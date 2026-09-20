@@ -1,0 +1,24 @@
+from fastapi import Response
+from fastapi.responses import JSONResponse
+
+
+API_VERSION = "1"
+
+
+def ok(data, status: int = 200) -> JSONResponse:
+    resp = JSONResponse(content={"ok": True, "data": data}, status_code=status)
+    resp.headers["X-Api-Version"] = API_VERSION
+    return resp
+
+
+def err(code: str, message: str, status: int = 400) -> JSONResponse:
+    resp = JSONResponse(
+        content={"ok": False, "error": {"code": code, "message": message}},
+        status_code=status,
+    )
+    resp.headers["X-Api-Version"] = API_VERSION
+    return resp
+
+
+def add_version_header(response: Response) -> None:
+    response.headers["X-Api-Version"] = API_VERSION
