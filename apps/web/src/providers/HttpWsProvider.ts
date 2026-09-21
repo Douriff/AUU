@@ -3,8 +3,11 @@ import type {
   Candle,
   Envelope,
   Fill,
+  PaperOrderResult,
+  PipelineResult,
   RejectEvent,
   RiskEvent,
+  RiskOut,
   SignalOut,
   SymbolInfo,
   TradeTick,
@@ -108,15 +111,17 @@ export class HttpWsProvider {
     return getJson("/api/v1/health");
   }
 
+  getBook(symbol: string): Promise<BookSnapshot> {
+    const q = new URLSearchParams({ symbol });
+    return getJson(`/api/v1/book?${q}`);
+  }
+
   preOrder(body: unknown) {
-    return postJson<import("@/types/contracts").RiskOut>("/api/v1/risk/pre-order", body);
+    return postJson<RiskOut>("/api/v1/risk/pre-order", body);
   }
 
   paperOrder(body: unknown) {
-    return postJson<{ fills: Fill[]; reject?: { tags: string[]; notes: string } }>(
-      "/api/v1/paper/orders",
-      body
-    );
+    return postJson<PaperOrderResult>("/api/v1/paper/orders", body);
   }
 
   postFill(body: unknown) {
@@ -124,6 +129,10 @@ export class HttpWsProvider {
       "/api/v1/risk/post-fill",
       body
     );
+  }
+
+  decideAndFill(body: unknown) {
+    return postJson<PipelineResult>("/api/v1/pipeline/decide-and-fill", body);
   }
 
   connect(handlers: Handlers): () => void {

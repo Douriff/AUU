@@ -113,3 +113,57 @@ export interface EnvelopeErr {
 }
 
 export type Envelope<T> = EnvelopeOk<T> | EnvelopeErr;
+
+/** Additive paper-path types — frozen Fill / RiskOut / SignalOut names unchanged. */
+
+export type OrderSide = "buy" | "sell";
+
+export interface SizeIn {
+  target_notional: number;
+  max_slippage_bps?: number;
+  urgency?: "low" | "normal" | "high";
+}
+
+export interface OrderIntent {
+  side: OrderSide;
+  order_type?: "market" | "limit" | "twap_sim";
+  qty_or_notional: number;
+  limit_price?: number;
+  max_slippage_bps?: number;
+  client_tag?: string;
+  expire_ts?: number;
+}
+
+export interface StrategyContext {
+  symbol: string;
+  ts: number;
+  account?: { equity: number; day_pnl: number };
+  liquidity?: { spread_bps: number; adv_usd: number };
+  position?: number;
+  features?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  book?: { bids: BookLevel[]; asks: BookLevel[] };
+  tick?: { mid: number };
+}
+
+export interface RejectOut {
+  tags: string[];
+  notes: string;
+}
+
+export interface PaperOrderResult {
+  fills: Fill[];
+  reject?: RejectOut;
+  trading_state?: TradingState;
+}
+
+export interface PipelineResult extends PaperOrderResult {
+  signal?: SignalOut;
+  risk: RiskOut;
+  ctx?: {
+    symbol: string;
+    ts: number;
+    tick?: { mid: number } | null;
+    liquidity?: { spread_bps: number; adv_usd: number };
+  };
+}

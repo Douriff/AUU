@@ -33,3 +33,17 @@ Header：`X-Api-Version: 1`
 2. 客户端 `{ type:"subscribe", channel, symbol, interval? }`
 3. channel ∈ `candles|book|trades|signals|fills|risk`
 4. 心跳 `ping`/`pong` 每 15s
+
+## Paper path（additive · 不改冻结字段名）
+
+REST：
+
+- `POST /api/v1/risk/pre-order` → `RiskOut`
+- `POST /api/v1/paper/orders` → `{ fills, reject? }`（`risk.allow` 必须为 true）
+- `POST /api/v1/risk/post-fill`
+- `POST /api/v1/pipeline/decide-and-fill` — 一枪：mock mid/book 组 ctx → signal → RiskGate → PaperBroker
+- `GET /api/v1/book?symbol=` — mock 深度快照（供 UI 组 ctx）
+
+Hub WS event types（非 subscribe channel）：`signal | risk | fill | reject | trading_state`  
+`allow=false` / reject **永不** 伪造 Fill。
+

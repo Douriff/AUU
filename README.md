@@ -72,6 +72,45 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 详见 `docs/contracts.md`。
 
+## 试一笔纸面单
+
+纸面 / Mock only。无交易所密钥。拒单 **不会** 伪造 Fill。
+
+1. 按上方启动 API（`:8000`）+ Web（`:5173`）。
+2. 打开 [Settings](http://localhost:5173/settings) 把 `dataSource` 切到 **paper**（行情图只叠加 PaperBroker Fill；mock 信号仍保留）。
+3. 打开 [Trade](http://localhost:5173/trade)：
+   - 输入 notional（默认 `500`），点 **Buy** 或 **Sell**。
+   - 前端先 `POST /api/v1/risk/pre-order`，`allow=true` 后再 `POST /api/v1/paper/orders`。
+   - HTTP 结果区显示 Fill 或 Reject；右侧 WS tape 收 `signal|risk|fill|reject|trading_state`。
+   - 勾选 **Wide spread (deny)** 可走 `SPREAD_TOO_WIDE` 拒单（随后该 symbol 约 30s cooldown）。
+4. 回到行情页 `/`：paper 模式下成交点来自 Fill；reject 不画点。
+
+可选一枪（服务端用 mock mid/book 组 `StrategyContext`，发同样的 WS 事件）：
+
+```bash
+curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"MOCK/USDC","side":"buy","notional":500}'
+
+# deny 样例
+curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"MOCK/USDC","side":"buy","notional":500,"spread_bps":200}'
+```
+
+两步拆开（与 Trade 页相同）：
+
+```bash
+# 1) pre-order — 可用扁平字段；或先 GET /api/v1/book?symbol=MOCK/USDC 组 ctx
+curl -sS http://localhost:8000/api/v1/risk/pre-order \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"MOCK/USDC","signal":{"side":"long"},"size":{"target_notional":500}}'
+
+# 2) paper/orders — 需 risk.allow=true 的 RiskOut + ctx + intent
+```
+
+`GET /api/v1/health` 应返回 `mode=paper`、`dataSourceOptions=["mock","paper"]`。
+
 ## 端口
 
 | 服务 | 端口 |

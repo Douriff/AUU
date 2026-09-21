@@ -13,14 +13,18 @@ flowchart LR
     WS["/api/v1/ws"]
     Mock[MockMarketDataProvider]
     Demo[demo-momentum-v0 signals]
+    Paper[RiskGate + PaperBroker]
   end
   HttpWsProvider -->|REST+WS| REST
   HttpWsProvider --> WS
   REST --> Mock
+  REST --> Paper
   WS --> Mock
+  WS --> Paper
   Mock --> Demo
 ```
 
 - **默认** `DATA_PROVIDER=mock`：确定性 RNG 蜡烛 + 周期信号/成交/风控。
 - **禁止**：GPL fork（Freqtrade/FreqUI）、真实密钥、实盘下单。
+- **纸面路径**：`pre-order` → `paper/orders`；可选 `POST /api/v1/pipeline/decide-and-fill`。
 - **后续**：`ccxt_public` / `dexscreener` provider（仅 public）。
