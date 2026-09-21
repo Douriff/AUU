@@ -64,6 +64,13 @@ class ParamsDefaultsTests(unittest.TestCase):
         self.assertEqual(p.max_day_loss_pct, 0.05)
         self.assertEqual(p.max_open_mints, 3)
         self.assertEqual(p.max_notional_sol, 0.12)
+        self.assertEqual(p.min_trade_count_1m, 10)
+        self.assertAlmostEqual(p.min_buy_sell_ratio_1m, 2.5)
+        from app.traders.distill import DISTILL_PARAM_KEYS
+
+        self.assertNotIn("min_trade_count_1m", DISTILL_PARAM_KEYS)
+        self.assertNotIn("min_buy_sell_ratio_1m", DISTILL_PARAM_KEYS)
+        self.assertNotIn("auto_paper_orders", DISTILL_PARAM_KEYS)
 
 
 class TapeTests(unittest.TestCase):
@@ -163,6 +170,17 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(sig.reason, "momentum")
 
+        # Default min count is 10, so a 7-print tape is momentum.
+        thin = TapeWindow(buy_notional_1m=4.0, sell_notional_1m=1.0, trade_count_1m=7)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=thin,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "momentum")
+
         sig = evaluate(
             snapshot=_snap(),
             tape=_hot_tape(),
@@ -211,6 +229,88 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(over_hard.reason, "impact")
         self.assertIn("GROSS_IMPACT_HARD", over_hard.tags)
         self.assertIn("SLIPPAGE_CAP", over_hard.tags)
+
+    def test_momentum_uses_params_not_constants(self):
+        few = TapeWindow(buy_notional_1m=4.0, sell_notional_1m=1.0, trade_count_1m=9)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=few,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.side, "flat")
+        self.assertEqual(sig.reason, "momentum")
+
+        soft = TapeWindow(buy_notional_1m=2.4, sell_notional_1m=1.0, trade_count_1m=12)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=soft,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "momentum")
+
+        at_floor = TapeWindow(buy_notional_1m=2.5, sell_notional_1m=1.0, trade_count_1m=10)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=at_floor,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=75.0,
+        )
+        self.assertEqual(sig.side, "long")
+        self.assertEqual(sig.reason, "pump_paper_v1_entry")
+
+        # Same tape fails the default 10 / 2.5 gate and passes a looser patch.
+        borderline = TapeWindow(buy_notional_1m=2.0, sell_notional_1m=1.0, trade_count_1m=8)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=borderline,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "momentum")
+        looser = PumpPaperParams(min_trade_count_1m=8, min_buy_sell_ratio_1m=2.0)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=borderline,
+            params=looser,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.side, "long")
+
+        tighter = PumpPaperParams(min_trade_count_1m=20, min_buy_sell_ratio_1m=5.0)
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=_hot_tape(),
+            params=tighter,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "momentum")
+
+        # Exits ignore the entry tape gate.
+        pos = PositionState(
+            mint="m",
+            symbol="PUMPDEMO/SOL",
+            qty=1000,
+            entry_price=1e-5,
+            entry_ts=self.now - 1_000,
+            entry_notional=0.1,
+        )
+        sig = evaluate(
+            snapshot=_snap(),
+            tape=few,
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+            position=pos,
+        )
+        self.assertEqual(sig.reason, "take_profit")
 
     def test_forbidden_tags_and_cooldown(self):
         sig = evaluate(
@@ -467,6 +567,27 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.07)
         self.assertEqual(data["params"]["max_hold_sec"], 300)
         self.assertEqual(data["params"]["max_notional_sol"], 0.12)
+        self.assertEqual(data["params"]["min_trade_count_1m"], 10)
+        self.assertAlmostEqual(data["params"]["min_buy_sell_ratio_1m"], 2.5)
+        self.assertNotIn("min_buy_sell_notional_ratio", data["params"])
+        tuned = self.client.put(
+            "/api/v1/strategy/pump-paper-v1",
+            json={"min_trade_count_1m": 15, "min_buy_sell_ratio_1m": 3.0},
+        )
+        self.assertEqual(tuned.status_code, 200)
+        tuned_params = tuned.json()["data"]["params"]
+        self.assertEqual(tuned_params["min_trade_count_1m"], 15)
+        self.assertAlmostEqual(tuned_params["min_buy_sell_ratio_1m"], 3.0)
+        self.assertFalse(tuned.json()["data"]["auto_paper_orders"])
+        self.assertEqual(tuned_params["max_impact_bps"], 75)
+        bad = self.client.put(
+            "/api/v1/strategy/pump-paper-v1", json={"min_trade_count_1m": -1}
+        )
+        self.assertEqual(bad.status_code, 422)
+        self.client.put(
+            "/api/v1/strategy/pump-paper-v1",
+            json={"min_trade_count_1m": 10, "min_buy_sell_ratio_1m": 2.5},
+        )
         raised = self.client.put(
             "/api/v1/strategy/pump-paper-v1", json={"max_impact_bps": 200}
         )

@@ -73,6 +73,10 @@ class PumpPaperParams(BaseModel):
     auto_paper_orders: bool = False
     # Smaller paper clip keeps curve impact under the 75 bps buffer.
     max_notional_sol: float = 0.12
+    # Entry momentum on the existing 60s tape (trade_count_1m, buy/sell notional).
+    # Reject reason stays "momentum". Defaults replace the old 8 / 2.0 constants.
+    min_trade_count_1m: int = Field(default=10, ge=0)
+    min_buy_sell_ratio_1m: float = Field(default=2.5, ge=0)
 
 
 @dataclass
@@ -219,7 +223,10 @@ def evaluate(
         return SignalOut(side="flat", strength=0.0, reason="not_curve")
     if not (params.progress_bps_min <= snapshot.progress_bps <= params.progress_bps_max):
         return SignalOut(side="flat", strength=0.0, reason="progress_band")
-    if tape.buy_notional_1m < 2.0 * tape.sell_notional_1m or tape.trade_count_1m < 8:
+    if (
+        tape.buy_notional_1m < float(params.min_buy_sell_ratio_1m) * tape.sell_notional_1m
+        or tape.trade_count_1m < int(params.min_trade_count_1m)
+    ):
         return SignalOut(side="flat", strength=0.0, reason="momentum")
     # Hard reject: gross impact above 80 never enters, even if max_impact_bps is higher.
     # Default buffer is 75, so a print between 75 and 80 is also rejected.

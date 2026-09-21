@@ -37,7 +37,7 @@
 
 1. `not complete` 且 `not migrated`
 2. `1200 <= progress_bps <= 6500`（过早噪音大，过晚拥挤）
-3. `buy_notional_1m >= 2 * sell_notional_1m` 且 `trade_count_1m >= 8`
+3. `buy_notional_1m >= min_buy_sell_ratio_1m * sell_notional_1m` 且 `trade_count_1m >= min_trade_count_1m`（默认 **2.5** 与 **10**；不足则 `reason=momentum`）。字段是已有 60s tape：`buy_notional_1m` / `sell_notional_1m` / `trade_count_1m`。
 4. 入场含费冲击 `estimated_impact_gross_bps` **≤ `max_impact_bps`**（默认 **75**，80 硬顶下的缓冲）。**> 80** 一律拒单（`GROSS_IMPACT_HARD`），即使把参数抬到 80 以上。等于 80 且参数允许时可以过。
 5. 无标签：`HONEYPOT` / `TAX_HIGH` / `SPREAD_TOO_WIDE`（若有外部打标）
 6. 冷却：同 mint `cooldown_sec` 默认 **120s** 内不再开仓
@@ -127,6 +127,8 @@ max_day_loss_pct: 0.05
 max_open_mints: 3
 notional_pct_equity: 0.005
 max_notional_sol: 0.12
+min_trade_count_1m: 10           # entry momentum; was hardcoded 8
+min_buy_sell_ratio_1m: 2.5       # buy_notional_1m / sell_notional_1m; was hardcoded 2.0
 auto_paper_orders: false
 strategy_autopaper: false   # alias of auto_paper_orders; default off
 ```
@@ -143,7 +145,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 - [x] 持仓 mint 离开 `list_symbols` 后，超过 `max_hold_sec` 仍纸面平仓（orphan exit；`liveEnabled` 仍 false）
 
-版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。纸面 Go 窗：`progress_bps [1200,6500]`，`take_profit_pct 0.10`，`stop_loss_pct 0.07`，`max_hold_sec 300`，`max_notional_sol 0.12`，`notional_pct_equity 0.005`。`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。实盘名义硬顶 1.0 SOL 不变。
+版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。纸面 Go 窗：`progress_bps [1200,6500]`，`take_profit_pct 0.10`，`stop_loss_pct 0.07`，`max_hold_sec 300`，`max_notional_sol 0.12`，`notional_pct_equity 0.005`。入场动能默认 `trade_count_1m ≥ 10` 且买名义 ≥ **2.5×** 卖名义（仍是 `momentum`）。`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。实盘名义硬顶 1.0 SOL 不变。
 
 ---
 

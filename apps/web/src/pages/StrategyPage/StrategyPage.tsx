@@ -15,6 +15,8 @@ const FIELDS: { key: keyof PumpPaperParams; label: string; step?: string }[] = [
   { key: "max_open_mints", label: "max_open_mints" },
   { key: "notional_pct_equity", label: "notional_pct_equity", step: "0.001" },
   { key: "max_notional_sol", label: "max_notional_sol", step: "0.01" },
+  { key: "min_trade_count_1m", label: "min_trade_count_1m" },
+  { key: "min_buy_sell_ratio_1m", label: "min_buy_sell_ratio_1m", step: "0.1" },
 ];
 
 export function StrategyPage() {
@@ -27,7 +29,9 @@ export function StrategyPage() {
           <code>pump-paper-v1</code> 纸面策略。默认 <code>progress_bps [1200,6500]</code>、
           <code>max_impact_bps 75</code>（含费硬顶 80）、名义 0.5% 权益且单笔 ≤ 0.12 SOL；<code>auto_paper_orders</code> /{" "}
           <code>strategy_autopaper</code> 默认关。行情/交易页可看纸面成功概率（平仓后）。
-          发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。无钱包、无 sniper。
+          发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。动能默认{" "}
+          <code>trade_count_1m ≥ 10</code> 且买名义 ≥ 2.5× 卖名义（不足仍是 <code>momentum</code>）。
+          无钱包、无 sniper。
         </p>
       <p className="muted">
         trading_state=<code>{tradingState}</code>

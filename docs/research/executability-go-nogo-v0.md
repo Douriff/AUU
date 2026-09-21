@@ -262,3 +262,24 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 | `max_notional_sol` | **0.12** |
 
 习惯分桶（`0_800` … `7500_9000`、`pct_entries_800_7500`）仍是观察标签，不随这组入场窗改写。
+
+---
+
+## 8. 纸面入场 tape 阈值（round 4 之后）
+
+Round 4 Go 窗在 `n=30` 时期望 ≈ **+0.00123**。同一组默认扩到 `n=51` 后期望 ≈ **−0.0003**，`verdict` 从 go 漂到 no-go。冲击仍过门。本轮只把纸面入场动能阈值参数化并收紧默认，**不**改 G1–G6，**不**改 tape 聚合，**不**改 DecisionLog 分桶，**不**放宽含费硬顶 80 / 默认缓冲 75，**不**把 `liveEnabled` 或 `auto_paper_orders` 默认打开。
+
+现有 `TapeWindow` 字段不变：`trade_count_1m`、`buy_notional_1m`、`sell_notional_1m`。入场仍是一条 `momentum` 拒单：
+
+```text
+buy_notional_1m < min_buy_sell_ratio_1m * sell_notional_1m
+  or trade_count_1m < min_trade_count_1m
+  → reason = momentum
+```
+
+| 参数 | 默认 | 原先写死 |
+|------|------|----------|
+| `min_trade_count_1m` | **10** | 8 |
+| `min_buy_sell_ratio_1m` | **2.5** | 2.0 |
+
+`PUT /api/v1/strategy/pump-paper-v1` 可改这两键。出场卖压仍是另一条 2× 规则，不读这两个参数。

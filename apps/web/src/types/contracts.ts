@@ -109,6 +109,8 @@ export interface PumpPaperParams {
   auto_paper_orders: boolean;
   strategy_autopaper?: boolean;
   max_notional_sol: number;
+  min_trade_count_1m: number;
+  min_buy_sell_ratio_1m: number;
 }
 
 export interface PumpPaperPosition {
