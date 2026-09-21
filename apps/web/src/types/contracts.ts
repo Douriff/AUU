@@ -80,7 +80,7 @@ export interface TradingStateEvent {
   ts?: number;
 }
 
-export type DataSource = "mock" | "paper";
+export type DataSource = "mock" | "paper" | "pumpfun_paper";
 
 /** Market data provider (env DATA_PROVIDER). Orthogonal to order-path dataSource. */
 export type MarketProvider = "mock" | "pumpfun_paper";
@@ -167,3 +167,87 @@ export interface EnvelopeErr {
 }
 
 export type Envelope<T> = EnvelopeOk<T> | EnvelopeErr;
+
+export interface CurveSnapshot {
+  symbol: string;
+  mint?: string;
+  venue?: string;
+  quote?: string;
+  virtual_sol_reserves?: string | number | null;
+  virtual_token_reserves?: string | number | null;
+  real_sol_reserves?: string | number | null;
+  real_token_reserves?: string | number | null;
+  curve_progress?: number | null;
+  progress_bps?: number | null;
+  graduated?: boolean;
+  migrated?: boolean;
+  complete?: boolean;
+  price_sol?: number;
+  phase?: string;
+}
+
+/** Additive paper-path types — frozen Fill / RiskOut / SignalOut names unchanged. */
+
+export type OrderSide = "buy" | "sell";
+
+export interface SizeIn {
+  target_notional: number;
+  max_slippage_bps?: number;
+  urgency?: "low" | "normal" | "high";
+}
+
+export interface OrderIntent {
+  side: OrderSide;
+  order_type?: "market" | "limit" | "twap_sim";
+  qty_or_notional: number;
+  limit_price?: number;
+  max_slippage_bps?: number;
+  client_tag?: string;
+  expire_ts?: number;
+}
+
+export interface StrategyContext {
+  symbol: string;
+  ts: number;
+  account?: { equity: number; day_pnl: number };
+  liquidity?: {
+    spread_bps: number;
+    adv_usd: number;
+    virtual_sol_reserves?: string;
+    virtual_token_reserves?: string;
+    real_sol_reserves?: string;
+    real_token_reserves?: string;
+    fee_bps?: number | null;
+    protocol_fee_bps?: number | null;
+    creator_fee_bps?: number | null;
+  };
+  position?: number;
+  features?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  book?: { bids: BookLevel[]; asks: BookLevel[] };
+  tick?: { mid: number };
+  pump?: PumpCtx | null;
+}
+
+export interface RejectOut {
+  tags: string[];
+  notes: string;
+}
+
+export interface PaperOrderResult {
+  fills: Fill[];
+  reject?: RejectOut;
+  trading_state?: TradingState;
+}
+
+export interface PipelineResult extends PaperOrderResult {
+  signal?: SignalOut;
+  risk: RiskOut;
+  ctx?: {
+    symbol: string;
+    ts: number;
+    tick?: { mid: number } | null;
+    liquidity?: StrategyContext["liquidity"];
+    pump?: PumpCtx | null;
+  };
+}

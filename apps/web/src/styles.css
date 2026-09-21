@@ -94,6 +94,19 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .symbol-list button.active { border-color: var(--accent); background: #21262d; }
 .symbol-list .sym { font-size: 0.9rem; }
 .symbol-list .kind { font-size: 0.7rem; color: var(--muted); }
+.symbol-list .mint { font-size: 0.68rem; color: var(--muted); font-family: ui-monospace, monospace; }
+
+.curve-panel { border-bottom: 1px solid var(--border); }
+.curve-body { padding: 0.55rem 0.75rem 0.75rem; font-size: 0.78rem; }
+.curve-bar {
+  height: 6px; background: #21262d; border-radius: 99px; overflow: hidden; margin-bottom: 0.55rem;
+}
+.curve-bar-fill { height: 100%; background: var(--accent); }
+.curve-body dl {
+  display: grid; grid-template-columns: 90px 1fr; gap: 0.2rem 0.5rem; margin: 0;
+}
+.curve-body dt { color: var(--muted); }
+.curve-body dd { margin: 0; font-family: ui-monospace, monospace; }
 
 .depth-panel { flex: 1; min-height: 0; overflow: auto; border-bottom: 1px solid var(--border); }
 .depth-grid { padding: 0.35rem 0.6rem; font-family: ui-monospace, monospace; font-size: 0.75rem; }
@@ -112,7 +125,7 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .trades-tape li.buy { color: var(--green); }
 .trades-tape li.sell { color: var(--red); }
 
-.shell-page { padding: 1.5rem; }
+.shell-page { padding: 1.5rem; overflow: auto; height: 100%; }
 .shell-page h1 { margin-top: 0; }
 .settings-dl {
   display: grid; grid-template-columns: 160px 1fr; gap: 0.5rem 1rem;
@@ -131,6 +144,60 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .data-source-toggle button.active {
   background: rgba(88,166,255,0.15); color: var(--accent); border-color: var(--accent);
+}
+
+.trade-toolbar {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.5rem 0 1rem;
+}
+.paper-order-panel, .trade-result, .trade-tape {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1rem; margin-bottom: 1rem;
+}
+.paper-order-panel h2, .trade-result h2, .trade-tape h2 {
+  margin: 0 0 0.75rem; font-size: 1rem;
+}
+.paper-form {
+  display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-bottom: 0.85rem;
+}
+.paper-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
+.paper-form label.checkbox { flex-direction: row; align-items: center; gap: 0.4rem; padding-bottom: 0.2rem; }
+.paper-form input[type="number"], .paper-form select {
+  background: #0d1117; color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.4rem 0.55rem; min-width: 160px;
+}
+.paper-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.paper-actions button {
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 1.1rem;
+  background: #21262d; color: var(--text);
+}
+.paper-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.paper-actions button.buy { background: rgba(63,185,80,0.15); border-color: var(--green); color: var(--green); }
+.paper-actions button.sell { background: rgba(248,81,73,0.15); border-color: var(--red); color: var(--red); }
+.paper-actions button.ghost { color: var(--muted); }
+.tiny { font-size: 0.8rem; }
+.ok-text { color: var(--green); }
+.reject-box {
+  background: rgba(248,81,73,0.12); border: 1px solid var(--red);
+  border-radius: 6px; padding: 0.6rem 0.75rem; margin: 0.5rem 0;
+}
+.fill-table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 0.78rem; }
+.fill-table th, .fill-table td { text-align: left; padding: 0.3rem 0.45rem; border-bottom: 1px solid var(--border); }
+.fill-table tr.buy td { color: var(--green); }
+.fill-table tr.sell td { color: var(--red); }
+.trade-columns {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; align-items: start;
+}
+.trade-tape ul { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
+.trade-tape li {
+  display: grid; grid-template-columns: 110px 1fr; gap: 0.5rem;
+  font-size: 0.78rem; font-family: ui-monospace, monospace;
+  padding: 0.28rem 0; border-bottom: 1px solid var(--border);
+}
+.trade-tape .kind { color: var(--accent); }
+.trade-tape li[data-kind="reject"] .kind, .trade-tape li[data-kind="reject"] span:last-child { color: var(--red); }
+.trade-tape li[data-kind="fill"] .kind { color: var(--green); }
+@media (max-width: 900px) {
+  .trade-columns { grid-template-columns: 1fr; }
 }
 
 .curve-progress {

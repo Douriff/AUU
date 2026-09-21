@@ -13,6 +13,7 @@ import type {
   TradeTick,
   TradingState,
 } from "@/types/contracts";
+import { isPaperPath } from "@/venue";
 
 export function useMarketSession(symbol: string, interval = "1m") {
   const { dataSource } = useDataSource();
@@ -66,7 +67,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
       setPumpSnapshot(null);
     }
     // paper: do not seed mock fills on chart — wait for PaperBroker WS fills
-    if (src === "paper") {
+    if (isPaperPath(src)) {
       setFills([]);
     } else {
       const f = await marketProvider.getFills(sym);
@@ -116,7 +117,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
       },
       onFill: (f) => {
         // paper mode: only draw hub/paper fills (tag paper* or symbol match from hub)
-        if (dataSourceRef.current === "paper") {
+        if (isPaperPath(dataSourceRef.current)) {
           const tag = f.tag ?? "";
           const fromPaper = tag.startsWith("paper") || tag.includes("paper") || Boolean(f.symbol);
           if (!fromPaper) return; // ignore mock stream fills
@@ -152,13 +153,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
     marketProvider.subscribe("trades", symbol);
     marketProvider.subscribe("signals", symbol, interval);
     marketProvider.subscribe("risk", symbol);
-    if (dataSource === "paper") {
-      // still subscribe fills so hub-forwarded events arrive; mock pump also runs —
-      // onFill filters mock when paper
-      marketProvider.subscribe("fills", symbol);
-    } else {
-      marketProvider.subscribe("fills", symbol);
-    }
+    marketProvider.subscribe("fills", symbol);
   }, [symbol, interval, dataSource]);
 
   return {

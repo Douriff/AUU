@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { useDataSource } from "@/hooks/useDataSource";
-import type { DataSource } from "@/types/contracts";
+import { DATA_SOURCES, VENUE } from "@/venue";
+import type { DataSource } from "@/venue";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
@@ -21,7 +22,7 @@ export function SettingsPage() {
         setMode(h.mode);
         setStatus(h.status);
         setTradingState(h.trading_state ?? "active");
-        setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? "Pump.fun" : "mock"));
+        setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? VENUE : "mock"));
         setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper"]);
       })
       .catch((e: Error) => setErr(e.message));
@@ -32,8 +33,8 @@ export function SettingsPage() {
       <h1>设置 / Settings</h1>
       <p className="muted">
         纸面默认；无实盘密钥、无钱包。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
-        ；下单仍走 <code>PaperBroker</code>（<code>dataSource=mock | paper</code>）。
-        {provider === "pumpfun_paper" ? " venue=Pump.fun，仅纸面曲线模拟。" : null}
+        ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
+        {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
       </p>
 
       <section className="settings-section">
@@ -62,31 +63,32 @@ export function SettingsPage() {
       <section className="settings-section">
         <h2>Order path · dataSource</h2>
         <div className="data-source-toggle" role="group" aria-label="dataSource">
-          {(["mock", "paper"] as DataSource[]).map((opt) => (
+          {DATA_SOURCES.map((opt) => (
             <button
               key={opt}
               type="button"
               className={dataSource === opt ? "active" : ""}
-              onClick={() => setDataSource(opt)}
+              onClick={() => setDataSource(opt as DataSource)}
             >
               {opt}
             </button>
           ))}
         </div>
         <p className="muted">
-          当前 <code>dataSource={dataSource}</code>。paper 时 Overlay 订 fill；告警条听
+          当前 <code>dataSource={dataSource}</code>。
+          <code>paper</code> / <code>pumpfun_paper</code> 时 Overlay 只订 PaperBroker Fill；告警条听
           reject/risk；拒单不画成交点。Mock 信号叠加始终保留。下单不离开 PaperBroker。
         </p>
       </section>
 
       <dl className="settings-dl">
-        <dt>DATA_PROVIDER</dt>
-        <dd>
-          <code>{provider}</code>
-        </dd>
         <dt>venue</dt>
         <dd>
           <code>{venue}</code>
+        </dd>
+        <dt>DATA_PROVIDER</dt>
+        <dd>
+          <code>{provider}</code>
         </dd>
         <dt>MODE</dt>
         <dd>

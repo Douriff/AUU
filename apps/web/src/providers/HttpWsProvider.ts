@@ -1,11 +1,15 @@
 import type {
   BookSnapshot,
   Candle,
+  CurveSnapshot,
   Envelope,
   Fill,
+  PaperOrderResult,
+  PipelineResult,
   PumpfunPaperSnapshot,
   RejectEvent,
   RiskEvent,
+  RiskOut,
   SignalOut,
   SymbolInfo,
   TradeTick,
@@ -81,6 +85,8 @@ export class HttpWsProvider {
   private pendingSubs: { channel: Channel; symbol: string; interval?: string }[] = [];
   private reconnectTimer: number | null = null;
   private intentionalClose = false;
+  /** Bumps on each connect() so StrictMode unmount cannot reconnect a stale socket. */
+  private epoch = 0;
 
   listSymbols(): Promise<SymbolInfo[]> {
     return getJson("/api/v1/symbols");
@@ -106,12 +112,25 @@ export class HttpWsProvider {
     provider: string;
     mode: string;
     venue?: string;
+    quote?: string;
+    defaultSymbol?: string;
     dataSourceOptions?: string[];
     marketProviderOptions?: string[];
     trading_state?: string;
+    liveDisabled?: boolean;
     watch_mints?: string;
   }> {
     return getJson("/api/v1/health");
+  }
+
+  getBook(symbol: string): Promise<BookSnapshot> {
+    const q = new URLSearchParams({ symbol });
+    return getJson(`/api/v1/book?${q}`);
+  }
+
+  getCurve(symbol: string): Promise<CurveSnapshot> {
+    const q = new URLSearchParams({ symbol });
+    return getJson(`/api/v1/curve?${q}`);
   }
 
   getPumpfunSnapshot(symbol: string): Promise<PumpfunPaperSnapshot> {
@@ -120,14 +139,11 @@ export class HttpWsProvider {
   }
 
   preOrder(body: unknown) {
-    return postJson<import("@/types/contracts").RiskOut>("/api/v1/risk/pre-order", body);
+    return postJson<RiskOut>("/api/v1/risk/pre-order", body);
   }
 
   paperOrder(body: unknown) {
-    return postJson<{ fills: Fill[]; reject?: { tags: string[]; notes: string } }>(
-      "/api/v1/paper/orders",
-      body
-    );
+    return postJson<PaperOrderResult>("/api/v1/paper/orders", body);
   }
 
   postFill(body: unknown) {
@@ -137,15 +153,29 @@ export class HttpWsProvider {
     );
   }
 
+  decideAndFill(body: unknown) {
+    return postJson<PipelineResult>("/api/v1/pipeline/decide-and-fill", body);
+  }
+
   connect(handlers: Handlers): () => void {
     this.handlers = handlers;
     this.intentionalClose = false;
-    this.open();
+    this.pendingSubs = [];
+    const epoch = ++this.epoch;
+    this.open(epoch);
     return () => {
+      if (epoch !== this.epoch) return;
       this.intentionalClose = true;
-      if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
-      this.ws?.close();
+      if (this.reconnectTimer) {
+        window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      const ws = this.ws;
       this.ws = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
     };
   }
 
@@ -169,16 +199,24 @@ export class HttpWsProvider {
     }
   }
 
-  private open() {
+  private open(epoch: number) {
+    if (epoch !== this.epoch) return;
     this.handlers.onStatus?.("connecting");
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
     const ws = new WebSocket(wsUrl());
     this.ws = ws;
 
     ws.onopen = () => {
+      if (epoch !== this.epoch) return;
       this.handlers.onStatus?.("open");
     };
 
     ws.onmessage = (ev) => {
+      if (epoch !== this.epoch) return;
       let msg: Record<string, unknown>;
       try {
         msg = JSON.parse(String(ev.data));
@@ -229,11 +267,15 @@ export class HttpWsProvider {
         this.handlers.onTradingState?.(msg.payload as TradingStateEvent);
     };
 
-    ws.onerror = () => this.handlers.onStatus?.("error");
+    ws.onerror = () => {
+      if (epoch !== this.epoch) return;
+      this.handlers.onStatus?.("error");
+    };
     ws.onclose = () => {
+      if (epoch !== this.epoch) return;
       this.handlers.onStatus?.("closed");
       if (!this.intentionalClose) {
-        this.reconnectTimer = window.setTimeout(() => this.open(), 2000);
+        this.reconnectTimer = window.setTimeout(() => this.open(epoch), 2000);
       }
     };
   }

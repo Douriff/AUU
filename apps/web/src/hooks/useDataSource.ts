@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DataSource } from "@/types/contracts";
+import type { DataSource } from "@/venue";
+import { DATA_SOURCES } from "@/venue";
 
 const KEY = "auu.dataSource";
+
+function isDataSource(v: string | null): v is DataSource {
+  return v !== null && (DATA_SOURCES as readonly string[]).includes(v);
+}
 
 function read(): DataSource {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === "paper" || v === "mock") return v;
+    if (isDataSource(v)) return v;
   } catch {
     /* ignore */
   }
@@ -34,13 +39,13 @@ export function useDataSource() {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === KEY && (e.newValue === "mock" || e.newValue === "paper")) {
+      if (e.key === KEY && isDataSource(e.newValue)) {
         setDataSourceState(e.newValue);
       }
     };
     const onCustom = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (d === "mock" || d === "paper") setDataSourceState(d);
+      if (isDataSource(d)) setDataSourceState(d);
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("auu:dataSource", onCustom);
