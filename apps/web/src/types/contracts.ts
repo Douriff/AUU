@@ -566,7 +566,11 @@ export interface ExecutabilityReport {
   /** Gross entry impact median (含费). Go median uses the net field. */
   median_entry_impact_bps: number | null;
   median_entry_impact_gross_bps?: number | null;
-  /** Net of protocol fee. Go requires this median < 60. */
+  /**
+   * Net of protocol fee.
+   * `gates.median_entry_impact.ok` is false only when this median is >= 60
+   * or any gross sample is > 80. A short sample is `coverage_ok`, not that fail.
+   */
   median_entry_impact_net_bps?: number | null;
   /** Phase-aware impact fee floor actually applied (curve 62.5 / amm 10). */
   protocol_fee_bps?: number | null;

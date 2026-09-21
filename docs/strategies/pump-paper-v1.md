@@ -38,11 +38,11 @@
 1. `not complete` 且 `not migrated`
 2. `800 <= progress_bps <= 7500`（过早噪音大，过晚拥挤）
 3. `buy_notional_1m >= 2 * sell_notional_1m` 且 `trade_count_1m >= 8`
-4. `estimated_impact_bps(order_notional) <= max_impact_bps`（默认 **80**）
+4. 入场含费冲击 `estimated_impact_gross_bps` **≤ `max_impact_bps`**（默认 **75**，80 硬顶下的缓冲）。**> 80** 一律拒单（`GROSS_IMPACT_HARD`），即使把参数抬到 80 以上。等于 80 且参数允许时可以过。
 5. 无标签：`HONEYPOT` / `TAX_HIGH` / `SPREAD_TOO_WIDE`（若有外部打标）
 6. 冷却：同 mint `cooldown_sec` 默认 **120s** 内不再开仓
 
-默认纸面名义：账户权益的 **0.5%**，且单笔绝对上限 `max_notional_sol`（默认仿真 **0.5 SOL 等值**）。
+默认纸面名义：账户权益的 **0.5%**，且单笔绝对上限 `max_notional_sol`（默认 **0.12 SOL**）。较小名义把曲线冲击压在 75 bps 缓冲内。
 
 发现（`new_token`）只入自选表，**不等于入场**；仍须过上述 progress / 动能 / 冲击门。
 
@@ -54,12 +54,12 @@
 
 | 条件 | 动作 |
 |------|------|
-| 浮盈 `>= take_profit_pct`（默认 **15%**） | 全平 |
+| 浮盈 `>= take_profit_pct`（默认 **14%**） | 全平 |
 | 浮亏 `<= -stop_loss_pct`（默认 **9%**） | 全平 |
 | `progress_bps >= 9000` 或 `complete` | 全平（毕业拥挤） |
 | `sell_notional_1m >= 2 * buy_notional_1m` 持续 30s | 全平 |
 | `estimated_impact_bps` 对平仓侧 `> 250` | 分两笔减仓（纸面） |
-| 持仓超过 `max_hold_sec`（默认 **480**） | 全平 |
+| 持仓超过 `max_hold_sec`（默认 **420**） | 全平 |
 
 ### 4.1 脱离监控列表的持仓（orphan）
 
@@ -73,15 +73,17 @@
 
 30 笔已平仓里约 13 胜 / 17 负，期望约 −0.003。出场标签以 `MAX_HOLD`（约 19）为主，`STOP_LOSS` 约 6，`TAKE_PROFIT` 约 3：仓位经常在 900 秒时钟上结束，到不了 25% 止盈。
 
-策略确认的纸面默认写在 `PumpPaperParams`（进程启动即用，不是只改运行中的 PUT）：
+纸面默认写在 `PumpPaperParams`（进程启动即用）：
 
-| 参数 | 先前 | 现在 |
-|------|------|------|
-| `max_hold_sec` | 900 | **480** |
-| `take_profit_pct` | 0.25 | **0.15** |
-| `stop_loss_pct` | 0.12 | **0.09** |
+| 参数 | 值 | 作用 |
+|------|----|------|
+| `max_hold_sec` | **420** | 短于原先 900s 超时 |
+| `take_profit_pct` | **0.14** | 止盈仍高于止损 9% |
+| `stop_loss_pct` | **0.09** | 亏损先砍 |
+| `max_notional_sol` | **0.12** | 压低曲线冲击 |
+| `max_impact_bps` | **75** | 入场缓冲；硬顶仍是 **80** |
 
-止盈 15% 仍高于止损 9%。成交仍只来自 PaperBroker 报价。硬风控保持：`max_impact_bps=80`、`max_day_loss_pct=0.05`、`max_open_mints=3`、`notional_pct_equity=0.005`、`max_notional_sol=0.5`、`auto_paper_orders=false`。`liveEnabled` 仍为 **false**。Go 门槛不放宽：`sample_ok` ≥ 30、扣费冲击中位 < 60、含费硬顶 80。
+成交仍只来自 PaperBroker。`max_day_loss_pct=0.05`、`max_open_mints=3`、`notional_pct_equity=0.005`、`auto_paper_orders=false`。`liveEnabled` 仍为 **false**。Go 门槛不放宽：`sample_ok` ≥ 30、扣费中位 < 60、含费 **> 80** 才算硬顶失败（等于 80 仍过）。
 
 ---
 
@@ -114,14 +116,15 @@ Monitor tape/curve
 ```yaml
 progress_bps_min: 800
 progress_bps_max: 7500
-max_impact_bps: 80
-take_profit_pct: 0.15
+max_impact_bps: 75          # entry buffer; hard reject when gross impact > 80
+take_profit_pct: 0.14
 stop_loss_pct: 0.09
-max_hold_sec: 480
+max_hold_sec: 420
 cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3
 notional_pct_equity: 0.005
+max_notional_sol: 0.12
 auto_paper_orders: false
 strategy_autopaper: false   # alias of auto_paper_orders; default off
 ```
@@ -138,7 +141,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 - [x] 持仓 mint 离开 `list_symbols` 后，超过 `max_hold_sec` 仍纸面平仓（orphan exit；`liveEnabled` 仍 false）
 
-版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。
+版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。冻结：`progress_bps [800,7500]`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。
 
 ---
 
