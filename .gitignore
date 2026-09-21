@@ -9,7 +9,9 @@ venv/
 *.egg-info/
 .pytest_cache/
 
-# Solana / live signer — never commit keypairs
+# Solana / live signer — never commit keypairs or secrets/
+secrets/*
+!secrets/README.md
 *keypair*.json
 *.keypair.json
 id.json

@@ -5,6 +5,7 @@ from .gate import (
     ENV_LIVE_CONFIRMED,
     ENV_LIVE_DISABLED,
     ENV_LIVE_ENABLED,
+    DEFAULT_KEYPAIR_RELPATH,
     LIVE_SEND_WIRED,
     LOCKED_MAX_DAY_LOSS_PCT,
     LOCKED_MAX_NOTIONAL_SOL,
@@ -30,6 +31,7 @@ from .signer import LocalSigner, SignerStatus
 
 __all__ = [
     "ENV_KEYPAIR_PATH",
+    "DEFAULT_KEYPAIR_RELPATH",
     "ENV_LIVE_ARMED",
     "ENV_LIVE_CONFIRMED",
     "ENV_LIVE_DISABLED",

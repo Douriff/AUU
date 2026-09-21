@@ -144,7 +144,9 @@ export class HttpWsProvider {
     liveReasons?: string[];
     liveLimits?: LiveLimits;
     keypairConfigured?: boolean;
-    keypairMounted?: "yes" | "no";
+    keypairMounted?: boolean;
+    pubkeyShort?: string | null;
+    keypairRelpath?: string;
     keypairEnv?: string;
     watch_mints?: string;
     discovery?: string;

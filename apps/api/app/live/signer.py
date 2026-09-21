@@ -1,6 +1,8 @@
-"""LocalSigner — load a Solana JSON keypair from a filesystem path on this machine.
+"""LocalSigner — load a Solana JSON keypair from a local filesystem path.
 
-Never accepts a private-key string from env. Never logs secret bytes.
+Never accepts a secret string from env, HTTP, or Settings. Never logs or
+returns secret bytes. Health may expose keypairMounted (bool) and a shortened
+public key only.
 This PR does not sign or submit chain transactions.
 """
 from __future__ import annotations
@@ -15,12 +17,38 @@ log = logging.getLogger("auu.live.signer")
 
 REASON_NO_KEYPAIR = "NO_KEYPAIR"
 
+# Bitcoin/Solana alphabet. Used only to shorten the 32-byte public key.
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _b58encode(data: bytes) -> str:
+    n = int.from_bytes(data, "big")
+    out: list[str] = []
+    while n > 0:
+        n, r = divmod(n, 58)
+        out.append(_B58[r])
+    pad = 0
+    for b in data:
+        if b == 0:
+            pad += 1
+        else:
+            break
+    body = "".join(reversed(out)) if out else ""
+    return (_B58[0] * pad) + (body or (_B58[0] if not pad else ""))
+
+
+def shorten_pubkey(full: str) -> str:
+    if len(full) <= 12:
+        return full
+    return f"{full[:4]}…{full[-4:]}"
+
 
 @dataclass(frozen=True)
 class SignerStatus:
     ok: bool
     reason: str
     present: bool
+    pubkey_short: str = ""
 
 
 def _looks_like_keypair_blob(data: object) -> bool:
@@ -35,11 +63,21 @@ def _looks_like_keypair_blob(data: object) -> bool:
     return True
 
 
+def _pubkey_short_from_blob(data: list) -> str:
+    """Solana CLI 64-byte arrays store the public key in the last 32 bytes."""
+    if len(data) != 64:
+        return ""
+    pub = bytes(int(x) & 0xFF for x in data[32:64])
+    full = _b58encode(pub)
+    return shorten_pubkey(full)
+
+
 class LocalSigner:
     """Filesystem-only signer stub.
 
     `inspect(path)` checks that a keypair file exists and looks like a Solana
-    JSON secret array, then drops the bytes. It never retains or prints them.
+    JSON secret array, derives a shortened pubkey, then drops the bytes.
+    It never retains or prints secret material.
 
     `sign_message` is intentionally unimplemented in this PR.
     """
@@ -63,6 +101,9 @@ class LocalSigner:
             log.info("local signer: keypair file is not JSON")
             return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
         ok = _looks_like_keypair_blob(parsed)
+        pubkey_short = ""
+        if ok and isinstance(parsed, list):
+            pubkey_short = _pubkey_short_from_blob(parsed)
         # Drop secret material before returning. Do not interpolate parsed into logs.
         parsed = None
         raw_text = ""
@@ -70,7 +111,7 @@ class LocalSigner:
             log.info("local signer: keypair file has invalid shape")
             return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
         log.info("local signer: keypair file present")
-        return SignerStatus(ok=True, reason="", present=True)
+        return SignerStatus(ok=True, reason="", present=True, pubkey_short=pubkey_short)
 
     def sign_message(self, message: bytes) -> bytes:
         """Not wired. A later PR may sign with the filesystem keypair after the live gate."""

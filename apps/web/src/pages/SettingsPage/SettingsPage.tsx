@@ -56,7 +56,7 @@ export function SettingsPage() {
       .catch(() => undefined);
   }, []);
 
-  const mounted = live?.keypairConfigured === true || live?.keypairMounted === "yes";
+  const mounted = live?.keypairMounted === true || live?.keypairConfigured === true;
   const liveEnabled = Boolean(live?.liveEnabled);
 
   const applyLive = (st: LiveStatus) => {
@@ -208,7 +208,13 @@ export function SettingsPage() {
           </dd>
           <dt>keypair</dt>
           <dd>
-            mounted: <code>{mounted ? "yes" : "no"}</code>
+            mounted: <code>{String(mounted)}</code>
+            {live?.pubkeyShort ? (
+              <>
+                {" "}
+                · pubkey <code>{live.pubkeyShort}</code>
+              </>
+            ) : null}
           </dd>
         </dl>
         <div className="paper-actions">
@@ -223,8 +229,11 @@ export function SettingsPage() {
           )}
         </div>
         <p className="muted">
-          liveEnabled defaults off. Enabling requires a secondary confirm dialog, a mounted
-          local keypair, and the three locked caps. This runtime still sends zero chain txs.
+          liveEnabled defaults off. Mount a local JSON keypair at{" "}
+          <code>secrets/live-keypair.json</code> (gitignored) or set{" "}
+          <code>AUU_SOLANA_KEYPAIR_PATH</code>. Enabling requires a secondary confirm dialog and
+          the three locked caps. This runtime still sends zero chain txs. This UI never asks for a
+          secret.
         </p>
         {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>
@@ -234,8 +243,14 @@ export function SettingsPage() {
           <div className="live-confirm-dialog">
             <h2 id="live-confirm-title">Confirm liveEnabled</h2>
             <p>
-              Secondary confirm required. Keypair mounted: <code>{mounted ? "yes" : "no"}</code>.
-              Caps stay locked at 1 SOL / 4.5% / 10 mints. Send gate stays closed — zero chain
+              Secondary confirm required. Keypair mounted: <code>{String(mounted)}</code>
+              {live?.pubkeyShort ? (
+                <>
+                  {" "}
+                  pubkey <code>{live.pubkeyShort}</code>
+                </>
+              ) : null}
+              . Caps stay locked at 1 SOL / 4.5% / 10 mints. Send gate stays closed — zero chain
               transactions in this runtime.
             </p>
             <div className="paper-actions">
@@ -333,7 +348,11 @@ export function SettingsPage() {
         </dd>
         <dt>keypair mounted</dt>
         <dd>
-          <code>{mounted ? "yes" : "no"}</code>
+          <code>{String(mounted)}</code>
+        </dd>
+        <dt>pubkey</dt>
+        <dd>
+          <code>{live?.pubkeyShort || "—"}</code>
         </dd>
         <dt>live caps</dt>
         <dd>

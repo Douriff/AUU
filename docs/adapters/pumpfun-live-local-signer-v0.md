@@ -15,7 +15,7 @@ UI gates: `docs/viz/live-ui-gates-v0.md`.
 | Limits | paper `RiskLimits` (day-loss **5%**) | separate `LiveLimits` **1 / 0.045 / 10** |
 | Fill | local / simulated | **never** in this PR (send gate → `LIVE_STUB`) |
 | Journal | `PaperTradeJournal` `source=manual\|signal` | `source=live` ledger only; **not** in paper win-rate |
-| Keys | none | filesystem path `AUU_SOLANA_KEYPAIR_PATH` only |
+| Keys | none | LOCAL-ONLY `secrets/live-keypair.json` (gitignored) |
 | Autopaper | `strategy_autopaper` default **false** | not wired; live routes 403 unless checklist |
 
 Paper is unchanged. Autopaper stays off by default. Live is a separate route family under `/api/v1/live/*`.
@@ -24,7 +24,7 @@ Paper is unchanged. Autopaper stays off by default. Live is a separate route fam
 
 Reject with **`LIVE_DISABLED`** (403 `error.reasons` / `error.tags` **and** `RiskOut.tags`) unless **all** of:
 
-1. Local keypair **mounted** via gitignored env `AUU_SOLANA_KEYPAIR_PATH` — never a private-key string in repo, env value, logs, or Settings (there is no input).
+1. Local keypair **mounted** at gitignored **`secrets/live-keypair.json`** (or `AUU_SOLANA_KEYPAIR_PATH`) — never a secret string in repo, env value, logs, or Settings (there is no input). Health: `keypairMounted` bool + `pubkeyShort` only.
 2. User **explicit secondary confirm** (`liveConfirmed` / Settings dialog). `AUU_LIVE_ARMED` is an alias; default **false**.
 3. `liveEnabled` **true**. Default **false** (`AUU_LIVE_ENABLED` unset, or `AUU_LIVE_DISABLED` true).
 4. `LiveLimits` present (locked caps below).
@@ -41,21 +41,34 @@ Env may only **tighten** these; zero/unset falls back to the locked values.
 
 `LIVE_SEND_WIRED` is **false**. The **send gate is outside** `liveDisabled` / `liveEnabled`: checklist can pass and intent can be described; default runtime still submits **zero** chain txs. `GET /api/v1/health` keeps `liveDisabled=true` while send is unwired.
 
-## Gitignored `.env` (local machine only)
+## LOCAL-ONLY keypair mount
 
-Copy `.env.example` → `.env` (already gitignored). Do **not** commit `.env`, `id.json`, or `*keypair*.json`.
+AUU does **not** generate, request, or commit key material. Put an existing Solana CLI JSON keypair on **this machine**:
 
 ```bash
-# Live adapter — leave disabled. Caps are locked LiveLimits (not paper).
+mkdir -p secrets
+# copy your local 64-byte JSON array to:
+#   secrets/live-keypair.json
+# optional override (gitignored .env):
 AUU_LIVE_ENABLED=false
 AUU_LIVE_DISABLED=true
 AUU_LIVE_ARMED=false
-AUU_SOLANA_KEYPAIR_PATH=          # e.g. /home/you/.config/solana/id.json
+AUU_SOLANA_KEYPAIR_PATH=secrets/live-keypair.json
 ```
 
-The API never logs secret bytes from the keypair file. `LocalSigner.inspect` only checks that the path exists and looks like a Solana JSON byte array, then drops the contents.
+Do **not** commit `.env`, `secrets/live-keypair.json`, `id.json`, or `*keypair*.json`.
 
-Settings: `liveEnabled` default off + confirm dialog; three locked caps read-only; keypair `mounted: yes|no` only. Alert bar shows `LIVE_DISABLED`.
+`GET /api/v1/health` / `GET /api/v1/live/status`:
+
+| Field | Expose |
+|-------|--------|
+| `keypairMounted` | **bool** |
+| `pubkeyShort` | shortened public key or `null` |
+| secret / JSON array / full private key | **never** |
+
+The API never logs secret bytes. `LocalSigner.inspect` reads the file, derives `pubkeyShort` from the public half of a 64-byte Solana CLI array, then drops the contents.
+
+Settings: `liveEnabled` default off + confirm dialog; three locked caps read-only; keypair `mounted` bool + `pubkeyShort` only. Alert bar shows `LIVE_DISABLED`.
 
 ## RiskGate live extras
 
@@ -125,7 +138,7 @@ Forbidden now and later: Jito tips, sniper/create-listen auto-buy, private-key s
 
 ## REST
 
-- `GET /api/v1/live/status` — `liveEnabled`, `liveConfirmed`, `liveDisabled`, `liveArmed`, `reasons`, `limits`, `keypairMounted` (`yes`/`no`)
+- `GET /api/v1/live/status` — `liveEnabled`, `liveConfirmed`, `liveDisabled`, `liveArmed`, `reasons`, `limits`, `keypairMounted` (bool), `pubkeyShort`
 - `GET /api/v1/live/ledger` — `source=live` journal (empty here; never mixed into paper win-rate)
 - `PUT /api/v1/live/limits` — locked; body ignored
 - `PUT /api/v1/live/enabled` — `{ liveEnabled, confirmed }`; confirm required to leave `LIVE_DISABLED`

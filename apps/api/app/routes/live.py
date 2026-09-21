@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.live.broker import run_live_order, run_live_pre_order
 from app.live.gate import (
+    DEFAULT_KEYPAIR_RELPATH,
     REASON_LIVE_DISABLED,
     evaluate,
     set_limits,
@@ -86,7 +87,9 @@ def live_limits():
     data["liveConfirmed"] = st.live_confirmed
     data["liveDisabled"] = st.live_disabled
     data["liveArmed"] = st.live_armed
-    data["keypairMounted"] = "yes" if st.keypair_configured else "no"
+    data["keypairMounted"] = bool(st.keypair_configured)
+    data["pubkeyShort"] = st.pubkey_short or None
+    data["keypairRelpath"] = DEFAULT_KEYPAIR_RELPATH
     return ok(data)
 
 

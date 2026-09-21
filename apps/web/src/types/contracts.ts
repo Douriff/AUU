@@ -311,8 +311,10 @@ export interface LiveStatus {
   liveSendWired: boolean;
   reasons: string[];
   keypairConfigured: boolean;
-  keypairMounted: "yes" | "no";
+  keypairMounted: boolean;
+  pubkeyShort?: string | null;
   keypairEnv: string;
+  keypairRelpath?: string;
   keypairPathHint: string;
   limits: LiveLimits;
   limitsLocked: boolean;

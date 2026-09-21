@@ -8,7 +8,7 @@ Live adapter stays **dark**. Default runtime sends **zero** chain txs. Paper aut
 
 Reject with `LIVE_DISABLED` (RiskTagBar + `RiskOut.tags` + 403 `error.tags`) unless **all** of:
 
-1. Local keypair **mounted** (`AUU_SOLANA_KEYPAIR_PATH` file present) — UI shows `mounted: yes|no` only, **no private-key field**
+1. Local keypair **mounted** at gitignored `secrets/live-keypair.json` (or `AUU_SOLANA_KEYPAIR_PATH`) — UI/health show `keypairMounted` **bool** + `pubkeyShort` only; **no secret field**
 2. User **explicit secondary confirm** (Settings dialog → `liveConfirmed`)
 3. `liveEnabled` **true** (default **false**)
 4. `LiveLimits` present (locked, read-only):
@@ -30,7 +30,8 @@ Reject with `LIVE_DISABLED` (RiskTagBar + `RiskOut.tags` + 403 `error.tags`) unl
 │ max_notional_sol     1     (locked, read-only) │
 │ max_day_loss_pct     0.045 (locked, read-only) │
 │ max_open_mints       10    (locked, read-only) │
-│ keypair              mounted: yes | no         │
+│ keypair              mounted: true | false     │
+│ pubkey               Abcd…Wxyz (short only)    │
 │ [Enable live…] → confirm dialog                │
 └────────────────────────────────────────────────┘
 ```

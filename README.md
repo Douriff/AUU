@@ -65,7 +65,7 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 | 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 仍走 paper 行情 |
 | 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 不自动下单 |
 | 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | `LiveBroker` stub；**本轮不发链上 tx** |
-| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | 仅本机 `AUU_SOLANA_KEYPAIR_PATH`；锁定 1 SOL / 4.5% / 10 mints |
+| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored）；health 仅 `keypairMounted` + `pubkeyShort` |
 
 切换行情源：环境变量 `DATA_PROVIDER=mock` 或 `DATA_PROVIDER=pumpfun_paper`。  
 `pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS`（逗号分隔 mint 白名单）播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）把 `new_token` 写入自选，**不**自动下单。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。始终 PaperBroker。
@@ -85,7 +85,35 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 `strategy_autopaper` / `auto_paper_orders` **默认关**。在 Settings / 行情 / 交易顶栏打开后（无需重启），`pump-paper-v1` 在 `trading_state=active` 时对自选做 decide → RiskGate → PaperBroker。实盘路径关闭（`liveDisabled=true`）；私钥 env 一旦出现则拒绝执行。
 
-**Live adapter**（`docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/viz/live-ui-gates-v0.md`）：`liveEnabled` **默认 false**。独立 `LiveLimits` **1.0 SOL / 单笔**、**日亏 4.5%**、**最多 10 个并发 mint**（不复用纸面 limits）。需本机 keypair mounted **且**二次确认 **且** liveEnabled **且** limits 才离开 `LIVE_DISABLED`。纸面 journal / 胜率永不混入 live。本 PR **不**发送链上交易。
+**Live adapter**（`docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/viz/live-ui-gates-v0.md`）：`liveEnabled` **默认 false**。独立 `LiveLimits` **1.0 SOL / 单笔**、**日亏 4.5%**、**最多 10 个并发 mint**。拒绝 `LIVE_DISABLED`，除非本机 keypair **mounted** **且**二次确认 **且** liveEnabled **且** LiveLimits。纸面 journal / 胜率永不混入 live。本 PR **不**发送链上交易。
+
+## Local-only keypair mount
+
+AUU **never** asks you to paste, upload, or commit a secret. If you already created a Solana CLI wallet, mount it **on this machine only**:
+
+```bash
+# Gitignored. Do not commit, copy into the repo, or paste bytes anywhere.
+mkdir -p secrets
+# Point at your existing local JSON keypair (64-byte Solana CLI array), e.g.:
+#   cp /path/on/this/machine/id.json secrets/live-keypair.json
+# Or override:
+#   export AUU_SOLANA_KEYPAIR_PATH=/absolute/path/on/this/machine/id.json
+```
+
+Default path: **`secrets/live-keypair.json`** (see `secrets/README.md`). Env: `AUU_SOLANA_KEYPAIR_PATH`.
+
+`GET /api/v1/health` reports:
+
+| Field | Meaning |
+|-------|---------|
+| `liveEnabled` | default **false** |
+| `keypairMounted` | **bool** — file present and looks like a Solana JSON keypair |
+| `pubkeyShort` | shortened public key (`Abcd…Wxyz`) or `null` |
+| `liveReasons` | includes `LIVE_DISABLED` until mount + secondary confirm + LiveLimits |
+
+Health **never** returns secret bytes, the JSON array, or a full private key. `pubkeyShort` is not the secret.
+
+Refuse live orders with `LIVE_DISABLED` unless **all** of: mounted keypair, Settings secondary confirm, `liveEnabled=true`, LiveLimits present.
 
 纸面成功概率（胜率、期望、回撤）来自本会话 `PaperTradeJournal` 已平仓 round-trip（自算，不嵌 QuantStats）。蒙特卡洛默认关：
 

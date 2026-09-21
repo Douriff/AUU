@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 from app.live.signer import LocalSigner, SignerStatus
@@ -28,6 +29,8 @@ ENV_LIVE_DISABLED = "AUU_LIVE_DISABLED"
 ENV_LIVE_CONFIRMED = "AUU_LIVE_CONFIRMED"
 ENV_LIVE_ARMED = "AUU_LIVE_ARMED"
 ENV_KEYPAIR_PATH = "AUU_SOLANA_KEYPAIR_PATH"
+# LOCAL-ONLY default. Gitignored. Never commit this file. Override with env.
+DEFAULT_KEYPAIR_RELPATH = "secrets/live-keypair.json"
 ENV_MAX_NOTIONAL_SOL = "AUU_LIVE_MAX_NOTIONAL_SOL"
 ENV_MAX_DAY_LOSS_PCT = "AUU_LIVE_MAX_DAY_LOSS_PCT"
 ENV_MAX_OPEN_MINTS = "AUU_LIVE_MAX_OPEN_MINTS"
@@ -159,6 +162,7 @@ class LiveStatus:
     reasons: list[str]
     keypair_configured: bool
     keypair_env: str
+    pubkey_short: str
     limits: LiveLimits
     limits_missing: list[str]
     disabled_switch: bool
@@ -180,7 +184,6 @@ class LiveStatus:
         return REASON_LIVE_DISABLED
 
     def as_dict(self) -> dict[str, Any]:
-        mounted = "yes" if self.keypair_configured else "no"
         return {
             "liveEnabled": self.live_enabled,
             "liveConfirmed": self.live_confirmed,
@@ -189,11 +192,14 @@ class LiveStatus:
             "liveSendWired": self.live_send_wired,
             "reasons": list(self.reasons),
             "keypairConfigured": self.keypair_configured,
-            "keypairMounted": mounted,
+            "keypairMounted": bool(self.keypair_configured),
+            "pubkeyShort": self.pubkey_short or None,
             "keypairEnv": self.keypair_env,
+            "keypairRelpath": DEFAULT_KEYPAIR_RELPATH,
             "keypairPathHint": (
-                "set AUU_SOLANA_KEYPAIR_PATH on this machine (gitignored .env); "
-                "never paste a private key; never upload the file"
+                "LOCAL-ONLY gitignored file secrets/live-keypair.json "
+                "(or AUU_SOLANA_KEYPAIR_PATH on this machine). "
+                "Never paste a secret; never commit or upload the file"
             ),
             "limits": self.limits.as_dict(),
             "limitsLocked": True,
@@ -219,8 +225,17 @@ def reset_live_state() -> None:
     _signer = LocalSigner()
 
 
+def _repo_root() -> Path:
+    # apps/api/app/live/gate.py → repo root
+    return Path(__file__).resolve().parents[4]
+
+
 def keypair_path() -> str:
-    return (os.getenv(ENV_KEYPAIR_PATH) or "").strip()
+    """Resolved local path. Never returned on health — use DEFAULT_KEYPAIR_RELPATH."""
+    raw = (os.getenv(ENV_KEYPAIR_PATH) or "").strip()
+    if raw:
+        return raw
+    return str(_repo_root() / DEFAULT_KEYPAIR_RELPATH)
 
 
 def inspect_keypair() -> SignerStatus:
@@ -294,6 +309,7 @@ def evaluate() -> LiveStatus:
         reasons=reasons,
         keypair_configured=keypair_ok,
         keypair_env=ENV_KEYPAIR_PATH,
+        pubkey_short=signer.pubkey_short if keypair_ok else "",
         limits=limits,
         limits_missing=missing,
         disabled_switch=not enabled,
