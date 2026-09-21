@@ -96,6 +96,8 @@ async def decide_and_fill(
             impact_bps_est=impact,
             impact_bps_cap=float(sz.max_slippage_bps),
             estimated_impact_bps=impact,
+            pump=built.pump,
+            liquidity=built.liquidity,
             decision_px=float(built.tick.mid) if built.tick and built.tick.mid else None,
             arrival_px=float(built.tick.mid) if built.tick and built.tick.mid else None,
         )

@@ -9,6 +9,11 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from app.models.contracts import DecisionLogRow, Fill, RiskOut, SignalOut
+from app.providers.pumpfun_curve_math import (
+    impact_net_bps as compute_impact_net_bps,
+    impact_venue_phase,
+    protocol_fee_bps_for_phase,
+)
 
 LOG_CAP = 2_000
 
@@ -275,6 +280,13 @@ def make_row(
     impact_bps_est: Optional[float] = None,
     impact_bps_cap: Optional[float] = None,
     estimated_impact_bps: Optional[float] = None,
+    impact_gross_bps: Optional[float] = None,
+    protocol_fee_bps: Optional[float] = None,
+    impact_net_bps: Optional[float] = None,
+    phase: Optional[str] = None,
+    impact_fee_bps: Optional[float] = None,
+    pump: Optional[object] = None,
+    liquidity: Optional[object] = None,
     decision_px: Optional[float] = None,
     arrival_px: Optional[float] = None,
     fill_px: Optional[float] = None,
@@ -310,6 +322,18 @@ def make_row(
     est = estimated_impact_bps if estimated_impact_bps is not None else impact_bps_est
     paper_px = paper_fill_px if paper_fill_px is not None else fill_px
     arrive = arrival_px if arrival_px is not None else decision_px
+    venue = impact_venue_phase(pump, phase)
+    gross = impact_gross_bps if impact_gross_bps is not None else est
+    addon = impact_fee_bps
+    if addon is None and liquidity is not None and getattr(liquidity, "fee_bps", None) is not None:
+        addon = float(getattr(liquidity, "fee_bps"))
+    if addon is None and pump is not None and getattr(pump, "fee_bps", None) is not None:
+        addon = float(getattr(pump, "fee_bps"))
+    fee = protocol_fee_bps
+    if fee is None:
+        fee = protocol_fee_bps_for_phase(venue, impact_fee_bps=addon)
+    net = compute_impact_net_bps(gross, fee) if gross is not None else None
+    stored_est = est if est is not None else gross
     return DecisionLogRow(
         ts=int(ts),
         strategy_id=strategy_id,
@@ -323,9 +347,13 @@ def make_row(
         risk_tags=r_tags,
         risk_notes=r_notes,
         notional_sol=notional_sol,
-        impact_bps_est=impact_bps_est if impact_bps_est is not None else est,
+        impact_bps_est=impact_bps_est if impact_bps_est is not None else stored_est,
         impact_bps_cap=impact_bps_cap,
-        estimated_impact_bps=est,
+        estimated_impact_bps=stored_est,
+        impact_gross_bps=gross,
+        protocol_fee_bps=float(fee),
+        impact_net_bps=net,
+        phase=venue,
         decision_px=decision_px if decision_px is not None else arrive,
         arrival_px=arrive,
         fill_px=paper_px,

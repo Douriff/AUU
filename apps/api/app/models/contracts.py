@@ -408,7 +408,13 @@ class DecisionLogRow(BaseModel):
     notional_sol: Optional[float] = None
     impact_bps_est: Optional[float] = None
     impact_bps_cap: Optional[float] = None
-    estimated_impact_bps: Optional[float] = None  # alias of impact_bps_est
+    estimated_impact_bps: Optional[float] = None  # alias of impact_bps_est (gross)
+    # Go net-of-fee split. gross == estimated impact; fee is the phase floor
+    # (curve 62.5 / amm 10), not PumpCtx.protocol_fee_bps (swap path, default 100).
+    impact_gross_bps: Optional[float] = None
+    protocol_fee_bps: Optional[float] = None
+    impact_net_bps: Optional[float] = None
+    phase: Optional[str] = None
     decision_px: Optional[float] = None
     arrival_px: Optional[float] = None
     fill_px: Optional[float] = None

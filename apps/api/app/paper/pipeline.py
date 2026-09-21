@@ -71,6 +71,8 @@ async def run_pre_order(
             impact_bps_est=impact,
             impact_bps_cap=float(size.max_slippage_bps),
             estimated_impact_bps=impact,
+            pump=ctx.pump,
+            liquidity=ctx.liquidity,
             decision_px=float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None,
             arrival_px=float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None,
         )
@@ -119,6 +121,8 @@ async def run_paper_order(
                 risk_notes=why,
                 notional_sol=abs(float(intent.qty_or_notional)),
                 reject_bucket="risk",
+                pump=ctx.pump,
+                liquidity=ctx.liquidity,
             )
         )
         return {"fills": [], "reject": {"tags": ["LIVE_DISABLED"], "notes": why}}
@@ -151,6 +155,8 @@ async def run_paper_order(
                 risk_tags=tags,
                 risk_notes=notes,
                 notional_sol=abs(float(intent.qty_or_notional)),
+                pump=ctx.pump,
+                liquidity=ctx.liquidity,
             )
         )
         await hub.publish(
@@ -222,6 +228,8 @@ async def run_paper_order(
             impact_bps_est=impact,
             impact_bps_cap=float(intent.max_slippage_bps),
             estimated_impact_bps=shadow.get("estimated_impact_bps"),
+            pump=ctx.pump,
+            liquidity=ctx.liquidity,
             decision_px=shadow.get("decision_px"),
             arrival_px=shadow.get("arrival_px"),
             fill_px=shadow.get("fill_px"),

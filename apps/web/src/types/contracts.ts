@@ -557,8 +557,17 @@ export interface ExecutabilityReport {
   n_trades: number;
   sample_ok: boolean;
   expectancy: number | null;
+  /** Gross entry impact median (含费). Go median uses the net field. */
   median_entry_impact_bps: number | null;
+  median_entry_impact_gross_bps?: number | null;
+  /** Net of protocol fee. Go requires this median < 60. */
+  median_entry_impact_net_bps?: number | null;
+  /** Phase-aware impact fee floor actually applied (curve 62.5 / amm 10). */
+  protocol_fee_bps?: number | null;
+  protocol_fee_bps_curve?: number | null;
+  protocol_fee_bps_amm?: number | null;
   max_entry_impact_bps?: number | null;
+  max_entry_impact_gross_bps?: number | null;
   impact_cap_go_bps: number;
   hard_max_impact_bps: number;
   params_max_impact_bps?: number | null;

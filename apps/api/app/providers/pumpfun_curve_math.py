@@ -19,6 +19,17 @@ DEFAULT_PROTOCOL_FEE_BPS = 100
 DEFAULT_CREATOR_FEE_BPS = 0
 # Paper impact add-on / fee-aware path default (overridable).
 DEFAULT_IMPACT_FEE_BPS = 125
+# Flat fee inside estimated_curve_impact_bps: the formula adds fee_bps/2.
+# Default 125/2 = 62.5 bps. This is the bonding-curve protocol-fee floor
+# subtracted for Go net-of-fee. It is NOT DEFAULT_PROTOCOL_FEE_BPS (100),
+# which is already inside the fee-aware reserve walk (sol_after_buy_fee).
+CURVE_IMPACT_FEE_FLOOR_BPS = DEFAULT_IMPACT_FEE_BPS / 2.0  # 62.5
+# AMM / migrated (GRADMOCK): virtual reserves are cleared, so
+# LiquidityCtx.estimated_impact_bps falls back to CEX
+# `spread_bps/2 + 40*(notional/adv)^0.6`. Default spread is 20 → floor 10 bps.
+# Kept here so Go uses the model floor, not a handwritten magic number.
+DEFAULT_LIQUIDITY_SPREAD_BPS = 20.0
+AMM_IMPACT_FEE_FLOOR_BPS = DEFAULT_LIQUIDITY_SPREAD_BPS / 2.0  # 10.0
 # When the curve cannot fill, report a full-notional shock rather than 0.
 UNFILLABLE_IMPACT_BPS = 10_000.0
 # Unsold supply that typically seeds PumpSwap on migrate (~206.9M whole tokens).
@@ -130,6 +141,47 @@ def sell_sol_out(
     fee_amt = gross * fee // 10_000
     net = max(0, gross - fee_amt)
     return net, gross
+
+
+def impact_venue_phase(pump: object | None = None, phase: str | None = None) -> str:
+    """curve | graduating | amm. Unknown / missing → curve (paper entry venue)."""
+    if phase:
+        p = str(phase).strip().lower()
+        if p in {"curve", "graduating", "amm"}:
+            return p
+    if pump is not None:
+        if bool(getattr(pump, "migrated", False)):
+            return "amm"
+        explicit = getattr(pump, "phase", None)
+        if explicit in {"curve", "graduating", "amm"}:
+            return str(explicit)
+        if bool(getattr(pump, "complete", False)):
+            return "graduating"
+    return "curve"
+
+
+def protocol_fee_bps_for_phase(
+    phase: str | None = "curve",
+    *,
+    impact_fee_bps: float | None = None,
+) -> float:
+    """Phase-aware flat fee embedded in estimated impact (Go net-of-fee).
+
+    curve / graduating: ``impact_fee_bps/2``, default ``CURVE_IMPACT_FEE_FLOOR_BPS``
+    (62.5). amm: ``AMM_IMPACT_FEE_FLOOR_BPS`` (10), the CEX half-spread floor used
+    once a mint has migrated and curve reserves are gone.
+    """
+    venue = impact_venue_phase(phase=phase)
+    if venue == "amm":
+        return float(AMM_IMPACT_FEE_FLOOR_BPS)
+    if impact_fee_bps is None:
+        return float(CURVE_IMPACT_FEE_FLOOR_BPS)
+    return max(0.0, float(impact_fee_bps) / 2.0)
+
+
+def impact_net_bps(impact_gross_bps: float, protocol_fee_bps: float) -> float:
+    """``max(0, impact_gross_bps - protocol_fee_bps)``."""
+    return max(0.0, float(impact_gross_bps) - float(protocol_fee_bps))
 
 
 def _bps_vs_mid(px: float, mid0: float) -> float:

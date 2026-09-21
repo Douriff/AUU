@@ -1,6 +1,6 @@
 # 决策日志 · 拒单原因码 v0（可执行性证据）
 
-对齐望舒门槛：平仓≥30 + sample_ok；期望≥0；入场冲击中位<60bps（硬顶80）；影子滑点；拒单可解释。  
+对齐望舒门槛：平仓≥30 + sample_ok；期望≥0；入场冲击**扣费**中位<60bps（含费硬顶80）；影子滑点；拒单可解释。  
 原则：只加日志字段，不改冻结 Signal/Risk/Fill 事件名。
 
 ---
@@ -36,6 +36,9 @@ DecisionLog:
   signal_side, signal_reason, signal_tags[]
   risk_allow, risk_tags[], risk_notes
   notional_sol?, impact_bps_est?, impact_bps_cap?
+  impact_gross_bps?, protocol_fee_bps?, impact_net_bps?, phase?
+  # gross = 现有 estimated impact（含费）；net = max(0, gross − protocol_fee_bps)
+  # curve/graduating 费地板 62.5；amm 10。不是 swap 路径的 DEFAULT_PROTOCOL_FEE_BPS=100
   shadow_slippage_bps?     # 纸面 Fill.slippage vs 预估，无成交可空
   outcome: emit_signal | reject | fill | partial
   reject_bucket: progress | impact | risk | none

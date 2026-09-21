@@ -9,6 +9,7 @@ from pathlib import Path
 from app.models.contracts import Fill, OrderIntent, StrategyContext, TickCtx
 from app.paper.decision_log import (
     classify_reject_bucket,
+    make_row,
     pick_shadow_fill_px,
     reset_decision_log,
     shadow_metrics,
@@ -25,6 +26,12 @@ from app.paper.executability import (
     annotate_fill_executability,
     classify_reject_reason,
     shadow_slippage_bps,
+)
+from app.providers.pumpfun_curve_math import (
+    AMM_IMPACT_FEE_FLOOR_BPS,
+    CURVE_IMPACT_FEE_FLOOR_BPS,
+    impact_net_bps,
+    protocol_fee_bps_for_phase,
 )
 from app.paper.ledger import PaperTradeJournal, reset_paper_ledger
 from app.paper.pipeline import run_paper_order
@@ -137,6 +144,10 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertEqual(data["n_trades"], MIN_CLOSED_TRADES)
         self.assertGreaterEqual(data["expectancy"], 0)
         self.assertLess(data["median_entry_impact_bps"], IMPACT_MEDIAN_MAX_BPS)
+        self.assertAlmostEqual(data["median_entry_impact_gross_bps"], 42.0)
+        self.assertAlmostEqual(data["protocol_fee_bps"], CURVE_IMPACT_FEE_FLOOR_BPS)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 0.0)
+        self.assertLess(data["gates"]["median_entry_impact"]["median_net_bps"], IMPACT_MEDIAN_MAX_BPS)
         self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
         self.assertTrue(data["shadow_slippage"]["ok"])
         self.assertLessEqual(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
@@ -174,14 +185,20 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertLess(data["expectancy"], 0)
 
     def test_nogo_median_impact(self):
+        """Gross ~150 still fails: net median stays ≥60 and gross breaches 80."""
         recipe = _load("nogo_impact.json")
         data = aggregate_executability(
             _expand_trades(recipe), eval_counts=recipe["eval_counts"]
         )
         self.assertEqual(data["verdict"], "no-go")
         self.assertFalse(data["gates"]["median_entry_impact"]["ok"])
-        self.assertGreaterEqual(data["median_entry_impact_bps"], IMPACT_MEDIAN_MAX_BPS)
-        self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
+        self.assertAlmostEqual(data["median_entry_impact_gross_bps"], 150.0)
+        self.assertAlmostEqual(data["protocol_fee_bps"], CURVE_IMPACT_FEE_FLOOR_BPS)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 87.5)
+        self.assertGreaterEqual(data["median_entry_impact_net_bps"], IMPACT_MEDIAN_MAX_BPS)
+        self.assertGreater(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
+        self.assertEqual(data["gates"]["median_entry_impact"]["basis"], "net_of_protocol_fee")
+        self.assertFalse(data["liveEnabled"])
 
     def test_nogo_shadow(self):
         recipe = _load("nogo_shadow.json")
@@ -191,6 +208,85 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertEqual(data["verdict"], "no-go")
         self.assertFalse(data["gates"]["shadow_slippage"]["ok"])
         self.assertGreater(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
+
+    def test_net_of_fee_gross_76_goes(self):
+        """Gross ~76 with curve fee 62.5 → net ~13.5 clears the <60 median."""
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        for row in trades:
+            row["entry_estimated_impact_bps"] = 76.0
+        data = aggregate_executability(trades, eval_counts=recipe["eval_counts"])
+        self.assertAlmostEqual(impact_net_bps(76.0, CURVE_IMPACT_FEE_FLOOR_BPS), 13.5)
+        self.assertAlmostEqual(data["protocol_fee_bps"], 62.5)
+        self.assertAlmostEqual(data["median_entry_impact_gross_bps"], 76.0)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 13.5)
+        self.assertLess(data["median_entry_impact_net_bps"], IMPACT_MEDIAN_MAX_BPS)
+        self.assertLessEqual(data["max_entry_impact_gross_bps"], IMPACT_HARD_MAX_BPS)
+        self.assertTrue(data["gates"]["median_entry_impact"]["ok"])
+        self.assertEqual(data["verdict"], "go")
+        self.assertEqual(data["lamp"], "green")
+        self.assertFalse(data["liveEnabled"])
+        self.assertTrue(data["sample_ok"])
+        self.assertGreaterEqual(data["n_trades"], MIN_CLOSED_TRADES)
+
+    def test_sample_ok_still_requires_30_when_net_passes(self):
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)[:29]
+        for row in trades:
+            row["entry_estimated_impact_bps"] = 76.0
+        data = aggregate_executability(trades, eval_counts=recipe["eval_counts"])
+        self.assertEqual(len(trades), 29)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 13.5)
+        self.assertFalse(data["sample_ok"])
+        self.assertFalse(data["gates"]["sample_ok"]["ok"])
+        self.assertEqual(data["verdict"], "no-go")
+        self.assertFalse(data["liveEnabled"])
+
+    def test_amm_phase_uses_ten_bps_floor(self):
+        """GRADMOCK-style AMM floor is half of default spread (10), not the curve 62.5."""
+        self.assertAlmostEqual(protocol_fee_bps_for_phase("amm"), AMM_IMPACT_FEE_FLOOR_BPS)
+        self.assertAlmostEqual(AMM_IMPACT_FEE_FLOOR_BPS, 10.0)
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        for row in trades:
+            row["entry_estimated_impact_bps"] = 75.0
+            row["phase"] = "amm"
+        data = aggregate_executability(trades, eval_counts=recipe["eval_counts"])
+        self.assertAlmostEqual(data["protocol_fee_bps"], 10.0)
+        self.assertAlmostEqual(data["median_entry_impact_gross_bps"], 75.0)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 65.0)
+        self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
+        self.assertFalse(data["gates"]["median_entry_impact"]["ok"])
+        self.assertEqual(data["verdict"], "no-go")
+        self.assertFalse(data["liveEnabled"])
+
+    def test_decision_log_row_exposes_gross_fee_net(self):
+        row = make_row(
+            ts=1,
+            strategy_id="pump-paper-v1",
+            symbol="PUMPDEMO/SOL",
+            stage="paper_submit",
+            outcome="fill",
+            signal_side="buy",
+            impact_bps_est=76.0,
+            phase="curve",
+        )
+        self.assertAlmostEqual(row.impact_gross_bps, 76.0)
+        self.assertAlmostEqual(row.protocol_fee_bps, 62.5)
+        self.assertAlmostEqual(row.impact_net_bps, 13.5)
+        self.assertEqual(row.phase, "curve")
+        amm = make_row(
+            ts=2,
+            strategy_id="pump-paper-v1",
+            symbol="GRADMOCK/SOL",
+            stage="paper_submit",
+            outcome="fill",
+            signal_side="buy",
+            impact_bps_est=20.0,
+            phase="amm",
+        )
+        self.assertAlmostEqual(amm.protocol_fee_bps, 10.0)
+        self.assertAlmostEqual(amm.impact_net_bps, 10.0)
 
     def test_hard_max_impact_breach(self):
         recipe = _load("go_30.json")
@@ -352,6 +448,9 @@ class ExecutabilityApiTests(unittest.TestCase):
         self.assertIn("LiveLimits", data["gates"]["live"]["reason"])
         self.assertEqual(data["live_limits"]["max_notional_sol"], 1.0)
         self.assertEqual(data["hard_max_impact_bps"], 80.0)
+        self.assertAlmostEqual(data["protocol_fee_bps_curve"], 62.5)
+        self.assertAlmostEqual(data["protocol_fee_bps_amm"], 10.0)
+        self.assertEqual(data["gates"]["median_entry_impact"]["basis"], "net_of_protocol_fee")
         self.assertEqual(data["n_closed"], 0)
         self.assertIn("progress", data["reject_rate"])
         self.assertIn("impact", data["reject_rate"])
@@ -398,6 +497,16 @@ class ExecutabilityApiTests(unittest.TestCase):
         fills_log = [row for row in items if row["outcome"] in ("fill", "partial")]
         self.assertGreaterEqual(len(fills_log), 1)
         self.assertIn("estimated_impact_bps", fills_log[0])
+        self.assertIn("impact_gross_bps", fills_log[0])
+        self.assertIn("protocol_fee_bps", fills_log[0])
+        self.assertIn("impact_net_bps", fills_log[0])
+        self.assertAlmostEqual(fills_log[0]["protocol_fee_bps"], 62.5)
+        self.assertAlmostEqual(
+            fills_log[0]["impact_net_bps"],
+            max(0.0, float(fills_log[0]["impact_gross_bps"]) - 62.5),
+        )
+        self.assertIn("median_entry_impact_net_bps", data)
+        self.assertIn("median_entry_impact_gross_bps", data)
         self.assertIn("decision_px", fills_log[0])
         self.assertIn("paper_fill_px", fills_log[0])
         self.assertIn("shadow_fill_px", fills_log[0])
