@@ -100,7 +100,7 @@ export function PaperStatsPanel({ compact }: Props) {
           autopaper {autoPaperOrders ? "on" : "off"}
         </span>
         <span className="muted tiny">{tradingState}</span>
-        <label className="mc-toggle">
+        <label className="mc-toggle" title="show_monte_carlo · default off">
           <input
             type="checkbox"
             checked={mcOn}
