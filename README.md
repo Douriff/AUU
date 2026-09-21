@@ -65,7 +65,7 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 | 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 仍走 paper 行情 |
 | 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 不自动下单 |
 | 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | `LiveBroker` stub；**本轮不发链上 tx** |
-| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored）；health 仅 `keypairMounted` + `pubkeyShort` |
+| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored）；health 仅 `keypairMounted` + `pubkey` |
 
 切换行情源：环境变量 `DATA_PROVIDER=mock` 或 `DATA_PROVIDER=pumpfun_paper`。  
 `pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS`（逗号分隔 mint 白名单）播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）把 `new_token` 写入自选，**不**自动下单。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。始终 PaperBroker。
@@ -109,11 +109,11 @@ Default path: **`secrets/live-keypair.json`** (see `secrets/README.md`). Env: `A
 |-------|---------|
 | `liveEnabled` | default **false** (stays false until Settings secondary confirm) |
 | `keypairMounted` | **bool** — file present and looks like a 64-int Solana JSON keypair |
-| `pubkey` / `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` — never secret bytes |
+| `pubkey` | public key (`8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi`) or `null` — never secret bytes |
 | `liveLimits` | locked **1 / 0.045 / 10** |
 | `liveReasons` | includes `LIVE_DISABLED` until mount + secondary confirm + LiveLimits |
 
-Health **never** returns secret bytes, the JSON array, or a full private key. `pubkeyShort` is not the secret.
+Health **never** returns secret bytes, the JSON array, or a private key. `pubkey` is the public key only.
 
 Refuse live orders with `LIVE_DISABLED` unless **all** of: mounted keypair, Settings secondary confirm, `liveEnabled=true`, LiveLimits present.
 

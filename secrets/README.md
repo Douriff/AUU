@@ -8,8 +8,8 @@ secrets/live-keypair.json
 
 Expected shape: JSON array of **64 ints** (Phantom base58 converted locally).
 That file is gitignored. AUU never asks you to paste a secret. Health reports
-`keypairMounted` (bool) and `pubkey` only (example `8fs58…akFi`) — never
-the file bytes. `pubkeyShort` is the same shortened value.
+`keypairMounted` (bool) and `pubkey` only (example
+`8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi`) — never the file bytes.
 
 Override path with gitignored env `AUU_SOLANA_KEYPAIR_PATH`.
 

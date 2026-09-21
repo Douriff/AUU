@@ -24,7 +24,7 @@ Paper is unchanged. Autopaper stays off by default. Live is a separate route fam
 
 Reject with **`LIVE_DISABLED`** (403 `error.reasons` / `error.tags` **and** `RiskOut.tags`) unless **all** of:
 
-1. Local keypair **mounted** at gitignored **`secrets/live-keypair.json`** (or `AUU_SOLANA_KEYPAIR_PATH`) — never a secret string in repo, env value, logs, or Settings (there is no input). Health: `keypairMounted` bool + `pubkeyShort` only.
+1. Local keypair **mounted** at gitignored **`secrets/live-keypair.json`** (or `AUU_SOLANA_KEYPAIR_PATH`) — never a secret string in repo, env value, logs, or Settings (there is no input). Health: `keypairMounted` bool + `pubkey` only.
 2. User **explicit secondary confirm** (`liveConfirmed` / Settings dialog). `AUU_LIVE_ARMED` is an alias; default **false**.
 3. `liveEnabled` **true**. Default **false** (`AUU_LIVE_ENABLED` unset, or `AUU_LIVE_DISABLED` true).
 4. `LiveLimits` present (locked caps below).
@@ -63,12 +63,12 @@ Do **not** commit `.env`, `secrets/live-keypair.json`, `id.json`, or `*keypair*.
 | Field | Expose |
 |-------|--------|
 | `keypairMounted` | **bool** (`true` when the 64-int file is present) |
-| `pubkey` / `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` |
+| `pubkey` | public key (`8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi`) or `null` |
 | secret / JSON array / full private key | **never** |
 
-The API never logs secret bytes. `LocalSigner.inspect` reads the file, derives `pubkeyShort` from the public half of a 64-int Solana CLI array (last 32 bytes), then drops the contents. `liveEnabled` stays **false** until Settings secondary confirm.
+The API never logs secret bytes. `LocalSigner.inspect` reads the file, derives `pubkey` from the public half of a 64-int Solana CLI array (last 32 bytes), then drops the contents. `liveEnabled` stays **false** until Settings secondary confirm.
 
-Settings: `liveEnabled` default off + confirm dialog; three locked caps read-only; keypair `mounted` bool + `pubkeyShort` only. Alert bar shows `LIVE_DISABLED`.
+Settings: `liveEnabled` default off + confirm dialog; three locked caps read-only; keypair `mounted` bool + `pubkey` only. Alert bar shows `LIVE_DISABLED`.
 
 ## RiskGate live extras
 
@@ -138,7 +138,7 @@ Forbidden now and later: Jito tips, sniper/create-listen auto-buy, private-key s
 
 ## REST
 
-- `GET /api/v1/live/status` — `liveEnabled`, `liveConfirmed`, `liveDisabled`, `liveArmed`, `reasons`, `limits`, `keypairMounted` (bool), `pubkeyShort`
+- `GET /api/v1/live/status` — `liveEnabled`, `liveConfirmed`, `liveDisabled`, `liveArmed`, `reasons`, `limits`, `keypairMounted` (bool), `pubkey`
 - `GET /api/v1/live/ledger` — `source=live` journal (empty here; never mixed into paper win-rate)
 - `PUT /api/v1/live/limits` — locked; body ignored
 - `PUT /api/v1/live/enabled` — `{ liveEnabled, confirmed }`; confirm required to leave `LIVE_DISABLED`

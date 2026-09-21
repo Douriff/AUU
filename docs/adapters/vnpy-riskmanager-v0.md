@@ -24,7 +24,7 @@
 | 日亏熔断 | `max_day_loss_pct` **= 0.045** | `DAY_LOSS_BREAKER`（纸面仍 5%） |
 | 持仓个数 | `max_open_mints` **= 10** | `MAX_OPEN_MINTS` |
 | 交易开关 | `liveEnabled` (default false) + secondary confirm | `LIVE_DISABLED`；默认关 |
-| 密钥 | `secrets/live-keypair.json` 本机文件（gitignored） | 缺文件 `NO_KEYPAIR`；health 仅 `keypairMounted` + `pubkeyShort` |
+| 密钥 | `secrets/live-keypair.json` 本机文件（gitignored） | 缺文件 `NO_KEYPAIR`；health 仅 `keypairMounted` + `pubkey` |
 
 详见 `docs/adapters/pumpfun-live-local-signer-v0.md`。本轮 **不** `sendTransaction`。
 

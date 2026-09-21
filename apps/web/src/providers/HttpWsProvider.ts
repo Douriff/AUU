@@ -146,7 +146,6 @@ export class HttpWsProvider {
     keypairConfigured?: boolean;
     keypairMounted?: boolean;
     pubkey?: string | null;
-    pubkeyShort?: string | null;
     keypairRelpath?: string;
     keypairEnv?: string;
     watch_mints?: string;

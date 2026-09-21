@@ -313,7 +313,6 @@ export interface LiveStatus {
   keypairConfigured: boolean;
   keypairMounted: boolean;
   pubkey?: string | null;
-  pubkeyShort?: string | null;
   keypairEnv: string;
   keypairRelpath?: string;
   keypairPathHint: string;

@@ -4,8 +4,9 @@ Expected file: gitignored secrets/live-keypair.json as a JSON array of 64
 ints (Solana CLI / Phantom base58 converted locally). Never accepts a secret
 string from HTTP or Settings. Never logs or returns secret bytes.
 
-Health may expose keypairMounted (bool) and a shortened public key only
-(shape 8fs58…akFi). This PR does not sign or submit chain transactions.
+Health may expose keypairMounted (bool) and the public key only
+(example 8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi). This PR does not
+sign or submit chain transactions.
 """
 from __future__ import annotations
 
@@ -59,19 +60,12 @@ def _b58decode(s: str) -> bytes:
     return (b"\x00" * pad) + body
 
 
-def shorten_pubkey(full: str) -> str:
-    """Health/UI shape: 8fs58…akFi (5 prefix + 4 suffix). Never the full key."""
-    if len(full) <= 10:
-        return full
-    return f"{full[:5]}…{full[-4:]}"
-
-
 @dataclass(frozen=True)
 class SignerStatus:
     ok: bool
     reason: str
     present: bool
-    pubkey_short: str = ""
+    pubkey: str = ""
 
 
 def _as_byte(item: object) -> Optional[int]:
@@ -115,16 +109,14 @@ def _coerce_blob(data: object) -> Optional[list[int]]:
     return None
 
 
-def _pubkey_short_from_blob(data: list[int]) -> str:
+def _pubkey_from_blob(data: list[int]) -> str:
     """64-byte Solana arrays store the public key in the last 32 bytes."""
     if len(data) != 64:
         return ""
     pub = bytes(int(x) & 0xFF for x in data[32:64])
     full = _b58encode(pub)
-    short = shorten_pubkey(full)
     pub = b""
-    full = ""
-    return short
+    return full
 
 
 class LocalSigner:
@@ -148,10 +140,10 @@ class LocalSigner:
         except json.JSONDecodeError:
             parsed = raw_text.strip()
         blob = _coerce_blob(parsed)
-        pubkey_short = ""
+        pubkey = ""
         ok = blob is not None
         if ok and blob is not None:
-            pubkey_short = _pubkey_short_from_blob(blob)
+            pubkey = _pubkey_from_blob(blob)
         # Drop secret material before returning. Do not interpolate into logs.
         blob = None
         parsed = None
@@ -160,7 +152,7 @@ class LocalSigner:
             log.info("local signer: keypair file has invalid shape")
             return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
         log.info("local signer: keypair file present")
-        return SignerStatus(ok=True, reason="", present=True, pubkey_short=pubkey_short)
+        return SignerStatus(ok=True, reason="", present=True, pubkey=pubkey)
 
     def sign_message(self, message: bytes) -> bytes:
         """Not wired. A later PR may sign with the filesystem keypair after the live gate."""

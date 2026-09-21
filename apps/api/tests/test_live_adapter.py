@@ -32,7 +32,7 @@ from app.live.gate import (
 from app.live.intent import BUY_METHOD, PUMP_SDK_PACKAGE, SELL_METHOD, build_intent_for_order
 from app.live.ledger import LiveTradeJournal, get_live_ledger, reset_live_ledger
 from app.live.send import send_allowed
-from app.live.signer import LocalSigner, shorten_pubkey, _b58encode, _b58decode
+from app.live.signer import LocalSigner, _b58encode, _b58decode
 from app.models.contracts import (
     AccountCtx,
     Fill,
@@ -73,7 +73,8 @@ LOCKED_LIMITS = {
 
 
 _UNMOUNTED_PATH = str(Path(tempfile.gettempdir()) / "auu-missing-live-keypair.json")
-_PUBKEY_SHORT_RE = r"^.{5}….{4}$"
+_PUBKEY_RE = r"^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+EXAMPLE_PUBKEY = "8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi"
 
 
 def _clear_live_env() -> None:
@@ -93,10 +94,10 @@ def _dummy_keypair(dirpath: str, marker: int = 173) -> str:
     return str(path)
 
 
-def _assert_pubkey_short_shape(testcase: unittest.TestCase, short: str) -> None:
-    testcase.assertRegex(short, _PUBKEY_SHORT_RE)
-    testcase.assertLessEqual(len(short), 12)
-    testcase.assertIn("…", short)
+def _assert_pubkey(testcase: unittest.TestCase, pubkey: str) -> None:
+    testcase.assertRegex(pubkey, _PUBKEY_RE)
+    testcase.assertNotIn("…", pubkey)
+    testcase.assertNotIn("...", pubkey)
 
 
 def _arm(tmp: str) -> None:
@@ -130,7 +131,7 @@ class LiveGateDefaultTests(unittest.TestCase):
         self.assertFalse(st.keypair_configured)
         self.assertFalse(st.as_dict()["keypairMounted"])
         self.assertIsNone(st.as_dict()["pubkey"])
-        self.assertIsNone(st.as_dict()["pubkeyShort"])
+        self.assertNotIn("pubkeyShort", st.as_dict())
         self.assertEqual(st.as_dict()["keypairRelpath"], DEFAULT_KEYPAIR_RELPATH)
         self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
         self.assertTrue(paper_live_disabled())
@@ -193,8 +194,7 @@ class LiveGateDefaultTests(unittest.TestCase):
             self.assertFalse(st.armed)
             self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
             self.assertIs(st.as_dict()["keypairMounted"], True)
-            self.assertEqual(st.as_dict()["pubkey"], st.as_dict()["pubkeyShort"])
-            _assert_pubkey_short_shape(self, st.as_dict()["pubkey"])
+            _assert_pubkey(self, st.as_dict()["pubkey"])
 
     def test_settings_cannot_disable_switch_without_keypair(self):
         ok, st = try_set_disabled(False)
@@ -234,10 +234,10 @@ class LocalSignerTests(unittest.TestCase):
         self.assertFalse(st.ok)
         self.assertEqual(st.reason, REASON_NO_KEYPAIR)
 
-    def test_shorten_pubkey_example_shape(self):
-        full = "8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi"
-        self.assertEqual(shorten_pubkey(full), "8fs58…akFi")
-        self.assertEqual(len("8fs58…akFi"), 10)
+    def test_documented_pubkey_is_full_not_garbled(self):
+        _assert_pubkey(self, EXAMPLE_PUBKEY)
+        self.assertEqual(EXAMPLE_PUBKEY, "8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi")
+        self.assertEqual(len(EXAMPLE_PUBKEY), 44)
 
     def test_b58_roundtrip_pubkey_bytes(self):
         data = bytes(range(32))
@@ -251,9 +251,9 @@ class LocalSignerTests(unittest.TestCase):
             path.write_text(json.dumps(secret + pub), encoding="utf-8")
             st = LocalSigner().inspect(str(path))
             self.assertTrue(st.ok)
-            expected = shorten_pubkey(_b58encode(bytes(pub)))
-            self.assertEqual(st.pubkey_short, expected)
-            _assert_pubkey_short_shape(self, st.pubkey_short)
+            expected = _b58encode(bytes(pub))
+            self.assertEqual(st.pubkey, expected)
+            _assert_pubkey(self, st.pubkey)
 
     def test_inspect_does_not_log_secret_bytes(self):
         marker = 199
@@ -268,17 +268,17 @@ class LocalSignerTests(unittest.TestCase):
             self.assertNotIn(json.dumps([marker] * 32), blob)
             self.assertNotIn(json.dumps(list(range(64))), blob)
             self.assertIn("present", blob.lower())
-            _assert_pubkey_short_shape(self, st.pubkey_short)
+            _assert_pubkey(self, st.pubkey)
 
-    def test_pubkey_short_never_includes_secret_bytes(self):
+    def test_pubkey_never_includes_secret_bytes(self):
         marker = 201
         with tempfile.TemporaryDirectory() as tmp:
             path = _dummy_keypair(tmp, marker=marker)
             st = LocalSigner().inspect(path)
-            payload = {"keypairMounted": st.ok, "pubkey": st.pubkey_short}
+            payload = {"keypairMounted": st.ok, "pubkey": st.pubkey}
             dumped = json.dumps(payload)
             self.assertTrue(payload["keypairMounted"])
-            _assert_pubkey_short_shape(self, payload["pubkey"])
+            _assert_pubkey(self, payload["pubkey"])
             self.assertNotIn(json.dumps([marker] * 32), dumped)
             self.assertNotIn(json.dumps([(marker + 1) % 256] * 32), dumped)
 
@@ -309,8 +309,7 @@ class DefaultSecretsMountTests(unittest.TestCase):
         dumped = json.dumps(payload)
         self.assertNotIn("secretKey", dumped.lower())
         if payload["keypairMounted"]:
-            self.assertEqual(payload["pubkey"], payload["pubkeyShort"])
-            _assert_pubkey_short_shape(self, payload["pubkey"])
+            _assert_pubkey(self, payload["pubkey"])
             self.assertNotIn(REASON_NO_KEYPAIR, st.reasons)
 
     def test_mounted_64_int_file_reports_pubkey_only(self):
@@ -320,8 +319,8 @@ class DefaultSecretsMountTests(unittest.TestCase):
             st = evaluate()
             payload = st.as_dict()
             self.assertIs(payload["keypairMounted"], True)
-            self.assertEqual(payload["pubkey"], payload["pubkeyShort"])
-            _assert_pubkey_short_shape(self, payload["pubkey"])
+            _assert_pubkey(self, payload["pubkey"])
+            self.assertNotIn("pubkeyShort", payload)
             self.assertFalse(payload["liveEnabled"])
             self.assertFalse(payload["liveConfirmed"])
             self.assertIn(REASON_LIVE_DISABLED, payload["reasons"])
@@ -563,7 +562,7 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertFalse(data["keypairConfigured"])
         self.assertIs(data["keypairMounted"], False)
         self.assertIsNone(data["pubkey"])
-        self.assertIsNone(data["pubkeyShort"])
+        self.assertNotIn("pubkeyShort", data)
         self.assertEqual(data["keypairRelpath"], DEFAULT_KEYPAIR_RELPATH)
         self.assertEqual(data["liveLimits"]["max_notional_sol"], 1.0)
         self.assertEqual(data["liveLimits"]["max_day_loss_pct"], 0.045)
@@ -577,7 +576,7 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertFalse(data["sendEnabled"])
         self.assertIn("keypairMounted", data)
         self.assertIn("pubkey", data)
-        self.assertEqual(data["pubkey"], data["pubkeyShort"])
+        self.assertNotIn("pubkeyShort", data)
         self.assertEqual(data["limits"]["max_notional_sol"], 1.0)
         self.assertEqual(data["limits"]["max_day_loss_pct"], 0.045)
         self.assertEqual(data["limits"]["max_open_mints"], 10)
@@ -640,8 +639,8 @@ class LiveRouteAndPaperTests(unittest.TestCase):
             self.assertTrue(st["liveDisabled"])
             self.assertFalse(st["sendEnabled"])
             self.assertIs(st["keypairMounted"], True)
-            self.assertEqual(st["pubkey"], st["pubkeyShort"])
-            _assert_pubkey_short_shape(self, st["pubkey"])
+            _assert_pubkey(self, st["pubkey"])
+            self.assertNotIn("pubkeyShort", st)
             dumped = json.dumps(st)
             self.assertNotIn(json.dumps([173] * 32), dumped)
             self.assertEqual(st["limits"]["max_notional_sol"], 1.0)
@@ -718,8 +717,9 @@ class NoCommittedKeypairTests(unittest.TestCase):
         self.assertIn("secrets/*", gi)
         readme = (ROOT / "secrets" / "README.md").read_text(encoding="utf-8")
         self.assertIn("secrets/live-keypair.json", readme)
-        self.assertIn("pubkeyShort", readme)
-        self.assertIn("8fs58…akFi", readme)
+        self.assertIn("pubkey", readme)
+        self.assertIn(EXAMPLE_PUBKEY, readme)
+        self.assertNotIn("…", readme)
         self.assertIn("64", readme)
 
     def test_git_does_not_track_keypair_json(self):
@@ -776,7 +776,10 @@ class NoCommittedKeypairTests(unittest.TestCase):
         self.assertNotIn("private key", settings.lower())
         self.assertIn("mounted", settings.lower())
         self.assertIn("secrets/live-keypair.json", settings)
-        self.assertIn("pubkeyShort", settings)
+        self.assertIn("pubkey", settings)
+        self.assertIn(EXAMPLE_PUBKEY, settings)
+        self.assertNotIn("pubkeyShort", settings)
+        self.assertNotIn("8fs58…akFi", settings)
         self.assertIn("Confirm liveEnabled", settings)
         self.assertIn("LIVE_DISABLED", settings)
 

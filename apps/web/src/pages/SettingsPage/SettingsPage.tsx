@@ -57,7 +57,7 @@ export function SettingsPage() {
   }, []);
 
   const mounted = live?.keypairMounted === true || live?.keypairConfigured === true;
-  const pubkey = live?.pubkey || live?.pubkeyShort || "";
+  const pubkey = live?.pubkey || "";
   const liveEnabled = Boolean(live?.liveEnabled);
 
   const applyLive = (st: LiveStatus) => {
@@ -232,9 +232,10 @@ export function SettingsPage() {
         <p className="muted">
           liveEnabled defaults off. Mount a local JSON array of 64 ints at{" "}
           <code>secrets/live-keypair.json</code> (gitignored; Phantom base58 converted locally) or
-          set <code>AUU_SOLANA_KEYPAIR_PATH</code>. Health shows mounted + pubkey only (shape{" "}
-          <code>8fs58…akFi</code>). Enabling requires a secondary confirm dialog and the three
-          locked caps. This runtime still sends zero chain txs. This UI never asks for a secret.
+          set <code>AUU_SOLANA_KEYPAIR_PATH</code>. Health shows mounted + pubkey only (
+          <code>8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi</code>). Enabling requires a
+          secondary confirm dialog and the three locked caps. This runtime still sends zero
+          chain txs. This UI never asks for a secret.
         </p>
         {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>

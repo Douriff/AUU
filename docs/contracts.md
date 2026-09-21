@@ -47,7 +47,7 @@ REST：
 - `POST /api/v1/paper/orders` → `{ fills, reject? }`（`risk.allow` 必须为 true）
 - `POST /api/v1/risk/post-fill`
 - `POST /api/v1/pipeline/decide-and-fill` — 一枪：provider mid/book + optional `PumpCtx` → signal → RiskGate → PaperBroker
-- `GET /api/v1/live/status` — live adapter (default `liveEnabled=false`; 403 `LIVE_DISABLED` on `/live/orders` unless keypair mounted + confirm + enabled + `LiveLimits`). Health: `keypairMounted` bool + `pubkeyShort` only; never a secret.
+- `GET /api/v1/live/status` — live adapter (default `liveEnabled=false`; 403 `LIVE_DISABLED` on `/live/orders` unless keypair mounted + confirm + enabled + `LiveLimits`). Health: `keypairMounted` bool + `pubkey` only; never a secret.
 - `GET /api/v1/live/ledger` — `source=live` only; paper stats win-rate never mixes these fills
 - `GET /api/v1/book?symbol=` — synth 深度快照（供 UI 组 ctx）
 - `GET/PUT /api/v1/strategy/pump-paper-v1` — `auto_paper_orders` / `strategy_autopaper`（默认 false，无需重启）

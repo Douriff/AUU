@@ -162,7 +162,7 @@ class LiveStatus:
     reasons: list[str]
     keypair_configured: bool
     keypair_env: str
-    pubkey_short: str
+    pubkey: str
     limits: LiveLimits
     limits_missing: list[str]
     disabled_switch: bool
@@ -193,8 +193,7 @@ class LiveStatus:
             "reasons": list(self.reasons),
             "keypairConfigured": self.keypair_configured,
             "keypairMounted": bool(self.keypair_configured),
-            "pubkey": self.pubkey_short or None,
-            "pubkeyShort": self.pubkey_short or None,
+            "pubkey": self.pubkey or None,
             "keypairEnv": self.keypair_env,
             "keypairRelpath": DEFAULT_KEYPAIR_RELPATH,
             "keypairPathHint": (
@@ -323,7 +322,7 @@ def evaluate() -> LiveStatus:
         reasons=reasons,
         keypair_configured=keypair_ok,
         keypair_env=ENV_KEYPAIR_PATH,
-        pubkey_short=signer.pubkey_short if keypair_ok else "",
+        pubkey=signer.pubkey if keypair_ok else "",
         limits=limits,
         limits_missing=missing,
         disabled_switch=not enabled,
