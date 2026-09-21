@@ -501,12 +501,15 @@ export interface RejectRateBucket {
 
 export interface ExecutabilityGate {
   ok: boolean;
+  warn_negative?: boolean;
   [key: string]: unknown;
 }
 
 export interface ExecutabilityReport {
   mode: string;
   verdict: "go" | "no-go";
+  lamp: "gray" | "green" | "red";
+  nogo_reason: string;
   liveEnabled: boolean;
   liveDisabled: boolean;
   live_limits: {
@@ -514,7 +517,13 @@ export interface ExecutabilityReport {
     max_day_loss_pct: number;
     max_open_mints: number;
   };
+  live_checks: {
+    live_limits: boolean;
+    keypair_mounted: boolean;
+    secondary_confirm: boolean;
+  };
   window?: string | number;
+  n_closed: number;
   n_trades: number;
   sample_ok: boolean;
   expectancy: number | null;
@@ -524,16 +533,24 @@ export interface ExecutabilityReport {
   hard_max_impact_bps: number;
   params_max_impact_bps?: number | null;
   reject_rate: {
-    progress_band: RejectRateBucket;
+    progress: RejectRateBucket;
     impact: RejectRateBucket;
     risk: RejectRateBucket;
+    progress_band?: RejectRateBucket;
   };
   n_entry_evals?: number;
   shadow_slippage: {
+    p50_bps?: number | null;
+    p90_bps?: number | null;
     median_bps: number | null;
     x_bps: number;
     n: number;
     ok: boolean;
+  };
+  impact_error?: {
+    p50_bps?: number | null;
+    p90_bps?: number | null;
+    n: number;
   };
   gates: {
     sample_ok: ExecutabilityGate;

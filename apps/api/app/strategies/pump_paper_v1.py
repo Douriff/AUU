@@ -27,7 +27,7 @@ from app.models.contracts import (
 )
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.paper.guard import live_execution_blocked
-from app.paper.executability import classify_reject_reason
+from app.paper.decision_log import append_decision, classify_reject_bucket, make_row
 from app.providers import get_provider
 from app.risk import get_risk_gate
 
@@ -316,12 +316,15 @@ class PumpPaperEngine:
         if signal.side == "long":
             self._eval_by_bucket["attempt"] = self._eval_by_bucket.get("attempt", 0) + 1
             return
-        bucket = classify_reject_reason(reason, signal.tags) or "other"
-        self._eval_by_bucket[bucket] = self._eval_by_bucket.get(bucket, 0) + 1
+        bucket = classify_reject_bucket(reason, signal.tags)
+        if bucket == "none":
+            self._eval_by_bucket["other"] = self._eval_by_bucket.get("other", 0) + 1
+        else:
+            self._eval_by_bucket[bucket] = self._eval_by_bucket.get(bucket, 0) + 1
 
     def record_order_reject(self, reason: str, tags: Optional[list[str]] = None) -> None:
-        bucket = classify_reject_reason(reason, tags) or "risk"
-        if bucket == "other":
+        bucket = classify_reject_bucket(reason, tags)
+        if bucket == "none":
             bucket = "risk"
         self._eval_by_bucket[bucket] = self._eval_by_bucket.get(bucket, 0) + 1
         key = reason or "order_reject"
@@ -518,6 +521,24 @@ class PumpPaperEngine:
         if blocked:
             self._note(symbol, now_ms, action="refuse", allow=False, reason="LIVE_DISABLED", notes=why)
             self.record_order_reject("LIVE_DISABLED", ["LIVE_DISABLED"])
+            append_decision(
+                make_row(
+                    ts=now_ms,
+                    strategy_id=STRATEGY_ID,
+                    symbol=symbol,
+                    mint=snap.mint,
+                    stage="live_blocked",
+                    outcome="reject",
+                    signal_side=signal.side,
+                    signal_reason="LIVE_DISABLED",
+                    signal_tags=["LIVE_DISABLED"],
+                    risk_allow=False,
+                    risk_tags=["LIVE_DISABLED"],
+                    risk_notes=why,
+                    notional_sol=notional,
+                    reject_bucket="risk",
+                )
+            )
             return
         gate = get_risk_gate()
         if gate.trading_state == "halted":
@@ -727,6 +748,22 @@ class PumpPaperEngine:
             )
             if pos is None:
                 self.record_entry_eval(signal)
+                if signal.reason != "hold":
+                    append_decision(
+                        make_row(
+                            ts=now_ms,
+                            strategy_id=STRATEGY_ID,
+                            symbol=info.symbol,
+                            mint=snap.mint,
+                            stage="signal",
+                            outcome="emit_signal" if signal.side == "long" else "reject",
+                            signal=signal,
+                            notional_sol=sized,
+                            impact_bps_est=None if impact_in >= 1e8 else impact_in,
+                            impact_bps_cap=float(self.params.max_impact_bps),
+                        ),
+                        debounce=True,
+                    )
             if self._should_emit(info.symbol, signal):
                 await self.publish_signal(info.symbol, now_ms, signal)
             self._last_emitted[info.symbol] = signal

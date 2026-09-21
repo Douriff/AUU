@@ -73,8 +73,8 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 | G1 | 样本 | `n_trades ≥ 30` 且 `sample_ok=true` | 不足 30 笔已平仓 | journal `closed` |
 | G2 | 期望 | `expectancy ≥ 0`（报价币 / 笔） | 均值为负 | `mean(pnl)`；容差见 §2.1 |
 | G3 | 入场冲击 | 入场 `estimated_impact_bps` **中位 < 60** | 中位 ≥ 60，或任一样本 **> 80**（硬顶） | 开仓 Fill 上的曲线/公式冲击 |
-| G4 | 拒单率 | `progress_band` / `impact` / `risk` **三项均已报告** | 缺字段 | 入场 evaluate + deny/refuse |
-| G5 | 影子滑点 | 中位 `shadow_slippage_bps ≤ X`，`X = 40` | 中位 > 40，或无报价样本 | 纸面成交价 vs **同时刻**曲线报价 |
+| G4 | 拒单结构 | `progress` / `impact` / `risk` **三项均已报告**（DecisionLog） | 缺字段 | `docs/adapters/decision-log-v0.md` |
+| G5 | 影子滑点 | 中位 `shadow_slippage_bps ≤ X`，`X = 40` | 中位 > 40，或无报价样本 | DecisionLog replay（next_trade\|next_open）或成交当时曲线报价；见 `docs/research/shadow-fill-v0.md` |
 | G6 | 实盘开关 | **永不**由本栈置 true | 任何 `liveEnabled=true` 都是违规 | 恒 `false`；见 §5 |
 
 **总 verdict** = G1∧G2∧G3∧G4∧G5。G6 **不**并入 `verdict`：即使纸面 go，`liveEnabled` 仍 false。
@@ -101,9 +101,9 @@ quote = 成交当时 ctx.tick.mid（pumpfun_paper 上即曲线 price_sol）
 
 | 桶 | 策略 `reason` / 标签 |
 |----|----------------------|
-| `progress_band` | `progress_band`、`not_curve` |
-| `impact` | `impact`；标签 `SLIPPAGE_CAP` |
-| `risk` | `blocked_tag`、`cooldown`、`reject_cooldown`、`max_open_mints`、`LIVE_DISABLED`、`TRADING_HALTED`、`REDUCE_ONLY`、`DAY_LOSS_BREAKER`、`HONEYPOT_FLAG`、`TAX_HIGH`、`SPREAD_TOO_WIDE`、`DEPTH_THIN`、`POSITION_CAP`、`COOLDOWN`、`CURVE_NEAR_GRADUATION`（作为拒单闸） |
+| `progress` | `progress_band`、`not_curve` |
+| `impact` | `impact`；标签 `SLIPPAGE_CAP`、`DEPTH_THIN`（`SPREAD_TOO_WIDE` 同流动性/冲击） |
+| `risk` | `blocked_tag`、`cooldown`、`reject_cooldown`、`max_open_mints`、`LIVE_DISABLED`、`TRADING_HALTED`、`REDUCE_ONLY`、`DAY_LOSS_BREAKER`、`HONEYPOT_FLAG`、`TAX_HIGH`、`POSITION_CAP`、`COOLDOWN`、`CURVE_NEAR_GRADUATION`（作为拒单闸） |
 | `other` | 如 `momentum`（报告但不作为 G4 缺项） |
 
 ```text
@@ -128,8 +128,9 @@ reject_rate[bucket] = count(bucket) / n_entry_evals
 verdict: "go" | "no-go"
 sample_ok, n_trades, expectancy
 median_entry_impact_bps, hard_max_impact_bps=80, impact_cap_go_bps=60
-reject_rate: { progress_band, impact, risk }   # { count, rate }
-shadow_slippage: { median_bps, x_bps=40, n, ok }
+reject_rate: { progress, impact, risk }   # { count, rate }
+shadow_slippage: { p50_bps, p90_bps, median_bps, x_bps=40, n, ok }
+impact_error: { p50_bps, p90_bps, n }
 liveEnabled: false
 live_limits: { max_notional_sol, max_day_loss_pct, max_open_mints }
 gates: { sample_ok, expectancy, median_entry_impact, reject_rate, shadow_slippage, live }

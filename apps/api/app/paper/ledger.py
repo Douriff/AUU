@@ -1,10 +1,14 @@
 """PaperTradeJournal — FIFO round-trips + PaperStats (+ optional trades-MC)."""
 from __future__ import annotations
 
+import json
+import os
 import random
+import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Mapping, Optional
 
 from app.models.contracts import Fill
 
@@ -41,6 +45,46 @@ class OpenLot:
     quote_price: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
 
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "qty": self.qty,
+            "price": self.price,
+            "ts": self.ts,
+            "fees": self.fees,
+            "tag": self.tag,
+            "mint": self.mint,
+            "strategy_id": self.strategy_id,
+            "estimated_impact_bps": self.estimated_impact_bps,
+            "quote_price": self.quote_price,
+            "shadow_slippage_bps": self.shadow_slippage_bps,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "OpenLot":
+        return cls(
+            symbol=str(d.get("symbol") or ""),
+            qty=float(d.get("qty") or 0.0),
+            price=float(d.get("price") or 0.0),
+            ts=int(d.get("ts") or 0),
+            fees=float(d.get("fees") or 0.0),
+            tag=str(d.get("tag") or ""),
+            mint=d.get("mint"),
+            strategy_id=str(d.get("strategy_id") or "manual-paper"),
+            estimated_impact_bps=_opt_float(d.get("estimated_impact_bps")),
+            quote_price=_opt_float(d.get("quote_price")),
+            shadow_slippage_bps=_opt_float(d.get("shadow_slippage_bps")),
+        )
+
+
+def _opt_float(v: Any) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
 
 @dataclass
 class RoundTrip:
@@ -59,7 +103,7 @@ class RoundTrip:
     pnl_pct: float
     fees: float
     tags: list[str] = field(default_factory=list)
-    source: str = "manual"  # signal | manual
+    source: str = "manual"  # signal | manual  (never live; live fills use LiveTradeJournal)
     side: str = "long"
     entry_estimated_impact_bps: Optional[float] = None
     entry_quote_price: Optional[float] = None
@@ -93,12 +137,52 @@ class RoundTrip:
             "exit_shadow_slippage_bps": self.exit_shadow_slippage_bps,
         }
 
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "RoundTrip":
+        tags = d.get("tags") or []
+        if not isinstance(tags, list):
+            tags = []
+        return cls(
+            id=str(d.get("id") or uuid.uuid4()),
+            strategy_id=str(d.get("strategy_id") or "manual-paper"),
+            symbol=str(d.get("symbol") or ""),
+            mint=d.get("mint"),
+            entry_ts=int(d.get("entry_ts") or 0),
+            exit_ts=int(d.get("exit_ts") or 0),
+            entry_price=float(d.get("entry_price") or 0.0),
+            exit_price=float(d.get("exit_price") or 0.0),
+            qty=float(d.get("qty") or 0.0),
+            pnl=float(d.get("pnl") or 0.0),
+            pnl_pct=float(d.get("pnl_pct") or 0.0),
+            fees=float(d.get("fees") or 0.0),
+            tags=[str(t) for t in tags],
+            source=str(d.get("source") or "manual"),
+            side=str(d.get("side") or "long"),
+            entry_estimated_impact_bps=_opt_float(d.get("entry_estimated_impact_bps")),
+            entry_quote_price=_opt_float(d.get("entry_quote_price")),
+            entry_shadow_slippage_bps=_opt_float(d.get("entry_shadow_slippage_bps")),
+            exit_estimated_impact_bps=_opt_float(d.get("exit_estimated_impact_bps")),
+            exit_quote_price=_opt_float(d.get("exit_quote_price")),
+            exit_shadow_slippage_bps=_opt_float(d.get("exit_shadow_slippage_bps")),
+        )
+
 
 ClosedTrade = RoundTrip
 
 
+def _is_live_tag(tag: str) -> bool:
+    t = (tag or "").lower()
+    if t.startswith("live") or ":live" in t or "venue:live" in t:
+        return True
+    if "source=live" in t or "source:live" in t:
+        return True
+    return False
+
+
 def _ids_from_tag(tag: str) -> tuple[str, str]:
     t = (tag or "").lower()
+    if _is_live_tag(t):
+        return "live", "live"
     if "pump-paper-v1" in t or "autopaper" in t:
         return "pump-paper-v1", "signal"
     return "manual-paper", "manual"
@@ -117,18 +201,20 @@ def _tags_for(reason: str, tag: str) -> list[str]:
 
 
 class PaperTradeJournal:
-    """FIFO round-trip matcher for PaperBroker fills (session memory)."""
+    """FIFO round-trip matcher for PaperBroker fills (persists closed trades)."""
 
     def __init__(self, equity_0: float = EQUITY_0) -> None:
         self.equity_0 = float(equity_0)
         self.fills: list[dict[str, Any]] = []
         self.lots: dict[str, list[OpenLot]] = {}
         self.closed: list[RoundTrip] = []
+        self.persist_path: Optional[Path] = None
 
     def reset(self) -> None:
         self.fills.clear()
         self.lots.clear()
         self.closed.clear()
+        self._maybe_persist()
 
     def record_fill(
         self,
@@ -143,7 +229,11 @@ class PaperTradeJournal:
         fee = float(fill.fee or 0.0)
         ts = int(fill.ts)
         tag = fill.tag or ""
+        if _is_live_tag(tag):
+            return []
         strategy_id, source = _ids_from_tag(tag)
+        if source == "live":
+            return []
         if qty == 0 or px <= 0:
             return []
         dumped = fill.model_dump()
@@ -232,7 +322,13 @@ class PaperTradeJournal:
             )
         if not opened:
             self.lots.pop(symbol, None)
+        self._maybe_persist()
         return new_closed
+
+    def _maybe_persist(self) -> None:
+        if self.persist_path is None:
+            return
+        _write_journal(self.persist_path, self)
 
     def closed_in_window(
         self,
@@ -241,7 +337,7 @@ class PaperTradeJournal:
         from_ts: Optional[int] = None,
         to_ts: Optional[int] = None,
     ) -> list[RoundTrip]:
-        rows = list(self.closed)
+        rows = [t for t in self.closed if (t.source or "") != "live"]
         if from_ts is not None:
             rows = [t for t in rows if t.exit_ts >= from_ts]
         if to_ts is not None:
@@ -357,6 +453,8 @@ def summarize(
     equity_0: float = EQUITY_0,
 ) -> dict[str, Any]:
     # Win rate / expectancy / drawdown from journal trades only (QuantStats is idea-only).
+    # Live fills (source=live) never mix into paper win-rate.
+    trades = [t for t in trades if (t.source or "") != "live"]
     n = len(trades)
     wins = sum(1 for t in trades if t.pnl > 0)
     losses = sum(1 for t in trades if t.pnl < 0)
@@ -394,12 +492,66 @@ def summarize(
 
 PaperLedger = PaperTradeJournal
 _ledger: Optional[PaperTradeJournal] = None
+_PERSIST_LOCK = threading.Lock()
+
+
+def _journal_path() -> Path:
+    raw = (os.getenv("PAPER_JOURNAL_STORE") or "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[2] / "data" / "paper_journal.json"
+
+
+def _write_journal(path: Path, journal: PaperTradeJournal) -> None:
+    payload = {
+        "equity_0": journal.equity_0,
+        "fills": list(journal.fills),
+        "lots": {sym: [lot.as_dict() for lot in lots] for sym, lots in journal.lots.items()},
+        "closed": [t.as_dict() for t in journal.closed],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with _PERSIST_LOCK:
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(path)
+
+
+def _load_journal(path: Path) -> Optional[PaperTradeJournal]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    j = PaperTradeJournal(equity_0=float(raw.get("equity_0") or EQUITY_0))
+    fills = raw.get("fills") or []
+    if isinstance(fills, list):
+        j.fills = [f for f in fills if isinstance(f, dict)]
+    lots = raw.get("lots") or {}
+    if isinstance(lots, dict):
+        for sym, rows in lots.items():
+            if not isinstance(rows, list):
+                continue
+            j.lots[str(sym)] = [OpenLot.from_dict(r) for r in rows if isinstance(r, dict)]
+    closed = raw.get("closed") or []
+    if isinstance(closed, list):
+        j.closed = [RoundTrip.from_dict(r) for r in closed if isinstance(r, dict)]
+    return j
 
 
 def get_paper_ledger() -> PaperTradeJournal:
     global _ledger
     if _ledger is None:
-        _ledger = PaperTradeJournal()
+        path = _journal_path()
+        loaded = _load_journal(path)
+        _ledger = loaded if loaded is not None else PaperTradeJournal()
+        _ledger.persist_path = path
     return _ledger
 
 
@@ -407,13 +559,22 @@ def get_paper_journal() -> PaperTradeJournal:
     return get_paper_ledger()
 
 
-def reset_paper_ledger() -> None:
+def reset_paper_ledger(*, wipe_store: bool = True) -> None:
     global _ledger
+    path = _journal_path()
+    if wipe_store:
+        for p in (path, path.with_suffix(path.suffix + ".tmp")):
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
     _ledger = None
 
 
-def reset_paper_journal() -> None:
-    reset_paper_ledger()
+def reset_paper_journal(*, wipe_store: bool = True) -> None:
+    reset_paper_ledger(wipe_store=wipe_store)
 
 
 def build_performance(

@@ -11,6 +11,7 @@ from app.models.contracts import (
     SizeIn,
     StrategyContext,
 )
+from app.paper.decision_log import append_decision, make_row
 from app.paper.execute import execute_paper_order
 from app.pipeline.context import build_mock_ctx
 from app.risk import get_risk_gate
@@ -71,6 +72,30 @@ async def decide_and_fill(
                 "risk": risk.model_dump(),
             },
         }
+    )
+    notional = abs(float(sz.target_notional))
+    impact = None
+    try:
+        impact = float(
+            built.liquidity.estimated_impact_bps(notional, side=side, pump=built.pump)
+        )
+    except (ValueError, TypeError, ZeroDivisionError):
+        impact = None
+    mint = built.meta.get("mint") if built.meta else None
+    append_decision(
+        make_row(
+            ts=built.ts,
+            strategy_id=strategy_id,
+            symbol=built.symbol,
+            mint=str(mint) if mint else None,
+            stage="pre_order",
+            outcome="reject" if not risk.allow else "emit_signal",
+            signal=sig,
+            risk=risk,
+            notional_sol=notional,
+            impact_bps_est=impact,
+            impact_bps_cap=float(sz.max_slippage_bps),
+        )
     )
 
     out: dict[str, Any] = {

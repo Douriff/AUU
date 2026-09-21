@@ -4,11 +4,12 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.bus import get_hub
 from app.paper.ledger import build_performance, reset_paper_journal
+from app.paper.decision_log import get_decision_log, reset_decision_log
 from app.risk import get_risk_gate
 from app.routes.envelope import err, ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -100,6 +101,24 @@ def get_monitor():
     return ok(get_engine().monitor_rows())
 
 
+@router.get("/pump-paper-v1/decision-log")
+def get_decision_log_route(
+    from_ts: Optional[int] = Query(None, alias="from"),
+    to_ts: Optional[int] = Query(None, alias="to"),
+    limit: int = Query(200, ge=1, le=2000),
+):
+    """Paper DecisionLog rows. No secrets, no chain send."""
+    rows = get_decision_log().query(from_ts=from_ts, to_ts=to_ts, limit=max(1, min(limit, 2000)))
+    return ok(
+        {
+            "items": [r.model_dump() for r in rows],
+            "n": len(rows),
+            "liveEnabled": False,
+            "liveDisabled": True,
+        }
+    )
+
+
 @router.get("/pump-paper-v1/stats")
 def get_pump_paper_stats(
     window: str = "session",
@@ -127,6 +146,7 @@ def get_pump_paper_stats(
 @router.post("/pump-paper-v1/stats/reset")
 def reset_pump_paper_stats():
     reset_paper_journal()
+    reset_decision_log()
     get_engine().reset_eval_counts()
     return ok(build_performance())
 

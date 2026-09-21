@@ -4,6 +4,7 @@ import { useExecutability } from "@/hooks/useExecutability";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { habitLabel } from "@/components/watch/HabitTagChips";
+import { ExecutabilityPanel } from "@/components/market/ExecutabilityPanel";
 import type { CompareReport, EquityPoint } from "@/types/contracts";
 
 const STATS_KEY = "auu:show_paper_stats";
@@ -47,16 +48,6 @@ function rate(n: number | null | undefined): string {
 function num(n: number | null | undefined, digits = 4): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toPrecision(digits);
-}
-
-function ratePct(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-function bps(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return `${n.toFixed(1)} bps`;
 }
 
 function EquitySpark({ points }: { points: EquityPoint[] }) {
@@ -282,61 +273,7 @@ export function PaperStatsPanel({ compact }: Props) {
           <p className="mc-line">样本不足</p>
         )
       ) : null}
-      <div className="exec-panel" aria-label="executability">
-        <header>
-          <h3>可执行性</h3>
-          <span className={`exec-verdict ${exec?.verdict === "go" ? "go" : "nogo"}`}>
-            {exec?.verdict === "go" ? "纸面 GO" : "NO-GO"}
-          </span>
-          <span className="muted tiny">实盘仍关 · liveEnabled=false</span>
-        </header>
-        {execErr ? <p className="error tiny">{execErr}</p> : null}
-        {exec ? (
-          <>
-            <dl>
-              <div>
-                <dt>样本</dt>
-                <dd>
-                  {exec.n_trades}
-                  <span className="muted"> / ≥30 {exec.sample_ok ? "ok" : "不足"}</span>
-                </dd>
-              </div>
-              <div>
-                <dt>期望</dt>
-                <dd>{num(exec.expectancy)}</dd>
-              </div>
-              <div>
-                <dt>入场冲击中位</dt>
-                <dd>
-                  {bps(exec.median_entry_impact_bps)}
-                  <span className="muted"> &lt;60 / 硬顶 {exec.hard_max_impact_bps}</span>
-                </dd>
-              </div>
-              <div>
-                <dt>影子滑点</dt>
-                <dd>
-                  {bps(exec.shadow_slippage?.median_bps)}
-                  <span className="muted"> ≤{exec.shadow_slippage?.x_bps ?? 40}</span>
-                </dd>
-              </div>
-            </dl>
-            <p className="exec-rejects tiny">
-              拒单率 · 进度带 {ratePct(exec.reject_rate?.progress_band?.rate)}
-              {" · "}
-              冲击 {ratePct(exec.reject_rate?.impact?.rate)}
-              {" · "}
-              风控 {ratePct(exec.reject_rate?.risk?.rate)}
-            </p>
-            {!compact ? (
-              <p className="muted tiny exec-note">
-                纸面成交相对当时曲线报价的证据，不是链上保证。二次确认 + LiveLimits 之前不会开实盘。
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <p className="muted tiny">加载可执行性…</p>
-        )}
-      </div>
+      <ExecutabilityPanel report={exec} err={execErr} compact={compact} />
     </section>
   );
 }

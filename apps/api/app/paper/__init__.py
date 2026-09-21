@@ -1,5 +1,10 @@
 from .broker import PaperBroker, get_paper_broker, reset_paper_broker
 from .execute import execute_paper_order
+from .decision_log import (
+    DecisionLog,
+    get_decision_log,
+    reset_decision_log,
+)
 from .executability import (
     LIVE_ENABLED,
     LIVE_LIMITS,
@@ -37,4 +42,7 @@ __all__ = [
     "reset_paper_journal",
     "aggregate_executability",
     "build_executability",
+    "DecisionLog",
+    "get_decision_log",
+    "reset_decision_log",
 ]

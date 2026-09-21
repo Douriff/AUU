@@ -7,6 +7,12 @@ import unittest
 from pathlib import Path
 
 from app.models.contracts import Fill, OrderIntent, StrategyContext, TickCtx
+from app.paper.decision_log import (
+    classify_reject_bucket,
+    pick_shadow_fill_px,
+    reset_decision_log,
+    shadow_metrics,
+)
 from app.paper.executability import (
     IMPACT_HARD_MAX_BPS,
     IMPACT_MEDIAN_MAX_BPS,
@@ -63,20 +69,47 @@ def _expand_trades(recipe: dict) -> list[dict]:
 
 class ClassifyTests(unittest.TestCase):
     def test_buckets(self):
-        self.assertEqual(classify_reject_reason("progress_band"), "progress_band")
-        self.assertEqual(classify_reject_reason("not_curve"), "progress_band")
-        self.assertEqual(classify_reject_reason("impact"), "impact")
-        self.assertEqual(classify_reject_reason("pump_paper_v1_entry", ["SLIPPAGE_CAP"]), "impact")
-        self.assertEqual(classify_reject_reason("blocked_tag", ["HONEYPOT_FLAG"]), "risk")
-        self.assertEqual(classify_reject_reason("LIVE_DISABLED", ["LIVE_DISABLED"]), "risk")
-        self.assertIsNone(classify_reject_reason("auto_paper_orders=false", ["AUTOPAPER_OFF"]))
-        self.assertIsNone(classify_reject_reason("momentum"))
+        self.assertEqual(classify_reject_bucket("progress_band"), "progress")
+        self.assertEqual(classify_reject_reason("not_curve"), "progress")
+        self.assertEqual(classify_reject_bucket("impact"), "impact")
+        self.assertEqual(classify_reject_bucket("pump_paper_v1_entry", ["SLIPPAGE_CAP"]), "impact")
+        self.assertEqual(classify_reject_bucket("x", ["DEPTH_THIN"]), "impact")
+        self.assertEqual(classify_reject_bucket("blocked_tag", ["DAY_LOSS_BREAKER"]), "risk")
+        self.assertEqual(classify_reject_bucket("LIVE_DISABLED", ["LIVE_DISABLED"]), "risk")
+        self.assertEqual(classify_reject_bucket("auto_paper_orders=false", ["AUTOPAPER_OFF"]), "none")
+        self.assertEqual(classify_reject_bucket("momentum"), "none")
 
 
 class ShadowMathTests(unittest.TestCase):
     def test_quote_vs_fill(self):
         self.assertAlmostEqual(shadow_slippage_bps(1.004, 1.0), 40.0)
         self.assertIsNone(shadow_slippage_bps(1.0, 0.0))
+
+    def test_next_trade_preferred_over_bar(self):
+        px, src = pick_shadow_fill_px(
+            100,
+            trades=[{"ts": 50, "price": 1.0}, {"ts": 150, "price": 1.01}],
+            candles=[{"t": 200, "o": 1.5}],
+        )
+        self.assertAlmostEqual(px, 1.01)
+        self.assertEqual(src, "next_trade")
+
+    def test_next_open_fallback(self):
+        px, src = pick_shadow_fill_px(
+            100,
+            trades=[{"ts": 90, "price": 1.0}],
+            candles=[{"t": 80, "o": 0.9}, {"t": 180, "o": 1.02}],
+        )
+        self.assertAlmostEqual(px, 1.02)
+        self.assertEqual(src, "next_open")
+
+    def test_impact_error_is_shadow_minus_estimated(self):
+        fill = Fill(ts=1, price=1.0, qty=1.0)
+        m = shadow_metrics(fill, 40.0, shadow_fill_px=1.005, source="next_trade")
+        self.assertAlmostEqual(m["shadow_slippage_bps"], 50.0)
+        self.assertAlmostEqual(m["impact_error_bps"], 10.0)
+        self.assertEqual(m["shadow_source"], "next_trade")
+        self.assertEqual(m["estimated_impact_bps"], 40.0)
 
 
 class FixtureAggregatorTests(unittest.TestCase):
@@ -93,10 +126,11 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
         self.assertTrue(data["shadow_slippage"]["ok"])
         self.assertLessEqual(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
-        for key in ("progress_band", "impact", "risk"):
+        for key in ("progress", "impact", "risk"):
             self.assertIn(key, data["reject_rate"])
             self.assertIn("count", data["reject_rate"][key])
             self.assertIn("rate", data["reject_rate"][key])
+        self.assertEqual(data["lamp"], "green")
         self.assertFalse(data["liveEnabled"])
         self.assertTrue(data["liveDisabled"])
         self.assertFalse(data["gates"]["live"]["ok"])
@@ -151,18 +185,27 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertFalse(data["gates"]["median_entry_impact"]["ok"])
         self.assertGreater(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
 
-    def test_reject_rate_from_decision_fixture(self):
-        raw = _load("decisions_mix.json")
-        data = aggregate_executability([], decisions=raw["decisions"])
-        self.assertEqual(data["n_trades"], 0)
+    def test_reject_rate_from_decision_log_fixture(self):
+        raw = _load("decision_log_mix.json")
+        data = aggregate_executability([], decision_log=raw["items"])
+        self.assertEqual(data["n_closed"], 0)
         self.assertEqual(data["verdict"], "no-go")
+        self.assertEqual(data["lamp"], "gray")
         by = data["reject_rate"]
-        self.assertEqual(by["progress_band"]["count"], 2)
-        self.assertEqual(by["impact"]["count"], 1)
+        self.assertEqual(by["progress"]["count"], 2)
+        self.assertEqual(by["impact"]["count"], 2)  # impact + DEPTH_THIN
         self.assertEqual(by["risk"]["count"], 1)
         self.assertTrue(data["gates"]["reject_rate"]["ok"])
-        # autopaper-off skip is ignored
-        self.assertNotIn("auto_paper_orders=false", data["reject_reasons"])
+        self.assertFalse(data["liveEnabled"])
+        self.assertIn("progress", by)
+        self.assertNotIn("progress_band", by)
+        self.assertIn("impact_error", data)
+
+    def test_reject_rate_from_legacy_decision_fixture(self):
+        raw = _load("decisions_mix.json")
+        data = aggregate_executability([], decisions=raw["decisions"])
+        self.assertEqual(data["reject_rate"]["progress"]["count"], 2)
+        self.assertEqual(data["reject_rate"]["impact"]["count"], 1)
         self.assertFalse(data["liveEnabled"])
 
     def test_live_limits_not_weakened(self):
@@ -230,7 +273,7 @@ class EngineEvalCountTests(unittest.TestCase):
         eng.record_entry_eval(SignalOut(side="long", reason="pump_paper_v1_entry"))
         snap = eng.eval_snapshot()
         self.assertEqual(snap["total"], 3)
-        self.assertEqual(snap["by_bucket"]["progress_band"], 1)
+        self.assertEqual(snap["by_bucket"]["progress"], 1)
         self.assertEqual(snap["by_bucket"]["impact"], 1)
         self.assertEqual(snap["by_bucket"]["attempt"], 1)
 
@@ -274,6 +317,7 @@ class ExecutabilityApiTests(unittest.TestCase):
         reset_paper_ledger()
         reset_engine()
         reset_risk_gate()
+        reset_decision_log()
 
     def test_empty_endpoint_is_nogo_live_false(self):
         r = self.client.get("/api/v1/stats/executability")
@@ -282,6 +326,8 @@ class ExecutabilityApiTests(unittest.TestCase):
         self.assertTrue(body["ok"])
         data = body["data"]
         self.assertEqual(data["verdict"], "no-go")
+        self.assertEqual(data["lamp"], "gray")
+        self.assertIn("平仓样本", data["nogo_reason"])
         self.assertFalse(data["liveEnabled"])
         self.assertTrue(data["liveDisabled"])
         self.assertFalse(data["gates"]["live"]["ok"])
@@ -289,11 +335,17 @@ class ExecutabilityApiTests(unittest.TestCase):
         self.assertIn("LiveLimits", data["gates"]["live"]["reason"])
         self.assertEqual(data["live_limits"]["max_notional_sol"], 1.0)
         self.assertEqual(data["hard_max_impact_bps"], 80.0)
-        self.assertIn("progress_band", data["reject_rate"])
+        self.assertEqual(data["n_closed"], 0)
+        self.assertIn("progress", data["reject_rate"])
         self.assertIn("impact", data["reject_rate"])
         self.assertIn("risk", data["reject_rate"])
-        self.assertNotIn("secret", json.dumps(data).lower())
-        self.assertNotIn("keypair", json.dumps(data).lower())
+        self.assertFalse(data["live_checks"]["secondary_confirm"])
+        self.assertFalse(data["live_checks"]["keypair_mounted"])
+        self.assertIn("impact_error", data)
+        blob = json.dumps(data).lower()
+        self.assertNotIn("secret", blob)
+        self.assertNotIn("private_key", blob)
+        self.assertNotIn("mnemonic", blob)
 
     def test_pipeline_fill_carries_exec_fields(self):
         buy = self.client.post(
@@ -313,9 +365,24 @@ class ExecutabilityApiTests(unittest.TestCase):
         )
         r = self.client.get("/api/v1/stats/executability")
         data = r.json()["data"]
-        self.assertGreaterEqual(data["n_trades"], 1)
+        self.assertGreaterEqual(data["n_closed"], 1)
         self.assertFalse(data["liveEnabled"])
         self.assertEqual(data["verdict"], "no-go")  # sample < 30
+        self.assertEqual(data["lamp"], "gray")
+        log = self.client.get("/api/v1/strategy/pump-paper-v1/decision-log")
+        self.assertTrue(log.json()["ok"])
+        items = log.json()["data"]["items"]
+        self.assertGreaterEqual(len(items), 1)
+        stages = {row["stage"] for row in items}
+        self.assertTrue(stages & {"pre_order", "paper_submit"})
+        self.assertFalse(log.json()["data"]["liveEnabled"])
+        for row in items:
+            self.assertIn(row["reject_bucket"], ("progress", "impact", "risk", "none"))
+        fills_log = [row for row in items if row["outcome"] in ("fill", "partial")]
+        self.assertGreaterEqual(len(fills_log), 1)
+        self.assertIn("estimated_impact_bps", fills_log[0])
+        self.assertIn("shadow_fill_px", fills_log[0])
+        self.assertIn("impact_error_bps", fills_log[0])
 
     def test_root_lists_endpoint(self):
         r = self.client.get("/")

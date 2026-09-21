@@ -196,6 +196,16 @@ export class HttpWsProvider {
     return getJson(`/api/v1/stats/executability?${q}`);
   }
 
+  getDecisionLog(fromTs?: number, toTs?: number) {
+    const q = new URLSearchParams();
+    if (fromTs != null) q.set("from", String(fromTs));
+    if (toTs != null) q.set("to", String(toTs));
+    const qs = q.toString();
+    return getJson<{ items: Record<string, unknown>[]; n: number; liveEnabled: boolean }>(
+      `/api/v1/strategy/pump-paper-v1/decision-log${qs ? `?${qs}` : ""}`
+    );
+  }
+
   putStrategy(patch: Partial<PumpPaperParams>) {
     return putJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
   }

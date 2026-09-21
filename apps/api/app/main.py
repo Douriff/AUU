@@ -107,6 +107,7 @@ def root():
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
+                "decisionLog": "GET /api/v1/strategy/pump-paper-v1/decision-log",
                 "monitor": "GET /api/v1/pumpfun/monitor",
                 "discovery": "env PUMPFUN_DISCOVERY=pumpportal|logs|off",
             },
