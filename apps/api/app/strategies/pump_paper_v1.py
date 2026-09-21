@@ -19,11 +19,18 @@ from app.models.contracts import (
     LiquidityCtx,
     OrderIntent,
     PumpfunPaperSnapshot,
+    RiskOut,
     SignalEvent,
     SignalOut,
     SizeIn,
     StrategyContext,
     TickCtx,
+)
+from app.providers.pumpfun_curve_math import (
+    INITIAL_REAL_TOKEN_RESERVES,
+    INITIAL_VIRTUAL_SOL_RESERVES,
+    INITIAL_VIRTUAL_TOKEN_RESERVES,
+    TOKEN_TOTAL_SUPPLY,
 )
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.paper.guard import live_execution_blocked
@@ -262,6 +269,9 @@ class PumpPaperEngine:
         self._running = False
         self._decisions: list[AutoDecision] = []
         self._last_decision_key: dict[str, tuple] = {}
+        # Last live curve per symbol. Used to mark orphan paper exits after the
+        # mint drops out of the discovery/watch list.
+        self._last_snap: dict[str, PumpfunPaperSnapshot] = {}
         self._eval_total = 0
         self._eval_by_bucket: dict[str, int] = {}
         self._eval_by_reason: dict[str, int] = {}
@@ -411,6 +421,7 @@ class PumpPaperEngine:
                 qty += q
         if qty <= 1e-9:
             self.positions.pop(symbol, None)
+            self._last_snap.pop(symbol, None)
             return
         self.positions[symbol] = PositionState(
             mint=mint,
@@ -638,6 +649,153 @@ class PumpPaperEngine:
             if not filled_any:
                 self.record_order_reject(signal.reason, signal.tags or last_tags)
 
+    def _symbols_for_tick(self, provider: Any) -> list[str]:
+        """Watch-list symbols union open paper positions.
+
+        A held mint can leave ``list_symbols`` when discovery drops it. Exits
+        still have to run, or ``max_hold`` / take-profit / stop-loss never fire
+        and ``max_open_mints`` stays full.
+        """
+        symbols: list[str] = []
+        seen: set[str] = set()
+        lister = getattr(provider, "list_symbols", None)
+        listed = lister() if callable(lister) else []
+        for info in listed or []:
+            sym = getattr(info, "symbol", None)
+            if sym is None and isinstance(info, dict):
+                sym = info.get("symbol")
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            symbols.append(str(sym))
+        for sym in list(self.positions.keys()):
+            if sym not in seen:
+                seen.add(sym)
+                symbols.append(sym)
+        return symbols
+
+    def _mark_snapshot(
+        self, provider: Any, symbol: str, now_ms: int
+    ) -> tuple[Optional[PumpfunPaperSnapshot], bool]:
+        """Return ``(snapshot, orphan)``.
+
+        ``orphan`` is true when an open position has no live provider snapshot.
+        """
+        getter = getattr(provider, "get_pumpfun_snapshot", None)
+        live = getter(symbol) if callable(getter) else None
+        if live is not None:
+            self._last_snap[symbol] = live
+            return live, False
+        pos = self.positions.get(symbol)
+        if pos is None:
+            return None, False
+        return self._orphan_snapshot(pos, now_ms), True
+
+    def _orphan_snapshot(self, pos: PositionState, now_ms: int) -> PumpfunPaperSnapshot:
+        """Last known curve, or a minimal paper mark at ``entry_price``.
+
+        The synthetic curve uses initial virtual reserves so a paper sell's
+        impact stays inside the paper cap. It is not a chain quote.
+        """
+        cached = self._last_snap.get(pos.symbol)
+        if cached is not None:
+            return cached
+        px = max(float(pos.entry_price), 1e-18)
+        return PumpfunPaperSnapshot(
+            mint=pos.mint or pos.symbol,
+            symbol=pos.symbol,
+            phase="curve",
+            progress_bps=0,
+            complete=False,
+            migrated=False,
+            virtual_sol_reserves=str(INITIAL_VIRTUAL_SOL_RESERVES),
+            virtual_token_reserves=str(INITIAL_VIRTUAL_TOKEN_RESERVES),
+            real_sol_reserves="0",
+            real_token_reserves=str(INITIAL_REAL_TOKEN_RESERVES),
+            token_total_supply=str(TOKEN_TOTAL_SUPPLY),
+            price_sol=px,
+            creator_fee_bps=0,
+            updated_ts=now_ms,
+            synthetic=True,
+        )
+
+    async def _force_orphan_flat(
+        self,
+        symbol: str,
+        snap: PumpfunPaperSnapshot,
+        pos: PositionState,
+        now_ms: int,
+    ) -> None:
+        """Paper sell at the last mark when a normal exit did not close the mint.
+
+        Paper only: no live send. Reason is ``max_hold`` with tag ``ORPHAN_EXIT``.
+        Bypasses curve-impact / halt denies that would otherwise leave the
+        position stuck after the mint left the watch list.
+        """
+        px = max(float(snap.price_sol), float(pos.entry_price), 1e-18)
+        close_notional = abs(float(pos.qty)) * px
+        if close_notional <= 0:
+            self.positions.pop(symbol, None)
+            self._last_snap.pop(symbol, None)
+            return
+        ctx = StrategyContext(
+            symbol=symbol,
+            ts=now_ms,
+            account=AccountCtx(equity=self.equity, day_pnl=get_risk_gate().day_pnl),
+            liquidity=LiquidityCtx(spread_bps=20.0, adv_usd=100_000.0),
+            position=pos.qty,
+            tick=TickCtx(mid=px),
+            meta={"mint": pos.mint, "orphan_exit": True},
+        )
+        signal = SignalOut(
+            side="flat",
+            strength=0.7,
+            reason="max_hold",
+            tags=["MAX_HOLD", "ORPHAN_EXIT"],
+        )
+        intent = OrderIntent(
+            side="sell",
+            order_type="market",
+            qty_or_notional=close_notional,
+            max_slippage_bps=10_000.0,
+            client_tag=f"paper:{STRATEGY_ID}:flat",
+        )
+        risk = RiskOut(
+            allow=True,
+            clipped_size=close_notional,
+            tags=["ORPHAN_EXIT"],
+            notes="orphan_exit",
+        )
+        data = await run_paper_order(
+            ctx, intent, risk, auto_post_fill=True, close_reason="max_hold"
+        )
+        fills = [
+            Fill(**{k: v for k, v in f.items() if k != "symbol"}) for f in data.get("fills") or []
+        ]
+        if fills:
+            self._apply_fills(symbol, snap.mint or pos.mint, fills, now_ms, px)
+            self._note(
+                symbol,
+                now_ms,
+                action="fill",
+                allow=True,
+                reason="max_hold",
+                tags=signal.tags,
+                notes="orphan_exit",
+            )
+            return
+        reject = data.get("reject") or {}
+        self._note(
+            symbol,
+            now_ms,
+            action="deny",
+            allow=False,
+            reason="max_hold",
+            tags=reject.get("tags") or ["ORPHAN_EXIT"],
+            notes=reject.get("notes") or "orphan_exit",
+        )
+        log.warning("orphan max_hold paper sell did not fill for %s", symbol)
+
     def _tape_for(self, provider: Any, symbol: str, now_ms: int) -> TapeWindow:
         trades: list[dict[str, Any]] = []
         getter = getattr(provider, "get_recent_trades", None)
@@ -704,20 +862,20 @@ class PumpPaperEngine:
         provider = get_provider()
         now_ms = int(time.time() * 1000)
         cool = now_ms < self._reject_cool_until
-        for info in provider.list_symbols():
-            snap = provider.get_pumpfun_snapshot(info.symbol)
+        for symbol in self._symbols_for_tick(provider):
+            snap, orphan = self._mark_snapshot(provider, symbol, now_ms)
             if snap is None:
                 continue
-            tape = self._tape_for(provider, info.symbol, now_ms)
+            tape = self._tape_for(provider, symbol, now_ms)
             if tape.sell_notional_1m >= 2.0 * max(tape.buy_notional_1m, 1e-18):
-                self._sell_pressure_since.setdefault(info.symbol, now_ms)
+                self._sell_pressure_since.setdefault(symbol, now_ms)
             else:
-                self._sell_pressure_since.pop(info.symbol, None)
-            pressure_ms = now_ms - self._sell_pressure_since.get(info.symbol, now_ms)
-            if info.symbol not in self._sell_pressure_since:
+                self._sell_pressure_since.pop(symbol, None)
+            pressure_ms = now_ms - self._sell_pressure_since.get(symbol, now_ms)
+            if symbol not in self._sell_pressure_since:
                 pressure_ms = 0
 
-            pos = self.positions.get(info.symbol)
+            pos = self.positions.get(symbol)
             sized = fit_notional(snap, self.equity, self.params, "buy") or target_notional_sol(
                 self.equity, self.params
             )
@@ -746,6 +904,8 @@ class PumpPaperEngine:
                 sell_pressure_ms=pressure_ms,
                 reject_cooldown=cool,
             )
+            if orphan and signal.side == "flat" and "ORPHAN_EXIT" not in signal.tags:
+                signal = signal.model_copy(update={"tags": [*signal.tags, "ORPHAN_EXIT"]})
             if pos is None:
                 self.record_entry_eval(signal)
                 if signal.reason != "hold":
@@ -753,7 +913,7 @@ class PumpPaperEngine:
                         make_row(
                             ts=now_ms,
                             strategy_id=STRATEGY_ID,
-                            symbol=info.symbol,
+                            symbol=symbol,
                             mint=snap.mint,
                             stage="signal",
                             outcome="emit_signal" if signal.side == "long" else "reject",
@@ -767,13 +927,26 @@ class PumpPaperEngine:
                         ),
                         debounce=True,
                     )
-            if self._should_emit(info.symbol, signal):
-                await self.publish_signal(info.symbol, now_ms, signal)
-            self._last_emitted[info.symbol] = signal
+            if self._should_emit(symbol, signal):
+                await self.publish_signal(symbol, now_ms, signal)
+            self._last_emitted[symbol] = signal
             try:
-                await self.maybe_execute(info.symbol, snap, signal, now_ms, sized)
+                await self.maybe_execute(symbol, snap, signal, now_ms, sized)
             except Exception:
-                log.exception("pump-paper-v1 execute failed for %s", info.symbol)
+                log.exception("pump-paper-v1 execute failed for %s", symbol)
+            held = self.positions.get(symbol)
+            if (
+                orphan
+                and self.params.auto_paper_orders
+                and held is not None
+                and (now_ms - held.entry_ts) / 1000.0 >= float(self.params.max_hold_sec)
+            ):
+                blocked, _why = live_execution_blocked()
+                if not blocked:
+                    try:
+                        await self._force_orphan_flat(symbol, snap, held, now_ms)
+                    except Exception:
+                        log.exception("pump-paper-v1 orphan exit failed for %s", symbol)
 
     async def run_loop(self) -> None:
         self._running = True

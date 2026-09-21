@@ -61,6 +61,14 @@
 | `estimated_impact_bps` 对平仓侧 `> 250` | 分两笔减仓（纸面） |
 | 持仓超过 `max_hold_sec`（默认 **900**） | 全平 |
 
+### 4.1 脱离监控列表的持仓（orphan）
+
+`PumpPaperEngine.tick` 每拍评估的标的是 `provider.list_symbols()` **与** 当前纸面 `positions` 的并集。发现/自选把 mint 移出 watch list 后，持仓仍跑 `evaluate`（止盈 / 止损 / `max_hold_sec`）。
+
+没有实时 snapshot 时：优先用上一笔曲线缓存；没有缓存则用 `position.entry_price` 合成最小纸面标记（`synthetic=true`，初始 virtual reserves，不是链上报价）。若该 orphan 已超过 `max_hold_sec` 而常规纸面平仓没有成交，再强制一笔纸面卖出，原因 `max_hold`，标签 `ORPHAN_EXIT`。这样 `max_open_mints` 不会被掉出列表的仓位永久占满。
+
+本路径只走 PaperBroker。**不**发链上交易；`liveEnabled` 保持默认 **false**。
+
 ---
 
 ## 5. 组合熔断（日级）
@@ -114,6 +122,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] 触发日亏熔断后无法再开仓
 - [x] `new_token` 入自选但不绕过入场门；发现模块无下单
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
+- [x] 持仓 mint 离开 `list_symbols` 后，超过 `max_hold_sec` 仍纸面平仓（orphan exit；`liveEnabled` 仍 false）
 
 版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。
 
