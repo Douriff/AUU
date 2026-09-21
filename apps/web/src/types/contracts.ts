@@ -312,6 +312,7 @@ export interface LiveStatus {
   reasons: string[];
   keypairConfigured: boolean;
   keypairMounted: boolean;
+  pubkey?: string | null;
   pubkeyShort?: string | null;
   keypairEnv: string;
   keypairRelpath?: string;

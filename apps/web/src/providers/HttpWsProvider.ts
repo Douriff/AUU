@@ -145,6 +145,7 @@ export class HttpWsProvider {
     liveLimits?: LiveLimits;
     keypairConfigured?: boolean;
     keypairMounted?: boolean;
+    pubkey?: string | null;
     pubkeyShort?: string | null;
     keypairRelpath?: string;
     keypairEnv?: string;

@@ -88,6 +88,7 @@ def live_limits():
     data["liveDisabled"] = st.live_disabled
     data["liveArmed"] = st.live_armed
     data["keypairMounted"] = bool(st.keypair_configured)
+    data["pubkey"] = st.pubkey_short or None
     data["pubkeyShort"] = st.pubkey_short or None
     data["keypairRelpath"] = DEFAULT_KEYPAIR_RELPATH
     return ok(data)

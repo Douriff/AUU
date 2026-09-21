@@ -193,6 +193,7 @@ class LiveStatus:
             "reasons": list(self.reasons),
             "keypairConfigured": self.keypair_configured,
             "keypairMounted": bool(self.keypair_configured),
+            "pubkey": self.pubkey_short or None,
             "pubkeyShort": self.pubkey_short or None,
             "keypairEnv": self.keypair_env,
             "keypairRelpath": DEFAULT_KEYPAIR_RELPATH,

@@ -109,7 +109,8 @@ Default path: **`secrets/live-keypair.json`** (see `secrets/README.md`). Env: `A
 |-------|---------|
 | `liveEnabled` | default **false** (stays false until Settings secondary confirm) |
 | `keypairMounted` | **bool** — file present and looks like a 64-int Solana JSON keypair |
-| `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` |
+| `pubkey` / `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` — never secret bytes |
+| `liveLimits` | locked **1 / 0.045 / 10** |
 | `liveReasons` | includes `LIVE_DISABLED` until mount + secondary confirm + LiveLimits |
 
 Health **never** returns secret bytes, the JSON array, or a full private key. `pubkeyShort` is not the secret.

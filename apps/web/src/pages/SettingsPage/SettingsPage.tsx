@@ -57,6 +57,7 @@ export function SettingsPage() {
   }, []);
 
   const mounted = live?.keypairMounted === true || live?.keypairConfigured === true;
+  const pubkey = live?.pubkey || live?.pubkeyShort || "";
   const liveEnabled = Boolean(live?.liveEnabled);
 
   const applyLive = (st: LiveStatus) => {
@@ -209,10 +210,10 @@ export function SettingsPage() {
           <dt>keypair</dt>
           <dd>
             mounted: <code>{String(mounted)}</code>
-            {live?.pubkeyShort ? (
+            {pubkey ? (
               <>
                 {" "}
-                · pubkey <code>{live.pubkeyShort}</code>
+                · pubkey <code>{pubkey}</code>
               </>
             ) : null}
           </dd>
@@ -244,10 +245,10 @@ export function SettingsPage() {
             <h2 id="live-confirm-title">Confirm liveEnabled</h2>
             <p>
               Secondary confirm required. Keypair mounted: <code>{String(mounted)}</code>
-              {live?.pubkeyShort ? (
+              {pubkey ? (
                 <>
                   {" "}
-                  pubkey <code>{live.pubkeyShort}</code>
+                  pubkey <code>{pubkey}</code>
                 </>
               ) : null}
               . Caps stay locked at 1 SOL / 4.5% / 10 mints. Send gate stays closed — zero chain
@@ -352,7 +353,7 @@ export function SettingsPage() {
         </dd>
         <dt>pubkey</dt>
         <dd>
-          <code>{live?.pubkeyShort || "—"}</code>
+          <code>{pubkey || "—"}</code>
         </dd>
         <dt>live caps</dt>
         <dd>

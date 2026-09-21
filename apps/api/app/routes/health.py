@@ -46,6 +46,7 @@ def health():
             "liveLimits": payload["limits"],
             "keypairConfigured": payload["keypairConfigured"],
             "keypairMounted": bool(payload["keypairMounted"]),
+            "pubkey": payload.get("pubkey") or payload.get("pubkeyShort"),
             "pubkeyShort": payload.get("pubkeyShort"),
             "keypairRelpath": payload.get("keypairRelpath"),
             "keypairEnv": payload["keypairEnv"],
