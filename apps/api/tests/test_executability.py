@@ -329,6 +329,9 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertLessEqual(LIVE_LIMITS["max_notional_sol"], 1.0)
         self.assertLessEqual(LIVE_LIMITS["max_day_loss_pct"], 0.045)
         self.assertLessEqual(LIVE_LIMITS["max_open_mints"], 10)
+        self.assertEqual(MIN_CLOSED_TRADES, 30)
+        self.assertEqual(IMPACT_MEDIAN_MAX_BPS, 60.0)
+        self.assertEqual(IMPACT_HARD_MAX_BPS, 80.0)
 
 
 class AnnotateFillTests(unittest.TestCase):
@@ -340,6 +343,10 @@ class AnnotateFillTests(unittest.TestCase):
         self.assertAlmostEqual(out.quote_price, 1.0)
         self.assertAlmostEqual(out.shadow_slippage_bps, 20.0)
         self.assertIsNotNone(out.estimated_impact_bps)
+        self.assertAlmostEqual(out.estimated_impact_gross_bps, out.estimated_impact_bps)
+        self.assertIsNotNone(out.protocol_fee_bps)
+        self.assertIsNotNone(out.estimated_impact_net_bps)
+        self.assertGreaterEqual(out.estimated_impact_net_bps, 0.0)
         self.assertEqual(fill.price, 1.002)
 
 
@@ -370,9 +377,158 @@ class LedgerExecFieldsTests(unittest.TestCase):
         )
         rt = led.closed[0]
         self.assertAlmostEqual(rt.entry_estimated_impact_bps, 41.0)
+        self.assertAlmostEqual(rt.entry_estimated_impact_gross_bps, 41.0)
+        self.assertAlmostEqual(rt.entry_protocol_fee_bps, CURVE_IMPACT_FEE_FLOOR_BPS)
+        self.assertAlmostEqual(rt.entry_estimated_impact_net_bps, 0.0)
         self.assertAlmostEqual(rt.entry_shadow_slippage_bps, 10.0)
         dumped = rt.as_dict()
         self.assertIn("entry_estimated_impact_bps", dumped)
+        self.assertIn("entry_estimated_impact_gross_bps", dumped)
+        self.assertIn("entry_estimated_impact_net_bps", dumped)
+        self.assertIn("entry_protocol_fee_bps", dumped)
+
+
+class ExpectancyAndImpactCoverageTests(unittest.TestCase):
+    def test_net_median_under_60_ok_when_closed_n_is_sufficient(self):
+        """Gross 79.5 − curve fee 62.5 = net 17. Thirty closes keep n=30.
+
+        A DecisionLog that only still has 3 entry fills stays a backfill source.
+        The impact gate uses the net median and stays ok. Live stays off.
+        """
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        for row in trades:
+            row["entry_estimated_impact_bps"] = 79.5
+        short_log = [
+            {
+                "ts": i,
+                "symbol": "PUMPDEMO/SOL",
+                "stage": "paper_submit",
+                "outcome": "fill",
+                "signal_side": "buy",
+                "impact_gross_bps": 79.5,
+                "protocol_fee_bps": 62.5,
+                "impact_net_bps": 17.0,
+            }
+            for i in range(3)
+        ]
+        data = aggregate_executability(
+            trades, decision_log=short_log, eval_counts=recipe["eval_counts"]
+        )
+        gate = data["gates"]["median_entry_impact"]
+        self.assertEqual(data["n_closed"], 30)
+        self.assertEqual(gate["n"], 30)
+        self.assertAlmostEqual(data["median_entry_impact_gross_bps"], 79.5)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 17.0)
+        self.assertLess(data["median_entry_impact_net_bps"], IMPACT_MEDIAN_MAX_BPS)
+        self.assertLessEqual(data["max_entry_impact_gross_bps"], IMPACT_HARD_MAX_BPS)
+        self.assertTrue(gate["ok"])
+        self.assertEqual(gate["basis"], "net_of_protocol_fee")
+        self.assertTrue(data["sample_ok"])
+        self.assertTrue(data["gates"]["expectancy"]["ok"])
+        self.assertEqual(data["verdict"], "go")
+        self.assertFalse(data["liveEnabled"])
+        self.assertFalse(LIVE_ENABLED)
+
+    def test_negative_expectancy_blocks_when_impact_net_passes(self):
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        for row in trades:
+            row["pnl"] = -0.003
+            row["entry_estimated_impact_bps"] = 79.5
+        data = aggregate_executability(trades, eval_counts=recipe["eval_counts"])
+        self.assertTrue(data["sample_ok"])
+        self.assertAlmostEqual(data["expectancy"], -0.003)
+        self.assertFalse(data["gates"]["expectancy"]["ok"])
+        self.assertTrue(data["gates"]["median_entry_impact"]["ok"])
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 17.0)
+        self.assertEqual(data["gates"]["median_entry_impact"]["n"], 30)
+        self.assertEqual(data["verdict"], "no-go")
+        self.assertFalse(data["liveEnabled"])
+
+    def test_sparse_impacts_stay_not_ok_even_if_net_median_is_under_60(self):
+        """Coverage still needs ≥30 entry impacts once 30 trades are closed."""
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        for row in trades:
+            row.pop("entry_estimated_impact_bps", None)
+        log = [
+            {
+                "ts": 1_000 + i,
+                "symbol": "PUMPDEMO/SOL",
+                "outcome": "fill",
+                "signal_side": "buy",
+                "impact_gross_bps": 79.5,
+                "protocol_fee_bps": 62.5,
+                "impact_net_bps": 17.0,
+            }
+            for i in range(3)
+        ]
+        data = aggregate_executability(trades, decision_log=log, eval_counts=recipe["eval_counts"])
+        self.assertEqual(data["n_closed"], 30)
+        self.assertEqual(data["gates"]["median_entry_impact"]["n"], 3)
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 17.0)
+        self.assertFalse(data["gates"]["median_entry_impact"]["ok"])
+        self.assertEqual(data["verdict"], "no-go")
+        self.assertFalse(data["liveEnabled"])
+
+    def test_fill_backfill_makes_impact_n_match_n_closed(self):
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+        fills = []
+        for row in trades:
+            row.pop("entry_estimated_impact_bps", None)
+            fills.append(
+                {
+                    "symbol": row["symbol"],
+                    "ts": row["entry_ts"],
+                    "qty": 1.0,
+                    "estimated_impact_bps": 79.5,
+                    "estimated_impact_gross_bps": 79.5,
+                    "protocol_fee_bps": 62.5,
+                    "estimated_impact_net_bps": 17.0,
+                }
+            )
+        data = aggregate_executability(
+            trades, fills=fills, eval_counts=recipe["eval_counts"]
+        )
+        self.assertEqual(data["n_closed"], MIN_CLOSED_TRADES)
+        self.assertEqual(data["gates"]["median_entry_impact"]["n"], data["n_closed"])
+        self.assertAlmostEqual(data["median_entry_impact_net_bps"], 17.0)
+        self.assertTrue(data["gates"]["median_entry_impact"]["ok"])
+        self.assertFalse(data["liveEnabled"])
+
+    def test_journal_close_writes_gross_fee_net_for_every_trade(self):
+        led = PaperTradeJournal()
+        for i in range(4):
+            led.record_fill(
+                "A/SOL",
+                Fill(
+                    ts=10 + i * 2,
+                    price=1.0,
+                    qty=1.0,
+                    estimated_impact_bps=79.5,
+                    tag="paper:pump-paper-v1",
+                ),
+            )
+            led.record_fill(
+                "A/SOL",
+                Fill(
+                    ts=11 + i * 2,
+                    price=1.02,
+                    qty=-1.0,
+                    tag="paper:pump-paper-v1:flat",
+                ),
+            )
+        self.assertEqual(len(led.closed), 4)
+        for rt in led.closed:
+            self.assertAlmostEqual(rt.entry_estimated_impact_gross_bps, 79.5)
+            self.assertAlmostEqual(rt.entry_protocol_fee_bps, 62.5)
+            self.assertAlmostEqual(rt.entry_estimated_impact_net_bps, 17.0)
+        data = aggregate_executability([t.as_dict() for t in led.closed])
+        self.assertEqual(data["gates"]["median_entry_impact"]["n"], data["n_closed"])
+        self.assertEqual(data["n_closed"], 4)
+        self.assertFalse(data["liveEnabled"])
 
 
 class EngineEvalCountTests(unittest.TestCase):
@@ -474,6 +630,9 @@ class ExecutabilityApiTests(unittest.TestCase):
         f = fills[0]
         self.assertIn("quote_price", f)
         self.assertIsNotNone(f.get("estimated_impact_bps"))
+        self.assertIsNotNone(f.get("estimated_impact_gross_bps"))
+        self.assertIsNotNone(f.get("protocol_fee_bps"))
+        self.assertIsNotNone(f.get("estimated_impact_net_bps"))
         self.assertIsNotNone(f.get("shadow_slippage_bps"))
         self.client.post(
             "/api/v1/pipeline/decide-and-fill",
@@ -482,7 +641,20 @@ class ExecutabilityApiTests(unittest.TestCase):
         r = self.client.get("/api/v1/stats/executability")
         data = r.json()["data"]
         self.assertGreaterEqual(data["n_closed"], 1)
+        self.assertEqual(data["gates"]["median_entry_impact"]["n"], data["n_closed"])
         self.assertFalse(data["liveEnabled"])
+        stats = self.client.get("/api/v1/strategy/pump-paper-v1/stats")
+        self.assertEqual(stats.status_code, 200)
+        journal = stats.json()["data"]["journal"]
+        self.assertGreaterEqual(len(journal), 1)
+        closed = journal[-1]
+        for key in (
+            "entry_estimated_impact_gross_bps",
+            "entry_protocol_fee_bps",
+            "entry_estimated_impact_net_bps",
+        ):
+            self.assertIn(key, closed)
+            self.assertIsNotNone(closed[key])
         self.assertEqual(data["verdict"], "no-go")  # sample < 30
         self.assertEqual(data["lamp"], "gray")
         log = self.client.get("/api/v1/strategy/pump-paper-v1/decision-log")

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from app.models.contracts import Fill
+from app.providers.pumpfun_curve_math import split_impact_gross_fee_net
 
 DEFAULT_MC_PATHS = 500
 DEFAULT_MC_SEED = 42
@@ -42,6 +43,9 @@ class OpenLot:
     mint: Optional[str] = None
     strategy_id: str = "manual-paper"
     estimated_impact_bps: Optional[float] = None
+    estimated_impact_gross_bps: Optional[float] = None
+    estimated_impact_net_bps: Optional[float] = None
+    protocol_fee_bps: Optional[float] = None
     quote_price: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
 
@@ -56,6 +60,9 @@ class OpenLot:
             "mint": self.mint,
             "strategy_id": self.strategy_id,
             "estimated_impact_bps": self.estimated_impact_bps,
+            "estimated_impact_gross_bps": self.estimated_impact_gross_bps,
+            "estimated_impact_net_bps": self.estimated_impact_net_bps,
+            "protocol_fee_bps": self.protocol_fee_bps,
             "quote_price": self.quote_price,
             "shadow_slippage_bps": self.shadow_slippage_bps,
         }
@@ -72,6 +79,9 @@ class OpenLot:
             mint=d.get("mint"),
             strategy_id=str(d.get("strategy_id") or "manual-paper"),
             estimated_impact_bps=_opt_float(d.get("estimated_impact_bps")),
+            estimated_impact_gross_bps=_opt_float(d.get("estimated_impact_gross_bps")),
+            estimated_impact_net_bps=_opt_float(d.get("estimated_impact_net_bps")),
+            protocol_fee_bps=_opt_float(d.get("protocol_fee_bps")),
             quote_price=_opt_float(d.get("quote_price")),
             shadow_slippage_bps=_opt_float(d.get("shadow_slippage_bps")),
         )
@@ -84,6 +94,35 @@ def _opt_float(v: Any) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def impact_triple_from_mapping(row: Mapping[str, Any]) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """Gross / protocol fee / net already stored on a fill or lot. No invented impact."""
+    gross = _opt_float(row.get("estimated_impact_gross_bps"))
+    if gross is None:
+        gross = _opt_float(row.get("estimated_impact_bps"))
+    if gross is None:
+        gross = _opt_float(row.get("entry_estimated_impact_gross_bps"))
+    if gross is None:
+        gross = _opt_float(row.get("entry_estimated_impact_bps"))
+    if gross is None:
+        return None, None, None
+    fee = _opt_float(row.get("protocol_fee_bps"))
+    if fee is None:
+        fee = _opt_float(row.get("entry_protocol_fee_bps"))
+    net = _opt_float(row.get("estimated_impact_net_bps"))
+    if net is None:
+        net = _opt_float(row.get("entry_estimated_impact_net_bps"))
+    return split_impact_gross_fee_net(
+        gross,
+        protocol_fee_bps=fee,
+        net_bps=net,
+        phase=str(row.get("phase") or row.get("entry_phase") or "curve"),
+    )
+
+
+def impact_triple_from_fill(fill: Fill) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    return impact_triple_from_mapping(fill.model_dump())
 
 
 @dataclass
@@ -106,6 +145,9 @@ class RoundTrip:
     source: str = "manual"  # signal | manual  (never live; live fills use LiveTradeJournal)
     side: str = "long"
     entry_estimated_impact_bps: Optional[float] = None
+    entry_estimated_impact_gross_bps: Optional[float] = None
+    entry_estimated_impact_net_bps: Optional[float] = None
+    entry_protocol_fee_bps: Optional[float] = None
     entry_quote_price: Optional[float] = None
     entry_shadow_slippage_bps: Optional[float] = None
     exit_estimated_impact_bps: Optional[float] = None
@@ -130,6 +172,9 @@ class RoundTrip:
             "source": self.source,
             "side": self.side,
             "entry_estimated_impact_bps": self.entry_estimated_impact_bps,
+            "entry_estimated_impact_gross_bps": self.entry_estimated_impact_gross_bps,
+            "entry_estimated_impact_net_bps": self.entry_estimated_impact_net_bps,
+            "entry_protocol_fee_bps": self.entry_protocol_fee_bps,
             "entry_quote_price": self.entry_quote_price,
             "entry_shadow_slippage_bps": self.entry_shadow_slippage_bps,
             "exit_estimated_impact_bps": self.exit_estimated_impact_bps,
@@ -159,6 +204,9 @@ class RoundTrip:
             source=str(d.get("source") or "manual"),
             side=str(d.get("side") or "long"),
             entry_estimated_impact_bps=_opt_float(d.get("entry_estimated_impact_bps")),
+            entry_estimated_impact_gross_bps=_opt_float(d.get("entry_estimated_impact_gross_bps")),
+            entry_estimated_impact_net_bps=_opt_float(d.get("entry_estimated_impact_net_bps")),
+            entry_protocol_fee_bps=_opt_float(d.get("entry_protocol_fee_bps")),
             entry_quote_price=_opt_float(d.get("entry_quote_price")),
             entry_shadow_slippage_bps=_opt_float(d.get("entry_shadow_slippage_bps")),
             exit_estimated_impact_bps=_opt_float(d.get("exit_estimated_impact_bps")),
@@ -271,6 +319,7 @@ class PaperTradeJournal:
                 pnl_pct -= fee_share / (lot.price * take)
             src_tag = tag or lot.tag
             sid, src = _ids_from_tag(src_tag or lot.strategy_id)
+            entry_gross, entry_fee, entry_net = impact_triple_from_mapping(lot.as_dict())
             trade = RoundTrip(
                 id=str(uuid.uuid4()),
                 strategy_id=sid,
@@ -287,7 +336,10 @@ class PaperTradeJournal:
                 tags=_tags_for(reason, src_tag),
                 source=src,
                 side=side,
-                entry_estimated_impact_bps=lot.estimated_impact_bps,
+                entry_estimated_impact_bps=entry_gross,
+                entry_estimated_impact_gross_bps=entry_gross,
+                entry_estimated_impact_net_bps=entry_net,
+                entry_protocol_fee_bps=entry_fee,
                 entry_quote_price=lot.quote_price,
                 entry_shadow_slippage_bps=lot.shadow_slippage_bps,
                 exit_estimated_impact_bps=getattr(fill, "estimated_impact_bps", None),
@@ -307,6 +359,7 @@ class PaperTradeJournal:
 
         if abs(remaining) > 1e-12:
             leftover_fee = fee * (abs(remaining) / abs(qty)) if qty else 0.0
+            gross, proto, net = impact_triple_from_fill(fill)
             opened.append(
                 OpenLot(
                     symbol=symbol,
@@ -317,7 +370,10 @@ class PaperTradeJournal:
                     tag=tag,
                     mint=mint,
                     strategy_id=strategy_id,
-                    estimated_impact_bps=getattr(fill, "estimated_impact_bps", None),
+                    estimated_impact_bps=gross,
+                    estimated_impact_gross_bps=gross,
+                    estimated_impact_net_bps=net,
+                    protocol_fee_bps=proto,
                     quote_price=getattr(fill, "quote_price", None),
                     shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
                 )
@@ -547,6 +603,67 @@ def _load_journal(path: Path) -> Optional[PaperTradeJournal]:
     return j
 
 
+def repair_closed_entry_impacts(journal: PaperTradeJournal) -> int:
+    """Write gross/fee/net onto closes that only have a legacy gross, or copy
+    an impact already stored on the opening fill. Does not invent a number.
+    """
+    changed = 0
+    pool: dict[str, list[tuple[int, tuple[Optional[float], Optional[float], Optional[float]]]]] = {}
+    for raw in journal.fills:
+        if not isinstance(raw, dict):
+            continue
+        qty = _opt_float(raw.get("qty"))
+        side = str(raw.get("side") or raw.get("signal_side") or "").lower()
+        if side in {"sell", "short"}:
+            continue
+        if qty is not None and qty < 0:
+            continue
+        triple = impact_triple_from_mapping(raw)
+        if triple[0] is None:
+            continue
+        sym = str(raw.get("symbol") or "")
+        pool.setdefault(sym, []).append((int(raw.get("ts") or 0), triple))
+
+    for trade in journal.closed:
+        gross = trade.entry_estimated_impact_gross_bps
+        if gross is None:
+            gross = trade.entry_estimated_impact_bps
+        if gross is None:
+            cands = pool.get(trade.symbol) or []
+            if not cands:
+                continue
+            best_i = min(range(len(cands)), key=lambda i: abs(cands[i][0] - int(trade.entry_ts)))
+            _ts, triple = cands.pop(best_i)
+            gross, fee, net = triple
+        else:
+            _g, fee, net = split_impact_gross_fee_net(
+                gross,
+                protocol_fee_bps=trade.entry_protocol_fee_bps,
+                net_bps=trade.entry_estimated_impact_net_bps,
+            )
+        if gross is None:
+            continue
+        before = (
+            trade.entry_estimated_impact_bps,
+            trade.entry_estimated_impact_gross_bps,
+            trade.entry_estimated_impact_net_bps,
+            trade.entry_protocol_fee_bps,
+        )
+        trade.entry_estimated_impact_bps = float(gross)
+        trade.entry_estimated_impact_gross_bps = float(gross)
+        trade.entry_protocol_fee_bps = float(fee) if fee is not None else None
+        trade.entry_estimated_impact_net_bps = float(net) if net is not None else None
+        after = (
+            trade.entry_estimated_impact_bps,
+            trade.entry_estimated_impact_gross_bps,
+            trade.entry_estimated_impact_net_bps,
+            trade.entry_protocol_fee_bps,
+        )
+        if after != before:
+            changed += 1
+    return changed
+
+
 def get_paper_ledger() -> PaperTradeJournal:
     global _ledger
     if _ledger is None:
@@ -554,6 +671,8 @@ def get_paper_ledger() -> PaperTradeJournal:
         loaded = _load_journal(path)
         _ledger = loaded if loaded is not None else PaperTradeJournal()
         _ledger.persist_path = path
+        if repair_closed_entry_impacts(_ledger):
+            _ledger._maybe_persist()
     return _ledger
 
 

@@ -139,6 +139,20 @@ Go(G3)           = median(impact_net_bps) < 60
 
 纸面策略入场在 bonding curve，缺 `phase` 时按 `curve`（62.5）计。响应同时给含费与扣费，UI 标「含费 / 扣费」。
 
+### 2.5 入场冲击样本与平仓笔数
+
+G3 中位是 **一笔已平仓一条**。分母是 `PaperTradeJournal` 的 closed，不是 DecisionLog 里还留着的几条 fill。DecisionLog 只有 3 条入场 fill 时，不得把 `gates.median_entry_impact.n` 缩成 3（那样扣费中位即使约 17 bps、小于 60，也会因为 n 不足变成 `ok=false`）。
+
+每笔纸面开仓在平仓 round-trip 上写入：
+
+- `entry_estimated_impact_gross_bps`（含费；与 `entry_estimated_impact_bps` 相同）
+- `entry_protocol_fee_bps`
+- `entry_estimated_impact_net_bps` = max(0, gross − fee)
+
+Fill 上对应 `estimated_impact_gross_bps` / `estimated_impact_net_bps` / `protocol_fee_bps`。只有含费 gross、尚未拆费的旧 lot，平仓时用阶段地板补上 fee 与 net。closed 缺字段时，只从 **已经记在** 开仓 fill 或 DecisionLog 上的冲击回填，不新造数字。
+
+`n_closed ≥ 30` 且入场冲击条数 ≥ 30、扣费中位 < 60、含费最大 ≤ 80 → `gates.median_entry_impact.ok=true`（`basis=net_of_protocol_fee`）。`sample_ok` 仍是 ≥30。`liveEnabled` 仍为 false。
+
 ---
 
 ## 3. HTTP
@@ -208,6 +222,7 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 - [x] 理论：冲击 / 延迟 / MEV / 毕业 写明纸面缺口
 - [x] 门：30 笔、期望≥0、**扣费**中位冲击&lt;60（含费硬顶 80）、三桶拒单率、影子滑点≤40bps、`liveEnabled=false`
 - [x] 2026-09-22：G3 用 `impact_net_bps`（曲线费地板 62.5 = `DEFAULT_IMPACT_FEE_BPS/2`；AMM 10 = 默认 spread/2）
+- [x] 2026-09-21：G3 按已平仓逐笔计 n；journal 写入 gross/fee/net；短 DecisionLog 不覆盖 journal
 - [x] `GET /api/v1/stats/executability` 无密钥、无链上 send
 - [x] 聚合器单测 + fixtures
 - [x] 不打开 live、不放宽 LiveLimits、不改 `max_impact_bps` 硬顶 80

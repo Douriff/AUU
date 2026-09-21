@@ -50,6 +50,10 @@ class Fill(BaseModel):
     # Additive executability extras (paper evidence; not a live send).
     quote_price: Optional[float] = None
     estimated_impact_bps: Optional[float] = None
+    # Gross is estimated_impact_bps. Net is max(0, gross − protocol fee floor).
+    estimated_impact_gross_bps: Optional[float] = None
+    estimated_impact_net_bps: Optional[float] = None
+    protocol_fee_bps: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
 
 

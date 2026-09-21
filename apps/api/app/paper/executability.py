@@ -14,8 +14,8 @@ from app.paper.decision_log import REJECT_BUCKETS, backfill_decision_shadows, cl
 from app.providers.pumpfun_curve_math import (
     AMM_IMPACT_FEE_FLOOR_BPS,
     CURVE_IMPACT_FEE_FLOOR_BPS,
-    impact_net_bps,
-    protocol_fee_bps_for_phase,
+    impact_venue_phase,
+    split_impact_gross_fee_net,
 )
 
 THEORY_REF = "docs/research/executability-go-nogo-v0.md"
@@ -95,7 +95,7 @@ def shadow_slippage_bps(fill_price: float, quote: float) -> Optional[float]:
 def annotate_fill_executability(
     fill: Fill, ctx: StrategyContext, intent: OrderIntent
 ) -> Fill:
-    """Attach quote / curve impact / shadow slippage. Does not change fill price."""
+    """Attach quote / curve impact gross+fee+net / shadow slippage. Does not change fill price."""
     quote = None
     if ctx.tick and ctx.tick.mid and float(ctx.tick.mid) > 0:
         quote = float(ctx.tick.mid)
@@ -109,13 +109,33 @@ def annotate_fill_executability(
         )
     except (ValueError, TypeError, ZeroDivisionError):
         impact = None
+    if impact is None and intent.side == "buy" and ctx.meta:
+        hint = ctx.meta.get("entry_impact_bps")
+        if hint is not None:
+            try:
+                impact = float(hint)
+            except (TypeError, ValueError):
+                impact = None
+    phase_hint = ctx.meta.get("phase") if ctx.meta else None
+    phase = impact_venue_phase(ctx.pump, str(phase_hint) if phase_hint else None)
+    addon = None
+    if ctx.liquidity.fee_bps is not None:
+        addon = float(ctx.liquidity.fee_bps)
+    elif ctx.pump is not None and getattr(ctx.pump, "fee_bps", None) is not None:
+        addon = float(ctx.pump.fee_bps)
+    gross, fee, net = split_impact_gross_fee_net(
+        impact, phase=phase, impact_fee_bps=addon
+    )
     shadow = shadow_slippage_bps(float(fill.price), quote) if quote else None
     if shadow is None and fill.slippage_bps is not None:
         shadow = float(fill.slippage_bps)
     return fill.model_copy(
         update={
             "quote_price": quote,
-            "estimated_impact_bps": impact,
+            "estimated_impact_bps": gross,
+            "estimated_impact_gross_bps": gross,
+            "estimated_impact_net_bps": net,
+            "protocol_fee_bps": fee,
             "shadow_slippage_bps": shadow,
         }
     )
@@ -205,42 +225,114 @@ def _reject_from_log(log_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _entry_impact_pair(row: Mapping[str, Any]) -> Optional[tuple[float, float]]:
-    """(gross_bps, protocol_fee_bps) for one closed entry. None if no gross."""
-    gross = _f(row, "impact_gross_bps", "impact_bps_est", "estimated_impact_bps", "entry_estimated_impact_bps")
+def _resolve_impact(row: Mapping[str, Any]) -> Optional[tuple[float, float, float]]:
+    """(gross, protocol_fee, net) for one entry. None when gross was never recorded."""
+    gross = _f(
+        row,
+        "impact_gross_bps",
+        "entry_estimated_impact_gross_bps",
+        "estimated_impact_gross_bps",
+        "impact_bps_est",
+        "estimated_impact_bps",
+        "entry_estimated_impact_bps",
+    )
     if gross is None:
         return None
-    fee = _f(row, "protocol_fee_bps")
-    if fee is None:
-        fee = protocol_fee_bps_for_phase(
-            str(row.get("phase") or "curve"),
-            impact_fee_bps=_f(row, "impact_fee_bps", "fee_bps"),
-        )
-    return float(gross), float(fee)
+    fee = _f(row, "entry_protocol_fee_bps", "protocol_fee_bps")
+    net = _f(
+        row,
+        "entry_estimated_impact_net_bps",
+        "estimated_impact_net_bps",
+        "impact_net_bps",
+    )
+    phase = str(row.get("entry_phase") or row.get("phase") or "curve")
+    g, fee_v, net_v = split_impact_gross_fee_net(
+        gross,
+        protocol_fee_bps=fee,
+        net_bps=net,
+        phase=phase,
+        impact_fee_bps=_f(row, "impact_fee_bps", "fee_bps"),
+    )
+    if g is None or fee_v is None or net_v is None:
+        return None
+    return g, fee_v, net_v
+
+
+def _is_entry_fill(row: Mapping[str, Any]) -> bool:
+    outcome = str(row.get("outcome") or "")
+    if outcome and outcome not in {"fill", "partial"}:
+        return False
+    side = str(row.get("signal_side") or row.get("side") or "").lower()
+    if side in {"short", "sell"}:
+        return False
+    qty = _f(row, "qty")
+    if qty is not None and qty < 0:
+        return False
+    return True
+
+
+def _index_entry_impacts(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[str, list[tuple[int, tuple[float, float, float]]]]:
+    by: dict[str, list[tuple[int, tuple[float, float, float]]]] = {}
+    for row in rows:
+        if not _is_entry_fill(row):
+            continue
+        resolved = _resolve_impact(row)
+        if resolved is None:
+            continue
+        sym = str(row.get("symbol") or "")
+        ts = int(row.get("ts") or row.get("entry_ts") or 0)
+        by.setdefault(sym, []).append((ts, resolved))
+    return by
+
+
+def _take_closest(
+    bucket: dict[str, list[tuple[int, tuple[float, float, float]]]],
+    symbol: str,
+    entry_ts: int,
+) -> Optional[tuple[float, float, float]]:
+    cands = bucket.get(symbol) or []
+    if not cands:
+        return None
+    best_i = min(range(len(cands)), key=lambda i: abs(cands[i][0] - int(entry_ts)))
+    return cands.pop(best_i)[1]
 
 
 def _entry_impacts(
     log_rows: Sequence[Mapping[str, Any]],
     trade_rows: Sequence[Mapping[str, Any]],
-) -> list[tuple[float, float]]:
-    """Closed-entry (gross, fee) pairs. DecisionLog fills win; else journal."""
-    out: list[tuple[float, float]] = []
-    for row in log_rows:
-        outcome = str(row.get("outcome") or "")
-        side = str(row.get("signal_side") or "")
-        if outcome not in {"fill", "partial"}:
-            continue
-        if side in {"short", "sell"}:
-            continue
-        pair = _entry_impact_pair(row)
-        if pair is not None:
-            out.append(pair)
-    if out:
+    fill_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> list[tuple[float, float, float]]:
+    """One (gross, fee, net) per closed trade.
+
+    Journal closes are the sample. A short DecisionLog must not replace them
+    (that reported n=3 while n_closed=30 and then failed the <60 net gate).
+    Missing journal fields are filled from an already-recorded entry fill or
+    DecisionLog row for the same symbol. Nothing here invents an impact.
+    """
+    if trade_rows:
+        logs = _index_entry_impacts(log_rows)
+        fills = _index_entry_impacts(fill_rows or [])
+        out: list[tuple[float, float, float]] = []
+        for row in trade_rows:
+            resolved = _resolve_impact(row)
+            if resolved is None:
+                ts = int(row.get("entry_ts") or row.get("ts") or 0)
+                sym = str(row.get("symbol") or "")
+                resolved = _take_closest(fills, sym, ts) or _take_closest(logs, sym, ts)
+            if resolved is not None:
+                out.append(resolved)
         return out
-    for row in trade_rows:
-        pair = _entry_impact_pair(row)
-        if pair is not None:
-            out.append(pair)
+    out = []
+    for row in log_rows:
+        if str(row.get("outcome") or "") not in {"fill", "partial"}:
+            continue
+        if not _is_entry_fill(row):
+            continue
+        resolved = _resolve_impact(row)
+        if resolved is not None:
+            out.append(resolved)
     return out
 
 
@@ -391,10 +483,11 @@ def aggregate_executability(
     exp_floor = EXPECTANCY_MIN + EXPECTANCY_TOLERANCE
     expectancy_ok = expectancy is not None and sample_ok and expectancy >= exp_floor
 
-    impact_pairs = _entry_impacts(log_rows, trade_rows)
-    impacts = [g for g, _fee in impact_pairs]
-    nets = [impact_net_bps(g, fee) for g, fee in impact_pairs]
-    fees = [fee for _g, fee in impact_pairs]
+    fill_rows = [_as_mapping(f) for f in (fills or [])]
+    impact_pairs = _entry_impacts(log_rows, trade_rows, fill_rows)
+    impacts = [g for g, _fee, _net in impact_pairs]
+    nets = [net for _g, _fee, net in impact_pairs]
+    fees = [fee for _g, fee, _net in impact_pairs]
     median_impact = _median(impacts)
     median_net = _median(nets)
     median_fee = _median(fees)
