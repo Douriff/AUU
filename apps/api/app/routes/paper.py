@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.models.contracts import OrderIntent, RiskOut, StrategyContext
-from app.paper.pipeline import run_paper_order
+from app.paper.execute import execute_paper_order
 from app.routes.envelope import err, ok
 
 router = APIRouter(prefix="/api/v1", tags=["paper"])
@@ -24,7 +24,7 @@ async def paper_orders(body: PaperOrderBody):
     if not body.risk.allow:
         return err("RISK_DENIED", "risk.allow must be true before paper submit", 400)
 
-    data = await run_paper_order(
+    data = await execute_paper_order(
         body.ctx, body.intent, body.risk, auto_post_fill=body.auto_post_fill
     )
     return ok(data)

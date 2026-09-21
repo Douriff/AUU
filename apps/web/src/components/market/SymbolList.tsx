@@ -1,4 +1,5 @@
 import type { SymbolInfo } from "@/types/contracts";
+import { truncateMint, VENUE } from "@/venue";
 
 interface Props {
   symbols: SymbolInfo[];
@@ -7,9 +8,10 @@ interface Props {
 }
 
 export function SymbolList({ symbols, active, onSelect }: Props) {
+  const pump = symbols.some((s) => s.kind === "pumpfun_curve" || Boolean(s.mint));
   return (
     <div className="symbol-list">
-      <div className="panel-title">自选 Watchlist</div>
+      <div className="panel-title">自选{pump ? ` · ${VENUE}` : ""}</div>
       <ul>
         {symbols.map((s) => (
           <li key={s.symbol}>
@@ -18,8 +20,11 @@ export function SymbolList({ symbols, active, onSelect }: Props) {
               onClick={() => onSelect(s.symbol)}
               type="button"
             >
-              <span className="sym">{s.symbol}</span>
-              <span className="kind">{s.kind ?? "meme_mock"}</span>
+              <span className="sym">
+                {s.base}/{s.quote}
+              </span>
+              <span className="kind">{s.kind ?? "spot"}</span>
+              {s.mint ? <span className="mint">{truncateMint(s.mint)}</span> : null}
             </button>
           </li>
         ))}

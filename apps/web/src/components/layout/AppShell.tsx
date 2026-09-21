@@ -29,7 +29,7 @@ export function AppShell() {
       <header className="topbar">
         <div className="brand">
           <span className="logo">AUU</span>
-          <span className="sub">模因币量化 · 纸面终端</span>
+          <span className="sub">Pump.fun · 纸面曲线</span>
         </div>
         <nav>
           {links.map((l) => (
@@ -51,7 +51,7 @@ export function AppShell() {
             checked={autoPaperOrders}
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />
-          <div className="mode-badge">PAPER</div>
+          <div className="mode-badge">PAPER · PUMP.FUN</div>
         </div>
       </header>
       <main className="main">

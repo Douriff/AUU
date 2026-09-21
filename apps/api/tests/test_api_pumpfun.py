@@ -34,7 +34,7 @@ class PumpfunApiTests(unittest.TestCase):
         self.assertEqual(data["mode"], "paper")
         self.assertEqual(data["venue"], "Pump.fun")
         self.assertIn("pumpfun_paper", data["marketProviderOptions"])
-        self.assertEqual(data["dataSourceOptions"], ["mock", "paper"])
+        self.assertEqual(data["dataSourceOptions"], ["mock", "paper", "pumpfun_paper"])
 
     def test_symbols_and_snapshot(self):
         r = self.client.get("/api/v1/symbols")

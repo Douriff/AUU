@@ -29,12 +29,31 @@
 Header：`X-Api-Version: 1`
 
 ## WS
-1. 服务端首帧 `{ type:"hello", version:1, providers:["mock","pumpfun_paper"], orderMode:"paper" }`
+1. 服务端首帧 `{ type:"hello", version:1, providers:["mock","pumpfun_paper"], orderMode:"paper", venue }`
 2. 客户端 `{ type:"subscribe", channel, symbol, interval? }`
 3. channel ∈ `candles|book|trades|signals|fills|risk`
 4. 心跳 `ping`/`pong` 每 15s
 5. 可选帧 `type:"pumpfun_curve"` → `PumpfunPaperSnapshot`
 6. 可选帧 `type:"new_token"` → `NewTokenEvent` `{ mint, creator, slot?, initial_reserves, ts, source }`（`source=pumpportal|logs`；只读发现，不发单）
+
+Hub WS event types（非 subscribe channel）：`signal | risk | fill | reject | trading_state`  
+`allow=false` / reject **永不** 伪造 Fill。
+
+## Paper path（additive · 不改冻结字段名）
+
+REST：
+
+- `POST /api/v1/risk/pre-order` → `RiskOut`
+- `POST /api/v1/paper/orders` → `{ fills, reject? }`（`risk.allow` 必须为 true）
+- `POST /api/v1/risk/post-fill`
+- `POST /api/v1/pipeline/decide-and-fill` — 一枪：provider mid/book + optional `PumpCtx` → signal → RiskGate → PaperBroker
+- `GET /api/v1/book?symbol=` — synth 深度快照（供 UI 组 ctx）
+
+dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 只订 PaperBroker Fill）。
+
+## Venue（additive）
+
+`venue=Pump.fun` when `DATA_PROVIDER=pumpfun_paper`（Solana bonding curve）。符号为 `PUMPDEMO/SOL` 等，报价 SOL。无私钥、无 sniper。
 
 ## SymbolInfo
 `{ symbol, base, quote, kind, mint? }` — `pumpfun_paper` 时 `kind="pumpfun_curve"`。
@@ -63,5 +82,8 @@ Header：`X-Api-Version: 1`
 `{ mint, creator, slot?, initial_reserves, ts, source }` — `source` ∈ `pumpportal|logs`。  
 发现模块把 mint 写入 `pumpfun_paper` 自选（`discovered` 标签）；**不等于入场**，仍走 `pump-paper-v1` 的 progress / 动能 / 冲击门。`PUMPFUN_DISCOVERY=pumpportal|logs|off`；`PUMPFUN_PORTAL_API_KEY` 仅 env，永不入库。无 sniper、无下单。
 
-REST：`GET /api/v1/pumpfun/snapshot?symbol=`（无曲线快照时 404）。  
-`GET /api/v1/pumpfun/monitor` 自选盘面行。发现：`PUMPFUN_DISCOVERY` + `PUMPFUN_PORTAL_API_KEY`（仅 env）。
+REST：
+
+- `GET /api/v1/pumpfun/snapshot?symbol=`（无曲线快照时 404）
+- `GET /api/v1/curve?symbol=` — UI 友好别名（mock 返回空曲线字段）
+- `GET /api/v1/pumpfun/monitor` 自选盘面行。发现：`PUMPFUN_DISCOVERY` + `PUMPFUN_PORTAL_API_KEY`（仅 env）。
