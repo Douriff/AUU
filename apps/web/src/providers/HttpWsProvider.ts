@@ -150,6 +150,7 @@ export class HttpWsProvider {
   connect(handlers: Handlers): () => void {
     this.handlers = handlers;
     this.intentionalClose = false;
+    this.pendingSubs = [];
     const epoch = ++this.epoch;
     this.open(epoch);
     return () => {
