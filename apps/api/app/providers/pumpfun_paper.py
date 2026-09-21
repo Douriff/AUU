@@ -214,6 +214,27 @@ class PumpfunPaperProvider(MarketDataProvider):
         self._candles[symbol] = {iv: [] for iv in INTERVAL_MS}
         self._trades[symbol] = []
         self._seed_history(c, now_ms)
+        # Prime tape at current spot without moving the seeded curve.
+        px = max(_spot(c), 1e-18)
+        phase = "amm" if c.migrated else "curve"
+        primed: list[dict] = []
+        for i in range(8):
+            ts = now_ms - (8 - i) * TRADE_EVERY_MS
+            side = "buy" if i % 2 == 0 else "sell"
+            primed.append(
+                PumpfunTradeTick(
+                    mint=c.mint,
+                    symbol=c.symbol,
+                    ts=ts,
+                    side=side,  # type: ignore[arg-type]
+                    price=px,
+                    qty=1_000.0 + i * 50,
+                    sol_amount=px * (1_000.0 + i * 50),
+                    phase=phase,  # type: ignore[arg-type]
+                ).model_dump()
+            )
+        self._trades[symbol] = list(reversed(primed))
+        c.last_ms = now_ms
 
     def _seed_history(self, c: CurveMint, now_ms: int) -> None:
         iv = INTERVAL_MS["1m"]
@@ -583,13 +604,21 @@ class PumpfunPaperProvider(MarketDataProvider):
             )
             sigs.append(SignalEvent(strategyId="demo-momentum-v0", symbol=symbol, t=bar.t, signal=sig))
             deny = ((i // n) % 4) == 3
+            near = False
+            curve = self._curves.get(symbol)
+            if curve is not None:
+                near = curve.migrated or curve.complete or progress_bps(curve.real_token) >= 9500
             if deny:
                 risks.append(
                     RiskEvent(
                         strategyId="demo-momentum-v0",
                         symbol=symbol,
                         t=bar.t,
-                        risk=RiskOut(allow=False, tags=["CURVE_NEAR_GRADUATION"], notes="demo deny"),
+                        risk=RiskOut(
+                            allow=False,
+                            tags=["CURVE_NEAR_GRADUATION"] if near else ["COOLDOWN"],
+                            notes="demo deny",
+                        ),
                     )
                 )
                 continue

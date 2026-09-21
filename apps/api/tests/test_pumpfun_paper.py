@@ -80,6 +80,24 @@ class ProviderTests(unittest.TestCase):
     def test_name(self):
         self.assertEqual(self.p.name, "pumpfun_paper")
 
+    def test_stream_emits_curve_and_trades(self):
+        import asyncio
+
+        async def run():
+            agen = self.p.stream("trades", "GRADMOCK/SOL")
+            types = []
+            for _ in range(4):
+                msg = await asyncio.wait_for(agen.__anext__(), 2.5)
+                types.append(msg["type"])
+                if msg["type"] == "trade":
+                    self.assertIn(msg["payload"]["side"], ("buy", "sell"))
+            await agen.aclose()
+            return types
+
+        types = asyncio.run(run())
+        self.assertIn("pumpfun_curve", types)
+        self.assertTrue(any(t == "trade" for t in types))
+
 
 class RiskAndPaperTests(unittest.TestCase):
     def test_curve_near_graduation_tag(self):
