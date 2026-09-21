@@ -6,8 +6,10 @@ Place a Solana CLI JSON keypair **on this machine only**:
 secrets/live-keypair.json
 ```
 
+Expected shape: JSON array of **64 ints** (Phantom base58 converted locally).
 That file is gitignored. AUU never asks you to paste a secret. Health reports
-`keypairMounted` (bool) and `pubkeyShort` only — never the file bytes.
+`keypairMounted` (bool) and `pubkeyShort` only (example `8fs58…akFi`) — never
+the file bytes.
 
 Override path with gitignored env `AUU_SOLANA_KEYPAIR_PATH`.
 

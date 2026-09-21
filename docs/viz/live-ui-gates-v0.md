@@ -31,7 +31,7 @@ Reject with `LIVE_DISABLED` (RiskTagBar + `RiskOut.tags` + 403 `error.tags`) unl
 │ max_day_loss_pct     0.045 (locked, read-only) │
 │ max_open_mints       10    (locked, read-only) │
 │ keypair              mounted: true | false     │
-│ pubkey               Abcd…Wxyz (short only)    │
+│ pubkey               8fs58…akFi (short only)   │
 │ [Enable live…] → confirm dialog                │
 └────────────────────────────────────────────────┘
 ```

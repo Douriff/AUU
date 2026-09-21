@@ -1,9 +1,11 @@
 """LocalSigner — load a Solana JSON keypair from a local filesystem path.
 
-Never accepts a secret string from env, HTTP, or Settings. Never logs or
-returns secret bytes. Health may expose keypairMounted (bool) and a shortened
-public key only.
-This PR does not sign or submit chain transactions.
+Expected file: gitignored secrets/live-keypair.json as a JSON array of 64
+ints (Solana CLI / Phantom base58 converted locally). Never accepts a secret
+string from HTTP or Settings. Never logs or returns secret bytes.
+
+Health may expose keypairMounted (bool) and a shortened public key only
+(shape 8fs58…akFi). This PR does not sign or submit chain transactions.
 """
 from __future__ import annotations
 
@@ -17,7 +19,6 @@ log = logging.getLogger("auu.live.signer")
 
 REASON_NO_KEYPAIR = "NO_KEYPAIR"
 
-# Bitcoin/Solana alphabet. Used only to shorten the 32-byte public key.
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
@@ -37,10 +38,32 @@ def _b58encode(data: bytes) -> str:
     return (_B58[0] * pad) + (body or (_B58[0] if not pad else ""))
 
 
+def _b58decode(s: str) -> bytes:
+    n = 0
+    for ch in s:
+        i = _B58.find(ch)
+        if i < 0:
+            return b""
+        n = n * 58 + i
+    pad = 0
+    for ch in s:
+        if ch == _B58[0]:
+            pad += 1
+        else:
+            break
+    if n == 0:
+        body = b""
+    else:
+        length = (n.bit_length() + 7) // 8
+        body = n.to_bytes(length, "big")
+    return (b"\x00" * pad) + body
+
+
 def shorten_pubkey(full: str) -> str:
-    if len(full) <= 12:
+    """Health/UI shape: 8fs58…akFi (5 prefix + 4 suffix). Never the full key."""
+    if len(full) <= 10:
         return full
-    return f"{full[:4]}…{full[-4:]}"
+    return f"{full[:5]}…{full[-4:]}"
 
 
 @dataclass(frozen=True)
@@ -51,36 +74,61 @@ class SignerStatus:
     pubkey_short: str = ""
 
 
-def _looks_like_keypair_blob(data: object) -> bool:
-    """Solana CLI id.json is a JSON array of 64 (or 32) byte values."""
-    if not isinstance(data, list):
-        return False
-    if len(data) not in (32, 64):
-        return False
-    for item in data:
-        if not isinstance(item, int) or item < 0 or item > 255:
-            return False
-    return True
+def _as_byte(item: object) -> Optional[int]:
+    if isinstance(item, bool) or item is None:
+        return None
+    if isinstance(item, int) and 0 <= item <= 255:
+        return item
+    if isinstance(item, str) and item.strip().isdigit():
+        n = int(item.strip())
+        if 0 <= n <= 255:
+            return n
+    return None
 
 
-def _pubkey_short_from_blob(data: list) -> str:
-    """Solana CLI 64-byte arrays store the public key in the last 32 bytes."""
+def _coerce_blob(data: object) -> Optional[list[int]]:
+    """Accept Solana CLI [64 ints] or a local Phantom-base58 conversion.
+
+    Never logs `data`.
+    """
+    if isinstance(data, list):
+        out: list[int] = []
+        for item in data:
+            n = _as_byte(item)
+            if n is None:
+                return None
+            out.append(n)
+        if len(out) in (32, 64):
+            return out
+        return None
+    if isinstance(data, str):
+        raw = _b58decode(data.strip())
+        if len(raw) in (32, 64):
+            return list(raw)
+        return None
+    if isinstance(data, dict) and data:
+        for key in ("secretKey", "keypair", "value", "data"):
+            if key in data:
+                return _coerce_blob(data[key])
+        if len(data) == 1:
+            return _coerce_blob(next(iter(data.values())))
+    return None
+
+
+def _pubkey_short_from_blob(data: list[int]) -> str:
+    """64-byte Solana arrays store the public key in the last 32 bytes."""
     if len(data) != 64:
         return ""
     pub = bytes(int(x) & 0xFF for x in data[32:64])
     full = _b58encode(pub)
-    return shorten_pubkey(full)
+    short = shorten_pubkey(full)
+    pub = b""
+    full = ""
+    return short
 
 
 class LocalSigner:
-    """Filesystem-only signer stub.
-
-    `inspect(path)` checks that a keypair file exists and looks like a Solana
-    JSON secret array, derives a shortened pubkey, then drops the bytes.
-    It never retains or prints secret material.
-
-    `sign_message` is intentionally unimplemented in this PR.
-    """
+    """Filesystem-only signer stub. Drops secret bytes after inspect."""
 
     def inspect(self, path: Optional[str]) -> SignerStatus:
         if not path or not str(path).strip():
@@ -91,20 +139,21 @@ class LocalSigner:
             log.info("local signer: keypair file missing")
             return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
         try:
-            raw_text = target.read_text(encoding="utf-8")
+            raw_text = target.read_text(encoding="utf-8-sig")
         except OSError:
             log.info("local signer: keypair file unreadable")
             return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
         try:
-            parsed = json.loads(raw_text)
+            parsed: object = json.loads(raw_text)
         except json.JSONDecodeError:
-            log.info("local signer: keypair file is not JSON")
-            return SignerStatus(ok=False, reason=REASON_NO_KEYPAIR, present=False)
-        ok = _looks_like_keypair_blob(parsed)
+            parsed = raw_text.strip()
+        blob = _coerce_blob(parsed)
         pubkey_short = ""
-        if ok and isinstance(parsed, list):
-            pubkey_short = _pubkey_short_from_blob(parsed)
-        # Drop secret material before returning. Do not interpolate parsed into logs.
+        ok = blob is not None
+        if ok and blob is not None:
+            pubkey_short = _pubkey_short_from_blob(blob)
+        # Drop secret material before returning. Do not interpolate into logs.
+        blob = None
         parsed = None
         raw_text = ""
         if not ok:

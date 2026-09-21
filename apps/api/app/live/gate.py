@@ -231,11 +231,24 @@ def _repo_root() -> Path:
 
 
 def keypair_path() -> str:
-    """Resolved local path. Never returned on health — use DEFAULT_KEYPAIR_RELPATH."""
-    raw = (os.getenv(ENV_KEYPAIR_PATH) or "").strip()
-    if raw:
-        return raw
-    return str(_repo_root() / DEFAULT_KEYPAIR_RELPATH)
+    """Resolved local path. Never returned on health — use DEFAULT_KEYPAIR_RELPATH.
+
+    Relative paths (including secrets/live-keypair.json) are tried against the
+    repo root and the process cwd so a local mount is found from apps/api.
+    """
+    raw = (os.getenv(ENV_KEYPAIR_PATH) or "").strip() or DEFAULT_KEYPAIR_RELPATH
+    p = Path(raw).expanduser()
+    if p.is_file():
+        return str(p)
+    if not p.is_absolute():
+        for base in (_repo_root(), Path.cwd(), Path.cwd().parent):
+            cand = base / p
+            try:
+                if cand.is_file():
+                    return str(cand)
+            except OSError:
+                continue
+    return str((_repo_root() / DEFAULT_KEYPAIR_RELPATH) if raw == DEFAULT_KEYPAIR_RELPATH else p)
 
 
 def inspect_keypair() -> SignerStatus:

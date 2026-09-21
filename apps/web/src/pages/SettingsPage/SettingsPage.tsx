@@ -229,11 +229,11 @@ export function SettingsPage() {
           )}
         </div>
         <p className="muted">
-          liveEnabled defaults off. Mount a local JSON keypair at{" "}
-          <code>secrets/live-keypair.json</code> (gitignored) or set{" "}
-          <code>AUU_SOLANA_KEYPAIR_PATH</code>. Enabling requires a secondary confirm dialog and
-          the three locked caps. This runtime still sends zero chain txs. This UI never asks for a
-          secret.
+          liveEnabled defaults off. Mount a local JSON array of 64 ints at{" "}
+          <code>secrets/live-keypair.json</code> (gitignored; Phantom base58 converted locally) or
+          set <code>AUU_SOLANA_KEYPAIR_PATH</code>. Health shows mounted + pubkey only (shape{" "}
+          <code>8fs58…akFi</code>). Enabling requires a secondary confirm dialog and the three
+          locked caps. This runtime still sends zero chain txs. This UI never asks for a secret.
         </p>
         {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>

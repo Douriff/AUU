@@ -47,7 +47,7 @@ AUU does **not** generate, request, or commit key material. Put an existing Sola
 
 ```bash
 mkdir -p secrets
-# copy your local 64-byte JSON array to:
+# copy your local JSON array of 64 ints (Phantom base58 converted locally) to:
 #   secrets/live-keypair.json
 # optional override (gitignored .env):
 AUU_LIVE_ENABLED=false
@@ -62,11 +62,11 @@ Do **not** commit `.env`, `secrets/live-keypair.json`, `id.json`, or `*keypair*.
 
 | Field | Expose |
 |-------|--------|
-| `keypairMounted` | **bool** |
-| `pubkeyShort` | shortened public key or `null` |
+| `keypairMounted` | **bool** (`true` when the 64-int file is present) |
+| `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` |
 | secret / JSON array / full private key | **never** |
 
-The API never logs secret bytes. `LocalSigner.inspect` reads the file, derives `pubkeyShort` from the public half of a 64-byte Solana CLI array, then drops the contents.
+The API never logs secret bytes. `LocalSigner.inspect` reads the file, derives `pubkeyShort` from the public half of a 64-int Solana CLI array (last 32 bytes), then drops the contents. `liveEnabled` stays **false** until Settings secondary confirm.
 
 Settings: `liveEnabled` default off + confirm dialog; three locked caps read-only; keypair `mounted` bool + `pubkeyShort` only. Alert bar shows `LIVE_DISABLED`.
 

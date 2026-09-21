@@ -94,7 +94,8 @@ AUU **never** asks you to paste, upload, or commit a secret. If you already crea
 ```bash
 # Gitignored. Do not commit, copy into the repo, or paste bytes anywhere.
 mkdir -p secrets
-# Point at your existing local JSON keypair (64-byte Solana CLI array), e.g.:
+# Point at your existing local JSON keypair (Solana CLI array of 64 ints).
+# If the wallet came from Phantom, convert the base58 secret locally first.
 #   cp /path/on/this/machine/id.json secrets/live-keypair.json
 # Or override:
 #   export AUU_SOLANA_KEYPAIR_PATH=/absolute/path/on/this/machine/id.json
@@ -106,9 +107,9 @@ Default path: **`secrets/live-keypair.json`** (see `secrets/README.md`). Env: `A
 
 | Field | Meaning |
 |-------|---------|
-| `liveEnabled` | default **false** |
-| `keypairMounted` | **bool** — file present and looks like a Solana JSON keypair |
-| `pubkeyShort` | shortened public key (`Abcd…Wxyz`) or `null` |
+| `liveEnabled` | default **false** (stays false until Settings secondary confirm) |
+| `keypairMounted` | **bool** — file present and looks like a 64-int Solana JSON keypair |
+| `pubkeyShort` | shortened public key (`8fs58…akFi`) or `null` |
 | `liveReasons` | includes `LIVE_DISABLED` until mount + secondary confirm + LiveLimits |
 
 Health **never** returns secret bytes, the JSON array, or a full private key. `pubkeyShort` is not the secret.
