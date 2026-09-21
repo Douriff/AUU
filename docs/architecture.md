@@ -39,7 +39,7 @@ flowchart LR
 
 - **Venue** `Pump.fun`（Solana bonding curve）when `DATA_PROVIDER=pumpfun_paper`。符号 = `PUMPDEMO/SOL` 等，报价 SOL。
 - **默认** `DATA_PROVIDER=mock`：确定性 RNG 蜡烛 + 周期信号/成交/风控。
-- **`DATA_PROVIDER=pumpfun_paper`**：本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，paper-only）。`PUMPFUN_WATCH_MINTS` 白名单播种；只读发现 `PUMPFUN_DISCOVERY=pumpportal|logs|off` 可将 `new_token` 写入自选（不等于入场）。无钱包、无 `sendTransaction`。进度条绑 `progress_bps` + `complete`/`migrated`。
+- **`DATA_PROVIDER=pumpfun_paper`**：本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，paper-only）。`PUMPFUN_WATCH_MINTS` 白名单播种；只读发现 `PUMPFUN_DISCOVERY=pumpportal|logs|off` 可将 `new_token` 写入自选（不等于入场）。Portal 400/403 → `portal_auth_rejected` + 退避（见 `docs/adapters/pumpportal-discovery-v0.md`）。无钱包、无 `sendTransaction`。进度条绑 `progress_bps` + `complete`/`migrated`。
 - **下单**：始终 `PaperBroker` + `RiskGate`。`dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。有 `ctx.pump` 时 `estimated_impact_bps` 走 bonding-curve（buy/`buy_tokens_out` vs sell/`sell_sol_out`），否则 CEX 平方根。
 - **Live adapter（dark）**：`liveEnabled` 默认 false；LOCAL-ONLY `secrets/live-keypair.json`（gitignored）+ 二次确认 + 独立 `LiveLimits`（1 / 0.045 / 10）才离开 `LIVE_DISABLED`。Health：`keypairMounted` bool + `pubkey`，永不返回 secret。见 `docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/viz/live-ui-gates-v0.md`。本轮不发链上 tx。
 - **Trade UI**：`pre-order` → `paper/orders`；可选 `POST /api/v1/pipeline/decide-and-fill`。

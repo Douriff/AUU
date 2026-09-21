@@ -2,7 +2,7 @@ import os
 
 from fastapi import APIRouter
 
-from app.discovery import portal_key_configured, resolve_discovery_mode
+from app.discovery import discovery_health_fields
 from app.live.gate import evaluate
 from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider
 from app.risk import get_risk_gate
@@ -36,9 +36,7 @@ def health():
             "strategy_autopaper": get_engine().params.auto_paper_orders,
             "strategyId": "pump-paper-v1",
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
-            "discovery": resolve_discovery_mode(),
-            "discoveryOptions": ["pumpportal", "logs", "off"],
-            "portal_key_configured": portal_key_configured(),
+            **discovery_health_fields(),
             "liveEnabled": payload["liveEnabled"],
             "liveConfirmed": payload["liveConfirmed"],
             "liveDisabled": payload["liveDisabled"],

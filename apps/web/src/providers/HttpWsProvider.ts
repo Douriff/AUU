@@ -166,6 +166,8 @@ export class HttpWsProvider {
     keypairEnv?: string;
     watch_mints?: string;
     discovery?: string;
+    discoveryActive?: string;
+    discoveryReason?: string;
     discoveryOptions?: string[];
     portal_key_configured?: boolean;
     copy_trade_enabled?: boolean;
