@@ -115,7 +115,11 @@ class RiskGate:
         if ctx.liquidity.adv_usd < float(self.meme.get("min_adv_usd", 5e4)):
             return RiskOut(allow=False, clipped_size=None, tags=["DEPTH_THIN"], notes="adv")
 
-        impact = ctx.liquidity.estimated_impact_bps(abs(notional))
+        impact = ctx.liquidity.estimated_impact_bps(
+            abs(notional),
+            side=_impact_side(signal, notional),
+            pump=ctx.pump,
+        )
         if ctx.pump is not None:
             near = ctx.pump.curve_progress_bps >= 9500 or ctx.pump.complete or ctx.pump.migrated
             if near:
@@ -238,6 +242,15 @@ class RiskGate:
 
 def _sign(x: float) -> float:
     return 1.0 if x >= 0 else -1.0
+
+
+def _impact_side(signal: SignalOut, notional: float) -> str:
+    """Buy vs sell must stay distinct for curve impact (long→buy, short→sell)."""
+    if signal.side == "short":
+        return "sell"
+    if signal.side == "long":
+        return "buy"
+    return "sell" if notional < 0 else "buy"
 
 
 _gate: Optional[RiskGate] = None

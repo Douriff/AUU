@@ -112,7 +112,12 @@ class RiskGate:
         if ctx.liquidity.adv_usd < self.meme.get("min_adv_usd", 5e4):
             return RiskOut(False, None, ["DEPTH_THIN"], "adv")
 
-        impact = ctx.liquidity.estimated_impact_bps(abs(s.target_notional))
+        impact = ctx.liquidity.estimated_impact_bps(
+            abs(s.target_notional), side=buy_or_sell, pump=ctx.pump
+        )
+        # pump 曲线：buy→buy_tokens_out+fee-aware SOL；sell→sell_sol_out；
+        # impact=max(avg vs mid0, mid move)+fee_bps/2（默认 125 bps）
+        # complete/migrated 只作闸（近毕业 ×1.5），不进 CP
         if impact > self.meme.get("impact_cap_bps", 150) or impact > s.max_slippage_bps:
             return RiskOut(False, None, ["SLIPPAGE_CAP"], f"impact={impact}")
 

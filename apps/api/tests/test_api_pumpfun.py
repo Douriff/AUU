@@ -71,12 +71,13 @@ class PumpfunApiTests(unittest.TestCase):
                 "migrated": False,
             },
         }
+        # Quote notional is SOL on the curve; 0.1 SOL stays under impact_cap_bps.
         pre = self.client.post(
             "/api/v1/risk/pre-order",
             json={
                 "ctx": ctx,
                 "signal": {"side": "long", "strength": 0.5, "reason": "test"},
-                "size": {"target_notional": 400, "max_slippage_bps": 200},
+                "size": {"target_notional": 0.1, "max_slippage_bps": 500},
             },
         )
         self.assertEqual(pre.status_code, 200)
@@ -89,9 +90,9 @@ class PumpfunApiTests(unittest.TestCase):
                 "intent": {
                     "side": "buy",
                     "order_type": "market",
-                    "qty_or_notional": 400,
+                    "qty_or_notional": 0.1,
                     "client_tag": "paper",
-                    "max_slippage_bps": 200,
+                    "max_slippage_bps": 500,
                 },
                 "risk": risk,
             },

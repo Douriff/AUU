@@ -207,7 +207,10 @@ class PumpfunPaperProvider(MarketDataProvider):
 曲线报价（纸面 fill 用，与 RiskGate `LiquidityCtx` 衔接）：
 
 - `price_sol = virtual_sol / virtual_token`
-- 买入冲击：用恒定乘积 \(\Delta y = y - k/(x+\Delta x)\)（扣费后再算）
+- 买入冲击：`buy_tokens_out` + 费后 SOL（`sol_after_buy_fee`）；卖出冲击：`sell_sol_out`。两侧分叉，不得写成一支带符号的恒定乘积。
+- `impact_bps = max(成交均价相对 mid0, mid 移动) + fee_bps/2`（默认 fee **125 bps**，可覆盖）
+- `complete` / `migrated` **只作闸**：进度 ≥95% 或毕业时 RiskGate 已有 impact ×1.5；不要把这两个布尔塞进 K。
+- 无 `ctx.pump` / 曲线储备时：保持原 CEX 平方根冲击。
 - `progress_bps = int(10_000 * (1 - real_token / initial_real_token))`
 
 ---

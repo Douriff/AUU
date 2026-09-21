@@ -39,8 +39,18 @@ Header：`X-Api-Version: 1`
 `{ symbol, base, quote, kind, mint? }` — `pumpfun_paper` 时 `kind="pumpfun_curve"`。
 
 ## PumpCtx（可选 `StrategyContext.pump`）
-`{ curve_progress_bps, virtual_sol_reserves, virtual_token_reserves, real_sol_reserves, real_token_reserves, creator_fee_bps, complete, migrated, amm_pool? }`  
-储备字段为十进制字符串（防 JS 精度丢失）。
+`{ curve_progress_bps, virtual_sol_reserves, virtual_token_reserves, real_sol_reserves, real_token_reserves, creator_fee_bps, protocol_fee_bps?, fee_bps?, complete, migrated, amm_pool? }`  
+储备字段为十进制字符串（防 JS 精度丢失）。`complete` / `migrated` 只作风控闸（进度高或毕业时 impact ×1.5），**不**写入恒定乘积公式。
+
+## 曲线冲击（纸面 `LiquidityCtx.estimated_impact_bps`）
+有 `ctx.pump`（或 `LiquidityCtx` 上同等储备字段）且虚拟储备 >0 时，走 `pumpfun_curve_math`，**不**走 CEX 平方根：
+
+- buy：`sol_after_buy_fee` + `buy_tokens_out`（费后 SOL 进曲线）
+- sell：`sell_sol_out`（token 进、SOL 出；与 buy 分叉，不得共用一支）
+- `impact_bps = max(avg_px vs mid0, |mid1 − mid0| / mid0) × 1e4 + fee_bps / 2`
+- 默认 `fee_bps = 125`（可经 `fee_bps` / `PumpCtx.fee_bps` / `LiquidityCtx.fee_bps` 覆盖）
+
+无泵字段时保持 CEX：`spread_bps/2 + 40 × (notional/adv)^0.6`。
 
 ## PumpfunPaperSnapshot
 `{ mint, symbol, phase:"curve"|"graduating"|"amm", progress_bps, complete, migrated, virtual_* / real_*_reserves, token_total_supply, price_sol, price_sol_str?, market_cap_sol?, creator_fee_bps, pool?, slot?, updated_ts, synthetic? }`

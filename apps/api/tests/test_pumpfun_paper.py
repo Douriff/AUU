@@ -101,7 +101,10 @@ class ProviderTests(unittest.TestCase):
 
 class RiskAndPaperTests(unittest.TestCase):
     def test_curve_near_graduation_tag(self):
+        from app.providers.pumpfun_curve_math import reserves_at_progress_bps
+
         gate = RiskGate()
+        vs, vt, rs, rt = reserves_at_progress_bps(9700)
         ctx = StrategyContext(
             symbol="MOONMOCK/SOL",
             ts=1,
@@ -110,16 +113,17 @@ class RiskAndPaperTests(unittest.TestCase):
             tick=TickCtx(mid=0.0001),
             pump=PumpCtx(
                 curve_progress_bps=9700,
-                virtual_sol_reserves="1",
-                virtual_token_reserves="1",
-                real_sol_reserves="1",
-                real_token_reserves="1",
+                virtual_sol_reserves=str(vs),
+                virtual_token_reserves=str(vt),
+                real_sol_reserves=str(rs),
+                real_token_reserves=str(rt),
                 creator_fee_bps=0,
                 complete=False,
                 migrated=False,
             ),
         )
-        out = gate.check(ctx, SignalOut(side="long"), SizeIn(target_notional=200, max_slippage_bps=500))
+        # Quote notional in SOL; keep small so curve impact ×1.5 still clears the cap.
+        out = gate.check(ctx, SignalOut(side="long"), SizeIn(target_notional=0.05, max_slippage_bps=500))
         self.assertTrue(out.allow)
         self.assertIn("CURVE_NEAR_GRADUATION", out.tags)
 
