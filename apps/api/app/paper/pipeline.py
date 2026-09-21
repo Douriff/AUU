@@ -96,11 +96,14 @@ async def run_paper_order(
     fill_payloads: list[dict[str, Any]] = []
     trading_state: Optional[str] = None
     ledger = get_paper_ledger()
+    mint = None
+    if ctx.meta:
+        mint = ctx.meta.get("mint")
     for f in fills:
         dumped = f.model_dump()
         dumped["symbol"] = ctx.symbol
         fill_payloads.append(dumped)
-        ledger.record_fill(ctx.symbol, f, reason=close_reason)
+        ledger.record_fill(ctx.symbol, f, reason=close_reason, mint=str(mint) if mint else None)
         await hub.publish({"type": "fill", "payload": dumped})
         if auto_post_fill:
             result = gate.post_fill(ctx, f)

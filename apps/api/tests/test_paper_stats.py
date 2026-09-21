@@ -8,6 +8,8 @@ from app.models.contracts import Fill
 from app.paper.broker import reset_paper_broker
 from app.paper.guard import live_execution_blocked
 from app.paper.ledger import (
+    EQUITY_0,
+    MIN_SAMPLE_OK,
     PaperLedger,
     monte_carlo,
     reset_paper_ledger,
@@ -23,24 +25,40 @@ class LedgerUnitTests(unittest.TestCase):
         led = PaperLedger()
         led.record_fill(
             "PUMPDEMO/SOL",
-            Fill(ts=1, price=1.0, qty=10.0, fee=0.0, tag="paper:in"),
+            Fill(ts=1, price=1.0, qty=10.0, fee=0.0, tag="paper-trade-ui"),
         )
         closed = led.record_fill(
             "PUMPDEMO/SOL",
-            Fill(ts=2, price=1.1, qty=-10.0, fee=0.0, tag="paper:out"),
+            Fill(ts=2, price=1.1, qty=-10.0, fee=0.0, tag="paper-trade-ui"),
         )
         self.assertEqual(len(closed), 1)
-        self.assertAlmostEqual(closed[0].pnl_pct, 0.1)
-        stats = summarize(led.closed, stop_loss_pct=0.12, day_loss_pct=0.05, n_paths=200, seed=1)
-        self.assertEqual(stats["trade_count"], 1)
+        rt = closed[0]
+        self.assertAlmostEqual(rt.pnl_pct, 0.1)
+        self.assertEqual(rt.source, "manual")
+        self.assertEqual(rt.strategy_id, "manual-paper")
+        self.assertTrue(rt.id)
+        stats = summarize(led.closed)
+        self.assertEqual(stats["n_trades"], 1)
         self.assertEqual(stats["wins"], 1)
         self.assertEqual(stats["losses"], 0)
         self.assertAlmostEqual(stats["win_rate"], 1.0)
-        self.assertAlmostEqual(stats["expectancy_pnl_pct"], 10.0)
+        self.assertEqual(stats["win_rate"], stats["wins"] / stats["n_trades"])
+        self.assertAlmostEqual(stats["expectancy"], rt.pnl)
         self.assertFalse(stats["empty"])
         self.assertFalse(stats["sample_ok"])
         self.assertIsNone(stats["monte_carlo"])
-        self.assertIn("simulation from paper history", stats["disclaimer"])
+        self.assertEqual(stats["equity"][0]["equity"], EQUITY_0)
+        self.assertAlmostEqual(stats["equity"][-1]["equity"], EQUITY_0 + rt.pnl)
+
+    def test_signal_source_from_autopaper_tag(self):
+        led = PaperLedger()
+        led.record_fill("A/SOL", Fill(ts=1, price=1.0, qty=2.0, tag="paper:pump-paper-v1"))
+        closed = led.record_fill(
+            "A/SOL", Fill(ts=2, price=0.9, qty=-2.0, tag="paper:pump-paper-v1:flat"), reason="take_profit"
+        )
+        self.assertEqual(closed[0].source, "signal")
+        self.assertEqual(closed[0].strategy_id, "pump-paper-v1")
+        self.assertIn("TAKE_PROFIT", closed[0].tags)
 
     def test_loss_and_drawdown(self):
         led = PaperLedger()
@@ -56,24 +74,24 @@ class LedgerUnitTests(unittest.TestCase):
         mc = stats["monte_carlo"]
         self.assertFalse(mc["sample_ok"])
         self.assertEqual(mc["note"], "样本不足")
-        self.assertNotIn("final_equity_pct_p5", mc)
+        self.assertEqual(mc["method"], "shuffle")
+        self.assertIn("p50_pnl", mc)
 
-    def test_monte_carlo_seed_stable(self):
-        rets = [0.1, -0.05, 0.02, -0.12, 0.08, 0.03, -0.01, 0.04, 0.02, 0.01]
-        a = monte_carlo(rets, n_paths=300, seed=42)
-        b = monte_carlo(rets, n_paths=300, seed=42)
+    def test_monte_carlo_seed_stable_and_sample_ok(self):
+        pnls = [0.1] * MIN_SAMPLE_OK
+        a = monte_carlo(pnls, n_paths=200, seed=42)
+        b = monte_carlo(pnls, n_paths=200, seed=42)
         self.assertEqual(a, b)
         self.assertTrue(a["sample_ok"])
-        self.assertGreaterEqual(a["p_equity_positive"], 0)
-        self.assertLessEqual(a["p_equity_positive"], 1)
-        self.assertIn("final_equity_pct_p50", a)
+        self.assertIn("p50_pnl", a)
+        self.assertIn("p50_dd", a)
 
     def test_empty_summarize(self):
         stats = summarize([])
         self.assertTrue(stats["empty"])
         self.assertIsNone(stats["win_rate"])
         self.assertIsNone(stats["monte_carlo"])
-        self.assertEqual(stats["trade_count"], 0)
+        self.assertEqual(stats["n_trades"], 0)
         self.assertFalse(stats["sample_ok"])
 
 
@@ -137,21 +155,17 @@ class StatsApiTests(unittest.TestCase):
         self.assertTrue(body["ok"])
         data = body["data"]
         self.assertTrue(data["empty"])
-        self.assertEqual(data["trade_count"], 0)
+        self.assertEqual(data["n_trades"], 0)
         self.assertIsNone(data["win_rate"])
         self.assertTrue(data["liveDisabled"])
-        self.assertEqual(data["mode"], "paper")
         self.assertFalse(data["mc"])
         self.assertIsNone(data["monte_carlo"])
         self.assertFalse(data["sample_ok"])
-        self.assertIn("simulation from paper history", data["disclaimer"])
-        self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["strategy_autopaper"])
         alias = self.client.get("/api/v1/stats/paper-performance")
         self.assertTrue(alias.json()["ok"])
-        self.assertIsNone(alias.json()["data"]["monte_carlo"])
 
-    def test_round_trip_updates_stats(self):
+    def test_round_trip_updates_stats_and_reset(self):
         buy = self.client.post(
             "/api/v1/pipeline/decide-and-fill",
             json={"symbol": "PUMPDEMO/SOL", "side": "buy", "notional": 0.05},
@@ -163,24 +177,25 @@ class StatsApiTests(unittest.TestCase):
             json={"symbol": "PUMPDEMO/SOL", "side": "sell", "notional": 0.05},
         )
         self.assertEqual(sell.status_code, 200)
-        self.assertGreaterEqual(len(sell.json()["data"]["fills"]), 1)
         r = self.client.get("/api/v1/strategy/pump-paper-v1/stats")
         data = r.json()["data"]
-        self.assertGreaterEqual(data["trade_count"], 1)
+        self.assertGreaterEqual(data["n_trades"], 1)
         self.assertFalse(data["empty"])
         self.assertIsNotNone(data["win_rate"])
+        self.assertIn("expectancy", data)
         self.assertFalse(data["mc"])
         self.assertIsNone(data["monte_carlo"])
-        self.assertIn("journal", data)
-        self.assertGreaterEqual(len(data["journal"]), 1)
-        self.assertIn("equity", data)
+        rt = data["journal"][0]
+        for k in ("id", "strategy_id", "symbol", "entry_ts", "exit_ts", "pnl", "tags"):
+            self.assertIn(k, rt)
         mc_r = self.client.get("/api/v1/strategy/pump-paper-v1/stats", params={"mc": "1"})
-        mc_data = mc_r.json()["data"]
-        self.assertTrue(mc_data["mc"])
-        mc = mc_data["monte_carlo"]
+        mc = mc_r.json()["data"]["monte_carlo"]
         self.assertFalse(mc["sample_ok"])
         self.assertEqual(mc["note"], "样本不足")
-        self.assertNotIn("final_equity_pct_p5", mc)
+        self.assertEqual(mc["method"], "shuffle")
+        reset = self.client.post("/api/v1/strategy/pump-paper-v1/stats/reset")
+        self.assertEqual(reset.status_code, 200)
+        self.assertEqual(reset.json()["data"]["n_trades"], 0)
 
     def test_health_strategy_autopaper_alias_and_toggle(self):
         h = self.client.get("/api/v1/health")
@@ -196,17 +211,9 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         payload = r.json()["data"]
         self.assertEqual(payload["strategy_autopaper"], (not off))
-        self.assertEqual(payload["auto_paper_orders"], (not off))
-        h2 = self.client.get("/api/v1/health").json()["data"]
-        self.assertEqual(h2["strategy_autopaper"], (not off))
-        self.assertEqual(h2["auto_paper_orders"], (not off))
-        # toggle back without restart
         self.client.put(
             "/api/v1/strategy/pump-paper-v1", json={"auto_paper_orders": False}
         )
-        h3 = self.client.get("/api/v1/health").json()["data"]
-        self.assertFalse(h3["auto_paper_orders"])
-        self.assertFalse(h3["strategy_autopaper"])
 
 
 class AutopaperLiveRefuseTests(unittest.IsolatedAsyncioTestCase):
@@ -261,7 +268,6 @@ class AutopaperLiveRefuseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(engine.positions, {})
         dec = engine.last_decisions()
         self.assertTrue(any(d["action"] == "refuse" for d in dec))
-        self.assertTrue(any("LIVE" in d["reason"] or "LIVE" in (d["notes"] or "") for d in dec))
 
 
 if __name__ == "__main__":

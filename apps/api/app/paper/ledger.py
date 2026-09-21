@@ -1,20 +1,30 @@
-"""Session paper fill ledger → closed trades + performance stats (simulation only)."""
+"""PaperTradeJournal — FIFO round-trips + PaperStats (+ optional trades-MC)."""
 from __future__ import annotations
 
-import math
 import random
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.models.contracts import Fill
 
-DEFAULT_MC_PATHS = 1000
+DEFAULT_MC_PATHS = 500
 DEFAULT_MC_SEED = 42
-MIN_SHARPE_N = 5
-MIN_SAMPLE_OK = 10
+MIN_SAMPLE_OK = 20
+JOURNAL_N = 50
+EQUITY_0 = 10_000.0
 DISCLAIMER = (
     "simulation from paper history, not a promise — 纸面历史重抽样，非实盘承诺"
 )
+
+_REASON_TAGS = {
+    "take_profit": "TAKE_PROFIT",
+    "stop_loss": "STOP_LOSS",
+    "graduation": "CURVE_NEAR_GRADUATION",
+    "sell_pressure": "SELL_PRESSURE",
+    "impact_split": "SPLIT_REDUCE",
+    "max_hold": "MAX_HOLD",
+}
 
 
 @dataclass
@@ -23,66 +33,87 @@ class OpenLot:
     qty: float  # signed: +long / -short remaining
     price: float
     ts: int
-    fee: float
+    fees: float
     tag: str = ""
+    mint: Optional[str] = None
+    strategy_id: str = "manual-paper"
 
 
 @dataclass
 class RoundTrip:
-    """Closed paper round-trip (FIFO). Manual Trade and autopaper share this journal."""
+    """Closed paper round-trip. Manual Trade and autopaper share this journal."""
 
+    id: str
+    strategy_id: str  # pump-paper-v1 | manual-paper
     symbol: str
-    side: str  # long | short
-    qty: float
-    entry_price: float
-    exit_price: float
+    mint: Optional[str]
     entry_ts: int
     exit_ts: int
-    fee: float
+    entry_price: float
+    exit_price: float
+    qty: float
     pnl: float
     pnl_pct: float
-    tag: str = ""
+    fees: float
     tags: list[str] = field(default_factory=list)
-    reason: str = ""
-    source: str = "manual"  # manual | autopaper
+    source: str = "manual"  # signal | manual
+    side: str = "long"
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            "id": self.id,
+            "strategy_id": self.strategy_id,
             "symbol": self.symbol,
-            "side": self.side,
-            "qty": self.qty,
-            "entry_price": self.entry_price,
-            "exit_price": self.exit_price,
+            "mint": self.mint,
             "entry_ts": self.entry_ts,
             "exit_ts": self.exit_ts,
-            "fee": self.fee,
+            "entry_price": self.entry_price,
+            "exit_price": self.exit_price,
+            "qty": self.qty,
             "pnl": self.pnl,
             "pnl_pct": self.pnl_pct,
-            "tag": self.tag,
+            "fees": self.fees,
             "tags": list(self.tags),
-            "reason": self.reason,
             "source": self.source,
+            "side": self.side,
         }
 
 
-# Back-compat alias used by early tests.
 ClosedTrade = RoundTrip
 
 
-def _source_from_tag(tag: str) -> str:
+def _ids_from_tag(tag: str) -> tuple[str, str]:
     t = (tag or "").lower()
     if "pump-paper-v1" in t or "autopaper" in t:
-        return "autopaper"
-    return "manual"
+        return "pump-paper-v1", "signal"
+    return "manual-paper", "manual"
+
+
+def _tags_for(reason: str, tag: str) -> list[str]:
+    out: list[str] = []
+    mapped = _REASON_TAGS.get((reason or "").lower())
+    if mapped:
+        out.append(mapped)
+    elif reason:
+        out.append(reason)
+    if tag and tag not in out:
+        out.append(tag)
+    return out
 
 
 class PaperTradeJournal:
     """FIFO round-trip matcher for PaperBroker fills (session memory)."""
 
-    def __init__(self) -> None:
+    def __init__(self, equity_0: float = EQUITY_0) -> None:
+        self.equity_0 = float(equity_0)
         self.fills: list[dict[str, Any]] = []
         self.lots: dict[str, list[OpenLot]] = {}
         self.closed: list[RoundTrip] = []
+
+    def reset(self) -> None:
+        self.fills.clear()
+        self.lots.clear()
+        self.closed.clear()
 
     def record_fill(
         self,
@@ -90,12 +121,14 @@ class PaperTradeJournal:
         fill: Fill,
         *,
         reason: str = "",
+        mint: Optional[str] = None,
     ) -> list[RoundTrip]:
         qty = float(fill.qty)
         px = float(fill.price)
         fee = float(fill.fee or 0.0)
         ts = int(fill.ts)
         tag = fill.tag or ""
+        strategy_id, source = _ids_from_tag(tag)
         if qty == 0 or px <= 0:
             return []
         dumped = fill.model_dump()
@@ -105,7 +138,6 @@ class PaperTradeJournal:
         remaining = qty
         new_closed: list[RoundTrip] = []
 
-        # Cover opposite lots first (FIFO).
         i = 0
         while remaining != 0 and i < len(opened):
             lot = opened[i]
@@ -114,13 +146,11 @@ class PaperTradeJournal:
                 continue
             take = min(abs(lot.qty), abs(remaining))
             lot_sign = 1.0 if lot.qty > 0 else -1.0
-            close_qty = take * lot_sign  # signed qty closed of the open lot
+            close_qty = take * lot_sign
             fee_share = 0.0
-            lot_notional = abs(lot.qty) * lot.price
-            if lot_notional > 0:
-                fee_share += lot.fee * (take / abs(lot.qty))
-            fill_notional = abs(qty) * px
-            if fill_notional > 0:
+            if abs(lot.qty) > 0:
+                fee_share += lot.fees * (take / abs(lot.qty))
+            if abs(qty) > 0:
                 fee_share += fee * (take / abs(qty))
             if lot.qty > 0:
                 side = "long"
@@ -133,31 +163,33 @@ class PaperTradeJournal:
             if lot.price * take > 0:
                 pnl_pct -= fee_share / (lot.price * take)
             src_tag = tag or lot.tag
+            sid, src = _ids_from_tag(src_tag or lot.strategy_id)
             trade = RoundTrip(
+                id=str(uuid.uuid4()),
+                strategy_id=sid,
                 symbol=symbol,
-                side=side,
-                qty=take,
-                entry_price=lot.price,
-                exit_price=px,
+                mint=mint or lot.mint,
                 entry_ts=lot.ts,
                 exit_ts=ts,
-                fee=fee_share,
+                entry_price=lot.price,
+                exit_price=px,
+                qty=take,
                 pnl=pnl,
                 pnl_pct=pnl_pct,
-                tag=src_tag,
-                tags=[x for x in (src_tag, reason) if x],
-                reason=reason,
-                source=_source_from_tag(src_tag),
+                fees=fee_share,
+                tags=_tags_for(reason, src_tag),
+                source=src,
+                side=side,
             )
             self.closed.append(trade)
             new_closed.append(trade)
             lot.qty -= close_qty
-            remaining -= -close_qty  # remaining is the fill remainder
+            remaining -= -close_qty
             if abs(lot.qty) <= 1e-12:
-                lot.fee = 0.0
+                lot.fees = 0.0
                 opened.pop(i)
             else:
-                lot.fee = max(0.0, lot.fee - fee_share)
+                lot.fees = max(0.0, lot.fees - fee_share)
                 i += 1
 
         if abs(remaining) > 1e-12:
@@ -168,8 +200,10 @@ class PaperTradeJournal:
                     qty=remaining,
                     price=px,
                     ts=ts,
-                    fee=leftover_fee,
+                    fees=leftover_fee,
                     tag=tag,
+                    mint=mint,
+                    strategy_id=strategy_id,
                 )
             )
         if not opened:
@@ -193,164 +227,144 @@ class PaperTradeJournal:
         return rows
 
 
-def _max_drawdown_pct(returns: list[float]) -> Optional[float]:
-    if not returns:
+def _equity_curve(trades: list[RoundTrip], equity_0: float = EQUITY_0) -> list[dict[str, Any]]:
+    eq = float(equity_0)
+    if not trades:
+        return []
+    out = [{"t": trades[0].entry_ts, "equity": eq}]
+    for t in trades:
+        eq += t.pnl
+        out.append({"t": t.exit_ts, "equity": eq})
+    return out
+
+
+def _max_drawdown_pct(equity: list[dict[str, Any]]) -> Optional[float]:
+    if not equity:
         return None
-    equity = 1.0
-    peak = 1.0
+    peak = equity[0]["equity"]
     max_dd = 0.0
-    for r in returns:
-        equity *= 1.0 + r
-        if equity > peak:
-            peak = equity
+    for pt in equity:
+        val = float(pt["equity"])
+        if val > peak:
+            peak = val
         if peak > 0:
-            dd = (peak - equity) / peak
+            dd = (peak - val) / peak
             if dd > max_dd:
                 max_dd = dd
     return max_dd * 100.0
 
 
-def _sharpe_like(returns: list[float]) -> Optional[float]:
-    n = len(returns)
-    if n < MIN_SHARPE_N:
-        return None
-    mean = sum(returns) / n
-    var = sum((x - mean) ** 2 for x in returns) / (n - 1)
-    std = math.sqrt(var)
-    if std <= 1e-18:
-        return None
-    return mean / std
-
-
-def _equity_curve(trades: list[RoundTrip]) -> list[dict[str, Any]]:
-    eq = 1.0
-    out = [{"t": trades[0].entry_ts if trades else 0, "equity": 1.0}] if trades else []
-    if not trades:
-        return out
-    out = [{"t": trades[0].entry_ts, "equity": 1.0}]
-    for t in trades:
-        eq *= 1.0 + t.pnl_pct
-        out.append({"t": t.exit_ts, "equity": eq, "symbol": t.symbol, "pnl_pct": t.pnl_pct})
-    return out
+def _pctile(sorted_vals: list[float], p: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    idx = min(len(sorted_vals) - 1, max(0, int(round((p / 100.0) * (len(sorted_vals) - 1)))))
+    return sorted_vals[idx]
 
 
 def monte_carlo(
-    returns: list[float],
+    pnls: list[float],
     *,
     n_paths: int = DEFAULT_MC_PATHS,
     seed: int = DEFAULT_MC_SEED,
-    day_loss_pct: float = 0.05,
-    method: str = "resample",
+    method: str = "shuffle",
+    equity_0: float = EQUITY_0,
 ) -> dict[str, Any]:
-    """P1 trades-MC: resample or reshuffle round-trip pnl, rebuild equity. Not a promise."""
-    n = len(returns)
+    """P0 trades-MC: shuffle (no replacement) or bootstrap pnl, rebuild additive equity."""
+    n = len(pnls)
     sample_ok = n >= MIN_SAMPLE_OK
-    base = {
-        "enabled": True,
+    method = "bootstrap" if method in {"resample", "bootstrap"} else "shuffle"
+    base: dict[str, Any] = {
+        "n_paths": int(n_paths),
         "method": method,
-        "n_paths": n_paths,
-        "trade_count": n,
         "seed": seed,
         "sample_ok": sample_ok,
         "label": DISCLAIMER,
     }
-    if not sample_ok:
+    if n == 0:
         base["note"] = "样本不足"
         return base
     rng = random.Random(seed)
     n_paths = max(1, int(n_paths))
-    finals: list[float] = []
-    n_pos = 0
-    n_above = 0
-    n_dd = 0
-    threshold = 1.0 - float(day_loss_pct)
+    totals: list[float] = []
+    dds: list[float] = []
     for _ in range(n_paths):
-        eq = 1.0
-        hit = False
-        if method == "reshuffle":
-            seq = list(returns)
+        if method == "shuffle":
+            seq = list(pnls)
             rng.shuffle(seq)
         else:
-            seq = [returns[rng.randrange(n)] for _j in range(n)]
-        for r in seq:
-            eq *= 1.0 + r
-            if eq <= threshold:
-                hit = True
-        finals.append(eq)
-        if eq > 0:
-            n_pos += 1
-        if eq > 1.0:
-            n_above += 1
-        if hit:
-            n_dd += 1
-    finals.sort()
-
-    def pctile(p: float) -> float:
-        idx = min(len(finals) - 1, max(0, int(round((p / 100.0) * (len(finals) - 1)))))
-        return (finals[idx] - 1.0) * 100.0
-
+            seq = [pnls[rng.randrange(n)] for _j in range(n)]
+        eq = float(equity_0)
+        peak = eq
+        max_dd = 0.0
+        for p in seq:
+            eq += p
+            if eq > peak:
+                peak = eq
+            if peak > 0:
+                dd = (peak - eq) / peak
+                if dd > max_dd:
+                    max_dd = dd
+        totals.append(eq - float(equity_0))
+        dds.append(max_dd * 100.0)
+    totals.sort()
+    dds.sort()
     base.update(
         {
-            "p_equity_positive": n_pos / n_paths,
-            "p_equity_above_start": n_above / n_paths,
-            "p_hit_day_loss": n_dd / n_paths,
-            "final_equity_pct_p5": pctile(5),
-            "final_equity_pct_p50": pctile(50),
-            "final_equity_pct_p95": pctile(95),
-            "day_loss_pct": day_loss_pct,
+            "p05_pnl": _pctile(totals, 5),
+            "p50_pnl": _pctile(totals, 50),
+            "p95_pnl": _pctile(totals, 95),
+            "p05_dd": _pctile(dds, 5),
+            "p50_dd": _pctile(dds, 50),
         }
     )
+    if not sample_ok:
+        base["note"] = "样本不足"
     return base
 
 
 def summarize(
     trades: list[RoundTrip],
     *,
-    stop_loss_pct: float = 0.12,
-    day_loss_pct: float = 0.05,
     n_paths: int = DEFAULT_MC_PATHS,
     seed: int = DEFAULT_MC_SEED,
     window: str | int = "session",
     mc: bool = False,
-    mc_method: str = "resample",
+    mc_method: str = "shuffle",
+    equity_0: float = EQUITY_0,
 ) -> dict[str, Any]:
+    # Win rate / expectancy / drawdown from journal trades only (QuantStats is idea-only).
     n = len(trades)
     wins = sum(1 for t in trades if t.pnl > 0)
     losses = sum(1 for t in trades if t.pnl < 0)
-    flats = n - wins - losses
-    returns = [t.pnl_pct for t in trades]
+    pnls = [t.pnl for t in trades]
     win_rate = (wins / n) if n else None
-    exp = (sum(returns) / n) if n else None
-    sl = max(float(stop_loss_pct), 1e-9)
-    exp_r = (sum(r / sl for r in returns) / n) if n else None
+    expectancy = (sum(pnls) / n) if n else None
+    equity = _equity_curve(trades, equity_0)
     sample_ok = n >= MIN_SAMPLE_OK
     mc_payload = None
     if mc:
         mc_payload = monte_carlo(
-            returns, n_paths=n_paths, seed=seed, day_loss_pct=day_loss_pct, method=mc_method
+            pnls, n_paths=n_paths, seed=seed, method=mc_method, equity_0=equity_0
         )
     return {
         "mode": "paper",
         "liveDisabled": True,
         "window": window,
+        "n_trades": n,
         "trade_count": n,
         "wins": wins,
         "losses": losses,
-        "flats": flats,
         "win_rate": win_rate,
-        "expectancy_pnl_pct": exp * 100.0 if exp is not None else None,
-        "expectancy_r": exp_r,
-        "max_drawdown_pct": _max_drawdown_pct(returns),
-        "sharpe_like": _sharpe_like(returns),
+        "expectancy": expectancy,
+        "max_drawdown_pct": _max_drawdown_pct(equity),
         "sample_ok": sample_ok,
         "mc": bool(mc),
-        "open_lots": None,
         "monte_carlo": mc_payload,
-        "equity": _equity_curve(trades),
-        "journal": [t.as_dict() for t in trades[-24:]],
+        "equity": equity,
+        "journal": [t.as_dict() for t in trades[-JOURNAL_N:]],
+        "equity_0": equity_0,
         "disclaimer": DISCLAIMER,
         "empty": n == 0,
-        "recent": [t.as_dict() for t in trades[-8:]],
     }
 
 
@@ -386,7 +400,7 @@ def build_performance(
     n_paths: int = DEFAULT_MC_PATHS,
     seed: int = DEFAULT_MC_SEED,
     mc: bool = False,
-    mc_method: str = "resample",
+    mc_method: str = "shuffle",
 ) -> dict[str, Any]:
     from app.strategies.pump_paper_v1 import get_engine
 
@@ -404,13 +418,12 @@ def build_performance(
     trades = journal.closed_in_window(window=n_window, from_ts=from_ts, to_ts=to_ts)
     data = summarize(
         trades,
-        stop_loss_pct=float(engine.params.stop_loss_pct),
-        day_loss_pct=float(engine.params.max_day_loss_pct),
         n_paths=n_paths,
         seed=seed,
         window=window_label,
         mc=mc,
         mc_method=mc_method,
+        equity_0=journal.equity_0,
     )
     data["open_lots"] = sum(len(v) for v in journal.lots.values())
     data["fill_count"] = len(journal.fills)

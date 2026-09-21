@@ -85,7 +85,7 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 `strategy_autopaper` / `auto_paper_orders` **默认关**。在 Settings / 行情 / 交易顶栏打开后（无需重启），`pump-paper-v1` 在 `trading_state=active` 时对自选做 decide → RiskGate → PaperBroker。实盘路径关闭（`liveDisabled=true`）；私钥 env 一旦出现则拒绝执行。
 
-纸面成功概率（胜率、期望、回撤、蒙特卡洛）来自本会话已平仓 Fill：
+纸面成功概率（胜率、期望、回撤）来自本会话 `PaperTradeJournal` 已平仓 round-trip（自算，不嵌 QuantStats）。蒙特卡洛默认关：
 
 ```bash
 curl -sS 'http://localhost:8000/api/v1/strategy/pump-paper-v1/stats'
@@ -127,7 +127,7 @@ curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
 
 `GET /api/v1/health` 应含 `venue=Pump.fun`（当 `DATA_PROVIDER=pumpfun_paper`）、`dataSourceOptions=["mock","paper","pumpfun_paper"]`、`strategy_autopaper`。
 
-纸面统计：`GET /api/v1/strategy/pump-paper-v1/stats`（`?mc=1` 才跑蒙特卡洛）。
+纸面统计：`GET /api/v1/strategy/pump-paper-v1/stats`（`?mc=1` 才跑蒙特卡洛；`n_trades < 20` 时 `sample_ok=false`，面板「样本不足」）。
 
 ## 端口
 

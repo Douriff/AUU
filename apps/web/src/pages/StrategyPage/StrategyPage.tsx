@@ -1,4 +1,5 @@
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
+import { PaperStatsPanel } from "@/components/market/PaperStatsPanel";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import type { PumpPaperParams } from "@/types/contracts";
 
@@ -39,6 +40,7 @@ export function StrategyPage() {
           label="自动纸面下单（默认关）"
         />
       </section>
+      <PaperStatsPanel />
       {params ? (
         <form
           className="strategy-form"

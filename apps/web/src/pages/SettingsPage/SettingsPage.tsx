@@ -3,6 +3,12 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { useDataSource } from "@/hooks/useDataSource";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
+import {
+  readShowMonteCarlo,
+  readShowPaperStats,
+  writeShowMonteCarlo,
+  writeShowPaperStats,
+} from "@/components/market/PaperStatsPanel";
 import { DATA_SOURCES, VENUE } from "@/venue";
 import type { DataSource } from "@/venue";
 
@@ -18,6 +24,13 @@ export function SettingsPage() {
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
   const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
+  const [showPaperStats, setShowPaperStats] = useState(true);
+  const [showMc, setShowMc] = useState(false);
+
+  useEffect(() => {
+    setShowPaperStats(readShowPaperStats());
+    setShowMc(readShowMonteCarlo());
+  }, []);
 
   useEffect(() => {
     marketProvider
@@ -111,7 +124,30 @@ export function SettingsPage() {
         />
         <p className="muted">
           关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无需重启。
-          成功概率见行情/交易页面板或 <code>GET /api/v1/stats/paper-performance</code>（纸面历史模拟，非承诺）。无钱包。
+          成功概率见行情/策略页面板或 <code>GET /api/v1/strategy/pump-paper-v1/stats</code>（纸面 journal，非承诺）。无钱包。
+        </p>
+      </section>
+
+      <section className="settings-section">
+        <h2>PaperStats 面板</h2>
+        <AutoPaperToggle
+          checked={showPaperStats}
+          onChange={(v) => {
+            setShowPaperStats(v);
+            writeShowPaperStats(v);
+          }}
+          label="show_paper_stats（默认开）"
+        />
+        <AutoPaperToggle
+          checked={showMc}
+          onChange={(v) => {
+            setShowMc(v);
+            writeShowMonteCarlo(v);
+          }}
+          label="show_monte_carlo（默认关）"
+        />
+        <p className="muted">
+          摘要条胜率/期望/回撤/笔数。蒙特卡洛仅 <code>?mc=1</code>；n&lt;20 显示「样本不足」，不画假分位带。
         </p>
       </section>
 

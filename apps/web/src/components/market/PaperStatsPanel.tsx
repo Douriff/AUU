@@ -1,6 +1,35 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePaperPerformance } from "@/hooks/usePaperPerformance";
+import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import type { EquityPoint } from "@/types/contracts";
+
+const STATS_KEY = "auu:show_paper_stats";
+const MC_KEY = "auu:show_monte_carlo";
+
+export function readShowPaperStats(): boolean {
+  try {
+    const v = localStorage.getItem(STATS_KEY);
+    return v == null ? true : v === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function readShowMonteCarlo(): boolean {
+  try {
+    return localStorage.getItem(MC_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeShowPaperStats(v: boolean) {
+  localStorage.setItem(STATS_KEY, v ? "1" : "0");
+}
+
+export function writeShowMonteCarlo(v: boolean) {
+  localStorage.setItem(MC_KEY, v ? "1" : "0");
+}
 
 function pct(n: number | null | undefined, digits = 1): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -12,15 +41,15 @@ function rate(n: number | null | undefined): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-function num(n: number | null | undefined, digits = 2): string {
+function num(n: number | null | undefined, digits = 4): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return n.toFixed(digits);
+  return n.toPrecision(digits);
 }
 
 function EquitySpark({ points }: { points: EquityPoint[] }) {
   if (points.length < 2) return null;
-  const w = 160;
-  const h = 28;
+  const w = 180;
+  const h = 32;
   const ys = points.map((p) => p.equity);
   const min = Math.min(...ys);
   const max = Math.max(...ys);
@@ -33,7 +62,7 @@ function EquitySpark({ points }: { points: EquityPoint[] }) {
     })
     .join(" ");
   return (
-    <svg className="equity-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+    <svg className="equity-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-label="equity">
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   );
@@ -44,26 +73,49 @@ interface Props {
 }
 
 export function PaperStatsPanel({ compact }: Props) {
+  const [showStats, setShowStats] = useState(true);
   const [mcOn, setMcOn] = useState(false);
   const { stats, err } = usePaperPerformance(2500, mcOn);
-  const empty = !stats || stats.empty || stats.trade_count === 0;
+  const { autoPaperOrders, tradingState } = useStrategyConfig();
+
+  useEffect(() => {
+    setShowStats(readShowPaperStats());
+    setMcOn(readShowMonteCarlo());
+  }, []);
+
+  if (!showStats) return null;
+
+  const empty = !stats || stats.empty || (stats.n_trades ?? stats.trade_count ?? 0) === 0;
+  const n = stats?.n_trades ?? stats?.trade_count ?? 0;
   const mc = stats?.monte_carlo;
   const sampleOk = Boolean(stats?.sample_ok);
-  const journal = stats?.journal ?? stats?.recent ?? [];
+  const journal = stats?.journal ?? [];
 
   return (
-    <section className={`paper-stats ${compact ? "compact" : ""}`} aria-label="paper performance">
+    <section className={`paper-stats ${compact ? "compact" : ""}`} aria-label="paper stats">
       <header>
-        <h2>成功概率 · 纸面模拟</h2>
-        <span className="muted tiny">非承诺</span>
+        <h2>PaperStats</h2>
+        <span className="muted tiny">纸面 · 非承诺</span>
+        <span className="trading-state" data-state={autoPaperOrders ? "active" : "halted"} title="autopaper">
+          autopaper {autoPaperOrders ? "on" : "off"}
+        </span>
+        <span className="muted tiny">{tradingState}</span>
         <label className="mc-toggle">
-          <input type="checkbox" checked={mcOn} onChange={(e) => setMcOn(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={mcOn}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setMcOn(v);
+              writeShowMonteCarlo(v);
+            }}
+          />
           蒙特卡洛
         </label>
       </header>
       {err ? <p className="error tiny">{err}</p> : null}
       {empty ? (
-        <p className="muted tiny">暂无平仓样本。纸面开平仓后显示胜率 / 期望 / 回撤。</p>
+        <p className="muted tiny">暂无已平仓纸面交易</p>
       ) : (
         <>
           <div className="paper-stats-row">
@@ -73,62 +125,45 @@ export function PaperStatsPanel({ compact }: Props) {
                 <dd>{rate(stats.win_rate)}</dd>
               </div>
               <div>
+                <dt>期望</dt>
+                <dd>{num(stats.expectancy)}</dd>
+              </div>
+              <div>
+                <dt>回撤</dt>
+                <dd>{pct(stats.max_drawdown_pct)}</dd>
+              </div>
+              <div>
                 <dt>笔数</dt>
                 <dd>
-                  {stats.trade_count}
+                  {n}
                   <span className="muted">
                     {" "}
                     ({stats.wins}胜{stats.losses}负)
                   </span>
                 </dd>
               </div>
-              <div>
-                <dt>期望</dt>
-                <dd>
-                  {pct(stats.expectancy_pnl_pct)}
-                  {stats.expectancy_r != null ? (
-                    <span className="muted"> · {num(stats.expectancy_r)}R</span>
-                  ) : null}
-                </dd>
-              </div>
-              <div>
-                <dt>回撤</dt>
-                <dd>{pct(stats.max_drawdown_pct)}</dd>
-              </div>
             </dl>
             {stats.equity && stats.equity.length > 1 ? <EquitySpark points={stats.equity} /> : null}
           </div>
-          {mcOn ? (
-            sampleOk && mc && mc.final_equity_pct_p5 != null ? (
-              <p className="mc-line">
-                蒙特卡洛 {mc.n_paths} 次{mc.method === "reshuffle" ? "重排" : "重抽样"}：P(权益&gt;起点){" "}
-                {rate(mc.p_equity_above_start)}
-                {" · "}
-                P(触及日亏) {rate(mc.p_hit_day_loss)}
-                {" · "}
-                区间 p5–p95 {pct(mc.final_equity_pct_p5)} ~ {pct(mc.final_equity_pct_p95)}
-              </p>
-            ) : (
-              <p className="mc-line">样本不足</p>
-            )
-          ) : null}
           {journal.length ? (
             <table className="journal-table">
               <thead>
                 <tr>
                   <th>symbol</th>
-                  <th>side</th>
-                  <th>pnl%</th>
-                  <th>src</th>
+                  <th>entry</th>
+                  <th>exit</th>
+                  <th>pnl</th>
+                  <th>tags</th>
                 </tr>
               </thead>
               <tbody>
-                {journal.slice(compact ? -4 : -6).reverse().map((row, i) => (
-                  <tr key={`${row.exit_ts}-${i}`} className={row.pnl >= 0 ? "buy" : "sell"}>
+                {journal.slice(compact ? -4 : -8).reverse().map((row) => (
+                  <tr key={row.id} className={row.pnl >= 0 ? "buy" : "sell"}>
                     <td>{row.symbol}</td>
-                    <td>{row.side}</td>
-                    <td>{pct(row.pnl_pct * 100)}</td>
-                    <td>{row.source ?? ""}</td>
+                    <td>{num(row.entry_price, 3)}</td>
+                    <td>{num(row.exit_price, 3)}</td>
+                    <td>{num(row.pnl)}</td>
+                    <td>{(row.tags ?? []).join(",")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -136,7 +171,16 @@ export function PaperStatsPanel({ compact }: Props) {
           ) : null}
         </>
       )}
-      <p className="muted tiny disclaimer">{stats?.disclaimer ?? "simulation from paper history, not a promise"}</p>
+      {mcOn ? (
+        sampleOk && mc && mc.p50_pnl != null ? (
+          <p className="mc-line">
+            MC {mc.n_paths} {mc.method ?? "shuffle"}：p50 pnl {num(mc.p50_pnl)} · p05–p95 {num(mc.p05_pnl)} ~{" "}
+            {num(mc.p95_pnl)} · p50 DD {pct(mc.p50_dd)}
+          </p>
+        ) : (
+          <p className="mc-line">样本不足</p>
+        )
+      ) : null}
     </section>
   );
 }

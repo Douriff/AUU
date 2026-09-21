@@ -22,11 +22,12 @@ def paper_performance(
     window: str = Query("session", description="session or last N closed trades (int)"),
     from_ts: Optional[int] = Query(None, alias="from"),
     to_ts: Optional[int] = Query(None, alias="to"),
-    n_paths: int = Query(1000, ge=1, le=20_000),
+    n_paths: int = Query(500, ge=1, le=20_000),
     seed: int = Query(42),
     mc: str = Query("0", description="1 to run trades-MC; default off"),
-    method: str = Query("resample", description="resample | reshuffle"),
+    method: str = Query("shuffle", description="shuffle | bootstrap"),
 ):
+    mc_method = "bootstrap" if method in {"resample", "bootstrap"} else "shuffle"
     data = build_performance(
         window=window,
         from_ts=from_ts,
@@ -34,6 +35,6 @@ def paper_performance(
         n_paths=n_paths,
         seed=seed,
         mc=_mc_flag(mc),
-        mc_method=method if method in {"resample", "reshuffle"} else "resample",
+        mc_method=mc_method,
     )
     return ok(data)
