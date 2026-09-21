@@ -95,7 +95,8 @@ dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 
 
 ## NewTokenEvent（WS `type:"new_token"`）
 `{ mint, creator, slot?, initial_reserves, ts, source }` — `source` ∈ `pumpportal|logs`。  
-发现模块把 mint 写入 `pumpfun_paper` 自选（`discovered` 标签）；**不等于入场**，仍走 `pump-paper-v1` 的 progress / 动能 / 冲击门。`PUMPFUN_DISCOVERY=pumpportal|logs|off`；`PUMPFUN_PORTAL_API_KEY` 仅 env，永不入库。无 sniper、无下单。
+发现模块把 mint 写入 `pumpfun_paper` 自选（`discovered` 标签）；**不等于入场**，仍走 `pump-paper-v1` 的 progress / 动能 / 冲击门。`PUMPFUN_DISCOVERY=pumpportal|logs|off`；`PUMPFUN_PORTAL_API_KEY` 仅 env，永不入库。无 sniper、无下单。  
+Health：`discovery` / `discoveryActive` / `discoveryReason`（Portal WS **400/403** → `portal_auth_rejected`；见 `docs/adapters/pumpportal-discovery-v0.md`）。`liveEnabled` 默认 false。
 
 REST：
 

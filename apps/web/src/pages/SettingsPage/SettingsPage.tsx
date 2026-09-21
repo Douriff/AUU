@@ -21,6 +21,8 @@ export function SettingsPage() {
   const [venue, setVenue] = useState<string>("…");
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
   const [discovery, setDiscovery] = useState<string>("…");
+  const [discoveryActive, setDiscoveryActive] = useState<string>("…");
+  const [discoveryReason, setDiscoveryReason] = useState<string>("");
   const [portalKey, setPortalKey] = useState<boolean | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [liveMsg, setLiveMsg] = useState("");
@@ -47,6 +49,8 @@ export function SettingsPage() {
         setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? VENUE : "mock"));
         setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper"]);
         setDiscovery(h.discovery ?? "off");
+        setDiscoveryActive(h.discoveryActive ?? h.discovery ?? "off");
+        setDiscoveryReason(h.discoveryReason ?? "");
         setPortalKey(Boolean(h.portal_key_configured));
       })
       .catch((e: Error) => setErr(e.message));
@@ -170,8 +174,21 @@ export function SettingsPage() {
         </p>
         <p className="muted">
           当前 <code>PUMPFUN_DISCOVERY={discovery}</code>
+          {discoveryActive && discoveryActive !== discovery ? (
+            <>
+              {" · "}
+              active=<code>{discoveryActive}</code>
+            </>
+          ) : null}
+          {discoveryReason ? (
+            <>
+              {" · "}
+              reason=<code>{discoveryReason}</code>
+            </>
+          ) : null}
           {" · "}
           portal key={portalKey == null ? "…" : portalKey ? "configured" : "absent"}
+          。Portal HTTP 400 = 畸形/拼接 key；403 = 无效/过期/封禁或 IP 禁（同一时间一条 WS）。
         </p>
       </section>
 
@@ -332,6 +349,14 @@ export function SettingsPage() {
         <dt>PUMPFUN_DISCOVERY</dt>
         <dd>
           <code>{discovery}</code>
+        </dd>
+        <dt>discoveryActive</dt>
+        <dd>
+          <code>{discoveryActive}</code>
+        </dd>
+        <dt>discoveryReason</dt>
+        <dd>
+          <code>{discoveryReason || "—"}</code>
         </dd>
         <dt>portal key</dt>
         <dd>

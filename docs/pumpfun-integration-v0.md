@@ -90,7 +90,7 @@ P_{\text{SOL/token}} \approx \frac{\text{virtual\_sol\_reserves}}{\text{virtual\
 
 | 资源 | 链接 | 鉴权 | AUU 用途 |
 |------|------|------|----------|
-| PumpPortal Data WS | https://pumpportal.fun/data-api/real-time/ · 示例 https://github.com/thetateman/Pump-Fun-API | WS；部分流需 API key / 计量 | `subscribeNewToken` / `subscribeTokenTrade` / `subscribeMigration`（只读） |
+| PumpPortal Data WS | https://pumpportal.fun/data-api/real-time/ · 示例 https://github.com/thetateman/Pump-Fun-API | WS；部分流需 API key / 计量 | `subscribeNewToken` 只读。URI `wss://pumpportal.fun/api/data?api-key=...`。**HTTP 400** = 畸形/拼接 key；**403** = 无效/过期/封禁 key 或 IP 禁（文档要求同一时间一条 WS）。AUU：指数退避（封顶 ~5min）+ `discoveryReason=portal_auth_rejected`；有 `SOLANA_RPC_URL` 时可回退 `logs`。见 `docs/adapters/pumpportal-discovery-v0.md` |
 | Bitquery Pump.fun GraphQL | https://docs.bitquery.io/docs/blockchain/Solana/Pumpfun/ | API key | 曲线进度、池余额查询 |
 | Solana Tracker Pump API | https://www.solanatracker.io/pumpfun-api | API key | REST + WS `curvePercentage` / graduated |
 | Codex Launchpad | https://docs.codex.io/launchpads/pump-fun | API key | `graduationPercent` / migrated 事件 |

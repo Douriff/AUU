@@ -25,7 +25,7 @@
 | `unique_buyers_5m`（可选） | tape 地址粗计 | 分散度 |
 | `new_token` | 只读发现（PumpPortal / logs） | 入自选；**不**当作入场 |
 
-发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 **off**；有 key 默认 pumpportal）。Key 仅 env，永不入库。发现模块禁止交易。
+发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 **off**；有 key 默认 pumpportal）。Key 仅 env，永不入库。Portal WS **400/403** → health `discoveryReason=portal_auth_rejected`（坏 key vs IP 禁：`docs/adapters/pumpportal-discovery-v0.md`）。发现模块禁止交易。
 
 盘面 UI：新币表 + Progress + tape + 风险标签 + 策略信号叠加（见 `docs/viz/market-monitor-v1.md`）。
 
