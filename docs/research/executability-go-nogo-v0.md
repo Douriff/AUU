@@ -109,7 +109,7 @@ impact_error_bps = shadow_slippage_bps − estimated_impact_bps
 | `progress` | `progress_band`、`not_curve` |
 | `impact` | `impact`；标签 `SLIPPAGE_CAP`、`DEPTH_THIN`（`SPREAD_TOO_WIDE` 同流动性/冲击） |
 | `risk` | `blocked_tag`、`cooldown`、`reject_cooldown`、`max_open_mints`、`LIVE_DISABLED`、`TRADING_HALTED`、`REDUCE_ONLY`、`DAY_LOSS_BREAKER`、`HONEYPOT_FLAG`、`TAX_HIGH`、`POSITION_CAP`、`COOLDOWN`、`CURVE_NEAR_GRADUATION`（作为拒单闸） |
-| `other` | 如 `momentum`、`WEAK_TAPE`（报告但不作为 G4 缺项） |
+| `other` | 如 `momentum`（报告但不作为 G4 缺项） |
 
 ```text
 reject_rate[bucket] = count(bucket) / n_entry_evals
@@ -265,15 +265,21 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 
 ---
 
-## 8. 纸面强 tape 入场（round 4 之后）
+## 8. 纸面入场 tape 阈值（round 4 之后）
 
-Round 4 Go 窗在 `n=30` 时期望 ≈ **+0.00123**。同一组默认扩到 `n=51` 后期望 ≈ **−0.0003**，`verdict` 从 go 漂到 no-go。冲击仍过门。本轮只收紧纸面买入 tape，**不**改 G1–G6，**不**放宽含费硬顶 80 / 默认缓冲 75，**不**把 `liveEnabled` 或 `auto_paper_orders` 默认打开。
+Round 4 Go 窗在 `n=30` 时期望 ≈ **+0.00123**。同一组默认扩到 `n=51` 后期望 ≈ **−0.0003**，`verdict` 从 go 漂到 no-go。冲击仍过门。本轮只把纸面入场动能阈值参数化并收紧默认，**不**改 G1–G6，**不**改 tape 聚合，**不**改 DecisionLog 分桶，**不**放宽含费硬顶 80 / 默认缓冲 75，**不**把 `liveEnabled` 或 `auto_paper_orders` 默认打开。
 
-现有 tape 没有单独的买卖笔数。`aggregate_tape` 的 60s 窗口已有 `trade_count_1m`、`buy_notional_1m`、`sell_notional_1m`。粗动能仍先拒（`momentum`：买名义 ≥ 2× 卖名义且笔数 ≥ 8）。过了粗动能、但不够强的纸面开仓再拒，原因码 **`WEAK_TAPE`**：
+现有 `TapeWindow` 字段不变：`trade_count_1m`、`buy_notional_1m`、`sell_notional_1m`。入场仍是一条 `momentum` 拒单：
 
-| 参数 | 默认 |
-|------|------|
-| `min_trade_count_1m` | **10**（`trade_count_1m`） |
-| `min_buy_sell_notional_ratio` | **2.5**（`buy_notional_1m ≥ 2.5 × sell_notional_1m`） |
+```text
+buy_notional_1m < min_buy_sell_ratio_1m * sell_notional_1m
+  or trade_count_1m < min_trade_count_1m
+  → reason = momentum
+```
 
-出场不走这道门。`WEAK_TAPE` 落在拒单桶 `other`，不充当 G4 的 progress / impact / risk 缺项。卖盘为 0 时，只有买名义 > 0（或把比率阈值设成 0）才算过比率。
+| 参数 | 默认 | 原先写死 |
+|------|------|----------|
+| `min_trade_count_1m` | **10** | 8 |
+| `min_buy_sell_ratio_1m` | **2.5** | 2.0 |
+
+`PUT /api/v1/strategy/pump-paper-v1` 可改这两键。出场卖压仍是另一条 2× 规则，不读这两个参数。

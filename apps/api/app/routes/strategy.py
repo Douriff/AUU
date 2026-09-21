@@ -35,7 +35,7 @@ class PumpPaperParamsPatch(BaseModel):
     strategy_autopaper: Optional[bool] = None
     max_notional_sol: Optional[float] = None
     min_trade_count_1m: Optional[int] = Field(default=None, ge=0)
-    min_buy_sell_notional_ratio: Optional[float] = Field(default=None, ge=0)
+    min_buy_sell_ratio_1m: Optional[float] = Field(default=None, ge=0)
 
 
 def _state_payload() -> dict[str, Any]:

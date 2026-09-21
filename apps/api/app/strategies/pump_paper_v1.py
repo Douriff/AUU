@@ -41,7 +41,6 @@ from app.risk import get_risk_gate
 log = logging.getLogger("auu.pump_paper_v1")
 
 STRATEGY_ID = "pump-paper-v1"
-WEAK_TAPE = "WEAK_TAPE"
 FORBIDDEN_TAGS = {"HONEYPOT", "HONEYPOT_FLAG", "TAX_HIGH", "SPREAD_TOO_WIDE"}
 EXIT_IMPACT_BPS = 250.0
 # Gross entry impact hard ceiling. Go uses the same 80. Entries reject above it.
@@ -74,11 +73,10 @@ class PumpPaperParams(BaseModel):
     auto_paper_orders: bool = False
     # Smaller paper clip keeps curve impact under the 75 bps buffer.
     max_notional_sol: float = 0.12
-    # Paper buys only. Closest tape fields (aggregate_tape, 60s window):
-    # trade_count_1m, buy_notional_1m, sell_notional_1m. No separate buy/sell count.
-    # Coarse momentum (2× notional and count≥8, reason `momentum`) still rejects first.
+    # Entry momentum on the existing 60s tape (trade_count_1m, buy/sell notional).
+    # Reject reason stays "momentum". Defaults replace the old 8 / 2.0 constants.
     min_trade_count_1m: int = Field(default=10, ge=0)
-    min_buy_sell_notional_ratio: float = Field(default=2.5, ge=0)
+    min_buy_sell_ratio_1m: float = Field(default=2.5, ge=0)
 
 
 @dataclass
@@ -144,24 +142,6 @@ def curve_impact_bps(snap: PumpfunPaperSnapshot, notional: float, side: str) -> 
         creator_fee_bps=snap.creator_fee_bps,
     )
     return liq.estimated_impact_bps(abs(notional), side=side, pump=snap.to_pump_ctx())
-
-
-def entry_tape_is_strong(tape: TapeWindow, params: PumpPaperParams) -> bool:
-    """True when the ~1m tape is strong enough for a paper buy.
-
-    `trade_count_1m` is the print count in `TAPE_WINDOW_MS` (60s).
-    Buy vs sell uses SOL notional (`buy_notional_1m` / `sell_notional_1m`),
-    the volume fields already on the tape. A zero sell side passes only when
-    there is buy notional (or the ratio threshold is disabled at 0).
-    """
-    if int(tape.trade_count_1m) < int(params.min_trade_count_1m):
-        return False
-    buy = float(tape.buy_notional_1m)
-    sell = float(tape.sell_notional_1m)
-    need = float(params.min_buy_sell_notional_ratio)
-    if sell <= 0.0:
-        return buy > 0.0 or need <= 0.0
-    return buy >= need * sell
 
 
 def entry_impact_limit_bps(params: PumpPaperParams) -> float:
@@ -243,11 +223,11 @@ def evaluate(
         return SignalOut(side="flat", strength=0.0, reason="not_curve")
     if not (params.progress_bps_min <= snapshot.progress_bps <= params.progress_bps_max):
         return SignalOut(side="flat", strength=0.0, reason="progress_band")
-    if tape.buy_notional_1m < 2.0 * tape.sell_notional_1m or tape.trade_count_1m < 8:
+    if (
+        tape.buy_notional_1m < float(params.min_buy_sell_ratio_1m) * tape.sell_notional_1m
+        or tape.trade_count_1m < int(params.min_trade_count_1m)
+    ):
         return SignalOut(side="flat", strength=0.0, reason="momentum")
-    # Stronger paper-entry tape. Does not run on exits (those return above).
-    if not entry_tape_is_strong(tape, params):
-        return SignalOut(side="flat", strength=0.0, reason=WEAK_TAPE, tags=[WEAK_TAPE])
     # Hard reject: gross impact above 80 never enters, even if max_impact_bps is higher.
     # Default buffer is 75, so a print between 75 and 80 is also rejected.
     if impact_entry_bps > HARD_MAX_ENTRY_IMPACT_BPS or impact_entry_bps > entry_impact_limit_bps(params):
