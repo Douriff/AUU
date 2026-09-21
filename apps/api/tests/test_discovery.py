@@ -270,8 +270,8 @@ class SanitizeKeyTests(unittest.TestCase):
         self.assertNotIn("%20", uri)
 
     def test_env_quoted_two_keys_do_not_enter_ws_uri(self):
-        first = "tok-one-" + ("x" * 94)
-        second = "tok-two-" + ("y" * 94)
+        first = "tok-one-" + ("x" * 95)
+        second = "tok-two-" + ("y" * 95)
         os.environ["PUMPFUN_PORTAL_API_KEY"] = f'"{first} {second}"'
         self.assertEqual(len(first), 103)
         self.assertEqual(portal_api_key(), first)
