@@ -49,10 +49,10 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .trading-state[data-state="halted"] { color: var(--red); border-color: var(--red); }
 .auto-paper-toggle {
   display: inline-flex; align-items: center; gap: 0.35rem;
-  font-size: 0.8rem; color: var(--muted); cursor: pointer; user-select: none;
+  font-size: 0.8rem; color: var(--muted); user-select: none;
 }
 .auto-paper-toggle.compact { font-size: 0.75rem; }
-.auto-paper-toggle input { accent-color: var(--accent); }
+.topbar-status .data-source-toggle button { padding: 0.2rem 0.55rem; font-size: 0.75rem; }
 .main { flex: 1; min-height: 0; overflow: hidden; }
 
 .market-page { display: flex; flex-direction: column; height: 100%; }

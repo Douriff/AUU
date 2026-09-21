@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
+import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 
 const links = [
   { to: "/", label: "行情", end: true },
@@ -44,14 +45,12 @@ export function AppShell() {
           <span className="muted topbar-provider" title="DATA_PROVIDER">
             {provider}
           </span>
-          <label className="auto-paper-toggle compact">
-            <input
-              type="checkbox"
-              checked={autoPaperOrders}
-              onChange={(e) => void setAutoPaperOrders(e.target.checked)}
-            />
-            auto_paper
-          </label>
+          <AutoPaperToggle
+            compact
+            label="auto_paper"
+            checked={autoPaperOrders}
+            onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+          />
           <div className="mode-badge">PAPER</div>
         </div>
       </header>

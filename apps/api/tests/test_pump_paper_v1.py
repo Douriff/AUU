@@ -315,7 +315,7 @@ class ApiStrategyTests(unittest.TestCase):
             "/api/v1/strategy/pump-paper-v1", json={"auto_paper_orders": True}
         )
         self.assertTrue(r.json()["data"]["auto_paper_orders"])
-        r = self.client.put(
+        r = self.client.post(
             "/api/v1/strategy/pump-paper-v1", json={"auto_paper_orders": False}
         )
         self.assertFalse(r.json()["data"]["auto_paper_orders"])

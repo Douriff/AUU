@@ -1,4 +1,5 @@
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
+import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import type { PumpPaperParams } from "@/types/contracts";
 
 const FIELDS: { key: keyof PumpPaperParams; label: string; step?: string }[] = [
@@ -30,14 +31,11 @@ export function StrategyPage() {
       </p>
       <section className="settings-section">
         <h2>auto_paper_orders</h2>
-        <label className="auto-paper-toggle">
-          <input
-            type="checkbox"
-            checked={autoPaperOrders}
-            onChange={(e) => void setAutoPaperOrders(e.target.checked)}
-          />
-          自动纸面下单（默认关）
-        </label>
+        <AutoPaperToggle
+          checked={autoPaperOrders}
+          onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+          label="自动纸面下单（默认关）"
+        />
       </section>
       {params ? (
         <form

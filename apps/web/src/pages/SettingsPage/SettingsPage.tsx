@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { useDataSource } from "@/hooks/useDataSource";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
+import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import type { DataSource } from "@/types/contracts";
 
 export function SettingsPage() {
@@ -83,14 +84,11 @@ export function SettingsPage() {
 
       <section className="settings-section">
         <h2>pump-paper-v1 · auto_paper_orders</h2>
-        <label className="auto-paper-toggle">
-          <input
-            type="checkbox"
-            checked={autoPaperOrders}
-            onChange={(e) => void setAutoPaperOrders(e.target.checked)}
-          />
-          自动纸面下单（默认关）
-        </label>
+        <AutoPaperToggle
+          checked={autoPaperOrders}
+          onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+          label="自动纸面下单（默认关）"
+        />
         <p className="muted">
           关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无钱包。
         </p>

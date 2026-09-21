@@ -8,7 +8,7 @@ interface Props {
 
 function fmtPct(bps: number | null): string {
   if (bps == null) return "—";
-  return `${(bps / 100).toFixed(1)}%`;
+  return `${Math.min(100, Math.max(0, bps / 100)).toFixed(1)}%`;
 }
 
 function fmtSol(n: number): string {

@@ -65,9 +65,9 @@ async function getJson<T>(path: string): Promise<T> {
   return body.data;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function sendJson<T>(path: string, body: unknown, method: "POST" | "PUT"): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -76,6 +76,14 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     throw new Error(env.error?.message ?? "request failed");
   }
   return env.data;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>(path, body, "POST");
+}
+
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>(path, body, "PUT");
 }
 
 export class HttpWsProvider {
@@ -133,7 +141,7 @@ export class HttpWsProvider {
   }
 
   putStrategy(patch: Partial<PumpPaperParams>) {
-    return postJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
+    return putJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
   }
 
   preOrder(body: unknown) {

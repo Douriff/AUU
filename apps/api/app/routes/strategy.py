@@ -58,6 +58,7 @@ def get_pump_paper():
 
 
 @router.put("/pump-paper-v1")
+@router.post("/pump-paper-v1")
 def put_pump_paper(body: PumpPaperParamsPatch):
     engine = get_engine()
     engine.update_params(body.model_dump(exclude_none=True))

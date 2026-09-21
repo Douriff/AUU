@@ -6,6 +6,7 @@ import { DepthPanel } from "@/components/market/DepthPanel";
 import { SymbolList } from "@/components/market/SymbolList";
 import { TradesTape } from "@/components/market/TradesTape";
 import { WatchlistTable } from "@/components/market/WatchlistTable";
+import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import { useMarketSession } from "@/hooks/useMarketSession";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -88,14 +89,11 @@ export function MarketPage() {
           {" · "}
           dataSource={dataSource}
         </div>
-        <label className="auto-paper-toggle">
-          <input
-            type="checkbox"
-            checked={autoPaperOrders}
-            onChange={(e) => void setAutoPaperOrders(e.target.checked)}
-          />
-          auto_paper_orders
-        </label>
+        <AutoPaperToggle
+          compact
+          checked={autoPaperOrders}
+          onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+        />
         <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
           {tradingState}
         </span>
