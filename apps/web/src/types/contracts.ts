@@ -85,6 +85,57 @@ export type DataSource = "mock" | "paper" | "pumpfun_paper";
 /** Market data provider (env DATA_PROVIDER). Orthogonal to order-path dataSource. */
 export type MarketProvider = "mock" | "pumpfun_paper";
 
+export interface PumpPaperParams {
+  progress_bps_min: number;
+  progress_bps_max: number;
+  max_impact_bps: number;
+  take_profit_pct: number;
+  stop_loss_pct: number;
+  max_hold_sec: number;
+  cooldown_sec: number;
+  max_day_loss_pct: number;
+  max_open_mints: number;
+  notional_pct_equity: number;
+  auto_paper_orders: boolean;
+  max_notional_sol: number;
+}
+
+export interface PumpPaperPosition {
+  symbol: string;
+  mint: string;
+  qty: number;
+  entry_price: number;
+  entry_ts: number;
+  entry_notional: number;
+}
+
+export interface PumpPaperState {
+  strategyId: string;
+  params: PumpPaperParams;
+  auto_paper_orders: boolean;
+  trading_state: TradingState;
+  day_pnl?: number;
+  positions: PumpPaperPosition[];
+}
+
+export interface MonitorRow {
+  symbol: string;
+  mint: string;
+  kind?: string;
+  progress_bps: number | null;
+  phase: "curve" | "graduating" | "amm" | null;
+  complete: boolean;
+  migrated: boolean;
+  price_sol: number | null;
+  buy_notional_1m: number;
+  sell_notional_1m: number;
+  trade_count_1m: number;
+  estimated_impact_bps: number | null;
+  tags: string[];
+  signal_side?: SignalSide | null;
+  signal_reason?: string | null;
+}
+
 export interface PumpCtx {
   curve_progress_bps: number;
   virtual_sol_reserves: string;
@@ -119,6 +170,15 @@ export interface PumpfunPaperSnapshot {
   slot?: number;
   updated_ts: number;
   synthetic?: boolean;
+}
+
+export interface NewTokenEvent {
+  mint: string;
+  creator: string;
+  slot?: number | null;
+  initial_reserves: Record<string, string>;
+  ts: number;
+  source: "pumpportal" | "logs";
 }
 
 export interface PumpfunTradeTick {

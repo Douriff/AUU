@@ -60,6 +60,10 @@ class RiskGate:
     def trading_state(self) -> TradingState:
         return self._trading_state
 
+    @property
+    def day_pnl(self) -> float:
+        return self._day_pnl
+
     def check(self, ctx: StrategyContext, signal: SignalOut, size: SizeIn) -> RiskOut:
         tags: list[str] = []
         notes: list[str] = []
@@ -261,3 +265,8 @@ def get_risk_gate() -> RiskGate:
     if _gate is None:
         _gate = RiskGate()
     return _gate
+
+
+def reset_risk_gate() -> None:
+    global _gate
+    _gate = None

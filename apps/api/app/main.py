@@ -2,20 +2,46 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager, suppress
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, symbols, ws
+from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, strategy, symbols, ws
 from app.routes.envelope import API_VERSION
+from app.strategies.pump_paper_v1 import get_engine, loop_enabled
+from app.discovery import get_discovery, resolve_discovery_mode
 
 load_dotenv()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import asyncio
+
+    tasks: list[asyncio.Task] = []
+    if loop_enabled():
+        tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
+    if resolve_discovery_mode() != "off":
+        tasks.append(asyncio.create_task(get_discovery().run_loop(), name="pumpfun-discovery"))
+    try:
+        yield
+    finally:
+        get_engine().stop()
+        get_discovery().stop()
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
+            with suppress(asyncio.CancelledError):
+                await t
+
 
 app = FastAPI(
     title="AUU Market Terminal API",
     version="0.1.0",
     description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. No live trading, no keys.",
+    lifespan=lifespan,
 )
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
@@ -48,6 +74,7 @@ app.include_router(risk.router)
 app.include_router(paper.router)
 app.include_router(pipeline.router)
 app.include_router(pumpfun.router)
+app.include_router(strategy.router)
 app.include_router(ws.router)
 
 
@@ -72,6 +99,9 @@ def root():
                 "book": "GET /api/v1/book?symbol=",
                 "curve": "GET /api/v1/curve?symbol=",
                 "pumpfunSnapshot": "GET /api/v1/pumpfun/snapshot?symbol=",
+                "strategy": "GET/PUT /api/v1/strategy/pump-paper-v1",
+                "monitor": "GET /api/v1/pumpfun/monitor",
+                "discovery": "env PUMPFUN_DISCOVERY=pumpportal|logs|off",
             },
         },
     }

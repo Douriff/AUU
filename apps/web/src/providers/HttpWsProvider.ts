@@ -4,9 +4,13 @@ import type {
   CurveSnapshot,
   Envelope,
   Fill,
+  MonitorRow,
+  NewTokenEvent,
   PaperOrderResult,
   PipelineResult,
   PumpfunPaperSnapshot,
+  PumpPaperParams,
+  PumpPaperState,
   RejectEvent,
   RiskEvent,
   RiskOut,
@@ -35,6 +39,7 @@ export interface Handlers {
   onRisk?: (r: RiskEvent) => void;
   onReject?: (r: RejectEvent) => void;
   onTradingState?: (t: TradingStateEvent) => void;
+  onNewToken?: (t: NewTokenEvent) => void;
   onStatus?: (s: "connecting" | "open" | "closed" | "error") => void;
 }
 
@@ -66,9 +71,9 @@ async function getJson<T>(path: string): Promise<T> {
   return body.data;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function sendJson<T>(path: string, body: unknown, method: "POST" | "PUT"): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -77,6 +82,14 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     throw new Error(env.error?.message ?? "request failed");
   }
   return env.data;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>(path, body, "POST");
+}
+
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>(path, body, "PUT");
 }
 
 export class HttpWsProvider {
@@ -117,8 +130,13 @@ export class HttpWsProvider {
     dataSourceOptions?: string[];
     marketProviderOptions?: string[];
     trading_state?: string;
+    auto_paper_orders?: boolean;
+    strategyId?: string;
     liveDisabled?: boolean;
     watch_mints?: string;
+    discovery?: string;
+    discoveryOptions?: string[];
+    portal_key_configured?: boolean;
   }> {
     return getJson("/api/v1/health");
   }
@@ -136,6 +154,18 @@ export class HttpWsProvider {
   getPumpfunSnapshot(symbol: string): Promise<PumpfunPaperSnapshot> {
     const q = new URLSearchParams({ symbol });
     return getJson(`/api/v1/pumpfun/snapshot?${q}`);
+  }
+
+  getMonitor(): Promise<MonitorRow[]> {
+    return getJson("/api/v1/pumpfun/monitor");
+  }
+
+  getStrategy(): Promise<PumpPaperState> {
+    return getJson("/api/v1/strategy/pump-paper-v1");
+  }
+
+  putStrategy(patch: Partial<PumpPaperParams>) {
+    return putJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
   }
 
   preOrder(body: unknown) {
@@ -265,6 +295,7 @@ export class HttpWsProvider {
       if (type === "reject") this.handlers.onReject?.(msg.payload as RejectEvent);
       if (type === "trading_state")
         this.handlers.onTradingState?.(msg.payload as TradingStateEvent);
+      if (type === "new_token") this.handlers.onNewToken?.(msg.payload as NewTokenEvent);
     };
 
     ws.onerror = () => {

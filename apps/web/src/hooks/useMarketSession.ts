@@ -137,9 +137,14 @@ export function useMarketSession(symbol: string, interval = "1m") {
       },
       onTradingState: (t) => {
         setTradingState(t.state);
+        window.dispatchEvent(new CustomEvent("auu:tradingState", { detail: t.state }));
         if (t.reason) {
           setRiskTags((prev) => (prev.includes(t.reason!) ? prev : [...prev, t.reason!]));
         }
+      },
+      onNewToken: () => {
+        marketProvider.listSymbols().then(setSymbols).catch(() => undefined);
+        window.dispatchEvent(new CustomEvent("auu:newToken"));
       },
     });
 

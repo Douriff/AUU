@@ -15,6 +15,7 @@ class PumpfunApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.environ["DATA_PROVIDER"] = "pumpfun_paper"
+        os.environ["PUMPFUN_DISCOVERY"] = "off"
         reset_provider()
         from app.main import app
 

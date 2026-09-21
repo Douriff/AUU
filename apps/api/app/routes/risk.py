@@ -5,7 +5,7 @@ import time
 from typing import Any, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.bus import get_hub
 from app.models.contracts import (
@@ -13,11 +13,11 @@ from app.models.contracts import (
     Fill,
     LiquidityCtx,
     PumpCtx,
-    RiskOut,
     SignalOut,
     SizeIn,
     StrategyContext,
 )
+from app.paper.pipeline import run_pre_order
 from app.risk import get_risk_gate
 from app.routes.envelope import err, ok
 
@@ -76,36 +76,7 @@ async def pre_order(body: PreOrderBody):
         # allow raw size dict via flattened — default demo notional
         size = SizeIn(target_notional=500.0, max_slippage_bps=150.0)
 
-    gate = get_risk_gate()
-    risk: RiskOut = gate.check(ctx, signal, size)
-
-    hub = get_hub()
-    await hub.publish(
-        {
-            "type": "risk",
-            "payload": {
-                "strategyId": "paper-manual",
-                "symbol": ctx.symbol,
-                "t": ctx.ts,
-                "risk": risk.model_dump(),
-            },
-        }
-    )
-
-    if not risk.allow:
-        gate.on_reject(ctx, risk.tags)
-        await hub.publish(
-            {
-                "type": "reject",
-                "payload": {
-                    "ts": ctx.ts,
-                    "symbol": ctx.symbol,
-                    "tags": risk.tags,
-                    "notes": risk.notes or "",
-                },
-            }
-        )
-
+    risk = await run_pre_order(ctx, signal, size, strategy_id="paper-manual")
     return ok(risk.model_dump())
 
 

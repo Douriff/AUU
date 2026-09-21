@@ -17,6 +17,8 @@ GLOBAL_PDA = "4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf"
 # PDA seeds (informational).
 BONDING_CURVE_SEED = b"bonding-curve"
 
+_B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
 # Anchor account discriminator is 8 bytes; BondingCurve then (borsh, no padding):
 #   virtual_token_reserves u64
 #   virtual_sol_reserves   u64
@@ -82,3 +84,68 @@ def encode_bonding_curve_body(
     if len(cre) != _CREATOR_SIZE:
         raise ValueError("creator must be 32 bytes")
     return disc + body + cre
+
+
+def b58encode(raw: bytes) -> str:
+    if not raw:
+        return ""
+    n = int.from_bytes(raw, "big")
+    out = []
+    while n > 0:
+        n, r = divmod(n, 58)
+        out.append(_B58_ALPHABET[r])
+    pad = 0
+    for b in raw:
+        if b == 0:
+            pad += 1
+        else:
+            break
+    return _B58_ALPHABET[0] * pad + "".join(reversed(out or [_B58_ALPHABET[0]]))
+
+
+def _borsh_str(buf: bytes, offset: int) -> tuple[str, int]:
+    if offset + 4 > len(buf):
+        raise ValueError("short borsh string")
+    (n,) = struct.unpack_from("<I", buf, offset)
+    start = offset + 4
+    end = start + n
+    if end > len(buf):
+        raise ValueError("borsh string overflow")
+    return buf[start:end].decode("utf-8", errors="replace"), end
+
+
+def decode_create_event(data: bytes) -> dict[str, Any] | None:
+    """Best-effort Anchor CreateEvent (name, symbol, uri, mint, bondingCurve, user)."""
+    body = data[DISCRIMINATOR_LEN:] if len(data) > DISCRIMINATOR_LEN + 32 else data
+    try:
+        name, o = _borsh_str(body, 0)
+        symbol, o = _borsh_str(body, o)
+        uri, o = _borsh_str(body, o)
+        if o + 96 > len(body):
+            return None
+        mint = b58encode(body[o : o + 32])
+        user = b58encode(body[o + 64 : o + 96])
+        return {"name": name, "symbol": symbol, "uri": uri, "mint": mint, "creator": user}
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def extract_create_from_logs(logs: list[str]) -> dict[str, Any] | None:
+    """Read-only parse of RPC logsSubscribe Create traces. No buy/sell handling."""
+    import base64
+
+    is_create = any("Instruction: Create" in (x or "") or "CreateEvent" in (x or "") for x in logs)
+    if not is_create:
+        return None
+    for line in logs:
+        if "Program data:" not in (line or ""):
+            continue
+        b64 = line.split("Program data:", 1)[-1].strip()
+        try:
+            raw = base64.b64decode(b64)
+        except Exception:
+            continue
+        parsed = decode_create_event(raw)
+        if parsed and parsed.get("mint"):
+            return parsed
+    return None

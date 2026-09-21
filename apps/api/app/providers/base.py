@@ -37,6 +37,17 @@ class MarketDataProvider(ABC):
         """Optional Pump.fun curve snapshot. Mock returns None."""
         return None
 
+    def get_recent_trades(self, symbol: str) -> list[dict]:
+        """Recent tape rows (PumpfunTradeTick-shaped dicts). Mock returns []."""
+        return []
+
+    def register_watch_mint(self, mint: str, **kwargs):
+        """Optional: discovery registers a mint onto the paper watchlist. Mock no-op."""
+        return None
+
+    def watch_flags(self, symbol: str) -> dict:
+        return {}
+
     @abstractmethod
     async def stream(self, channel: str, symbol: str, interval: str | None = None) -> AsyncIterator[dict]:
         ...

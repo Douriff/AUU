@@ -34,6 +34,7 @@ Header：`X-Api-Version: 1`
 3. channel ∈ `candles|book|trades|signals|fills|risk`
 4. 心跳 `ping`/`pong` 每 15s
 5. 可选帧 `type:"pumpfun_curve"` → `PumpfunPaperSnapshot`
+6. 可选帧 `type:"new_token"` → `NewTokenEvent` `{ mint, creator, slot?, initial_reserves, ts, source }`（`source=pumpportal|logs`；只读发现，不发单）
 
 Hub WS event types（非 subscribe channel）：`signal | risk | fill | reject | trading_state`  
 `allow=false` / reject **永不** 伪造 Fill。
@@ -77,7 +78,12 @@ dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 
 ## PumpfunTradeTick
 `{ mint, symbol, ts, side:"buy"|"sell", price, qty, sol_amount, signature?, phase:"curve"|"amm" }` — 投影到现有 `TradeTick`（`side` + 可选 `phase`）。
 
+## NewTokenEvent（WS `type:"new_token"`）
+`{ mint, creator, slot?, initial_reserves, ts, source }` — `source` ∈ `pumpportal|logs`。  
+发现模块把 mint 写入 `pumpfun_paper` 自选（`discovered` 标签）；**不等于入场**，仍走 `pump-paper-v1` 的 progress / 动能 / 冲击门。`PUMPFUN_DISCOVERY=pumpportal|logs|off`；`PUMPFUN_PORTAL_API_KEY` 仅 env，永不入库。无 sniper、无下单。
+
 REST：
 
 - `GET /api/v1/pumpfun/snapshot?symbol=`（无曲线快照时 404）
 - `GET /api/v1/curve?symbol=` — UI 友好别名（mock 返回空曲线字段）
+- `GET /api/v1/pumpfun/monitor` 自选盘面行。发现：`PUMPFUN_DISCOVERY` + `PUMPFUN_PORTAL_API_KEY`（仅 env）。

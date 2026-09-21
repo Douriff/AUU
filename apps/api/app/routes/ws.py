@@ -32,7 +32,15 @@ async def ws_endpoint(websocket: WebSocket):
             "providers": providers,
             "orderMode": "paper",
             "venue": "Pump.fun" if provider.name == "pumpfun_paper" else "mock",
-            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state", "pumpfun_curve"],
+            "eventTypes": [
+                "signal",
+                "risk",
+                "fill",
+                "reject",
+                "trading_state",
+                "pumpfun_curve",
+                "new_token",
+            ],
         }
     )
 
