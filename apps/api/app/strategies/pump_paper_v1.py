@@ -537,6 +537,7 @@ class PumpPaperEngine:
                     risk_notes=why,
                     notional_sol=notional,
                     reject_bucket="risk",
+                    phase=snap.phase,
                 )
             )
             return
@@ -762,6 +763,8 @@ class PumpPaperEngine:
                             impact_bps_est=None if impact_in >= 1e8 else impact_in,
                             estimated_impact_bps=None if impact_in >= 1e8 else impact_in,
                             impact_bps_cap=float(self.params.max_impact_bps),
+                            phase=snap.phase,
+                            pump=snap.to_pump_ctx(),
                             decision_px=float(snap.price_sol) if snap.price_sol else None,
                             arrival_px=float(snap.price_sol) if snap.price_sol else None,
                         ),

@@ -11,6 +11,12 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from app.models.contracts import Fill, OrderIntent, StrategyContext
 from app.paper.decision_log import REJECT_BUCKETS, backfill_decision_shadows, classify_reject_bucket
+from app.providers.pumpfun_curve_math import (
+    AMM_IMPACT_FEE_FLOOR_BPS,
+    CURVE_IMPACT_FEE_FLOOR_BPS,
+    impact_net_bps,
+    protocol_fee_bps_for_phase,
+)
 
 THEORY_REF = "docs/research/executability-go-nogo-v0.md"
 ADAPTER_REF = "docs/adapters/decision-log-v0.md"
@@ -199,8 +205,26 @@ def _reject_from_log(log_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _impacts_from_log(log_rows: Sequence[Mapping[str, Any]]) -> list[float]:
-    out: list[float] = []
+def _entry_impact_pair(row: Mapping[str, Any]) -> Optional[tuple[float, float]]:
+    """(gross_bps, protocol_fee_bps) for one closed entry. None if no gross."""
+    gross = _f(row, "impact_gross_bps", "impact_bps_est", "estimated_impact_bps", "entry_estimated_impact_bps")
+    if gross is None:
+        return None
+    fee = _f(row, "protocol_fee_bps")
+    if fee is None:
+        fee = protocol_fee_bps_for_phase(
+            str(row.get("phase") or "curve"),
+            impact_fee_bps=_f(row, "impact_fee_bps", "fee_bps"),
+        )
+    return float(gross), float(fee)
+
+
+def _entry_impacts(
+    log_rows: Sequence[Mapping[str, Any]],
+    trade_rows: Sequence[Mapping[str, Any]],
+) -> list[tuple[float, float]]:
+    """Closed-entry (gross, fee) pairs. DecisionLog fills win; else journal."""
+    out: list[tuple[float, float]] = []
     for row in log_rows:
         outcome = str(row.get("outcome") or "")
         side = str(row.get("signal_side") or "")
@@ -208,9 +232,15 @@ def _impacts_from_log(log_rows: Sequence[Mapping[str, Any]]) -> list[float]:
             continue
         if side in {"short", "sell"}:
             continue
-        v = _f(row, "impact_bps_est", "estimated_impact_bps")
-        if v is not None:
-            out.append(v)
+        pair = _entry_impact_pair(row)
+        if pair is not None:
+            out.append(pair)
+    if out:
+        return out
+    for row in trade_rows:
+        pair = _entry_impact_pair(row)
+        if pair is not None:
+            out.append(pair)
     return out
 
 
@@ -248,6 +278,8 @@ def _nogo_reason(
     sample_ok: bool,
     expectancy: Optional[float],
     median_impact: Optional[float],
+    median_net: Optional[float],
+    max_gross: Optional[float],
     shadow_p50: Optional[float],
     gates: Mapping[str, Mapping[str, Any]],
 ) -> str:
@@ -260,9 +292,18 @@ def _nogo_reason(
     if not gates["expectancy"]["ok"]:
         return f"期望 {expectancy:.4g} < 0"
     if median_impact is None or not gates["median_entry_impact"]["ok"]:
-        if median_impact is None:
+        if median_impact is None or median_net is None:
             return "证据不足：缺少入场冲击样本"
-        return f"入场冲击中位 {median_impact:.1f} bps（门槛 <60）"
+        hard_fail = max_gross is not None and max_gross > IMPACT_HARD_MAX_BPS
+        net_fail = median_net >= IMPACT_MEDIAN_MAX_BPS
+        if net_fail and hard_fail:
+            return (
+                f"入场冲击扣费中位 {median_net:.1f} bps（门槛 <60）；"
+                f"含费最大 {max_gross:.1f} 超硬顶 80"
+            )
+        if hard_fail:
+            return f"入场冲击含费 {max_gross:.1f} bps 超硬顶 80"
+        return f"入场冲击扣费中位 {median_net:.1f} bps（门槛 <60）"
     if shadow_p50 is None or not gates["shadow_slippage"]["ok"]:
         if shadow_p50 is None:
             return "证据不足：缺少影子滑点样本"
@@ -316,6 +357,10 @@ def aggregate_executability(
                     "outcome": outcome,
                     "reject_bucket": bucket,
                     "impact_bps_est": m.get("impact_bps_est"),
+                    "impact_gross_bps": m.get("impact_gross_bps"),
+                    "protocol_fee_bps": m.get("protocol_fee_bps"),
+                    "phase": m.get("phase"),
+                    "impact_fee_bps": m.get("impact_fee_bps") or m.get("fee_bps"),
                     "shadow_slippage_bps": m.get("shadow_slippage_bps"),
                 }
             )
@@ -346,23 +391,27 @@ def aggregate_executability(
     exp_floor = EXPECTANCY_MIN + EXPECTANCY_TOLERANCE
     expectancy_ok = expectancy is not None and sample_ok and expectancy >= exp_floor
 
-    impacts = _impacts_from_log(log_rows)
-    if not impacts:
-        for t in trade_rows:
-            v = _f(t, "entry_estimated_impact_bps", "estimated_impact_bps", "impact_bps_est")
-            if v is not None:
-                impacts.append(v)
+    impact_pairs = _entry_impacts(log_rows, trade_rows)
+    impacts = [g for g, _fee in impact_pairs]
+    nets = [impact_net_bps(g, fee) for g, fee in impact_pairs]
+    fees = [fee for _g, fee in impact_pairs]
     median_impact = _median(impacts)
+    median_net = _median(nets)
+    median_fee = _median(fees)
     max_impact = max(impacts) if impacts else None
     impact_n = len(impacts)
     impact_coverage_ok = impact_n >= MIN_CLOSED_TRADES if n >= MIN_CLOSED_TRADES else bool(impacts) and n > 0
     if n == 0:
         impact_coverage_ok = False
+    # Go median is net of protocol fee. Hard ceiling stays on gross.
     median_ok = (
-        median_impact is not None
+        median_net is not None
         and impact_coverage_ok
-        and median_impact < IMPACT_MEDIAN_MAX_BPS
+        and median_net < IMPACT_MEDIAN_MAX_BPS
         and (max_impact is None or max_impact <= IMPACT_HARD_MAX_BPS)
+    )
+    protocol_fee_bps = (
+        float(median_fee) if median_fee is not None else float(CURVE_IMPACT_FEE_FLOOR_BPS)
     )
 
     shadows = _shadows_from_log(log_rows)
@@ -424,11 +473,16 @@ def aggregate_executability(
         ),
         "median_entry_impact": _gate(
             bool(median_ok),
-            median_bps=median_impact,
+            median_bps=median_net,
+            median_gross_bps=median_impact,
+            median_net_bps=median_net,
+            protocol_fee_bps=protocol_fee_bps,
             max_bps=max_impact,
+            max_gross_bps=max_impact,
             n=impact_n,
             go_max=IMPACT_MEDIAN_MAX_BPS,
             hard_max=IMPACT_HARD_MAX_BPS,
+            basis="net_of_protocol_fee",
         ),
         "reject_rate": _gate(
             bool(reject["ok"]),
@@ -459,6 +513,8 @@ def aggregate_executability(
         sample_ok=sample_ok,
         expectancy=expectancy,
         median_impact=median_impact,
+        median_net=median_net,
+        max_gross=max_impact,
         shadow_p50=shadow_p50,
         gates=gates,
     )
@@ -478,7 +534,13 @@ def aggregate_executability(
         "sample_ok": sample_ok,
         "expectancy": expectancy,
         "median_entry_impact_bps": median_impact,
+        "median_entry_impact_gross_bps": median_impact,
+        "median_entry_impact_net_bps": median_net,
+        "protocol_fee_bps": protocol_fee_bps,
+        "protocol_fee_bps_curve": float(CURVE_IMPACT_FEE_FLOOR_BPS),
+        "protocol_fee_bps_amm": float(AMM_IMPACT_FEE_FLOOR_BPS),
         "max_entry_impact_bps": max_impact,
+        "max_entry_impact_gross_bps": max_impact,
         "impact_cap_go_bps": IMPACT_MEDIAN_MAX_BPS,
         "hard_max_impact_bps": IMPACT_HARD_MAX_BPS,
         "params_max_impact_bps": params_max_impact_bps,

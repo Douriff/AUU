@@ -13,11 +13,15 @@ from app.models.contracts import (
     StrategyContext,
 )
 from app.providers.pumpfun_curve_math import (
+    AMM_IMPACT_FEE_FLOOR_BPS,
+    CURVE_IMPACT_FEE_FLOOR_BPS,
     DEFAULT_IMPACT_FEE_BPS,
     DEFAULT_PROTOCOL_FEE_BPS,
     buy_tokens_out,
     estimated_curve_impact_bps,
+    impact_net_bps,
     price_sol,
+    protocol_fee_bps_for_phase,
     reserves_at_progress_bps,
     sell_sol_out,
     sol_after_buy_fee,
@@ -126,7 +130,14 @@ class CurveFormulaTests(unittest.TestCase):
         defaulted = estimated_curve_impact_bps(vs, vt, rs, rt, 0.2, "buy")
         override = estimated_curve_impact_bps(vs, vt, rs, rt, 0.2, "buy", fee_bps=200)
         self.assertEqual(DEFAULT_IMPACT_FEE_BPS, 125)
+        self.assertAlmostEqual(CURVE_IMPACT_FEE_FLOOR_BPS, 62.5)
+        self.assertAlmostEqual(defaulted - base, protocol_fee_bps_for_phase("curve"), places=6)
         self.assertAlmostEqual(defaulted - base, 62.5, places=6)
+        self.assertAlmostEqual(impact_net_bps(defaulted, CURVE_IMPACT_FEE_FLOOR_BPS), base, places=6)
+        self.assertAlmostEqual(AMM_IMPACT_FEE_FLOOR_BPS, 10.0)
+        bare = LiquidityCtx()
+        self.assertAlmostEqual(bare.spread_bps / 2.0, protocol_fee_bps_for_phase("amm"))
+        self.assertAlmostEqual(bare.estimated_impact_bps(0.0), AMM_IMPACT_FEE_FLOOR_BPS)
         self.assertAlmostEqual(override - base, 100.0, places=6)
         liq = _liq()
         via_ctx = liq.estimated_impact_bps(0.2, side="buy", pump=_pump_at(4200, fee_bps=200))

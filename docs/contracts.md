@@ -60,9 +60,9 @@ REST：
 
 ## 可执行性（additive · 纸面证据，非实盘）
 
-`ExecutabilityReport`：`lamp` · `nogo_reason` · `n_closed` / `sample_ok`（≥30）· `expectancy` · `median_entry_impact_bps`（go <60，硬顶 80）· `reject_rate.{progress,impact,risk}`（DecisionLog 聚合）· `shadow_slippage.{p50_bps,p90_bps}` · `impact_error.{p50_bps,p90_bps}` · `liveEnabled=false` · `live_checks` 三勾只读（与 live-ui-gates 同源，本栈不置 true）。无私钥、无 send。
+`ExecutabilityReport`：`lamp` · `nogo_reason` · `n_closed` / `sample_ok`（≥30）· `expectancy` · `median_entry_impact_gross_bps`（含费）· `median_entry_impact_net_bps`（扣费；go 中位 <60）· `protocol_fee_bps`（曲线地板 62.5 / AMM 10）· 含费硬顶 80 · `reject_rate.{progress,impact,risk}`（DecisionLog 聚合）· `shadow_slippage.{p50_bps,p90_bps}` · `impact_error.{p50_bps,p90_bps}` · `liveEnabled=false` · `live_checks` 三勾只读（与 live-ui-gates 同源，本栈不置 true）。无私钥、无 send。`median_entry_impact_bps` 仍是含费中位。
 
-`DecisionLogRow`：`ts, strategy_id, symbol, mint?, stage, signal_*, risk_*, notional_sol?, decision_px? / arrival_px?, impact_bps_est? / estimated_impact_bps?, paper_fill_px? / fill_px?, shadow_fill_px?, shadow_slippage_bps?, impact_error_bps?, shadow_source?, outcome, reject_bucket`。P0 replay=`next_trade|next_open`。不改冻结 Signal/Risk/Fill 事件名。IS 本 v0 不做。
+`DecisionLogRow`：`ts, strategy_id, symbol, mint?, stage, signal_*, risk_*, notional_sol?, decision_px? / arrival_px?, impact_bps_est? / estimated_impact_bps?, impact_gross_bps?, protocol_fee_bps?, impact_net_bps?, phase?, paper_fill_px? / fill_px?, shadow_fill_px?, shadow_slippage_bps?, impact_error_bps?, shadow_source?, outcome, reject_bucket`。P0 replay=`next_trade|next_open`。不改冻结 Signal/Risk/Fill 事件名。IS 本 v0 不做。
 
 dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 只订 PaperBroker Fill）。
 

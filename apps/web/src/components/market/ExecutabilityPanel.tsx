@@ -92,10 +92,20 @@ export function ExecutabilityPanel({ report, err, compact }: Props) {
               </dd>
             </div>
             <div>
-              <dt>入场冲击中位</dt>
+              <dt>入场冲击（扣费）</dt>
               <dd>
-                {bps(report.median_entry_impact_bps)}
-                <span className="muted"> &lt;60 / 硬顶 {report.hard_max_impact_bps}</span>
+                {bps(report.median_entry_impact_net_bps ?? report.median_entry_impact_bps)}
+                <span className="muted"> &lt;60</span>
+              </dd>
+            </div>
+            <div>
+              <dt>入场冲击（含费）</dt>
+              <dd>
+                {bps(report.median_entry_impact_gross_bps ?? report.median_entry_impact_bps)}
+                <span className="muted">
+                  {" "}
+                  费 {bps(report.protocol_fee_bps)} · 硬顶 {report.hard_max_impact_bps}
+                </span>
               </dd>
             </div>
             <div>

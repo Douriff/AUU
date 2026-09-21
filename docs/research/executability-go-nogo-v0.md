@@ -1,6 +1,6 @@
 # 纸面成交 → 链上可执行性：Go / No-Go v0
 
-状态：冻结草稿（2026-09-21）  
+状态：冻结草稿（2026-09-21）；**入场冲击 Go 口径改为扣协议费**（用户选择 2026-09-22）  
 模式：**仅纸面证据**。本页与 `GET /api/v1/stats/executability` 对齐。  
 **不**发链上交易、**不**读私钥、**不**把 `liveEnabled` 置 true。  
 对齐：`docs/strategies/pump-paper-v1.md` · `docs/riskgate-paperbroker-v0.md` · `docs/adapters/paper-trade-journal-stats-v0.md`
@@ -29,7 +29,8 @@ Pump.fun 曲线是虚拟储备恒定乘积（`price = virtual_sol / virtual_toke
 因此：
 
 - 名义越大、曲线越浅（低进度或薄虚拟储备），冲击非线性上升。
-- 策略硬顶仍是 `max_impact_bps = 80`（pump-paper-v1 冻结；蒸馏不得抬高）。可执行性 **中位** 更严：入场 `estimated_impact_bps` 中位数 **< 60**。任一入场 **> 80** → 硬顶失败（80 与策略 `<= max_impact_bps` 对齐）。
+- 策略硬顶仍是 `max_impact_bps = 80`（pump-paper-v1 冻结；蒸馏不得抬高）。硬顶看 **含费** `impact_gross_bps`：任一入场 **> 80** → 硬顶失败（80 与策略 `<= max_impact_bps` 对齐）。
+- **Go 中位看扣费**（用户选择 2026-09-22）：`impact_net_bps = max(0, impact_gross_bps − protocol_fee_bps)`，中位 **< 60**。`impact_gross_bps` 就是现有 `estimated_impact_bps`（曲线行走 + 费地板）。见 §2.4。
 
 纸面 CEX 平方根冲击（无 `ctx.pump`）**不能**当作 Pump 可执行性证据；聚合时仍记账，但 `curve_quote_ok` 需要当时有曲线报价（`tick.mid` / `price_sol`）。
 
@@ -72,7 +73,7 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 |---|----|----|-------|------|
 | G1 | 样本 | `n_trades ≥ 30` 且 `sample_ok=true` | 不足 30 笔已平仓 | journal `closed` |
 | G2 | 期望 | `expectancy ≥ 0`（报价币 / 笔） | 均值为负 | `mean(pnl)`；容差见 §2.1 |
-| G3 | 入场冲击 | 入场 `estimated_impact_bps` **中位 < 60** | 中位 ≥ 60，或任一样本 **> 80**（硬顶） | 开仓 Fill 上的曲线/公式冲击 |
+| G3 | 入场冲击 | 入场 `impact_net_bps` **中位 < 60**（扣协议费） | 扣费中位 ≥ 60，或任一 **含费** 样本 **> 80**（硬顶） | 开仓 Fill 上的曲线/公式冲击；费地板见 §2.4 |
 | G4 | 拒单结构 | `progress` / `impact` / `risk` **三项均已报告**（DecisionLog） | 缺字段 | `docs/adapters/decision-log-v0.md` |
 | G5 | 影子滑点 | 中位 `shadow_slippage_bps ≤ X`，`X = 40` | 中位 > 40，或无报价样本 | DecisionLog replay（next_trade\|next_open）或成交当时曲线报价；见 `docs/research/shadow-fill-v0.md` |
 | G6 | 实盘开关 | **永不**由本栈置 true | 任何 `liveEnabled=true` 都是违规 | 恒 `false`；见 §5 |
@@ -116,6 +117,28 @@ reject_rate[bucket] = count(bucket) / n_entry_evals
 
 `auto_paper_orders=false` 的 skip **不**记入拒单（用户开关，不是市场不可执行）。G4 只要求三桶 **出现在响应里**（可全 0）；不设拒单率上限。高 `progress_band` 是预期。
 
+### 2.4 扣协议费（用户选择 2026-09-22）
+
+G3 的 **< 60** 用扣费中位，不用含费中位。期望、`sample_ok`（≥30 已平仓）、影子滑点、硬顶 80、`liveEnabled=false` **不变**。
+
+```text
+impact_gross_bps = estimated_impact_bps          # 现有入场冲击（含费地板）
+impact_net_bps   = max(0, impact_gross_bps − protocol_fee_bps)
+Go(G3)           = median(impact_net_bps) < 60
+                 ∧ max(impact_gross_bps) ≤ 80
+```
+
+`protocol_fee_bps` 按阶段取模型里的费地板（`protocol_fee_bps_for_phase`），不另写魔法数：
+
+| 阶段 | 常数 | 从哪来 |
+|------|------|--------|
+| `curve` / `graduating` | **62.5** | `CURVE_IMPACT_FEE_FLOOR_BPS = DEFAULT_IMPACT_FEE_BPS / 2`。`estimated_curve_impact_bps` 在储备行走之后加 `fee_bps/2`；默认 `fee_bps = 125`，所以地板是 **62.5**。覆盖 `fee_bps` 时地板改为该值的一半。 |
+| `amm`（GRADMOCK 等已迁移） | **10** | `AMM_IMPACT_FEE_FLOOR_BPS = DEFAULT_LIQUIDITY_SPREAD_BPS / 2`。迁移后虚拟储备清零，冲击退回 CEX `spread_bps/2 + 40×(notional/adv)^0.6`。`LiquidityCtx.spread_bps` 默认 **20**，常数项是 **10 bps**。 |
+
+不要把曲线上的 `DEFAULT_PROTOCOL_FEE_BPS = 100`（`sol_after_buy_fee` / `buy_tokens_out` 路径费）当成这个地板。那 100 bps 已经进了价格行走，含在 `impact_gross_bps` 的非线性部分里；G3 减去的是冲击公式末尾那截 **平坦费**。
+
+纸面策略入场在 bonding curve，缺 `phase` 时按 `curve`（62.5）计。响应同时给含费与扣费，UI 标「含费 / 扣费」。
+
 ---
 
 ## 3. HTTP
@@ -131,7 +154,13 @@ reject_rate[bucket] = count(bucket) / n_entry_evals
 ```text
 verdict: "go" | "no-go"
 sample_ok, n_trades, expectancy
-median_entry_impact_bps, hard_max_impact_bps=80, impact_cap_go_bps=60
+median_entry_impact_bps                 # 含费中位（= gross；兼容旧字段）
+median_entry_impact_gross_bps           # 含费
+median_entry_impact_net_bps             # 扣费；G3 中位看这个 < 60
+protocol_fee_bps                        # 本窗口实际扣的费中位
+protocol_fee_bps_curve=62.5, protocol_fee_bps_amm=10
+hard_max_impact_bps=80                  # 仍约束含费 max
+impact_cap_go_bps=60                    # 约束扣费中位
 reject_rate: { progress, impact, risk }   # { count, rate }
 shadow_slippage: { p50_bps, p90_bps, median_bps, x_bps=40, n, ok }
 impact_error: { p50_bps, p90_bps, n }
@@ -177,9 +206,11 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 ## 6. 验收
 
 - [x] 理论：冲击 / 延迟 / MEV / 毕业 写明纸面缺口
-- [x] 门：30 笔、期望≥0、中位冲击&lt;60（硬顶 80）、三桶拒单率、影子滑点≤40bps、`liveEnabled=false`
+- [x] 门：30 笔、期望≥0、**扣费**中位冲击&lt;60（含费硬顶 80）、三桶拒单率、影子滑点≤40bps、`liveEnabled=false`
+- [x] 2026-09-22：G3 用 `impact_net_bps`（曲线费地板 62.5 = `DEFAULT_IMPACT_FEE_BPS/2`；AMM 10 = 默认 spread/2）
 - [x] `GET /api/v1/stats/executability` 无密钥、无链上 send
 - [x] 聚合器单测 + fixtures
 - [x] 不打开 live、不放宽 LiveLimits、不改 `max_impact_bps` 硬顶 80
 
-版本：v0。只追加门，不改已锁阈值，除非另开 RFC。
+版本：v0。只追加门，不改已锁阈值，除非另开 RFC。  
+2026-09-22 用户选择：G3 中位从含费改为扣协议费（&lt;60 不变，硬顶 80 仍看含费）。`liveEnabled` 默认仍 false。
