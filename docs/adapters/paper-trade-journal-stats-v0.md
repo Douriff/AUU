@@ -75,7 +75,8 @@ for i in 1..n_paths:
 
 - Journal **不替代** RiskGate；只记账  
 - `day_pnl` 可与 journal 当日已实现对齐（二选一真相：Gate 记账为主，journal 对账）  
-- 钩子够用，**无需新风控钩子**
+- 钩子够用，**无需新风控钩子**  
+- **永不**把 `source=live` 填进纸面胜率；实盘成交另账 `GET /api/v1/live/ledger`
 
 ---
 

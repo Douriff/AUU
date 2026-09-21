@@ -126,11 +126,25 @@ export function useMarketSession(symbol: string, interval = "1m") {
       },
       onRisk: (r: RiskEvent) => {
         if (r.symbol && r.symbol !== symbolRef.current) return;
+        if (r.venue === "live") {
+          setRiskTags((prev) => {
+            const next = ["LIVE_DISABLED", ...(r.risk.tags ?? []), ...prev];
+            return Array.from(new Set(next));
+          });
+          return;
+        }
         setRiskAllow(r.risk.allow);
         setRiskTags(r.risk.tags ?? []);
       },
       onReject: (r: RejectEvent) => {
         if (r.symbol && r.symbol !== symbolRef.current) return;
+        if (r.venue === "live") {
+          setRiskTags((prev) => {
+            const next = ["LIVE_DISABLED", ...(r.tags ?? []), ...prev];
+            return Array.from(new Set(next));
+          });
+          return;
+        }
         // reject only — never fabricate / draw a Fill
         setRiskAllow(false);
         setRiskTags(r.tags ?? []);

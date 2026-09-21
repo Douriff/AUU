@@ -11,6 +11,7 @@ import {
 } from "@/components/market/PaperStatsPanel";
 import { DATA_SOURCES, VENUE } from "@/venue";
 import type { DataSource } from "@/venue";
+import type { LiveStatus } from "@/types/contracts";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
@@ -21,6 +22,9 @@ export function SettingsPage() {
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
   const [discovery, setDiscovery] = useState<string>("…");
   const [portalKey, setPortalKey] = useState<boolean | null>(null);
+  const [live, setLive] = useState<LiveStatus | null>(null);
+  const [liveMsg, setLiveMsg] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
   const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
@@ -46,7 +50,61 @@ export function SettingsPage() {
         setPortalKey(Boolean(h.portal_key_configured));
       })
       .catch((e: Error) => setErr(e.message));
+    marketProvider
+      .getLiveStatus()
+      .then((st) => setLive(st))
+      .catch(() => undefined);
   }, []);
+
+  const mounted = live?.keypairMounted === true || live?.keypairConfigured === true;
+  const pubkey = live?.pubkey || "";
+  const liveEnabled = Boolean(live?.liveEnabled);
+
+  const applyLive = (st: LiveStatus) => {
+    setLive(st);
+  };
+
+  const requestEnable = () => {
+    setLiveMsg("");
+    if (!mounted) {
+      setLiveMsg("cannot enable: keypair mounted = no");
+      return;
+    }
+    setConfirmOpen(true);
+  };
+
+  const cancelConfirm = () => {
+    setConfirmOpen(false);
+    setLiveMsg("liveEnabled stays off (confirm cancelled)");
+  };
+
+  const confirmEnable = () => {
+    setConfirmOpen(false);
+    setLiveMsg("");
+    void marketProvider
+      .putLiveEnabled(true, true)
+      .then((st) => {
+        applyLive(st);
+        setLiveMsg(
+          st.liveArmed && st.liveEnabled
+            ? "checklist updated; send gate stays closed (zero chain txs)"
+            : "liveEnabled requested; LIVE_DISABLED until keypair + confirm + limits"
+        );
+      })
+      .catch((e: Error) => setLiveMsg(e.message));
+  };
+
+  const disableLive = () => {
+    setLiveMsg("");
+    setConfirmOpen(false);
+    void marketProvider
+      .putLiveEnabled(false, false)
+      .then((st) => {
+        applyLive(st);
+        setLiveMsg("liveEnabled=false");
+      })
+      .catch((e: Error) => setLiveMsg(e.message));
+  };
 
   return (
     <div className="shell-page">
@@ -55,6 +113,8 @@ export function SettingsPage() {
         纸面默认；无实盘密钥、无钱包。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
         ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
         {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
+        {" "}
+        Live adapter is scaffolded but <strong>liveEnabled defaults off</strong> (no chain submit).
       </p>
 
       <section className="settings-section">
@@ -114,6 +174,98 @@ export function SettingsPage() {
           portal key={portalKey == null ? "…" : portalKey ? "configured" : "absent"}
         </p>
       </section>
+
+      <section className="settings-section live-section">
+        <h2>Live adapter · Pump.fun local signer (dark)</h2>
+        <p className="muted">
+          liveEnabled=<code>{String(live?.liveEnabled ?? false)}</code>
+          {" · "}
+          liveConfirmed=<code>{String(live?.liveConfirmed ?? false)}</code>
+          {" · "}
+          sendEnabled=<code>{String(live?.sendEnabled ?? false)}</code>
+          . Caps are locked (read-only). This UI never accepts a secret blob.
+        </p>
+        <p className="live-status-row">
+          <span className="mode-badge live-off">LIVE DISABLED</span>
+          <span className="mode-badge live-off">{liveEnabled ? "ENABLED (SEND OFF)" : "liveEnabled OFF"}</span>
+          {(live?.reasons ?? ["LIVE_DISABLED"]).map((tag) => (
+            <span key={tag} className="tag">
+              {tag}
+            </span>
+          ))}
+        </p>
+        <dl className="settings-dl live-caps">
+          <dt>max_notional_sol</dt>
+          <dd>
+            <code>{live?.limits.max_notional_sol ?? 1}</code> SOL / order (locked)
+          </dd>
+          <dt>max_day_loss_pct</dt>
+          <dd>
+            <code>{live?.limits.max_day_loss_pct ?? 0.045}</code> (4.5%) (locked)
+          </dd>
+          <dt>max_open_mints</dt>
+          <dd>
+            <code>{live?.limits.max_open_mints ?? 10}</code> concurrent (locked)
+          </dd>
+          <dt>keypair</dt>
+          <dd>
+            mounted: <code>{String(mounted)}</code>
+            {pubkey ? (
+              <>
+                {" "}
+                · pubkey <code>{pubkey}</code>
+              </>
+            ) : null}
+          </dd>
+        </dl>
+        <div className="paper-actions">
+          {liveEnabled ? (
+            <button type="button" className="ghost" onClick={disableLive}>
+              Turn liveEnabled off
+            </button>
+          ) : (
+            <button type="button" className="ghost" disabled={!mounted} onClick={requestEnable}>
+              Enable live…
+            </button>
+          )}
+        </div>
+        <p className="muted">
+          liveEnabled defaults off. Mount a local JSON array of 64 ints at{" "}
+          <code>secrets/live-keypair.json</code> (gitignored; Phantom base58 converted locally) or
+          set <code>AUU_SOLANA_KEYPAIR_PATH</code>. Health shows mounted + pubkey only (
+          <code>8fs58PRKhWy8jVkm7Ro6umY2jxbjtoY33LjyUb6YakFi</code>). Enabling requires a
+          secondary confirm dialog and the three locked caps. This runtime still sends zero
+          chain txs. This UI never asks for a secret.
+        </p>
+        {liveMsg ? <p className="muted">{liveMsg}</p> : null}
+      </section>
+
+      {confirmOpen ? (
+        <div className="live-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="live-confirm-title">
+          <div className="live-confirm-dialog">
+            <h2 id="live-confirm-title">Confirm liveEnabled</h2>
+            <p>
+              Secondary confirm required. Keypair mounted: <code>{String(mounted)}</code>
+              {pubkey ? (
+                <>
+                  {" "}
+                  pubkey <code>{pubkey}</code>
+                </>
+              ) : null}
+              . Caps stay locked at 1 SOL / 4.5% / 10 mints. Send gate stays closed — zero chain
+              transactions in this runtime.
+            </p>
+            <div className="paper-actions">
+              <button type="button" className="ghost" onClick={cancelConfirm}>
+                Cancel
+              </button>
+              <button type="button" className="buy" onClick={confirmEnable}>
+                Confirm liveEnabled
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="settings-section">
         <h2>pump-paper-v1 · auto_paper_orders / strategy_autopaper</h2>
@@ -184,6 +336,34 @@ export function SettingsPage() {
         <dt>portal key</dt>
         <dd>
           <code>{portalKey == null ? "…" : portalKey ? "configured" : "absent"}</code>
+        </dd>
+        <dt>liveEnabled</dt>
+        <dd>
+          <code>{String(live?.liveEnabled ?? false)}</code>
+        </dd>
+        <dt>liveConfirmed</dt>
+        <dd>
+          <code>{String(live?.liveConfirmed ?? false)}</code>
+        </dd>
+        <dt>liveDisabled</dt>
+        <dd>
+          <code>{String(live?.liveDisabled ?? true)}</code>
+        </dd>
+        <dt>keypair mounted</dt>
+        <dd>
+          <code>{String(mounted)}</code>
+        </dd>
+        <dt>pubkey</dt>
+        <dd>
+          <code>{pubkey || "—"}</code>
+        </dd>
+        <dt>live caps</dt>
+        <dd>
+          <code>
+            {live
+              ? `${live.limits.max_notional_sol} SOL / ${live.limits.max_day_loss_pct} / ${live.limits.max_open_mints}`
+              : "1 SOL / 0.045 / 10"}
+          </code>
         </dd>
         <dt>API health</dt>
         <dd>

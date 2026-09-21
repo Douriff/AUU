@@ -56,7 +56,7 @@ class RoundTrip:
     pnl_pct: float
     fees: float
     tags: list[str] = field(default_factory=list)
-    source: str = "manual"  # signal | manual
+    source: str = "manual"  # signal | manual  (never live; live fills use LiveTradeJournal)
     side: str = "long"
 
     def as_dict(self) -> dict[str, Any]:
@@ -82,8 +82,20 @@ class RoundTrip:
 ClosedTrade = RoundTrip
 
 
+def _is_live_tag(tag: str) -> bool:
+    t = (tag or "").lower()
+    if t.startswith("live") or ":live" in t or "venue:live" in t:
+        return True
+    if "source=live" in t or "source:live" in t:
+        return True
+    return False
+
+
 def _ids_from_tag(tag: str) -> tuple[str, str]:
     t = (tag or "").lower()
+    if _is_live_tag(t):
+        # Live fills belong on the live ledger — paper journal never claims them.
+        return "live", "live"
     if "pump-paper-v1" in t or "autopaper" in t:
         return "pump-paper-v1", "signal"
     return "manual-paper", "manual"
@@ -128,7 +140,12 @@ class PaperTradeJournal:
         fee = float(fill.fee or 0.0)
         ts = int(fill.ts)
         tag = fill.tag or ""
+        if _is_live_tag(tag):
+            # PaperTradeJournal / stats win-rate stay paper-only.
+            return []
         strategy_id, source = _ids_from_tag(tag)
+        if source == "live":
+            return []
         if qty == 0 or px <= 0:
             return []
         dumped = fill.model_dump()
@@ -333,6 +350,8 @@ def summarize(
     equity_0: float = EQUITY_0,
 ) -> dict[str, Any]:
     # Win rate / expectancy / drawdown from journal trades only (QuantStats is idea-only).
+    # Live fills (source=live) never mix into paper win-rate.
+    trades = [t for t in trades if (t.source or "") != "live"]
     n = len(trades)
     wins = sum(1 for t in trades if t.pnl > 0)
     losses = sum(1 for t in trades if t.pnl < 0)
