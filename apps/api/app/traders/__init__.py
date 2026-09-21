@@ -6,8 +6,8 @@ copy_trade_enabled is hard-false; there is no mirror path.
 from __future__ import annotations
 
 from app.traders.distill import apply_distill, distill_watch
-from app.traders.habits import habit_profile
-from app.traders.helius import HeliusTraderReader, reader_mode
+from app.traders.habits import canonical_habit_tag, habit_profile
+from app.traders.helius import HeliusTraderReader, live_fetch_enabled, reader_mode
 from app.traders.snapshot import get_snapshot
 from app.traders.store import (
     delete_watch,
@@ -27,8 +27,10 @@ __all__ = [
     "distill_watch",
     "get_snapshot",
     "get_watch",
+    "canonical_habit_tag",
     "habit_profile",
     "list_watches",
+    "live_fetch_enabled",
     "reader_mode",
     "reset_watch_store",
     "upsert_watch",

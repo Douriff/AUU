@@ -8,8 +8,28 @@ export const HABIT_LABEL: Record<HabitTagName, string> = {
   bag: "长持持仓",
 };
 
+/** Research aliases → frozen HabitTag names (curve_mid / quick_flip). */
+export const HABIT_ALIASES: Record<string, HabitTagName> = {
+  early_entry: "sniper",
+  curve_sniper: "sniper",
+  curve_mid: "mid_curve",
+  mid_bonding: "mid_curve",
+  migrate_chase: "graduation_chase",
+  kotl_chase: "graduation_chase",
+  quick_flip: "flip",
+  scalp: "flip",
+  holder: "bag",
+  long_bag: "bag",
+  bag_holder: "bag",
+};
+
+export function canonicalHabitTag(tag: string): string {
+  return HABIT_ALIASES[tag] ?? tag;
+}
+
 export function habitLabel(tag: string): string {
-  return HABIT_LABEL[tag as HabitTagName] ?? tag;
+  const canonical = canonicalHabitTag(tag);
+  return HABIT_LABEL[canonical as HabitTagName] ?? tag;
 }
 
 export function HabitTagChips({

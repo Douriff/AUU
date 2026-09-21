@@ -1,8 +1,12 @@
-"""TraderSnapshotter — mock-first holdings + recent buys/sells (distill-v0 fields)."""
+"""TraderSnapshotter — mock-first holdings + recent buys/sells (distill-v0 fields).
+
+Chain path (TRADER_WATCH_READER=helius|rpc) assembles the same field set from
+parsed Pump ix + ctx.pump. Mock snapshots stay compatible with that table.
+"""
 from __future__ import annotations
 
 from statistics import median
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from app.models.contracts import (
     TradeBrief,
@@ -10,8 +14,40 @@ from app.models.contracts import (
     TraderSnapshot,
     TraderWatchlistItem,
 )
+from app.traders.ctx_pump import lookup_ctx_pump
+from app.traders.pump_ix import PumpIxTrade
 from app.traders.store import WATCH_GRAD, WATCH_MID, WATCH_SNIPER, get_watch
 
+# distill-v0 + datasources Snapshot→source table (mock and chain must fill these).
+SNAPSHOT_SOURCE_FIELDS = (
+    "watch_id",
+    "address",
+    "asof_ts",
+    "slot",
+    "positions",
+    "open_count",
+    "gross_exposure_sol",
+    "recent_buys",
+    "recent_sells",
+    "buy_notional_1h",
+    "sell_notional_1h",
+    "trade_count_1h",
+    "median_hold_sec_24h",
+    "flip_rate_24h",
+    "progress_hist",
+    "entry_progress_median_bps",
+)
+POSITION_SOURCE_FIELDS = (
+    "mint",
+    "symbol",
+    "qty",
+    "cost_basis_sol",
+    "unrealized_pnl_sol",
+    "hold_sec",
+    "progress_bps",
+    "phase",
+)
+TRADE_BRIEF_SOURCE_FIELDS = ("ts", "mint", "side", "sol_amount", "progress_bps", "signature")
 PROGRESS_HIST_KEYS = (
     "0_800",
     "800_5000",
@@ -20,6 +56,7 @@ PROGRESS_HIST_KEYS = (
     "9000_10000",
     "migrated",
 )
+FLIP_HOLD_SEC = 300.0
 
 MOCK_MINT_A = "MockMintAlpha11111111111111111111111111111"
 MOCK_MINT_B = "MockMintBravo11111111111111111111111111111"
@@ -346,6 +383,110 @@ def _assemble(
     )
 
 
+def assemble_from_pump_events(
+    item: TraderWatchlistItem,
+    trades: list[PumpIxTrade],
+    *,
+    now_ms: Optional[int] = None,
+    pump_by_mint: Optional[dict[str, dict[str, Any]]] = None,
+) -> TraderSnapshot:
+    """Build a distill-v0 TraderSnapshot from parsed Pump ix + current ctx.pump.
+
+    TradeBrief.progress_bps stays empty unless the event already has it (no
+    backfill from *current* curve). Position progress/phase come from ctx.pump.
+    """
+    ts = int(now_ms if now_ms is not None else 1_700_000_000_000)
+    ordered = sorted(trades, key=lambda t: t.ts)
+    buys: list[TradeBrief] = []
+    sells: list[TradeBrief] = []
+    lots: dict[str, list[dict[str, float | int]]] = {}
+    closed_holds: list[float] = []
+    last_slot: Optional[int] = None
+
+    def _lot_size(tr: PumpIxTrade) -> float:
+        if tr.token_amount is not None and tr.token_amount > 0:
+            return float(tr.token_amount)
+        return float(tr.sol_amount)
+
+    for tr in ordered:
+        if tr.slot is not None:
+            last_slot = tr.slot
+        brief = TradeBrief(
+            ts=tr.ts,
+            mint=tr.mint,
+            side=tr.side,  # type: ignore[arg-type]
+            sol_amount=float(tr.sol_amount),
+            progress_bps=tr.progress_bps,
+            signature=tr.signature,
+        )
+        size = max(_lot_size(tr), 0.0)
+        if tr.side == "buy":
+            buys.append(brief)
+            lots.setdefault(tr.mint, []).append(
+                {"ts": tr.ts, "qty": size, "sol": float(tr.sol_amount)}
+            )
+            continue
+        sells.append(brief)
+        remain = size
+        sol_remain = float(tr.sol_amount)
+        queue = lots.setdefault(tr.mint, [])
+        while remain > 1e-12 and queue:
+            lot = queue[0]
+            take = min(float(lot["qty"]), remain)
+            lot_qty = float(lot["qty"]) or take
+            frac = take / lot_qty if lot_qty else 1.0
+            closed_holds.append(max(0.0, (tr.ts - int(lot["ts"])) / 1000.0))
+            lot["qty"] = float(lot["qty"]) - take
+            lot["sol"] = max(0.0, float(lot["sol"]) - sol_remain * frac)
+            remain -= take
+            if float(lot["qty"]) <= 1e-12:
+                queue.pop(0)
+
+    holds_24h = list(closed_holds)
+    median_hold = float(median(holds_24h)) if holds_24h else None
+    flips = sum(1 for h in holds_24h if h < FLIP_HOLD_SEC)
+    flip_rate = (flips / len(holds_24h)) if holds_24h else None
+
+    positions: list[TraderPosition] = []
+    for mint, queue in lots.items():
+        qty = sum(float(lot["qty"]) for lot in queue)
+        if qty <= 1e-12:
+            continue
+        cost = sum(float(lot["sol"]) for lot in queue)
+        oldest = min(int(lot["ts"]) for lot in queue)
+        curve = lookup_ctx_pump(mint, pump_by_mint) or {}
+        bps = curve.get("progress_bps")
+        phase = str(curve.get("phase") or "unknown")
+        px = curve.get("price_sol")
+        mark = None
+        if px is not None and any(t.token_amount for t in ordered if t.mint == mint):
+            mark = float(qty) * float(px)
+        unreal = (mark - cost) if mark is not None else None
+        positions.append(
+            TraderPosition(
+                mint=mint,
+                symbol=curve.get("symbol"),
+                qty=round(qty, 6),
+                cost_basis_sol=round(cost, 6),
+                unrealized_pnl_sol=round(unreal, 6) if unreal is not None else None,
+                hold_sec=max(0.0, (ts - oldest) / 1000.0),
+                progress_bps=int(bps) if bps is not None else None,
+                phase=phase if phase in {"curve", "graduating", "amm", "unknown"} else "unknown",  # type: ignore[arg-type]
+            )
+        )
+
+    return _assemble(
+        item,
+        ts,
+        positions,
+        buys,
+        sells,
+        median_hold_sec_24h=median_hold,
+        flip_rate_24h=round(flip_rate, 4) if flip_rate is not None else None,
+        slot=last_slot,
+    )
+
+
 class MockTraderReader:
     name = "mock"
 
@@ -359,8 +500,8 @@ def get_reader() -> TraderReader:
     from app.traders.helius import HeliusTraderReader, reader_mode
 
     mode = reader_mode()
-    if mode == "helius":
-        return HeliusTraderReader()
+    if mode in {"helius", "rpc"}:
+        return HeliusTraderReader(name=mode)
     return MockTraderReader()
 
 

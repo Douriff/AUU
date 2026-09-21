@@ -178,6 +178,9 @@ class GuardrailSourceTests(unittest.TestCase):
             "/mirror",
             "copy_trade_enabled = true",
             "copy_trade_enabled=true",
+            "photon.trading",
+            "bullx.io",
+            "gmgn.ai",
         )
         hits: list[str] = []
         for path in (API_APP / "traders").rglob("*.py"):
@@ -198,6 +201,11 @@ class GuardrailSourceTests(unittest.TestCase):
         self.assertFalse(COPY_TRADE_ENABLED)
         self.assertEqual(reader_mode(), "mock")
         self.assertFalse(HeliusTraderReader.LIVE_FETCH)
+        from app.traders.helius import live_fetch_enabled
+        from app.traders.enrich import enrich_enabled
+
+        self.assertFalse(live_fetch_enabled())
+        self.assertFalse(enrich_enabled())
 
     def test_traders_package_does_not_import_live_sdks(self):
         banned = {"solders", "solana", "jito"}
@@ -397,6 +405,196 @@ class WatchApiTests(unittest.TestCase):
         src = Path(apply_distill.__code__.co_filename).read_text(encoding="utf-8").lower()
         self.assertNotIn("sendtransaction", src)
         self.assertIn("confirm=true", src.replace(" ", ""))
+
+
+class DataSourceContractTests(unittest.TestCase):
+    def test_habit_aliases_curve_mid_and_quick_flip(self):
+        from app.traders.habits import canonical_habit_tag
+
+        self.assertEqual(canonical_habit_tag("curve_mid"), "mid_curve")
+        self.assertEqual(canonical_habit_tag("quick_flip"), "flip")
+        self.assertEqual(canonical_habit_tag("mid_curve"), "mid_curve")
+        item = _item("watch-alias", WATCH_MID, "alias")
+        snap = mock_snapshot_for(item, now_ms=NOW, persona="mid_curve")
+        item.tags_override = ["curve_mid", "quick_flip"]
+        profile = build_profile(item, snap)
+        tags = {t.tag for t in profile.tags}
+        self.assertIn("mid_curve", tags)
+        self.assertIn("flip", tags)
+
+    def test_mock_snapshot_matches_source_table(self):
+        from app.traders.snapshot import (
+            POSITION_SOURCE_FIELDS,
+            PROGRESS_HIST_KEYS,
+            SNAPSHOT_SOURCE_FIELDS,
+            TRADE_BRIEF_SOURCE_FIELDS,
+        )
+
+        item = _item("watch-mid", WATCH_MID, "mock-mid-curve")
+        snap = mock_snapshot_for(item, now_ms=NOW, persona="mid_curve")
+        payload = snap.model_dump()
+        for key in SNAPSHOT_SOURCE_FIELDS:
+            self.assertIn(key, payload)
+        self.assertEqual(set(payload["progress_hist"]), set(PROGRESS_HIST_KEYS))
+        self.assertTrue(payload["positions"])
+        for pos in payload["positions"]:
+            for key in POSITION_SOURCE_FIELDS:
+                self.assertIn(key, pos)
+            self.assertIn(pos["phase"], {"curve", "graduating", "amm", "unknown"})
+        for brief in payload["recent_buys"] + payload["recent_sells"]:
+            for key in TRADE_BRIEF_SOURCE_FIELDS:
+                self.assertIn(key, brief)
+            self.assertIn(brief["side"], {"buy", "sell"})
+
+    def test_leaving_mock_parses_helius_pump_ix_and_ctx_pump(self):
+        from app.providers.pumpfun_decode import PUMP_PROGRAM_ID
+        from app.traders.helius import HeliusTraderReader
+        from app.traders.snapshot import SNAPSHOT_SOURCE_FIELDS
+
+        wallet = "WatchChainWallet11111111111111111111111111"
+        mint = "ChainMintMid111111111111111111111111111111"
+        item = _item("watch-chain", wallet, "chain-mid")
+        ts = NOW // 1000
+        events = [
+            {
+                "signature": "SigBuy1" + "1" * 20,
+                "timestamp": ts - 600,
+                "slot": 42,
+                "source": "PUMP_FUN",
+                "feePayer": wallet,
+                "instructions": [{"programId": PUMP_PROGRAM_ID}],
+                "nativeTransfers": [
+                    {"fromUserAccount": wallet, "toUserAccount": "Pool111", "amount": 150_000_000}
+                ],
+                "tokenTransfers": [
+                    {
+                        "mint": mint,
+                        "tokenAmount": 8000,
+                        "toUserAccount": wallet,
+                        "fromUserAccount": "Pool111",
+                    }
+                ],
+            },
+            {
+                "signature": "SigBuy2" + "2" * 20,
+                "timestamp": ts - 400,
+                "slot": 43,
+                "source": "PUMP_FUN",
+                "feePayer": wallet,
+                "instructions": [{"programId": PUMP_PROGRAM_ID}],
+                "nativeTransfers": [
+                    {"fromUserAccount": wallet, "toUserAccount": "Pool111", "amount": 120_000_000}
+                ],
+                "tokenTransfers": [
+                    {
+                        "mint": mint,
+                        "tokenAmount": 3000,
+                        "toUserAccount": wallet,
+                        "fromUserAccount": "Pool111",
+                    }
+                ],
+            },
+            {
+                "signature": "SigSell1" + "3" * 19,
+                "timestamp": ts - 200,
+                "slot": 44,
+                "source": "PUMP_FUN",
+                "feePayer": wallet,
+                "instructions": [{"programId": PUMP_PROGRAM_ID}],
+                "nativeTransfers": [
+                    {"toUserAccount": wallet, "fromUserAccount": "Pool111", "amount": 80_000_000}
+                ],
+                "tokenTransfers": [
+                    {
+                        "mint": mint,
+                        "tokenAmount": 2000,
+                        "fromUserAccount": wallet,
+                        "toUserAccount": "Pool111",
+                    }
+                ],
+            },
+        ]
+        pump_by_mint = {
+            mint: {"progress_bps": 2800, "phase": "curve", "price_sol": 0.00002, "symbol": "MID/SOL"}
+        }
+        reader = HeliusTraderReader(name="helius")
+        snap = reader.fetch_snapshot(
+            item, now_ms=NOW, events=events, pump_by_mint=pump_by_mint
+        )
+        payload = snap.model_dump()
+        for key in SNAPSHOT_SOURCE_FIELDS:
+            self.assertIn(key, payload)
+        self.assertEqual(len(snap.recent_buys), 2)
+        self.assertEqual(len(snap.recent_sells), 1)
+        self.assertEqual(snap.positions[0].progress_bps, 2800)
+        self.assertEqual(snap.positions[0].phase, "curve")
+        self.assertEqual(snap.positions[0].symbol, "MID/SOL")
+        self.assertGreater(snap.open_count, 0)
+        self.assertIsNone(snap.recent_buys[0].progress_bps)
+        self.assertFalse(reader.LIVE_FETCH)
+        from app.traders.helius import live_fetch_enabled
+
+        self.assertFalse(live_fetch_enabled())
+        self.assertNotEqual(snap.watch_id, "watch-sniper")
+        self.assertGreater(snap.median_hold_sec_24h or 0, 0)
+
+    def test_normalized_events_keep_entry_progress_and_hist_buckets(self):
+        from app.traders.helius import HeliusTraderReader
+        from app.traders.snapshot import PROGRESS_HIST_KEYS
+
+        wallet = "WatchNormAddr11111111111111111111111111111"
+        item = _item("watch-norm", wallet, "norm")
+        mint = "NormMint1111111111111111111111111111111111"
+        events = [
+            {
+                "ts": NOW - 180_000,
+                "mint": mint,
+                "side": "buy",
+                "sol_amount": 0.2,
+                "progress_bps": 2200,
+                "signature": "SigN1",
+            },
+            {
+                "ts": NOW - 90_000,
+                "mint": mint,
+                "side": "buy",
+                "sol_amount": 0.1,
+                "progress_bps": 3100,
+                "signature": "SigN2",
+            },
+        ]
+        snap = HeliusTraderReader(name="rpc").fetch_snapshot(
+            item,
+            now_ms=NOW,
+            events=events,
+            pump_by_mint={mint: {"progress_bps": 4000, "phase": "curve"}},
+        )
+        self.assertEqual(snap.entry_progress_median_bps, 2650)
+        self.assertEqual(set(snap.progress_hist), set(PROGRESS_HIST_KEYS))
+        self.assertGreater(snap.progress_hist["800_5000"], 0)
+        self.assertEqual(snap.recent_buys[0].progress_bps, 2200)
+        self.assertEqual(snap.positions[0].progress_bps, 4000)
+
+    def test_live_fetch_stays_off_even_with_key(self):
+        from app.traders.helius import live_fetch_enabled
+        from app.traders.enrich import enrich_enabled, enrich_mode
+
+        os.environ["HELIUS_API_KEY"] = "not-a-real-key"
+        os.environ.pop("TRADER_WATCH_LIVE_FETCH", None)
+        os.environ["TRADER_WATCH_READER"] = "helius"
+        os.environ["SOLANA_TRACKER_API_KEY"] = "tracker-key"
+        os.environ["TRADER_WATCH_ENRICH"] = "off"
+        try:
+            self.assertFalse(live_fetch_enabled())
+            self.assertEqual(enrich_mode(), "off")
+            self.assertFalse(enrich_enabled())
+            rows = HeliusTraderReader().fetch_parsed_rows(WATCH_MID)
+            self.assertEqual(rows, [])
+        finally:
+            os.environ.pop("HELIUS_API_KEY", None)
+            os.environ.pop("SOLANA_TRACKER_API_KEY", None)
+            os.environ["TRADER_WATCH_READER"] = "mock"
+            os.environ["TRADER_WATCH_ENRICH"] = "off"
 
 
 if __name__ == "__main__":

@@ -167,14 +167,36 @@ def tag_habits(features: HabitFeatures, snap: TraderSnapshot) -> list[HabitTag]:
     return tags
 
 
+# Frozen HabitTags plus research-doc synonyms (datasources §2 / channel-brief).
+HABIT_TAG_ALIASES = {
+    "early_entry": "sniper",
+    "curve_sniper": "sniper",
+    "curve_mid": "mid_curve",
+    "mid_bonding": "mid_curve",
+    "migrate_chase": "graduation_chase",
+    "kotl_chase": "graduation_chase",
+    "quick_flip": "flip",
+    "scalp": "flip",
+    "holder": "bag",
+    "long_bag": "bag",
+    "bag_holder": "bag",
+}
+FROZEN_HABIT_TAGS = {"sniper", "mid_curve", "graduation_chase", "flip", "bag"}
+
+
+def canonical_habit_tag(raw: str) -> Optional[str]:
+    name = str(raw or "").strip().lower()
+    if name in FROZEN_HABIT_TAGS:
+        return name
+    return HABIT_TAG_ALIASES.get(name)
+
+
 def apply_overrides(tags: list[HabitTag], overrides: list[str]) -> list[HabitTag]:
     have = {t.tag for t in tags}
     out = list(tags)
     for raw in overrides:
-        name = str(raw).strip()
-        if name not in {"sniper", "mid_curve", "graduation_chase", "flip", "bag"}:
-            continue
-        if name in have:
+        name = canonical_habit_tag(raw)
+        if name is None or name in have:
             continue
         out.append(
             HabitTag(
@@ -183,6 +205,7 @@ def apply_overrides(tags: list[HabitTag], overrides: list[str]) -> list[HabitTag
                 evidence=["tags_override"],
             )
         )
+        have.add(name)
     return out
 
 

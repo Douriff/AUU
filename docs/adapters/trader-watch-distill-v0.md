@@ -107,6 +107,8 @@ HabitTag:
   tag: sniper | mid_curve | graduation_chase | flip | bag
   confidence: float ∈ [0,1]
   evidence: list[str]          # 人可读短句 / 特征键
+  # 同义映射（写入前规范化）：curve_mid→mid_curve，quick_flip→flip
+  # 完整表见 docs/research/trader-learning-datasources.md §2
 
 HabitProfile:
   watch_id / address

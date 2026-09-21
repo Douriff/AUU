@@ -2,7 +2,8 @@
 
 状态：调研规格（2026-09-21 Asia/Shanghai）  
 范围：**只读公开数据 + 纸面信号**；禁止实盘、私钥、默认盲跟单。  
-对齐：`docs/strategies/pump-paper-v1.md`、`docs/architecture.md`、`docs/contracts.md`。
+对齐：`docs/strategies/pump-paper-v1.md`、`docs/architecture.md`、`docs/contracts.md`。  
+**数据源拍板（望舒）：** `docs/research/trader-learning-datasources.md` + `docs/research/trader-learning-channel-brief.md`。P0 离开 mock = 用户 Watchlist + Helius/RPC parsed Pump ix + `ctx.pump`；禁止刮 frontend-api / Photon / BullX / GMGN。
 
 ---
 
