@@ -760,7 +760,10 @@ class PumpPaperEngine:
                             signal=signal,
                             notional_sol=sized,
                             impact_bps_est=None if impact_in >= 1e8 else impact_in,
+                            estimated_impact_bps=None if impact_in >= 1e8 else impact_in,
                             impact_bps_cap=float(self.params.max_impact_bps),
+                            decision_px=float(snap.price_sol) if snap.price_sol else None,
+                            arrival_px=float(snap.price_sol) if snap.price_sol else None,
                         ),
                         debounce=True,
                     )

@@ -95,6 +95,9 @@ async def decide_and_fill(
             notional_sol=notional,
             impact_bps_est=impact,
             impact_bps_cap=float(sz.max_slippage_bps),
+            estimated_impact_bps=impact,
+            decision_px=float(built.tick.mid) if built.tick and built.tick.mid else None,
+            arrival_px=float(built.tick.mid) if built.tick and built.tick.mid else None,
         )
     )
 

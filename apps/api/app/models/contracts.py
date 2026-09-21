@@ -409,7 +409,10 @@ class DecisionLogRow(BaseModel):
     impact_bps_est: Optional[float] = None
     impact_bps_cap: Optional[float] = None
     estimated_impact_bps: Optional[float] = None  # alias of impact_bps_est
+    decision_px: Optional[float] = None
+    arrival_px: Optional[float] = None
     fill_px: Optional[float] = None
+    paper_fill_px: Optional[float] = None
     shadow_fill_px: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
     impact_error_bps: Optional[float] = None  # shadow_slippage_bps − estimated

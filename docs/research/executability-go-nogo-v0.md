@@ -87,13 +87,17 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 ### 2.2 影子滑点 X
 
 ```text
-shadow_slippage_bps = |fill.price − quote| / quote × 1e4
-quote = 成交当时 ctx.tick.mid（pumpfun_paper 上即曲线 price_sol）
+shadow_slippage_bps = sign(side) * (shadow_fill_px − decision_px) / decision_px × 1e4
+# buy/long: sign=+1；sell/short: sign=-1
+decision_px = 信号刻 curve mid（ctx.tick.mid / price_sol）
+shadow_fill_px = 下一笔曲线 tape 价（优先）或下一根 1m open
+impact_error_bps = shadow_slippage_bps − estimated_impact_bps
 ```
 
-- `X = 40` bps（中位硬门）。PaperBroker `base_bps=15` 的公式滑点应落在此内；超过说明纸面成交已大幅偏离当时报价，链上只会更差。
-- 缺 `quote` 的成交不进入中位；若有效样本 < `min(n_trades, 30)` 且 < 30 → G5 no-go（证据不足）。
-- **不是** MEV；**不是** `estimated_impact_bps`（冲击是曲线行走，影子滑点是成交价 vs 决策报价）。
+- `X = 40` bps（中位硬门）。缺 replay 时退回成交当时 `tick.mid`（`fill_quote`）。
+- 缺有效样本 < `min(n_trades, 30)` 且 < 30 → G5 no-go（证据不足）。
+- **不是** MEV；**不是** `estimated_impact_bps`（冲击是曲线行走，影子滑点是决策价 vs 下一笔/下一根可成交价）。
+- 公式与落地见 `docs/research/shadow-fill-v0.md`；开源借鉴清单（勿嵌 GPL/LGPL）见 `docs/research/auu-shadow-fill-impact-refs.md`。
 
 ### 2.3 拒单分桶
 

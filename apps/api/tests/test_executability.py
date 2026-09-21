@@ -12,6 +12,7 @@ from app.paper.decision_log import (
     pick_shadow_fill_px,
     reset_decision_log,
     shadow_metrics,
+    signed_shadow_slippage_bps,
 )
 from app.paper.executability import (
     IMPACT_HARD_MAX_BPS,
@@ -105,11 +106,24 @@ class ShadowMathTests(unittest.TestCase):
 
     def test_impact_error_is_shadow_minus_estimated(self):
         fill = Fill(ts=1, price=1.0, qty=1.0)
-        m = shadow_metrics(fill, 40.0, shadow_fill_px=1.005, source="next_trade")
+        m = shadow_metrics(
+            fill, 40.0, shadow_fill_px=1.005, source="next_trade", decision_px=1.0, side="buy"
+        )
         self.assertAlmostEqual(m["shadow_slippage_bps"], 50.0)
         self.assertAlmostEqual(m["impact_error_bps"], 10.0)
         self.assertEqual(m["shadow_source"], "next_trade")
         self.assertEqual(m["estimated_impact_bps"], 40.0)
+        self.assertAlmostEqual(m["decision_px"], 1.0)
+        self.assertAlmostEqual(m["paper_fill_px"], 1.0)
+
+    def test_sell_flips_shadow_sign(self):
+        self.assertAlmostEqual(signed_shadow_slippage_bps("sell", 1.0, 0.99), 100.0)
+        fill = Fill(ts=1, price=0.995, qty=-1.0)
+        m = shadow_metrics(
+            fill, 40.0, shadow_fill_px=0.99, source="next_trade", decision_px=1.0, side="sell"
+        )
+        self.assertAlmostEqual(m["shadow_slippage_bps"], 100.0)
+        self.assertAlmostEqual(m["impact_error_bps"], 60.0)
 
 
 class FixtureAggregatorTests(unittest.TestCase):
@@ -126,6 +140,8 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
         self.assertTrue(data["shadow_slippage"]["ok"])
         self.assertLessEqual(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
+        self.assertIn("impact_error", data)
+        self.assertFalse(data["liveEnabled"])
         for key in ("progress", "impact", "risk"):
             self.assertIn(key, data["reject_rate"])
             self.assertIn("count", data["reject_rate"][key])
@@ -282,13 +298,14 @@ class NoChainSendTests(unittest.TestCase):
     def test_modules_have_no_send(self):
         files = [
             ROOT / "apps" / "api" / "app" / "paper" / "executability.py",
+            ROOT / "apps" / "api" / "app" / "paper" / "decision_log.py",
             ROOT / "apps" / "api" / "app" / "routes" / "stats.py",
         ]
+        banned = ("sendtransaction", "sniper", "private_key", "hftbacktest", "nautilus", "backtrader", "freqtrade")
         for path in files:
             text = path.read_text(encoding="utf-8").lower()
-            self.assertNotIn("sendtransaction", text)
-            self.assertNotIn("sniper", text)
-            self.assertNotIn("private_key", text)
+            for needle in banned:
+                self.assertNotIn(needle, text, f"{path.name} must not mention {needle}")
 
 
 class ExecutabilityApiTests(unittest.TestCase):
@@ -381,6 +398,8 @@ class ExecutabilityApiTests(unittest.TestCase):
         fills_log = [row for row in items if row["outcome"] in ("fill", "partial")]
         self.assertGreaterEqual(len(fills_log), 1)
         self.assertIn("estimated_impact_bps", fills_log[0])
+        self.assertIn("decision_px", fills_log[0])
+        self.assertIn("paper_fill_px", fills_log[0])
         self.assertIn("shadow_fill_px", fills_log[0])
         self.assertIn("impact_error_bps", fills_log[0])
 

@@ -70,6 +70,9 @@ async def run_pre_order(
             notional_sol=notional,
             impact_bps_est=impact,
             impact_bps_cap=float(size.max_slippage_bps),
+            estimated_impact_bps=impact,
+            decision_px=float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None,
+            arrival_px=float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None,
         )
     )
     if not risk.allow:
@@ -198,7 +201,10 @@ async def run_paper_order(
     first = fills[0]
     mint = ctx.meta.get("mint") if ctx.meta else None
     impact = first.estimated_impact_bps
-    shadow = shadow_fields_for_fill(first, ctx.symbol, impact)
+    decision_px = float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None
+    shadow = shadow_fields_for_fill(
+        first, ctx.symbol, impact, decision_px=decision_px, side=intent.side
+    )
     append_decision(
         make_row(
             ts=first.ts,
@@ -216,7 +222,10 @@ async def run_paper_order(
             impact_bps_est=impact,
             impact_bps_cap=float(intent.max_slippage_bps),
             estimated_impact_bps=shadow.get("estimated_impact_bps"),
+            decision_px=shadow.get("decision_px"),
+            arrival_px=shadow.get("arrival_px"),
             fill_px=shadow.get("fill_px"),
+            paper_fill_px=shadow.get("paper_fill_px"),
             shadow_fill_px=shadow.get("shadow_fill_px"),
             shadow_slippage_bps=shadow.get("shadow_slippage_bps"),
             impact_error_bps=shadow.get("impact_error_bps"),

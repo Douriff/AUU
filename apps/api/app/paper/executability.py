@@ -15,6 +15,7 @@ from app.paper.decision_log import REJECT_BUCKETS, backfill_decision_shadows, cl
 THEORY_REF = "docs/research/executability-go-nogo-v0.md"
 ADAPTER_REF = "docs/adapters/decision-log-v0.md"
 PANEL_REF = "docs/viz/executability-panel-v0.md"
+SHADOW_REF = "docs/research/shadow-fill-v0.md"
 
 MIN_CLOSED_TRADES = 30
 EXPECTANCY_MIN = 0.0
@@ -510,6 +511,7 @@ def aggregate_executability(
         "theory_ref": THEORY_REF,
         "adapter_ref": ADAPTER_REF,
         "panel_ref": PANEL_REF,
+        "shadow_ref": SHADOW_REF,
         "disclaimer": "paper executability evidence, not a live fill guarantee — 纸面可执行性证据，非实盘承诺",
         "empty": n == 0,
     }

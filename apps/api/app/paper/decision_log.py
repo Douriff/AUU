@@ -119,20 +119,46 @@ def pick_shadow_fill_px(
     return None, None
 
 
+def signed_shadow_slippage_bps(
+    side: Optional[str],
+    decision_px: Optional[float],
+    shadow_fill_px: Optional[float],
+) -> Optional[float]:
+    """sign(side) * (shadow − decision) / decision * 1e4. Sell/short flips sign."""
+    if decision_px is None or shadow_fill_px is None:
+        return None
+    try:
+        d = float(decision_px)
+        s = float(shadow_fill_px)
+    except (TypeError, ValueError):
+        return None
+    if d <= 0 or s <= 0:
+        return None
+    sign = -1.0 if str(side or "").lower() in {"sell", "short"} else 1.0
+    return sign * (s - d) / d * 1e4
+
+
 def shadow_metrics(
     fill: Fill,
     impact_bps_est: Optional[float],
     *,
     shadow_fill_px: Optional[float] = None,
     source: Optional[str] = None,
+    decision_px: Optional[float] = None,
+    side: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Replay shadow vs paper fill; impact_error = shadow − estimated."""
+    """Replay shadow vs decision_px; impact_error = shadow − estimated."""
     est = impact_bps_est if impact_bps_est is not None else fill.estimated_impact_bps
-    slip: Optional[float] = None
     src = source
     px = shadow_fill_px
-    if px is not None and float(fill.price) > 0:
-        slip = abs(float(px) - float(fill.price)) / float(fill.price) * 1e4
+    arrival = decision_px
+    if arrival is None and fill.quote_price:
+        arrival = float(fill.quote_price)
+    if arrival is None and fill.price:
+        arrival = float(fill.price)
+    paper_px = float(fill.price) if fill.price else None
+    slip = signed_shadow_slippage_bps(side, arrival, px)
+    if slip is not None:
         src = src or "next_trade"
     else:
         slip = fill.shadow_slippage_bps
@@ -141,12 +167,16 @@ def shadow_metrics(
         if px is None and fill.quote_price:
             px = float(fill.quote_price)
             src = src or "fill_quote"
+            slip = signed_shadow_slippage_bps(side, arrival, px) if arrival else slip
     err = None
     if slip is not None and est is not None:
         err = float(slip) - float(est)
     return {
         "estimated_impact_bps": est,
-        "fill_px": float(fill.price),
+        "decision_px": arrival,
+        "arrival_px": arrival,
+        "fill_px": paper_px,
+        "paper_fill_px": paper_px,
         "shadow_fill_px": px,
         "shadow_slippage_bps": slip,
         "impact_error_bps": err,
@@ -158,6 +188,9 @@ def shadow_fields_for_fill(
     fill: Fill,
     symbol: str,
     impact_bps_est: Optional[float],
+    *,
+    decision_px: Optional[float] = None,
+    side: Optional[str] = None,
 ) -> dict[str, Any]:
     trades: Sequence[Mapping[str, Any]] = []
     candles: Sequence[Any] = []
@@ -172,7 +205,14 @@ def shadow_fields_for_fill(
     except Exception:
         trades, candles = [], []
     px, src = pick_shadow_fill_px(fill.ts, trades, candles)
-    out = shadow_metrics(fill, impact_bps_est, shadow_fill_px=px, source=src)
+    out = shadow_metrics(
+        fill,
+        impact_bps_est,
+        shadow_fill_px=px,
+        source=src,
+        decision_px=decision_px,
+        side=side,
+    )
     out["impact_bps_est"] = impact_bps_est if impact_bps_est is not None else out.get("estimated_impact_bps")
     return out
 
@@ -191,7 +231,8 @@ def backfill_decision_shadows(rows: Sequence[DecisionLogRow]) -> None:
     for row in rows:
         if row.outcome not in {"fill", "partial"}:
             continue
-        if row.shadow_fill_px is not None and row.impact_error_bps is not None:
+        prefer = row.shadow_source in {"next_trade", "next_open"}
+        if prefer and row.shadow_fill_px is not None and row.impact_error_bps is not None:
             continue
         if row.symbol not in cache_tr and hasattr(prov, "get_recent_trades"):
             cache_tr[row.symbol] = list(prov.get_recent_trades(row.symbol) or [])
@@ -204,13 +245,14 @@ def backfill_decision_shadows(rows: Sequence[DecisionLogRow]) -> None:
             continue
         row.shadow_fill_px = px
         row.shadow_source = src
-        base = row.fill_px
-        if base and float(base) > 0:
-            slip = abs(float(px) - float(base)) / float(base) * 1e4
-            row.shadow_slippage_bps = slip
-            est = row.impact_bps_est if row.impact_bps_est is not None else row.estimated_impact_bps
-            if est is not None:
-                row.impact_error_bps = float(slip) - float(est)
+        decision = row.decision_px or row.arrival_px or row.fill_px or row.paper_fill_px
+        slip = signed_shadow_slippage_bps(row.signal_side, decision, px)
+        if slip is None:
+            continue
+        row.shadow_slippage_bps = slip
+        est = row.impact_bps_est if row.impact_bps_est is not None else row.estimated_impact_bps
+        if est is not None:
+            row.impact_error_bps = float(slip) - float(est)
 
 
 def make_row(
@@ -233,7 +275,10 @@ def make_row(
     impact_bps_est: Optional[float] = None,
     impact_bps_cap: Optional[float] = None,
     estimated_impact_bps: Optional[float] = None,
+    decision_px: Optional[float] = None,
+    arrival_px: Optional[float] = None,
     fill_px: Optional[float] = None,
+    paper_fill_px: Optional[float] = None,
     shadow_fill_px: Optional[float] = None,
     shadow_slippage_bps: Optional[float] = None,
     impact_error_bps: Optional[float] = None,
@@ -263,6 +308,8 @@ def make_row(
     if bucket not in {"progress", "impact", "risk", "none"}:
         bucket = "none"
     est = estimated_impact_bps if estimated_impact_bps is not None else impact_bps_est
+    paper_px = paper_fill_px if paper_fill_px is not None else fill_px
+    arrive = arrival_px if arrival_px is not None else decision_px
     return DecisionLogRow(
         ts=int(ts),
         strategy_id=strategy_id,
@@ -279,7 +326,10 @@ def make_row(
         impact_bps_est=impact_bps_est if impact_bps_est is not None else est,
         impact_bps_cap=impact_bps_cap,
         estimated_impact_bps=est,
-        fill_px=fill_px,
+        decision_px=decision_px if decision_px is not None else arrive,
+        arrival_px=arrive,
+        fill_px=paper_px,
+        paper_fill_px=paper_px,
         shadow_fill_px=shadow_fill_px,
         shadow_slippage_bps=shadow_slippage_bps,
         impact_error_bps=impact_error_bps,
