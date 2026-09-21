@@ -114,8 +114,8 @@ def distill_profile(
         median_bps = feat.median_entry_progress_bps
         if median_bps is not None:
             half = 1500
-            cur_min = int(params.get("progress_bps_min", 800))
-            cur_max = int(params.get("progress_bps_max", 7500))
+            cur_min = int(params.get("progress_bps_min", 1200))
+            cur_max = int(params.get("progress_bps_max", 6500))
             new_min = max(cur_min, int(median_bps) - half)
             new_max = min(cur_max, int(median_bps) + half)
             if new_min > new_max:
@@ -123,14 +123,14 @@ def distill_profile(
             suggested["progress_bps_min"] = int(new_min)
             suggested["progress_bps_max"] = int(new_max)
     elif primary.tag == "flip":
-        cur_hold = int(params.get("max_hold_sec", 420))
+        cur_hold = int(params.get("max_hold_sec", 300))
         suggested["max_hold_sec"] = int(min(cur_hold, 180))
-        cur_tp = float(params.get("take_profit_pct", 0.14))
+        cur_tp = float(params.get("take_profit_pct", 0.10))
         suggested["take_profit_pct"] = round(max(0.08, cur_tp * 0.8), 4)
     elif primary.tag == "bag":
-        cur_hold = int(params.get("max_hold_sec", 420))
+        cur_hold = int(params.get("max_hold_sec", 300))
         suggested["max_hold_sec"] = int(max(cur_hold, 3600))
-        cur_sl = float(params.get("stop_loss_pct", 0.09))
+        cur_sl = float(params.get("stop_loss_pct", 0.07))
         suggested["stop_loss_pct"] = round(max(0.04, min(cur_sl, 0.08)), 4)
 
     # Never propose raising the impact hard cap; paper remains gated at 80.
@@ -175,8 +175,8 @@ def sanitize_patch(
             continue
         clean[key] = value
 
-    cur_min = int(current.get("progress_bps_min", 800))
-    cur_max = int(current.get("progress_bps_max", 7500))
+    cur_min = int(current.get("progress_bps_min", 1200))
+    cur_max = int(current.get("progress_bps_max", 6500))
     if "progress_bps_min" in clean and int(clean["progress_bps_min"]) < cur_min:
         raise DistillReject(
             "DISTILL_WINDOW_GUARD",

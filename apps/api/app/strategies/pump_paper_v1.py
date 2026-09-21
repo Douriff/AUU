@@ -57,15 +57,15 @@ TAPE_WINDOW_MS = 60_000
 class PumpPaperParams(BaseModel):
     """Configurable table from docs/strategies/pump-paper-v1.md §7."""
 
-    progress_bps_min: int = 800
-    progress_bps_max: int = 7500
+    # Paper round 4 Go window (2026-09-21). Process defaults, not a runtime patch.
+    progress_bps_min: int = 1200
+    progress_bps_max: int = 6500
     # Buffer under HARD_MAX_ENTRY_IMPACT_BPS (80). Cannot be raised past 80.
     max_impact_bps: float = ENTRY_IMPACT_BUFFER_BPS
-    # Paper exits: closer TP and a shorter hold than the 900s timeout mix.
-    # TP stays above SL. liveEnabled stays false.
-    take_profit_pct: float = 0.14
-    stop_loss_pct: float = 0.09
-    max_hold_sec: int = 420
+    # Go-window exits: TP 10% above SL 7%, hold 300s. liveEnabled stays false.
+    take_profit_pct: float = 0.10
+    stop_loss_pct: float = 0.07
+    max_hold_sec: int = 300
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3

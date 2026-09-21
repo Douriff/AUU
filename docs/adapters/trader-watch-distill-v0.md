@@ -131,7 +131,7 @@ HabitProfile:
 | tag | 启发式（默认） |
 |-----|----------------|
 | `sniper` | `pct_entries_lt_800 ≥ 0.5` 且 `median_hold_sec` 偏短 |
-| `mid_curve` | `pct_entries_800_7500 ≥ 0.45`（与 pump-paper-v1 入场窗重合） |
+| `mid_curve` | `pct_entries_800_7500 ≥ 0.45`（观察桶 800–7500；纸面入场窗是 `[1200, 6500]`） |
 | `graduation_chase` | `pct_entries_gt_9000 ≥ 0.35` 或持仓 progress 中位数 ≥ 9000 |
 | `flip` | `flip_rate_24h ≥ 0.5` 且 `median_hold_sec < 300` |
 | `bag` | `median_hold_sec > 3600` 或大仓长期未平 |

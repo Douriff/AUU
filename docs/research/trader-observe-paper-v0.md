@@ -107,7 +107,7 @@ interface TraderSnapshot {
 | Tag | 启发式（示例阈值，可配置） |
 |-----|---------------------------|
 | `sniper` | 买入 slot − create slot ≤ 2 **或** `progress_bps_at_fill < 300` |
-| `curve_mid` | 买入 `progress_bps ∈ [800, 7500]`（与 v1 入场窗对齐） |
+| `curve_mid` | 买入 `progress_bps ∈ [800, 7500]`（观察桶；纸面 Go 窗是 `[1200, 6500]`） |
 | `graduation_chase` | 买入 `progress_bps ≥ 8500` 或临近 `complete` |
 | `quick_flip` | `median_hold_sec < 180` 且 `flip_ratio_15m` 高 |
 | `bag_holder` | `median_hold_sec > 3600` 或未平仓 > 持仓天数阈值 |
