@@ -277,6 +277,7 @@ export function SettingsPage() {
         <p className="muted">
           关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无需重启。
           成功概率见行情/策略页面板或 <code>GET /api/v1/strategy/pump-paper-v1/stats</code>（纸面 journal，非承诺）。无钱包。
+          观察蒸馏在「观察」页；应用蒸馏<strong>不会</strong>打开本开关或实盘。
         </p>
       </section>
 

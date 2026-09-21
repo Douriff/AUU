@@ -80,3 +80,10 @@ P2：MC 区块（`show_monte_carlo`）
 - 摘要：胜率 / 期望 / 回撤 / 笔数 ← `GET .../stats`
 - `?mc=1`：分位带；`sample_ok=false`（如 n<20）时 MC 区显示「样本不足」不画假带
 - 手动 Trade + autopaper 成交均入 journal
+
+---
+
+## 7. 观察对照（additive）
+
+对齐 `docs/viz/trader-watch-ui-v0.md`：胜率旁「对照 ▾」，折叠 `观察对照（仅参考）`。  
+`trader_ref` 仅展示；**禁止**并入胜率。页脚 `reference_only`。

@@ -403,6 +403,118 @@ export interface RejectOut {
   notes: string;
 }
 
+export type HabitTagName = "sniper" | "mid_curve" | "graduation_chase" | "flip" | "bag";
+export type WatchSource = "portal" | "rpc" | "indexer";
+export type TraderPhase = "curve" | "graduating" | "amm" | "unknown";
+
+export interface TraderWatchlistItem {
+  watch_id: string;
+  address: string;
+  label?: string | null;
+  enabled: boolean;
+  source: WatchSource;
+  added_ts: number;
+  tags_override: string[];
+  risk_notes?: string | null;
+}
+
+export interface TraderPosition {
+  mint: string;
+  symbol?: string | null;
+  qty: number;
+  cost_basis_sol?: number | null;
+  unrealized_pnl_sol?: number | null;
+  hold_sec: number;
+  progress_bps?: number | null;
+  phase: TraderPhase;
+}
+
+export interface TradeBrief {
+  ts: number;
+  mint: string;
+  side: "buy" | "sell";
+  sol_amount: number;
+  progress_bps?: number | null;
+  signature?: string | null;
+}
+
+export interface TraderSnapshot {
+  watch_id: string;
+  address: string;
+  asof_ts: number;
+  slot?: number | null;
+  positions: TraderPosition[];
+  open_count: number;
+  gross_exposure_sol: number;
+  recent_buys: TradeBrief[];
+  recent_sells: TradeBrief[];
+  buy_notional_1h: number;
+  sell_notional_1h: number;
+  trade_count_1h: number;
+  median_hold_sec_24h?: number | null;
+  flip_rate_24h?: number | null;
+  progress_hist: Record<string, number>;
+  entry_progress_median_bps?: number | null;
+}
+
+export interface HabitTag {
+  tag: HabitTagName;
+  confidence: number;
+  evidence: string[];
+}
+
+export interface HabitFeatures {
+  median_entry_progress_bps?: number | null;
+  pct_entries_lt_800: number;
+  pct_entries_800_7500: number;
+  pct_entries_gt_9000: number;
+  median_hold_sec?: number | null;
+  flip_rate_24h?: number | null;
+  bag_score: number;
+}
+
+export interface HabitProfile {
+  watch_id: string;
+  address: string;
+  asof_ts: number;
+  tags: HabitTag[];
+  primary: HabitTag | null;
+  features: HabitFeatures;
+}
+
+export interface DistillResult {
+  source_watch_id: string;
+  asof_ts: number;
+  suggested_params: Partial<PumpPaperParams>;
+  feature_weights: { progress: number; momentum: number; impact: number };
+  enabled_tags: string[];
+  reject_reason?: string | null;
+  paper_compare?: Record<string, unknown> | null;
+  applied?: boolean;
+  copy_trade_enabled?: boolean;
+  note?: string;
+}
+
+export interface TraderWatchList {
+  items: TraderWatchlistItem[];
+  copy_trade_enabled: boolean;
+  reader: string;
+  helius_enabled?: boolean;
+  liveDisabled: boolean;
+}
+
+export interface CompareReport {
+  window: { from_ts?: number | null; to_ts?: number | null };
+  self: PaperPerformance | Record<string, unknown>;
+  trader_ref: {
+    n_trades: number;
+    approx_pnl: number;
+    tags_hist: string[];
+    reference_only?: boolean;
+  };
+  note: string;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

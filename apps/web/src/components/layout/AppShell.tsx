@@ -7,6 +7,7 @@ import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 const links = [
   { to: "/", label: "行情", end: true },
   { to: "/strategy", label: "策略" },
+  { to: "/watch", label: "观察" },
   { to: "/trade", label: "交易" },
   { to: "/backtest", label: "回测" },
   { to: "/alerts", label: "告警" },
@@ -33,7 +34,7 @@ export function AppShell() {
       <header className="topbar">
         <div className="brand">
           <span className="logo">AUU</span>
-          <span className="sub">Pump.fun · 纸面曲线</span>
+          <span className="sub">只读观察 · 蒸馏调参 · 自有纸面策略</span>
         </div>
         <nav>
           {links.map((l) => (

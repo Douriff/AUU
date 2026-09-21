@@ -215,6 +215,112 @@ class NewTokenEvent(BaseModel):
     source: Literal["pumpportal", "logs"]
 
 
+# --- Trader Watch → Habit → Distill (additive; paper observe only; not copy-trade) ---
+
+HabitTagName = Literal["sniper", "mid_curve", "graduation_chase", "flip", "bag"]
+WatchSource = Literal["portal", "rpc", "indexer"]
+TraderPhase = Literal["curve", "graduating", "amm", "unknown"]
+TradeBriefSide = Literal["buy", "sell"]
+
+
+class TraderWatchlistItem(BaseModel):
+    watch_id: str
+    address: str
+    label: Optional[str] = None
+    enabled: bool = True
+    source: WatchSource = "rpc"
+    added_ts: int
+    tags_override: list[str] = Field(default_factory=list)
+    risk_notes: Optional[str] = None
+
+
+class TraderPosition(BaseModel):
+    mint: str
+    symbol: Optional[str] = None
+    qty: float
+    cost_basis_sol: Optional[float] = None
+    unrealized_pnl_sol: Optional[float] = None
+    hold_sec: float
+    progress_bps: Optional[int] = None
+    phase: TraderPhase = "unknown"
+
+
+class TradeBrief(BaseModel):
+    ts: int
+    mint: str
+    side: TradeBriefSide
+    sol_amount: float
+    progress_bps: Optional[int] = None
+    signature: Optional[str] = None
+
+
+class TraderSnapshot(BaseModel):
+    watch_id: str
+    address: str
+    asof_ts: int
+    slot: Optional[int] = None
+    positions: list[TraderPosition] = Field(default_factory=list)
+    open_count: int = 0
+    gross_exposure_sol: float = 0.0
+    recent_buys: list[TradeBrief] = Field(default_factory=list)
+    recent_sells: list[TradeBrief] = Field(default_factory=list)
+    buy_notional_1h: float = 0.0
+    sell_notional_1h: float = 0.0
+    trade_count_1h: int = 0
+    median_hold_sec_24h: Optional[float] = None
+    flip_rate_24h: Optional[float] = None
+    progress_hist: dict[str, int] = Field(default_factory=dict)
+    entry_progress_median_bps: Optional[int] = None
+
+
+class HabitTag(BaseModel):
+    tag: HabitTagName
+    confidence: float
+    evidence: list[str] = Field(default_factory=list)
+
+
+class HabitFeatures(BaseModel):
+    median_entry_progress_bps: Optional[int] = None
+    pct_entries_lt_800: float = 0.0
+    pct_entries_800_7500: float = 0.0
+    pct_entries_gt_9000: float = 0.0
+    median_hold_sec: Optional[float] = None
+    flip_rate_24h: Optional[float] = None
+    bag_score: float = 0.0
+
+
+class HabitProfile(BaseModel):
+    watch_id: str
+    address: str
+    asof_ts: int
+    tags: list[HabitTag] = Field(default_factory=list)
+    primary: Optional[HabitTag] = None
+    features: HabitFeatures = Field(default_factory=HabitFeatures)
+
+
+class DistillFeatureWeights(BaseModel):
+    progress: float = 1.0
+    momentum: float = 1.0
+    impact: float = 1.0
+
+
+class DistillResult(BaseModel):
+    source_watch_id: str
+    asof_ts: int
+    suggested_params: dict[str, Any] = Field(default_factory=dict)
+    feature_weights: DistillFeatureWeights = Field(default_factory=DistillFeatureWeights)
+    enabled_tags: list[str] = Field(default_factory=list)
+    reject_reason: Optional[str] = None
+    paper_compare: Optional[dict[str, Any]] = None
+
+
+class CompareReport(BaseModel):
+    window: dict[str, Any] = Field(default_factory=dict)
+    self: dict[str, Any] = Field(default_factory=dict)
+    trader_ref: dict[str, Any] = Field(default_factory=dict)
+    note: str = "reference_only — not copy-trading"
+
+
 def _reserve_int(obj: Any, name: str) -> int:
     val = getattr(obj, name, None)
     if val is None:

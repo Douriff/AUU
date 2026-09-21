@@ -11,8 +11,10 @@ from app.bus import get_hub
 from app.live.gate import evaluate
 from app.paper.ledger import build_performance, reset_paper_journal
 from app.risk import get_risk_gate
-from app.routes.envelope import ok
+from app.routes.envelope import err, ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
+from app.traders import COPY_TRADE_ENABLED
+from app.traders.distill import DistillReject, apply_distill
 
 router = APIRouter(prefix="/api/v1/strategy", tags=["strategy"])
 
@@ -57,6 +59,7 @@ def _state_payload() -> dict[str, Any]:
         "positions": positions,
         "last_decisions": engine.last_decisions(20),
         "liveDisabled": evaluate().live_disabled,
+        "copy_trade_enabled": COPY_TRADE_ENABLED,
     }
 
 
@@ -126,3 +129,26 @@ def get_pump_paper_stats(
 def reset_pump_paper_stats():
     reset_paper_journal()
     return ok(build_performance())
+
+
+class ApplyDistillBody(BaseModel):
+    confirm: bool = False
+    source_watch_id: str
+    suggested_params: Optional[dict[str, Any]] = None
+
+
+@router.post("/pump-paper-v1/apply-distill")
+def post_apply_distill(body: ApplyDistillBody):
+    """Write distilled paper params. Requires confirm=true. Never toggles auto_paper_orders."""
+    try:
+        applied = apply_distill(
+            confirm=body.confirm,
+            source_watch_id=body.source_watch_id,
+            suggested_params=body.suggested_params,
+        )
+    except DistillReject as e:
+        status = 404 if e.code == "NOT_FOUND" else 400
+        return err(e.code, e.message, status)
+    data = _state_payload()
+    data["distill"] = applied
+    return ok(data)

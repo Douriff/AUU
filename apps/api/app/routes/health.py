@@ -8,6 +8,8 @@ from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 from app.strategies.pump_paper_v1 import get_engine
+from app.traders import COPY_TRADE_ENABLED
+from app.traders.helius import helius_enabled, reader_mode
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
@@ -49,5 +51,8 @@ def health():
             "pubkey": payload.get("pubkey"),
             "keypairRelpath": payload.get("keypairRelpath"),
             "keypairEnv": payload["keypairEnv"],
+            "copy_trade_enabled": COPY_TRADE_ENABLED,
+            "trader_watch_reader": reader_mode(),
+            "helius_enabled": helius_enabled(),
         }
     )

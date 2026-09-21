@@ -15,3 +15,6 @@ secrets/*
 *keypair*.json
 *.keypair.json
 id.json
+
+# Trader watch local store
+apps/api/data/*.json
