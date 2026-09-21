@@ -131,7 +131,7 @@ curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
 
 ## 观察交易员 → 习惯蒸馏（纸面）
 
-不是盲跟单。`GET/PUT/DELETE /api/v1/watch/traders` 只存公开地址；mock 快照 → `HabitTags` → `POST .../distill`（只计算）→ `POST /api/v1/strategy/pump-paper-v1/apply-distill` 且 `confirm=true` 才 overlay `pump-paper-v1` 参数。**永不**改 `auto_paper_orders`。`copy_trade_enabled=false`。`sniper` / `graduation_chase` 不自动放宽入场窗。Helius 只读 reader 默认关。合同：`docs/adapters/trader-watch-distill-v0.md`。
+观察公开地址 → 习惯标签 → 蒸馏为自有 `pump-paper-v1` 参数。`GET/PUT/DELETE /api/v1/watch/traders` 只存公开地址；`POST .../distill`（只计算）→ `POST /api/v1/strategy/pump-paper-v1/apply-distill` 且 `confirm=true` 才 overlay。**永不**改 `auto_paper_orders`。`sniper` / `graduation_chase` 不自动放宽入场窗。Helius 只读 reader 默认关。合同：`docs/adapters/trader-watch-distill-v0.md`、UI `docs/viz/trader-watch-ui-v0.md`（`/watch`）。
 
 ## 端口
 
