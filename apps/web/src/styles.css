@@ -206,7 +206,7 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .paper-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
 .paper-form label.checkbox { flex-direction: row; align-items: center; gap: 0.4rem; padding-bottom: 0.2rem; }
-.paper-form input[type="number"], .paper-form select {
+.paper-form input[type="number"], .paper-form input[type="text"], .paper-form select {
   background: #0d1117; color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.4rem 0.55rem; min-width: 160px;
 }
@@ -310,3 +310,15 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .curve-chip.discovered { color: var(--accent); }
 code.hl { color: var(--accent); }
+.observe-table { max-width: 960px; }
+.observe-table tr { cursor: pointer; }
+.observe-table tr.active-row { background: rgba(88,166,255,0.08); }
+.habit-tags { margin: 0.35rem 0; padding-left: 1.1rem; font-size: 0.85rem; }
+.observe-json {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.6rem 0.75rem; overflow: auto; max-height: 220px;
+}
+.checkbox-row {
+  display: flex; align-items: center; gap: 0.45rem;
+  margin: 0.6rem 0; font-size: 0.85rem; color: var(--muted);
+}

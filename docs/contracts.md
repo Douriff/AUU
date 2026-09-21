@@ -91,3 +91,24 @@ REST：
 - `GET /api/v1/pumpfun/snapshot?symbol=`（无曲线快照时 404）
 - `GET /api/v1/curve?symbol=` — UI 友好别名（mock 返回空曲线字段）
 - `GET /api/v1/pumpfun/monitor` 自选盘面行。发现：`PUMPFUN_DISCOVERY` + `PUMPFUN_PORTAL_API_KEY`（仅 env）。
+
+## Trader Watch → Habit → Distill（additive · 纸面观察，非镜像）
+
+字段名冻结见 `docs/adapters/trader-watch-distill-v0.md`。数据源调研见 `docs/research/trader-observe-paper-v0.md`（P0 = 用户自选钱包 + 链上/Helius 只读；**不**刮 pump 前端）。
+
+- `TraderWatchlistItem` `{ watch_id, address, label?, enabled, source:portal|rpc|indexer, added_ts, tags_override[], risk_notes? }` — 无私钥
+- `TraderSnapshot` `{ watch_id, address, asof_ts, slot?, positions[{mint,symbol?,qty,cost_basis_sol?,unrealized_pnl_sol?,hold_sec,progress_bps?,phase}], open_count, gross_exposure_sol, recent_buys/recent_sells[TradeBrief], buy_notional_1h, sell_notional_1h, trade_count_1h, median_hold_sec_24h, flip_rate_24h, progress_hist, entry_progress_median_bps }`
+- `TradeBrief` `{ ts, mint, side:buy|sell, sol_amount, progress_bps?, signature? }`
+- `HabitTag` `{ tag:sniper|mid_curve|graduation_chase|flip|bag, confidence, evidence[] }`
+- `HabitProfile` `{ watch_id, address, asof_ts, tags, primary, features }`
+- `DistillResult` `{ source_watch_id, asof_ts, suggested_params:PumpPaperParamsPatch, feature_weights{progress,momentum,impact}, enabled_tags, reject_reason?, paper_compare? }`
+- `CompareReport` `{ window, self:PaperStats, trader_ref, note:"reference_only — not copy-trading" }` — 胜率仍只吃自有纸面 Journal
+
+REST：
+
+- `GET/PUT/DELETE /api/v1/watch/traders` — 观察地址 CRUD
+- `GET /api/v1/watch/traders/{id}/snapshot|habits|compare`
+- `POST /api/v1/watch/traders/{id}/distill` — **只计算**
+- `POST /api/v1/strategy/pump-paper-v1/apply-distill` — 须 `confirm=true`；写入纸面 params；**永不**改 `auto_paper_orders`
+- `copy_trade_enabled=false` 硬编码；无 mirror 路径。`sniper` / `graduation_chase` 不自动放宽入场窗。
+- `HeliusTraderReader` 仅 `TRADER_WATCH_READER=helius`（默认 mock/off）；P0 stub 不发 HTTP、不刮前端。

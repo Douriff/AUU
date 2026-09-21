@@ -129,6 +129,10 @@ curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
 
 纸面统计：`GET /api/v1/strategy/pump-paper-v1/stats`（`?mc=1` 才跑蒙特卡洛；`n_trades < 20` 时 `sample_ok=false`，面板「样本不足」）。
 
+## 观察交易员 → 习惯蒸馏（纸面）
+
+不是盲跟单。`GET/PUT/DELETE /api/v1/watch/traders` 只存公开地址；mock 快照 → `HabitTags` → `POST .../distill`（只计算）→ `POST /api/v1/strategy/pump-paper-v1/apply-distill` 且 `confirm=true` 才 overlay `pump-paper-v1` 参数。**永不**改 `auto_paper_orders`。`copy_trade_enabled=false`。`sniper` / `graduation_chase` 不自动放宽入场窗。Helius 只读 reader 默认关。合同：`docs/adapters/trader-watch-distill-v0.md`。
+
 ## 端口
 
 | 服务 | 端口 |

@@ -116,3 +116,21 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 
 版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。
+
+---
+
+## 9. 观察蒸馏 overlay（非镜像钱包）
+
+对齐 `docs/adapters/trader-watch-distill-v0.md`。蒸馏产出 **`PumpPaperParamsPatch` + feature_weights**，不是「抄他下一笔」。
+
+- `POST /api/v1/watch/traders/{id}/distill` 只计算
+- `POST /api/v1/strategy/pump-paper-v1/apply-distill` 须 `confirm=true` 才写入 params
+- **默认不改** `auto_paper_orders` / `strategy_autopaper`
+- `copy_trade_enabled=false` 硬编码；无 mirror 路径
+- `sniper`：**不**降低 `progress_bps_min`（拒绝自动套用入场窗）
+- `graduation_chase`：**不**抬高 `progress_bps_max`（与毕业熔断冲突，默认拒绝）
+- `mid_curve`：向其 `entry_progress_median` 收紧入场窗（同族，优先采纳）
+- `flip`：缩短 `max_hold_sec`，略降 `take_profit_pct`
+- `bag`：放宽 `max_hold_sec`，收紧 `stop_loss_pct`（不取消日亏熔断）
+- `feature_weights.impact` 更厌恶冲击时仍受 `max_impact_bps=80` 硬顶
+- Journal / 成功概率仍只吃自有纸面；`CompareReport` 为 `reference_only`

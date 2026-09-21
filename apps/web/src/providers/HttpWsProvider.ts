@@ -18,6 +18,12 @@ import type {
   SignalOut,
   SymbolInfo,
   TradeTick,
+  TraderWatchList,
+  TraderWatchlistItem,
+  HabitProfile,
+  DistillResult,
+  CompareReport,
+  TraderSnapshot,
   TradingStateEvent,
 } from "@/types/contracts";
 
@@ -93,6 +99,15 @@ async function putJson<T>(path: string, body: unknown): Promise<T> {
   return sendJson<T>(path, body, "PUT");
 }
 
+async function delJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, { method: "DELETE" });
+  const env = (await res.json()) as Envelope<T>;
+  if (!env.ok) {
+    throw new Error(env.error?.message ?? "request failed");
+  }
+  return env.data;
+}
+
 export class HttpWsProvider {
   private ws: WebSocket | null = null;
   private handlers: Handlers = {};
@@ -139,6 +154,9 @@ export class HttpWsProvider {
     discovery?: string;
     discoveryOptions?: string[];
     portal_key_configured?: boolean;
+    copy_trade_enabled?: boolean;
+    trader_watch_reader?: string;
+    helius_enabled?: boolean;
   }> {
     return getJson("/api/v1/health");
   }
@@ -174,6 +192,45 @@ export class HttpWsProvider {
 
   putStrategy(patch: Partial<PumpPaperParams>) {
     return putJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
+  }
+
+  listWatchedTraders() {
+    return getJson<TraderWatchList>("/api/v1/watch/traders");
+  }
+
+  putWatchedTrader(body: Partial<TraderWatchlistItem> & { address?: string }) {
+    return putJson<TraderWatchList>("/api/v1/watch/traders", body);
+  }
+
+  deleteWatchedTrader(watchId: string) {
+    return delJson<TraderWatchList>(`/api/v1/watch/traders/${encodeURIComponent(watchId)}`);
+  }
+
+  getTraderHabits(watchId: string) {
+    return getJson<HabitProfile>(`/api/v1/watch/traders/${encodeURIComponent(watchId)}/habits`);
+  }
+
+  getTraderSnapshot(watchId: string) {
+    return getJson<TraderSnapshot>(`/api/v1/watch/traders/${encodeURIComponent(watchId)}/snapshot`);
+  }
+
+  distillTrader(watchId: string) {
+    return postJson<DistillResult>(`/api/v1/watch/traders/${encodeURIComponent(watchId)}/distill`, {});
+  }
+
+  applyDistill(body: {
+    confirm: boolean;
+    source_watch_id: string;
+    suggested_params?: Partial<PumpPaperParams>;
+  }) {
+    return postJson<PumpPaperState & { distill?: Record<string, unknown> }>(
+      "/api/v1/strategy/pump-paper-v1/apply-distill",
+      body
+    );
+  }
+
+  compareTrader(watchId: string) {
+    return getJson<CompareReport>(`/api/v1/watch/traders/${encodeURIComponent(watchId)}/compare`);
   }
 
   preOrder(body: unknown) {

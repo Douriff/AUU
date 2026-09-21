@@ -7,6 +7,7 @@ import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 const links = [
   { to: "/", label: "行情", end: true },
   { to: "/strategy", label: "策略" },
+  { to: "/observe", label: "观察" },
   { to: "/trade", label: "交易" },
   { to: "/backtest", label: "回测" },
   { to: "/alerts", label: "告警" },
