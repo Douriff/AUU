@@ -17,9 +17,14 @@ from app.models.contracts import (
     SymbolInfo,
 )
 from app.providers.base import MarketDataProvider
-from app.providers.pump_mints import curve_for_symbol, price_sol, symbol_infos
 
-SYMBOLS: list[SymbolInfo] = symbol_infos()
+SYMBOLS: list[SymbolInfo] = [
+    SymbolInfo(symbol="MOCK/USDC", base="MOCK", quote="USDC"),
+    SymbolInfo(symbol="PEPEMOCK/SOL", base="PEPEMOCK", quote="SOL"),
+    SymbolInfo(symbol="DOGEFAKE/USDC", base="DOGEFAKE", quote="USDC"),
+    SymbolInfo(symbol="WIFMOCK/SOL", base="WIFMOCK", quote="SOL"),
+    SymbolInfo(symbol="BONKFAKE/USDC", base="BONKFAKE", quote="USDC"),
+]
 
 INTERVAL_MS = {
     "1m": 60_000,
@@ -55,16 +60,17 @@ class DetRNG:
 
 
 def _base_price(symbol: str) -> float:
-    """Spot in SOL from the mock bonding curve (not a CEX quote)."""
-    try:
-        return price_sol(symbol)
-    except Exception:
-        return 1e-8
+    return {
+        "MOCK/USDC": 1.25,
+        "PEPEMOCK/SOL": 0.00042,
+        "DOGEFAKE/USDC": 0.18,
+        "WIFMOCK/SOL": 2.35,
+        "BONKFAKE/USDC": 0.000031,
+    }.get(symbol, 1.0)
 
 
 class MockMarketDataProvider(MarketDataProvider):
     name = "mock"
-    venue = "pump.fun"
 
     def __init__(self):
         self._history_bars = 180
@@ -261,20 +267,7 @@ class MockMarketDataProvider(MarketDataProvider):
             sz = abs(rng.gauss(800, 200)) * (1 + i * 0.1)
             bids.append({"price": mid - half - step, "size": sz})
             asks.append({"price": mid + half + step, "size": sz})
-        curve = self.snapshot_curve(symbol)
-        return {
-            "symbol": symbol,
-            "bids": bids,
-            "asks": asks,
-            "mid": mid,
-            "spread_bps": spread_bps,
-            # synth book around curve mid — pump.fun has no CLOB
-            "venue": curve.get("venue", "pump.fun"),
-            "curve_progress": curve.get("curve_progress"),
-        }
-
-    def snapshot_curve(self, symbol: str) -> dict:
-        return curve_for_symbol(symbol)
+        return {"symbol": symbol, "bids": bids, "asks": asks, "mid": mid, "spread_bps": spread_bps}
 
     async def stream(
         self, channel: str, symbol: str, interval: str | None = None

@@ -2,18 +2,16 @@ import { useEffect, useState } from "react";
 import { CandleChart } from "@/components/chart/CandleChart";
 import { RiskTagBar } from "@/components/alerts/RiskTagBar";
 import { CurvePanel } from "@/components/market/CurvePanel";
+import { CurveProgressBar } from "@/components/market/CurveProgressBar";
 import { DepthPanel } from "@/components/market/DepthPanel";
 import { SymbolList } from "@/components/market/SymbolList";
 import { TradesTape } from "@/components/market/TradesTape";
 import { useMarketSession } from "@/hooks/useMarketSession";
-import { marketProvider } from "@/providers/HttpWsProvider";
-import type { CurveSnapshot } from "@/types/contracts";
-import { DEFAULT_SYMBOL, truncateMint, VENUE } from "@/venue";
+import { truncateMint, VENUE } from "@/venue";
 
 export function MarketPage() {
-  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  const [symbol, setSymbol] = useState("");
   const [interval] = useState("1m");
-  const [curve, setCurve] = useState<CurveSnapshot | null>(null);
   const {
     symbols,
     candles,
@@ -28,14 +26,19 @@ export function MarketPage() {
     providers,
     dataProvider,
     dataSource,
+    pumpSnapshot,
   } = useMarketSession(symbol, interval);
 
   useEffect(() => {
-    marketProvider.getCurve(symbol).then(setCurve).catch(() => setCurve(null));
-  }, [symbol]);
+    if (!symbols.length) return;
+    if (!symbol || !symbols.some((s) => s.symbol === symbol)) {
+      setSymbol(symbols[0].symbol);
+    }
+  }, [symbols, symbol]);
 
   const info = symbols.find((s) => s.symbol === symbol);
-  const ticker = info ? `${info.base}/${info.quote}` : truncateMint(symbol);
+  const ticker = info ? `${info.base}/${info.quote}` : symbol || "…";
+  const venueLabel = dataProvider === "pumpfun_paper" ? VENUE : "mock";
 
   return (
     <div className="market-page">
@@ -44,7 +47,7 @@ export function MarketPage() {
           WS {wsStatus}
           {providers.length ? ` · ${providers.join(",")}` : ""}
           {" · "}
-          venue={VENUE}
+          venue={venueLabel}
           {" · "}
           DATA_PROVIDER={dataProvider}
           {" · "}
@@ -61,16 +64,17 @@ export function MarketPage() {
         <section className="center">
           <div className="chart-header">
             <strong>{ticker}</strong>
-            <span className="muted">{truncateMint(info?.mint ?? symbol)}</span>
+            {info?.mint ? <span className="muted">{truncateMint(info.mint)}</span> : null}
             <span className="muted">{interval}</span>
             <span className="muted">
               signals {signals.filter((s) => s.side !== "flat").length} · fills {fills.length}
             </span>
+            <CurveProgressBar snapshot={pumpSnapshot} />
           </div>
           <CandleChart candles={candles} signals={signals} fills={fills} />
         </section>
         <aside className="right">
-          <CurvePanel curve={curve} />
+          <CurvePanel snapshot={pumpSnapshot} />
           <DepthPanel book={book} />
           <TradesTape trades={trades} />
         </aside>

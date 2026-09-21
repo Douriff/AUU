@@ -10,7 +10,7 @@ import type {
   RiskOut,
   SymbolInfo,
 } from "@/types/contracts";
-import { DATA_SOURCES, DEFAULT_SYMBOL, truncateMint } from "@/venue";
+import { DATA_SOURCES, DEFAULT_SYMBOL, truncateMint, VENUE } from "@/venue";
 
 type TapeKind = "fill" | "reject" | "risk" | "signal" | "trading_state";
 
@@ -29,7 +29,7 @@ function fmt(n: number, digits = 6): string {
 export function TradePage() {
   const { dataSource, setDataSource } = useDataSource();
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
-  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  const [symbol, setSymbol] = useState("");
   const [notional, setNotional] = useState("0.1");
   const [side, setSide] = useState<OrderSide>("buy");
   const [wideSpread, setWideSpread] = useState(false);
@@ -53,7 +53,13 @@ export function TradePage() {
   };
 
   useEffect(() => {
-    marketProvider.listSymbols().then(setSymbols).catch(() => undefined);
+    marketProvider.listSymbols().then((list) => {
+      setSymbols(list);
+      setSymbol((prev) => {
+        if (prev && list.some((s) => s.symbol === prev)) return prev;
+        return list[0]?.symbol ?? DEFAULT_SYMBOL;
+      });
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -108,8 +114,9 @@ export function TradePage() {
 
   async function buildCtx() {
     const snap = await marketProvider.getBook(symbol).catch(() => book);
+    const pump = await marketProvider.getPumpfunSnapshot(symbol).catch(() => null);
     const candles = snap ? null : await marketProvider.getCandles(symbol, "1m");
-    const px = snap?.mid ?? (candles && candles.length ? candles[candles.length - 1].c : 1);
+    const px = snap?.mid ?? pump?.price_sol ?? (candles && candles.length ? candles[candles.length - 1].c : 1);
     return {
       symbol,
       ts: Date.now(),
@@ -117,10 +124,32 @@ export function TradePage() {
       liquidity: {
         spread_bps: wideSpread ? 200 : (snap?.spread_bps ?? 20),
         adv_usd: 100_000,
+        ...(pump
+          ? {
+              virtual_sol_reserves: pump.virtual_sol_reserves,
+              virtual_token_reserves: pump.virtual_token_reserves,
+              real_sol_reserves: pump.real_sol_reserves,
+              real_token_reserves: pump.real_token_reserves,
+              creator_fee_bps: pump.creator_fee_bps ?? 0,
+            }
+          : {}),
       },
       book: snap ? { bids: snap.bids, asks: snap.asks } : undefined,
       tick: { mid: px },
-      meta: { venue: "pump.fun", mint: symbol },
+      pump: pump
+        ? {
+            curve_progress_bps: pump.progress_bps,
+            virtual_sol_reserves: pump.virtual_sol_reserves,
+            virtual_token_reserves: pump.virtual_token_reserves,
+            real_sol_reserves: pump.real_sol_reserves,
+            real_token_reserves: pump.real_token_reserves,
+            creator_fee_bps: pump.creator_fee_bps ?? 0,
+            complete: pump.complete,
+            migrated: pump.migrated,
+            amm_pool: pump.pool ?? null,
+          }
+        : undefined,
+      meta: { venue: pump ? VENUE : "mock", mint: pump?.mint ?? symbol },
     };
   }
 
@@ -206,7 +235,7 @@ export function TradePage() {
     <div className="shell-page trade-page">
       <h1>交易 / Trade</h1>
       <p className="muted">
-        仅纸面 PaperBroker · venue=<code>pump.fun</code>。提交走 <code>pre-order</code> →{" "}
+        仅纸面 PaperBroker · venue=<code>{VENUE}</code>。提交走 <code>pre-order</code> →{" "}
         <code>paper/orders</code>；拒单不画 Fill。无私钥、无 sniper。行情叠加请切{" "}
         <code>paper</code> / <code>pumpfun_paper</code>。
       </p>
@@ -239,10 +268,11 @@ export function TradePage() {
           <label>
             Symbol
             <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-              {(symbols.length ? symbols : [{ symbol: DEFAULT_SYMBOL, base: "PEPE", quote: "SOL" } as SymbolInfo]).map(
+              {(symbols.length ? symbols : [{ symbol: DEFAULT_SYMBOL, base: "PUMPDEMO", quote: "SOL" } as SymbolInfo]).map(
                 (s) => (
                   <option key={s.symbol} value={s.symbol}>
-                    {s.base}/{s.quote} · {truncateMint(s.mint ?? s.symbol)}
+                    {s.base}/{s.quote}
+                    {s.mint ? ` · ${truncateMint(s.mint)}` : ""}
                   </option>
                 )
               )}
@@ -291,8 +321,8 @@ export function TradePage() {
         <p className="muted tiny">
           Buy/Sell：先 <code>POST /api/v1/risk/pre-order</code>，allow 后再{" "}
           <code>POST /api/v1/paper/orders</code>。One-shot：
-          <code>POST /api/v1/pipeline/decide-and-fill</code>（服务端用 mock mid/book 组 ctx）。拒单后该
-          symbol 约 30s cooldown。
+          <code>POST /api/v1/pipeline/decide-and-fill</code>（服务端用 book/curve 组 ctx，含{" "}
+          <code>PumpCtx</code>）。拒单后该 symbol 约 30s cooldown。
         </p>
         {busy ? <p className="muted">submitting…</p> : null}
         {error ? <p className="error">{error}</p> : null}

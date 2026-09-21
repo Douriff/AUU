@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import book, candles, curve, fills, health, paper, pipeline, risk, signals, symbols, ws
+from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, symbols, ws
 from app.routes.envelope import API_VERSION
 
 load_dotenv()
@@ -47,11 +47,13 @@ app.include_router(curve.router)
 app.include_router(risk.router)
 app.include_router(paper.router)
 app.include_router(pipeline.router)
+app.include_router(pumpfun.router)
 app.include_router(ws.router)
 
 
 @app.get("/")
 def root():
+    provider = os.getenv("DATA_PROVIDER", "mock")
     return {
         "ok": True,
         "data": {
@@ -59,9 +61,9 @@ def root():
             "docs": "/docs",
             "health": "/api/v1/health",
             "ws": "/api/v1/ws",
-            "provider": os.getenv("DATA_PROVIDER", "mock"),
+            "provider": provider,
             "orderMode": "paper",
-            "venue": "pump.fun",
+            "venue": "Pump.fun" if provider == "pumpfun_paper" else "mock",
             "endpoints": {
                 "preOrder": "POST /api/v1/risk/pre-order",
                 "paperOrders": "POST /api/v1/paper/orders",
@@ -69,6 +71,7 @@ def root():
                 "decideAndFill": "POST /api/v1/pipeline/decide-and-fill",
                 "book": "GET /api/v1/book?symbol=",
                 "curve": "GET /api/v1/curve?symbol=",
+                "pumpfunSnapshot": "GET /api/v1/pumpfun/snapshot?symbol=",
             },
         },
     }

@@ -6,12 +6,6 @@ export interface SymbolInfo {
   quote: string;
   kind?: string;
   mint?: string;
-  venue?: string;
-  curve_progress?: number;
-  virtual_sol_reserves?: number;
-  virtual_token_reserves?: number;
-  graduated?: boolean;
-  migrated?: boolean;
 }
 
 export interface Candle {
@@ -86,6 +80,59 @@ export interface TradingStateEvent {
   ts?: number;
 }
 
+export type DataSource = "mock" | "paper" | "pumpfun_paper";
+
+/** Market data provider (env DATA_PROVIDER). Orthogonal to order-path dataSource. */
+export type MarketProvider = "mock" | "pumpfun_paper";
+
+export interface PumpCtx {
+  curve_progress_bps: number;
+  virtual_sol_reserves: string;
+  virtual_token_reserves: string;
+  real_sol_reserves: string;
+  real_token_reserves: string;
+  creator_fee_bps: number;
+  protocol_fee_bps?: number | null;
+  fee_bps?: number | null;
+  complete: boolean;
+  migrated: boolean;
+  amm_pool?: string | null;
+}
+
+export interface PumpfunPaperSnapshot {
+  mint: string;
+  symbol: string;
+  phase: "curve" | "graduating" | "amm";
+  progress_bps: number;
+  complete: boolean;
+  migrated: boolean;
+  virtual_sol_reserves: string;
+  virtual_token_reserves: string;
+  real_sol_reserves: string;
+  real_token_reserves: string;
+  token_total_supply: string;
+  price_sol: number;
+  price_sol_str?: string;
+  market_cap_sol?: number;
+  creator_fee_bps?: number;
+  pool?: string | null;
+  slot?: number;
+  updated_ts: number;
+  synthetic?: boolean;
+}
+
+export interface PumpfunTradeTick {
+  mint: string;
+  symbol: string;
+  ts: number;
+  side: "buy" | "sell";
+  price: number;
+  qty: number;
+  sol_amount: number;
+  signature?: string;
+  phase: "curve" | "amm";
+}
+
 export interface BookLevel {
   price: number;
   size: number;
@@ -97,6 +144,7 @@ export interface BookSnapshot {
   asks: BookLevel[];
   mid: number;
   spread_bps: number;
+  synthetic?: boolean;
 }
 
 export interface TradeTick {
@@ -105,6 +153,7 @@ export interface TradeTick {
   price: number;
   qty: number;
   side: "buy" | "sell";
+  phase?: "curve" | "amm";
 }
 
 export interface EnvelopeOk<T> {
@@ -122,17 +171,19 @@ export type Envelope<T> = EnvelopeOk<T> | EnvelopeErr;
 export interface CurveSnapshot {
   symbol: string;
   mint?: string;
-  base?: string;
   venue?: string;
   quote?: string;
-  virtual_sol_reserves?: number;
-  virtual_token_reserves?: number;
-  real_sol_reserves?: number;
-  curve_progress?: number;
+  virtual_sol_reserves?: string | number | null;
+  virtual_token_reserves?: string | number | null;
+  real_sol_reserves?: string | number | null;
+  real_token_reserves?: string | number | null;
+  curve_progress?: number | null;
+  progress_bps?: number | null;
   graduated?: boolean;
   migrated?: boolean;
+  complete?: boolean;
   price_sol?: number;
-  graduation_sol?: number;
+  phase?: string;
 }
 
 /** Additive paper-path types — frozen Fill / RiskOut / SignalOut names unchanged. */
@@ -159,12 +210,23 @@ export interface StrategyContext {
   symbol: string;
   ts: number;
   account?: { equity: number; day_pnl: number };
-  liquidity?: { spread_bps: number; adv_usd: number };
+  liquidity?: {
+    spread_bps: number;
+    adv_usd: number;
+    virtual_sol_reserves?: string;
+    virtual_token_reserves?: string;
+    real_sol_reserves?: string;
+    real_token_reserves?: string;
+    fee_bps?: number | null;
+    protocol_fee_bps?: number | null;
+    creator_fee_bps?: number | null;
+  };
   position?: number;
   features?: Record<string, unknown>;
   meta?: Record<string, unknown>;
   book?: { bids: BookLevel[]; asks: BookLevel[] };
   tick?: { mid: number };
+  pump?: PumpCtx | null;
 }
 
 export interface RejectOut {
@@ -185,6 +247,7 @@ export interface PipelineResult extends PaperOrderResult {
     symbol: string;
     ts: number;
     tick?: { mid: number } | null;
-    liquidity?: { spread_bps: number; adv_usd: number };
+    liquidity?: StrategyContext["liquidity"];
+    pump?: PumpCtx | null;
   };
 }

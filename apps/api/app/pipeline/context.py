@@ -1,4 +1,4 @@
-"""Build StrategyContext from mock mid/book (paper only)."""
+"""Build StrategyContext from provider mid/book + optional PumpCtx (paper only)."""
 from __future__ import annotations
 
 import time
@@ -26,9 +26,11 @@ def build_mock_ctx(
     account: Optional[AccountCtx] = None,
     position: float = 0.0,
 ) -> StrategyContext:
-    """Snapshot mock book + last mid into a StrategyContext.
+    """Snapshot book + last mid into a StrategyContext.
 
-    `spread_bps` overrides RiskGate liquidity (book levels stay as mocked).
+    When the active provider is pumpfun_paper, `pump=` is filled so RiskGate
+    uses bonding-curve impact instead of CEX sqrt. `spread_bps` overrides
+    RiskGate liquidity (book levels stay as mocked).
     """
     provider = get_provider()
     snap: dict[str, Any] = {}
@@ -36,12 +38,14 @@ def build_mock_ctx(
     if callable(snapshot_fn):
         snap = snapshot_fn(symbol) or {}
 
-    curve: dict[str, Any] = {}
-    curve_fn = getattr(provider, "snapshot_curve", None)
-    if callable(curve_fn):
-        curve = curve_fn(symbol) or {}
+    pump_snap = None
+    get_pump = getattr(provider, "get_pumpfun_snapshot", None)
+    if callable(get_pump):
+        pump_snap = get_pump(symbol)
 
     mid = float(snap.get("mid") or 0.0)
+    if mid <= 0 and pump_snap is not None:
+        mid = float(pump_snap.price_sol or 0.0)
     if mid <= 0:
         candles = provider.get_candles(symbol, "1m")
         mid = float(candles[-1].c) if candles else _base_price(symbol)
@@ -57,25 +61,43 @@ def build_mock_ctx(
             asks=[BookLevel(price=float(x["price"]), size=float(x["size"])) for x in asks_raw],
         )
 
+    pump_ctx = pump_snap.to_pump_ctx() if pump_snap is not None else None
     merged_meta: dict[str, Any] = {
-        "venue": curve.get("venue") or "pump.fun",
-        "mint": curve.get("mint") or symbol,
-        "curve_progress": curve.get("curve_progress"),
-        "virtual_sol_reserves": curve.get("virtual_sol_reserves"),
-        "virtual_token_reserves": curve.get("virtual_token_reserves"),
-        "graduated": curve.get("graduated", False),
-        "migrated": curve.get("migrated", False),
+        "venue": "Pump.fun" if pump_ctx is not None else "mock",
+        "mint": pump_snap.mint if pump_snap is not None else symbol,
     }
+    if pump_snap is not None:
+        merged_meta.update(
+            {
+                "curve_progress_bps": pump_snap.progress_bps,
+                "virtual_sol_reserves": pump_snap.virtual_sol_reserves,
+                "virtual_token_reserves": pump_snap.virtual_token_reserves,
+                "graduated": pump_snap.complete,
+                "migrated": pump_snap.migrated,
+                "phase": pump_snap.phase,
+            }
+        )
     if meta:
         merged_meta.update(meta)
+
+    liq_kwargs: dict[str, Any] = {"spread_bps": spr, "adv_usd": adv_usd}
+    if pump_ctx is not None:
+        liq_kwargs["virtual_sol_reserves"] = pump_ctx.virtual_sol_reserves
+        liq_kwargs["virtual_token_reserves"] = pump_ctx.virtual_token_reserves
+        liq_kwargs["real_sol_reserves"] = pump_ctx.real_sol_reserves
+        liq_kwargs["real_token_reserves"] = pump_ctx.real_token_reserves
+        liq_kwargs["creator_fee_bps"] = pump_ctx.creator_fee_bps
+        liq_kwargs["protocol_fee_bps"] = pump_ctx.protocol_fee_bps
+        liq_kwargs["fee_bps"] = pump_ctx.fee_bps
 
     return StrategyContext(
         symbol=symbol,
         ts=ts or int(time.time() * 1000),
         account=account or AccountCtx(),
-        liquidity=LiquidityCtx(spread_bps=spr, adv_usd=adv_usd),
+        liquidity=LiquidityCtx(**liq_kwargs),
         position=position,
         meta=merged_meta,
         book=book,
         tick=TickCtx(mid=mid),
+        pump=pump_ctx,
     )

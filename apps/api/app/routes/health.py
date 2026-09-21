@@ -2,8 +2,7 @@ import os
 
 from fastapi import APIRouter
 
-from app.providers import get_provider
-from app.providers.pump_mints import DEFAULT_SYMBOL, VENUE
+from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 
@@ -14,17 +13,19 @@ router = APIRouter(prefix="/api/v1", tags=["health"])
 def health():
     gate = get_risk_gate()
     provider = get_provider()
+    venue = "Pump.fun" if provider.name == "pumpfun_paper" else "mock"
     return ok(
         {
             "status": "up",
-            "provider": os.getenv("DATA_PROVIDER", "mock"),
-            "providerName": getattr(provider, "name", "mock"),
+            "provider": provider.name,
             "mode": "paper",
-            "venue": getattr(provider, "venue", VENUE),
-            "quote": "SOL",
-            "defaultSymbol": DEFAULT_SYMBOL,
+            "venue": venue,
+            "quote": "SOL" if provider.name == "pumpfun_paper" else None,
+            "defaultSymbol": default_symbol(),
             "dataSourceOptions": ["mock", "paper", "pumpfun_paper"],
+            "marketProviderOptions": list(AVAILABLE_PROVIDERS),
             "trading_state": gate.trading_state,
+            "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
             "liveDisabled": True,
         }
     )

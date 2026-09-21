@@ -9,7 +9,8 @@ export function SettingsPage() {
   const [mode, setMode] = useState<string>("…");
   const [status, setStatus] = useState<string>("…");
   const [tradingState, setTradingState] = useState<string>("…");
-  const [venue, setVenue] = useState<string>(VENUE);
+  const [venue, setVenue] = useState<string>("…");
+  const [marketOpts, setMarketOpts] = useState<string[]>([]);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
 
@@ -21,7 +22,8 @@ export function SettingsPage() {
         setMode(h.mode);
         setStatus(h.status);
         setTradingState(h.trading_state ?? "active");
-        if (h.venue) setVenue(h.venue);
+        setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? VENUE : "mock"));
+        setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper"]);
       })
       .catch((e: Error) => setErr(e.message));
   }, []);
@@ -30,9 +32,33 @@ export function SettingsPage() {
     <div className="shell-page">
       <h1>设置 / Settings</h1>
       <p className="muted">
-        主场 <code>venue={venue}</code>（Solana bonding curve）。纸面 / mock 优先；无钱包私钥、无自动买币
-        sniper。
+        纸面默认；无实盘密钥、无钱包。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
+        ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
+        {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
       </p>
+
+      <section className="settings-section">
+        <h2>Market · DATA_PROVIDER</h2>
+        <p className="muted">
+          只读（进程环境变量）。可选{" "}
+          {(marketOpts.length ? marketOpts : ["mock", "pumpfun_paper"]).map((opt, i) => (
+            <span key={opt}>
+              {i ? " · " : null}
+              <code className={opt === provider ? "hl" : undefined}>{opt}</code>
+            </span>
+          ))}
+        </p>
+        <p className="muted">
+          当前 <code>DATA_PROVIDER={provider}</code>
+          {venue ? (
+            <>
+              {" "}
+              · venue=<code>{venue}</code>
+            </>
+          ) : null}
+          。<code>pumpfun_paper</code> 为本地 bonding-curve 模拟（watch-mints env），不连钱包。
+        </p>
+      </section>
 
       <section className="settings-section">
         <h2>Order path · dataSource</h2>
@@ -50,8 +76,8 @@ export function SettingsPage() {
         </div>
         <p className="muted">
           当前 <code>dataSource={dataSource}</code>。
-          <code>paper</code> / <code>pumpfun_paper</code> 时 Overlay 只订 PaperBroker Fill；
-          <code>pumpfun_paper</code> 走 mock 曲线仿真（virtual SOL/token reserves、progress、毕业/迁移）。拒单不画成交点。
+          <code>paper</code> / <code>pumpfun_paper</code> 时 Overlay 只订 PaperBroker Fill；告警条听
+          reject/risk；拒单不画成交点。Mock 信号叠加始终保留。下单不离开 PaperBroker。
         </p>
       </section>
 

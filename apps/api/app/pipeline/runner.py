@@ -1,4 +1,4 @@
-"""One-shot Signal → RiskGate → PaperBroker using mock ctx."""
+"""One-shot Signal → RiskGate → PaperBroker using mock/pump ctx."""
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
@@ -31,7 +31,7 @@ async def decide_and_fill(
     account: Optional[AccountCtx] = None,
     auto_post_fill: bool = True,
 ) -> dict[str, Any]:
-    """Build ctx from mock mid/book (unless provided), emit WS, fill or reject."""
+    """Build ctx from provider mid/book/pump (unless provided), emit WS, fill or reject."""
     built = ctx or build_mock_ctx(
         symbol,
         spread_bps=spread_bps,
@@ -82,6 +82,7 @@ async def decide_and_fill(
             "ts": built.ts,
             "tick": built.tick.model_dump() if built.tick else None,
             "liquidity": built.liquidity.model_dump(),
+            "pump": built.pump.model_dump() if built.pump else None,
         },
     }
 

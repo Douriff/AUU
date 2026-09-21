@@ -6,6 +6,7 @@ import type {
   Fill,
   PaperOrderResult,
   PipelineResult,
+  PumpfunPaperSnapshot,
   RejectEvent,
   RiskEvent,
   RiskOut,
@@ -23,10 +24,12 @@ export interface Handlers {
     providers: string[];
     orderMode?: string;
     eventTypes?: string[];
+    venue?: string;
   }) => void;
   onCandle?: (c: Candle) => void;
   onBook?: (b: BookSnapshot) => void;
   onTrade?: (t: TradeTick) => void;
+  onPumpfunCurve?: (s: PumpfunPaperSnapshot) => void;
   onSignal?: (s: SignalOut & { t: number; strategyId?: string; symbol?: string }) => void;
   onFill?: (f: Fill) => void;
   onRisk?: (r: RiskEvent) => void;
@@ -112,8 +115,10 @@ export class HttpWsProvider {
     quote?: string;
     defaultSymbol?: string;
     dataSourceOptions?: string[];
+    marketProviderOptions?: string[];
     trading_state?: string;
     liveDisabled?: boolean;
+    watch_mints?: string;
   }> {
     return getJson("/api/v1/health");
   }
@@ -126,6 +131,11 @@ export class HttpWsProvider {
   getCurve(symbol: string): Promise<CurveSnapshot> {
     const q = new URLSearchParams({ symbol });
     return getJson(`/api/v1/curve?${q}`);
+  }
+
+  getPumpfunSnapshot(symbol: string): Promise<PumpfunPaperSnapshot> {
+    const q = new URLSearchParams({ symbol });
+    return getJson(`/api/v1/pumpfun/snapshot?${q}`);
   }
 
   preOrder(body: unknown) {
@@ -220,6 +230,7 @@ export class HttpWsProvider {
           providers: (msg.providers as string[]) ?? [],
           orderMode: msg.orderMode as string | undefined,
           eventTypes: msg.eventTypes as string[] | undefined,
+          venue: msg.venue as string | undefined,
         });
         for (const s of this.pendingSubs) {
           ws.send(JSON.stringify({ type: "subscribe", ...s }));
@@ -233,6 +244,8 @@ export class HttpWsProvider {
       if (type === "candle") this.handlers.onCandle?.(msg.payload as Candle);
       if (type === "book") this.handlers.onBook?.(msg.payload as BookSnapshot);
       if (type === "trade") this.handlers.onTrade?.(msg.payload as TradeTick);
+      if (type === "pumpfun_curve")
+        this.handlers.onPumpfunCurve?.(msg.payload as PumpfunPaperSnapshot);
       if (type === "signal") {
         const p = msg.payload as {
           strategyId: string;

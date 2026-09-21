@@ -5,6 +5,7 @@ import type {
   BookSnapshot,
   Candle,
   Fill,
+  PumpfunPaperSnapshot,
   RejectEvent,
   RiskEvent,
   SignalOut,
@@ -28,6 +29,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
   const [wsStatus, setWsStatus] = useState<string>("closed");
   const [providers, setProviders] = useState<string[]>([]);
   const [dataProvider, setDataProvider] = useState("mock");
+  const [pumpSnapshot, setPumpSnapshot] = useState<PumpfunPaperSnapshot | null>(null);
   const symbolRef = useRef(symbol);
   const dataSourceRef = useRef(dataSource);
   symbolRef.current = symbol;
@@ -46,7 +48,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
       .catch(() => undefined);
   }, []);
 
-  const loadHistory = useCallback(async (sym: string, iv: string, src: typeof dataSource) => {
+  const loadHistory = useCallback(async (sym: string, iv: string, src: typeof dataSource, providerName: string) => {
     const [c, s] = await Promise.all([
       marketProvider.getCandles(sym, iv),
       marketProvider.getSignals(sym),
@@ -55,6 +57,15 @@ export function useMarketSession(symbol: string, interval = "1m") {
     setSignals(s);
     setTrades([]);
     setBook(null);
+    if (providerName === "pumpfun_paper") {
+      try {
+        setPumpSnapshot(await marketProvider.getPumpfunSnapshot(sym));
+      } catch {
+        setPumpSnapshot(null);
+      }
+    } else {
+      setPumpSnapshot(null);
+    }
     // paper: do not seed mock fills on chart — wait for PaperBroker WS fills
     if (isPaperPath(src)) {
       setFills([]);
@@ -65,8 +76,9 @@ export function useMarketSession(symbol: string, interval = "1m") {
   }, []);
 
   useEffect(() => {
-    loadHistory(symbol, interval, dataSource).catch(console.error);
-  }, [symbol, interval, dataSource, loadHistory]);
+    if (!symbol) return;
+    loadHistory(symbol, interval, dataSource, dataProvider).catch(console.error);
+  }, [symbol, interval, dataSource, dataProvider, loadHistory]);
 
   useEffect(() => {
     const unsub = marketProvider.connect({
@@ -93,6 +105,10 @@ export function useMarketSession(symbol: string, interval = "1m") {
       onTrade: (t) => {
         if (t.symbol !== symbolRef.current) return;
         setTrades((prev) => [t, ...prev].slice(0, 40));
+      },
+      onPumpfunCurve: (s) => {
+        if (s.symbol !== symbolRef.current) return;
+        setPumpSnapshot(s);
       },
       onSignal: (s) => {
         if (s.symbol && s.symbol !== symbolRef.current) return;
@@ -131,6 +147,7 @@ export function useMarketSession(symbol: string, interval = "1m") {
   }, []);
 
   useEffect(() => {
+    if (!symbol) return;
     marketProvider.subscribe("candles", symbol, interval);
     marketProvider.subscribe("book", symbol);
     marketProvider.subscribe("trades", symbol);
@@ -153,5 +170,6 @@ export function useMarketSession(symbol: string, interval = "1m") {
     providers,
     dataProvider,
     dataSource,
+    pumpSnapshot,
   };
 }

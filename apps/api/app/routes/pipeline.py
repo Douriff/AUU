@@ -1,4 +1,4 @@
-"""POST /api/v1/pipeline/decide-and-fill — one-shot mock ctx → risk → paper fill."""
+"""POST /api/v1/pipeline/decide-and-fill — one-shot mock/pump ctx → risk → paper fill."""
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
@@ -8,16 +8,16 @@ from pydantic import BaseModel
 
 from app.models.contracts import AccountCtx, SignalOut, SizeIn, StrategyContext
 from app.pipeline import decide_and_fill
-from app.providers.pump_mints import DEFAULT_SYMBOL
+from app.providers import default_symbol
 from app.routes.envelope import err, ok
 
 router = APIRouter(prefix="/api/v1", tags=["pipeline"])
 
 
 class DecideAndFillBody(BaseModel):
-    symbol: str = DEFAULT_SYMBOL
+    symbol: str = ""
     side: Literal["buy", "sell"] = "buy"
-    notional: float = 0.1  # SOL (pump.fun quote)
+    notional: float = 0.1  # SOL on pumpfun_paper; quote units otherwise
     max_slippage_bps: float = 150.0
     strategyId: str = "pipeline-v0"
     # optional overrides — frozen SignalOut / SizeIn / StrategyContext unchanged
@@ -34,11 +34,12 @@ class DecideAndFillBody(BaseModel):
 async def pipeline_decide_and_fill(body: DecideAndFillBody):
     if body.notional <= 0 and body.size is None:
         return err("BAD_REQUEST", "notional must be > 0", 400)
-    if not body.symbol:
+    symbol = body.symbol or default_symbol()
+    if not symbol:
         return err("BAD_REQUEST", "symbol required", 400)
 
     data = await decide_and_fill(
-        symbol=body.symbol,
+        symbol=symbol,
         side=body.side,
         notional=body.notional,
         max_slippage_bps=body.max_slippage_bps,

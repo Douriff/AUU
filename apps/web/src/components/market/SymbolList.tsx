@@ -7,15 +7,11 @@ interface Props {
   onSelect: (symbol: string) => void;
 }
 
-function pct(p?: number): string {
-  if (p == null || !Number.isFinite(p)) return "—";
-  return `${Math.round(p * 100)}%`;
-}
-
 export function SymbolList({ symbols, active, onSelect }: Props) {
+  const pump = symbols.some((s) => s.kind === "pumpfun_curve" || Boolean(s.mint));
   return (
     <div className="symbol-list">
-      <div className="panel-title">自选 · {VENUE}</div>
+      <div className="panel-title">自选{pump ? ` · ${VENUE}` : ""}</div>
       <ul>
         {symbols.map((s) => (
           <li key={s.symbol}>
@@ -27,10 +23,8 @@ export function SymbolList({ symbols, active, onSelect }: Props) {
               <span className="sym">
                 {s.base}/{s.quote}
               </span>
-              <span className="kind">
-                {s.graduated ? "graduated" : "bonding"} · {pct(s.curve_progress)}
-              </span>
-              <span className="mint">{truncateMint(s.mint ?? s.symbol)}</span>
+              <span className="kind">{s.kind ?? "spot"}</span>
+              {s.mint ? <span className="mint">{truncateMint(s.mint)}</span> : null}
             </button>
           </li>
         ))}

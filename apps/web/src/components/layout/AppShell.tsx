@@ -15,7 +15,7 @@ export function AppShell() {
       <header className="topbar">
         <div className="brand">
           <span className="logo">AUU</span>
-          <span className="sub">pump.fun · 纸面曲线</span>
+          <span className="sub">Pump.fun · 纸面曲线</span>
         </div>
         <nav>
           {links.map((l) => (

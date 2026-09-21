@@ -10,15 +10,8 @@ class SymbolInfo(BaseModel):
     symbol: str
     base: str
     quote: str
-    kind: str = "pumpfun_bonding"
-    # additive pump.fun fields — frozen symbol/base/quote names unchanged
+    kind: str = "meme_mock"
     mint: Optional[str] = None
-    venue: str = "pump.fun"
-    curve_progress: Optional[float] = None
-    virtual_sol_reserves: Optional[float] = None
-    virtual_token_reserves: Optional[float] = None
-    graduated: bool = False
-    migrated: bool = False
 
 
 class Candle(BaseModel):
@@ -81,8 +74,31 @@ class AccountCtx(BaseModel):
 class LiquidityCtx(BaseModel):
     spread_bps: float = 20.0
     adv_usd: float = 100_000.0
+    # Optional Pump.fun curve fields. When virtual reserves are >0 (here or via
+    # `pump=`), estimated_impact_bps uses bonding-curve math instead of CEX sqrt.
+    virtual_sol_reserves: Optional[str] = None
+    virtual_token_reserves: Optional[str] = None
+    real_sol_reserves: Optional[str] = None
+    real_token_reserves: Optional[str] = None
+    fee_bps: Optional[float] = None
+    protocol_fee_bps: Optional[int] = None
+    creator_fee_bps: Optional[int] = None
 
-    def estimated_impact_bps(self, notional: float) -> float:
+    def estimated_impact_bps(
+        self,
+        notional: float,
+        side: Optional[str] = None,
+        pump: Optional[Any] = None,
+        fee_bps: Optional[float] = None,
+    ) -> float:
+        src = pump if pump is not None else self
+        if _has_curve_reserves(src):
+            return _curve_impact_from_source(
+                src,
+                notional,
+                side,
+                fee_bps if fee_bps is not None else self.fee_bps,
+            )
         adv = max(self.adv_usd, 1.0)
         # conservative square-root impact + half-spread
         return self.spread_bps / 2 + 40.0 * ((abs(notional) / adv) ** 0.6)
@@ -100,6 +116,22 @@ class BookCtx(BaseModel):
 
 class TickCtx(BaseModel):
     mid: float
+
+
+class PumpCtx(BaseModel):
+    """Optional StrategyContext.pump — Pump.fun curve snapshot for paper risk/fill."""
+
+    curve_progress_bps: int = 0
+    virtual_sol_reserves: str = "0"
+    virtual_token_reserves: str = "0"
+    real_sol_reserves: str = "0"
+    real_token_reserves: str = "0"
+    creator_fee_bps: int = 0
+    protocol_fee_bps: Optional[int] = None
+    fee_bps: Optional[int] = None  # impact fee override; default 125 in curve math
+    complete: bool = False
+    migrated: bool = False
+    amm_pool: Optional[str] = None
 
 
 class SizeIn(BaseModel):
@@ -120,6 +152,107 @@ class StrategyContext(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
     book: Optional[BookCtx] = None
     tick: Optional[TickCtx] = None
+    pump: Optional[PumpCtx] = None
+
+
+class PumpfunPaperSnapshot(BaseModel):
+    """WS/REST additive payload: Pump.fun curve paper market."""
+
+    mint: str
+    symbol: str
+    phase: Literal["curve", "graduating", "amm"] = "curve"
+    progress_bps: int = 0
+    complete: bool = False
+    migrated: bool = False
+    virtual_sol_reserves: str
+    virtual_token_reserves: str
+    real_sol_reserves: str
+    real_token_reserves: str
+    token_total_supply: str
+    price_sol: float
+    price_sol_str: Optional[str] = None
+    market_cap_sol: Optional[float] = None
+    creator_fee_bps: int = 0
+    pool: Optional[str] = None
+    slot: Optional[int] = None
+    updated_ts: int
+    synthetic: bool = True
+
+    def to_pump_ctx(self) -> "PumpCtx":
+        return PumpCtx(
+            curve_progress_bps=self.progress_bps,
+            virtual_sol_reserves=self.virtual_sol_reserves,
+            virtual_token_reserves=self.virtual_token_reserves,
+            real_sol_reserves=self.real_sol_reserves,
+            real_token_reserves=self.real_token_reserves,
+            creator_fee_bps=self.creator_fee_bps,
+            complete=self.complete,
+            migrated=self.migrated,
+            amm_pool=self.pool,
+        )
+
+
+class PumpfunTradeTick(BaseModel):
+    mint: str
+    symbol: str
+    ts: int
+    side: Literal["buy", "sell"]
+    price: float
+    qty: float
+    sol_amount: float
+    signature: Optional[str] = None
+    phase: Literal["curve", "amm"] = "curve"
+
+
+def _reserve_int(obj: Any, name: str) -> int:
+    val = getattr(obj, name, None)
+    if val is None:
+        return 0
+    try:
+        return int(str(val).strip() or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
+def _has_curve_reserves(obj: Any) -> bool:
+    """True when virtual reserves can drive CP impact (complete/migrated ignored)."""
+    return _reserve_int(obj, "virtual_sol_reserves") > 0 and _reserve_int(
+        obj, "virtual_token_reserves"
+    ) > 0
+
+
+def _curve_impact_from_source(
+    src: Any,
+    notional: float,
+    side: Optional[str],
+    fee_bps: Optional[float],
+) -> float:
+    # Lazy import: models stay usable without loading the provider package first.
+    from app.providers.pumpfun_curve_math import (
+        DEFAULT_IMPACT_FEE_BPS,
+        estimated_curve_impact_bps,
+    )
+
+    if not side:
+        raise ValueError("curve impact requires side='buy'|'sell' (do not share one branch)")
+    addon = fee_bps
+    if addon is None:
+        addon = getattr(src, "fee_bps", None)
+    if addon is None:
+        addon = DEFAULT_IMPACT_FEE_BPS
+    proto = getattr(src, "protocol_fee_bps", None)
+    creator = int(getattr(src, "creator_fee_bps", 0) or 0)
+    return estimated_curve_impact_bps(
+        _reserve_int(src, "virtual_sol_reserves"),
+        _reserve_int(src, "virtual_token_reserves"),
+        _reserve_int(src, "real_sol_reserves"),
+        _reserve_int(src, "real_token_reserves"),
+        abs(float(notional)),
+        side,
+        fee_bps=int(addon),
+        protocol_fee_bps=int(proto) if proto is not None else None,
+        creator_fee_bps=creator,
+    )
 
 
 class OrderIntent(BaseModel):

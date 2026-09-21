@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       DATA_PROVIDER: mock
+      # DATA_PROVIDER: pumpfun_paper
+      # PUMPFUN_WATCH_MINTS: ""
       CORS_ORIGINS: http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080
     restart: unless-stopped
 

@@ -71,7 +71,7 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .right { border-right: none; border-left: 1px solid var(--border); display: flex; flex-direction: column; }
 .center { display: flex; flex-direction: column; min-width: 0; }
 .chart-header {
-  display: flex; gap: 0.75rem; align-items: baseline;
+  display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap;
   padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border);
 }
 .candle-chart { flex: 1; min-height: 320px; }
@@ -199,3 +199,23 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 @media (max-width: 900px) {
   .trade-columns { grid-template-columns: 1fr; }
 }
+
+.curve-progress {
+  display: flex; align-items: center; gap: 0.4rem;
+  margin-left: auto; min-width: 220px; font-size: 0.75rem;
+}
+.curve-progress-k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.curve-progress-bar {
+  flex: 1; height: 8px; min-width: 88px; background: #21262d;
+  border-radius: 99px; overflow: hidden; border: 1px solid var(--border);
+}
+.curve-progress-fill { height: 100%; background: var(--accent); }
+.curve-progress-fill.graduating { background: var(--warn); }
+.curve-progress-fill.migrated { background: var(--green); }
+.curve-progress-label { font-family: ui-monospace, monospace; color: var(--muted); }
+.curve-chip {
+  font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--warn);
+}
+.curve-chip.migrated { color: var(--green); }
+code.hl { color: var(--accent); }

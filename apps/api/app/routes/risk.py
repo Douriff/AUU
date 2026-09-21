@@ -12,6 +12,7 @@ from app.models.contracts import (
     AccountCtx,
     Fill,
     LiquidityCtx,
+    PumpCtx,
     RiskOut,
     SignalOut,
     SizeIn,
@@ -37,6 +38,7 @@ class PreOrderBody(BaseModel):
     meta: Optional[dict[str, Any]] = None
     position: Optional[float] = None
     features: Optional[dict[str, Any]] = None
+    pump: Optional[PumpCtx] = None
 
 
 class PostFillBody(BaseModel):
@@ -57,6 +59,7 @@ def _build_ctx(body: PreOrderBody) -> StrategyContext:
         position=body.position or 0.0,
         features=body.features or {},
         meta=body.meta or {},
+        pump=body.pump,
     )
 
 

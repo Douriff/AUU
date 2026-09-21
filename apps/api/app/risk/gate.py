@@ -21,6 +21,7 @@ REASON = {
     "REDUCE_ONLY",
     "OVERFILL",
     "DUP_FILL",
+    "CURVE_NEAR_GRADUATION",
 }
 
 TradingState = Literal["active", "reducing", "halted"]
@@ -114,10 +115,27 @@ class RiskGate:
         if ctx.liquidity.adv_usd < float(self.meme.get("min_adv_usd", 5e4)):
             return RiskOut(allow=False, clipped_size=None, tags=["DEPTH_THIN"], notes="adv")
 
-        impact = ctx.liquidity.estimated_impact_bps(abs(notional))
+        impact = ctx.liquidity.estimated_impact_bps(
+            abs(notional),
+            side=_impact_side(signal, notional),
+            pump=ctx.pump,
+        )
+        if ctx.pump is not None:
+            near = ctx.pump.curve_progress_bps >= 9500 or ctx.pump.complete or ctx.pump.migrated
+            if near:
+                impact *= 1.5
+                tags.append("CURVE_NEAR_GRADUATION")
+                notes.append("curve ≥95% / complete: impact ×1.5")
+
         if impact > float(self.meme.get("impact_cap_bps", 150)) or impact > max_slip:
+            deny_tags = ["SLIPPAGE_CAP"]
+            if "CURVE_NEAR_GRADUATION" in tags:
+                deny_tags.append("CURVE_NEAR_GRADUATION")
             return RiskOut(
-                allow=False, clipped_size=None, tags=["SLIPPAGE_CAP"], notes=f"impact={impact:.1f}"
+                allow=False,
+                clipped_size=None,
+                tags=deny_tags,
+                notes=f"impact={impact:.1f}",
             )
 
         if self.meme.get("honeypot_block") and ctx.meta.get("honeypot"):
@@ -224,6 +242,15 @@ class RiskGate:
 
 def _sign(x: float) -> float:
     return 1.0 if x >= 0 else -1.0
+
+
+def _impact_side(signal: SignalOut, notional: float) -> str:
+    """Buy vs sell must stay distinct for curve impact (long→buy, short→sell)."""
+    if signal.side == "short":
+        return "sell"
+    if signal.side == "long":
+        return "buy"
+    return "sell" if notional < 0 else "buy"
 
 
 _gate: Optional[RiskGate] = None

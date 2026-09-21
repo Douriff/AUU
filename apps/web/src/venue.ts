@@ -1,7 +1,7 @@
-/** Pump.fun paper venue — keep in sync with apps/api/app/providers/pump_mints.py */
-export const VENUE = "pump.fun";
+/** Pump.fun paper venue — keep in sync with apps/api health / pumpfun_paper. */
+export const VENUE = "Pump.fun";
 export const QUOTE = "SOL";
-export const DEFAULT_SYMBOL = "PmpPEPE11111111111111111111111111111111111";
+export const DEFAULT_SYMBOL = "PUMPDEMO/SOL";
 
 export const DATA_SOURCES = ["mock", "paper", "pumpfun_paper"] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
