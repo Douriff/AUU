@@ -146,3 +146,17 @@ Forbidden now and later: Jito tips, sniper/create-listen auto-buy, private-key s
 - `POST /api/v1/live/pre-order` · `POST /api/v1/live/orders` — **403** `LIVE_DISABLED` unless checklist; armed still returns `LIVE_STUB` (no Fill)
 
 Paper: `POST /api/v1/risk/pre-order` → `POST /api/v1/paper/orders` unchanged.
+
+## Executability evidence (this PR; before any live arm)
+
+`liveEnabled` stays **false**. Proof the scaffold is executable without arming or sending:
+
+| Check | Expected |
+|-------|----------|
+| `GET /api/v1/health` | `liveEnabled=false`, `liveSendWired=false`, `keypairMounted` bool, `pubkey` only, `liveLimits` **1 / 0.045 / 10**, `LIVE_DISABLED` in `liveReasons` |
+| `GET /api/v1/live/status` | same four-part gate fields; `sendEnabled=false` |
+| `POST /api/v1/live/orders` | **403** `LIVE_DISABLED` (also `error.tags`) |
+| `PUT /api/v1/live/enabled` without `confirmed` | **403**; `liveEnabled` remains false |
+| Paper `decide-and-fill` | fills; journal `mode=paper` |
+
+Test: `test_executability_evidence_before_live_arm`. Zero chain txs.

@@ -708,6 +708,72 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertFalse(data["liveArmed"])
         self.assertFalse(data["liveEnabled"])
 
+    def test_executability_evidence_before_live_arm(self):
+        """Paper executes; live stays unarmed. No chain tx. Default liveEnabled=false."""
+        health = self.client.get("/api/v1/health").json()["data"]
+        status = self.client.get("/api/v1/live/status").json()["data"]
+        self.assertFalse(health["liveEnabled"])
+        self.assertFalse(status["liveEnabled"])
+        self.assertFalse(health["liveConfirmed"])
+        self.assertFalse(status["liveArmed"])
+        self.assertFalse(health["liveSendWired"])
+        self.assertFalse(status["sendEnabled"])
+        self.assertIn("keypairMounted", health)
+        self.assertIn("keypairMounted", status)
+        self.assertIn("pubkey", health)
+        self.assertIn("pubkey", status)
+        self.assertNotIn("pubkeyShort", health)
+        self.assertNotIn("pubkeyShort", status)
+        self.assertEqual(health["liveLimits"]["max_notional_sol"], 1.0)
+        self.assertEqual(health["liveLimits"]["max_day_loss_pct"], 0.045)
+        self.assertEqual(health["liveLimits"]["max_open_mints"], 10)
+        self.assertEqual(status["limits"]["max_notional_sol"], 1.0)
+        self.assertEqual(status["limits"]["max_day_loss_pct"], 0.045)
+        self.assertEqual(status["limits"]["max_open_mints"], 10)
+        self.assertIn(REASON_LIVE_DISABLED, health["liveReasons"])
+        self.assertIn(REASON_LIVE_DISABLED, status["reasons"])
+        self.assertTrue(send_allowed() is False)
+
+        live_body = {
+            "ctx": {
+                "symbol": "PUMPDEMO/SOL",
+                "ts": 1_700_000_000_000,
+                "tick": {"mid": 0.00003},
+                "liquidity": {"spread_bps": 20, "adv_usd": 100000},
+            },
+            "intent": {
+                "side": "buy",
+                "order_type": "market",
+                "qty_or_notional": 0.05,
+                "client_tag": "live",
+            },
+        }
+        refused = self.client.post("/api/v1/live/orders", json=live_body)
+        self.assertEqual(refused.status_code, 403)
+        err = refused.json()["error"]
+        self.assertIn(REASON_LIVE_DISABLED, err["reasons"])
+        self.assertIn(REASON_LIVE_DISABLED, err["tags"])
+
+        enable = self.client.put(
+            "/api/v1/live/enabled", json={"liveEnabled": True, "confirmed": False}
+        )
+        self.assertEqual(enable.status_code, 403)
+        after = self.client.get("/api/v1/live/status").json()["data"]
+        self.assertFalse(after["liveEnabled"])
+        self.assertFalse(after["liveArmed"])
+
+        paper = self.client.post(
+            "/api/v1/pipeline/decide-and-fill",
+            json={"symbol": "PUMPDEMO/SOL", "side": "buy", "notional": 0.1},
+        )
+        self.assertEqual(paper.status_code, 200)
+        pdata = paper.json()["data"]
+        self.assertTrue(pdata["risk"]["allow"])
+        self.assertGreaterEqual(len(pdata["fills"]), 1)
+        dumped = json.dumps({"health": health, "status": status, "liveError": err})
+        self.assertNotIn("secretKey", dumped.lower())
+        self.assertNotRegex(dumped, r"\[[0-9]+(?:,\s*[0-9]+){31,}\]")
+
 
 class NoCommittedKeypairTests(unittest.TestCase):
     def test_gitignore_bans_keypair_json(self):
