@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
-import os
 import time
 from typing import AsyncIterator
 
@@ -392,17 +391,3 @@ class MockMarketDataProvider(MarketDataProvider):
 
             else:
                 await asyncio.sleep(5.0)
-
-
-_provider: MockMarketDataProvider | None = None
-
-
-def get_provider() -> MarketDataProvider:
-    global _provider
-    name = os.getenv("DATA_PROVIDER", "mock").lower()
-    if name != "mock":
-        # P0: only mock implemented; fall back
-        name = "mock"
-    if _provider is None:
-        _provider = MockMarketDataProvider()
-    return _provider

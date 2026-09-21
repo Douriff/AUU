@@ -21,6 +21,7 @@ REASON = {
     "REDUCE_ONLY",
     "OVERFILL",
     "DUP_FILL",
+    "CURVE_NEAR_GRADUATION",
 }
 
 TradingState = Literal["active", "reducing", "halted"]
@@ -115,9 +116,22 @@ class RiskGate:
             return RiskOut(allow=False, clipped_size=None, tags=["DEPTH_THIN"], notes="adv")
 
         impact = ctx.liquidity.estimated_impact_bps(abs(notional))
+        if ctx.pump is not None:
+            near = ctx.pump.curve_progress_bps >= 9500 or ctx.pump.complete or ctx.pump.migrated
+            if near:
+                impact *= 1.5
+                tags.append("CURVE_NEAR_GRADUATION")
+                notes.append("curve ≥95% / complete: impact ×1.5")
+
         if impact > float(self.meme.get("impact_cap_bps", 150)) or impact > max_slip:
+            deny_tags = ["SLIPPAGE_CAP"]
+            if "CURVE_NEAR_GRADUATION" in tags:
+                deny_tags.append("CURVE_NEAR_GRADUATION")
             return RiskOut(
-                allow=False, clipped_size=None, tags=["SLIPPAGE_CAP"], notes=f"impact={impact:.1f}"
+                allow=False,
+                clipped_size=None,
+                tags=deny_tags,
+                notes=f"impact={impact:.1f}",
             )
 
         if self.meme.get("honeypot_block") and ctx.meta.get("honeypot"):

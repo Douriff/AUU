@@ -5,6 +5,7 @@ export interface SymbolInfo {
   base: string;
   quote: string;
   kind?: string;
+  mint?: string;
 }
 
 export interface Candle {
@@ -81,6 +82,55 @@ export interface TradingStateEvent {
 
 export type DataSource = "mock" | "paper";
 
+/** Market data provider (env DATA_PROVIDER). Orthogonal to order-path dataSource. */
+export type MarketProvider = "mock" | "pumpfun_paper";
+
+export interface PumpCtx {
+  curve_progress_bps: number;
+  virtual_sol_reserves: string;
+  virtual_token_reserves: string;
+  real_sol_reserves: string;
+  real_token_reserves: string;
+  creator_fee_bps: number;
+  complete: boolean;
+  migrated: boolean;
+  amm_pool?: string | null;
+}
+
+export interface PumpfunPaperSnapshot {
+  mint: string;
+  symbol: string;
+  phase: "curve" | "graduating" | "amm";
+  progress_bps: number;
+  complete: boolean;
+  migrated: boolean;
+  virtual_sol_reserves: string;
+  virtual_token_reserves: string;
+  real_sol_reserves: string;
+  real_token_reserves: string;
+  token_total_supply: string;
+  price_sol: number;
+  price_sol_str?: string;
+  market_cap_sol?: number;
+  creator_fee_bps?: number;
+  pool?: string | null;
+  slot?: number;
+  updated_ts: number;
+  synthetic?: boolean;
+}
+
+export interface PumpfunTradeTick {
+  mint: string;
+  symbol: string;
+  ts: number;
+  side: "buy" | "sell";
+  price: number;
+  qty: number;
+  sol_amount: number;
+  signature?: string;
+  phase: "curve" | "amm";
+}
+
 export interface BookLevel {
   price: number;
   size: number;
@@ -92,6 +142,7 @@ export interface BookSnapshot {
   asks: BookLevel[];
   mid: number;
   spread_bps: number;
+  synthetic?: boolean;
 }
 
 export interface TradeTick {
@@ -100,6 +151,7 @@ export interface TradeTick {
   price: number;
   qty: number;
   side: "buy" | "sell";
+  phase?: "curve" | "amm";
 }
 
 export interface EnvelopeOk<T> {
