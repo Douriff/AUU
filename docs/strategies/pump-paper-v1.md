@@ -54,12 +54,12 @@
 
 | 条件 | 动作 |
 |------|------|
-| 浮盈 `>= take_profit_pct`（默认 **12%**） | 全平 |
-| 浮亏 `<= -stop_loss_pct`（默认 **10%**） | 全平 |
+| 浮盈 `>= take_profit_pct`（默认 **15%**） | 全平 |
+| 浮亏 `<= -stop_loss_pct`（默认 **9%**） | 全平 |
 | `progress_bps >= 9000` 或 `complete` | 全平（毕业拥挤） |
 | `sell_notional_1m >= 2 * buy_notional_1m` 持续 30s | 全平 |
 | `estimated_impact_bps` 对平仓侧 `> 250` | 分两笔减仓（纸面） |
-| 持仓超过 `max_hold_sec`（默认 **300**） | 全平 |
+| 持仓超过 `max_hold_sec`（默认 **480**） | 全平 |
 
 ### 4.1 脱离监控列表的持仓（orphan）
 
@@ -69,19 +69,19 @@
 
 本路径只走 PaperBroker。**不**发链上交易；`liveEnabled` 保持默认 **false**。
 
-### 4.2 纸面出场默认（2026-09-21）
+### 4.2 纸面出场默认（策略确认，2026-09-21）
 
 30 笔已平仓里约 13 胜 / 17 负，期望约 −0.003。出场标签以 `MAX_HOLD`（约 19）为主，`STOP_LOSS` 约 6，`TAKE_PROFIT` 约 3：仓位经常在 900 秒时钟上结束，到不了 25% 止盈。
 
-纸面默认据此收紧出场，成交仍只来自 PaperBroker 报价，不补造 Fill：
+策略确认的纸面默认写在 `PumpPaperParams`（进程启动即用，不是只改运行中的 PUT）：
 
-| 参数 | 先前 | 现在 | 依据 |
-|------|------|------|------|
-| `max_hold_sec` | 900 | **300** | 超时单占多数，缩短空转 |
-| `take_profit_pct` | 0.25 | **0.12** | 止盈落在更短的持仓窗里，仍高于止损 |
-| `stop_loss_pct` | 0.12 | **0.10** | 不对称：止盈 12% / 止损 10% |
+| 参数 | 先前 | 现在 |
+|------|------|------|
+| `max_hold_sec` | 900 | **480** |
+| `take_profit_pct` | 0.25 | **0.15** |
+| `stop_loss_pct` | 0.12 | **0.09** |
 
-硬风控保持：`max_impact_bps=80`、`max_day_loss_pct=0.05`、`max_open_mints=3`、`notional_pct_equity=0.005`、`max_notional_sol=0.5`、`auto_paper_orders=false`。`liveEnabled` 仍为 **false**。
+止盈 15% 仍高于止损 9%。成交仍只来自 PaperBroker 报价。硬风控保持：`max_impact_bps=80`、`max_day_loss_pct=0.05`、`max_open_mints=3`、`notional_pct_equity=0.005`、`max_notional_sol=0.5`、`auto_paper_orders=false`。`liveEnabled` 仍为 **false**。Go 门槛不放宽：`sample_ok` ≥ 30、扣费冲击中位 < 60、含费硬顶 80。
 
 ---
 
@@ -115,9 +115,9 @@ Monitor tape/curve
 progress_bps_min: 800
 progress_bps_max: 7500
 max_impact_bps: 80
-take_profit_pct: 0.12
-stop_loss_pct: 0.10
-max_hold_sec: 300
+take_profit_pct: 0.15
+stop_loss_pct: 0.09
+max_hold_sec: 480
 cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3

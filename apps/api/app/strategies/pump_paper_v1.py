@@ -56,11 +56,12 @@ class PumpPaperParams(BaseModel):
     progress_bps_min: int = 800
     progress_bps_max: int = 7500
     max_impact_bps: float = 80.0
-    # Exit mix on 30 closes was MAX_HOLD-heavy (timeout before the 25% target).
-    # Closer TP, slightly tighter SL, shorter hold. Hard caps below stay put.
-    take_profit_pct: float = 0.12
-    stop_loss_pct: float = 0.10
-    max_hold_sec: int = 300
+    # Confirmed paper defaults (strategy engineer, 2026-09-21).
+    # Exit mix was MAX_HOLD-heavy versus a 25% target at 900s.
+    # TP stays above SL. Hard caps below stay put. liveEnabled stays false.
+    take_profit_pct: float = 0.15
+    stop_loss_pct: float = 0.09
+    max_hold_sec: int = 480
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3

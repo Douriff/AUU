@@ -54,11 +54,11 @@ class ParamsDefaultsTests(unittest.TestCase):
         self.assertEqual(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
-        # Exit mix was MAX_HOLD-heavy; closer TP / tighter SL / shorter hold.
-        self.assertAlmostEqual(p.take_profit_pct, 0.12)
-        self.assertAlmostEqual(p.stop_loss_pct, 0.10)
+        # Strategy-engineer paper defaults: TP 15%, hold 480s, SL 9%.
+        self.assertAlmostEqual(p.take_profit_pct, 0.15)
+        self.assertAlmostEqual(p.stop_loss_pct, 0.09)
         self.assertGreater(p.take_profit_pct, p.stop_loss_pct)
-        self.assertEqual(p.max_hold_sec, 300)
+        self.assertEqual(p.max_hold_sec, 480)
         self.assertLess(p.max_hold_sec, 900)
         self.assertEqual(p.max_day_loss_pct, 0.05)
         self.assertEqual(p.max_open_mints, 3)
@@ -405,7 +405,13 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertEqual(data["params"]["progress_bps_max"], 7500)
         self.assertEqual(data["params"]["max_impact_bps"], 80)
         self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
+        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.15)
+        self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.09)
+        self.assertEqual(data["params"]["max_hold_sec"], 480)
         self.assertIn(data["trading_state"], ("active", "reducing", "halted"))
+        live = self.client.get("/api/v1/live/status")
+        self.assertEqual(live.status_code, 200)
+        self.assertFalse(live.json()["data"].get("liveEnabled", False))
 
     def test_put_auto_toggle(self):
         r = self.client.put(
