@@ -18,9 +18,11 @@ export function MarketPage() {
     trades,
     riskTags,
     riskAllow,
+    tradingState,
     wsStatus,
     providers,
     dataProvider,
+    dataSource,
   } = useMarketSession(symbol, interval);
 
   return (
@@ -31,6 +33,10 @@ export function MarketPage() {
           {providers.length ? ` · ${providers.join(",")}` : ""}
           {" · "}
           DATA_PROVIDER={dataProvider}
+          {" · "}
+          dataSource={dataSource}
+          {" · "}
+          state={tradingState}
         </div>
         <RiskTagBar tags={riskTags} allow={riskAllow} />
       </div>

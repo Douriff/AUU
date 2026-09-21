@@ -1,4 +1,4 @@
-"""WebSocket /api/v1/ws — hello + subscribe candles|book|trades|signals|fills|risk."""
+"""WebSocket /api/v1/ws — hello + subscribe + paper event hub fan-out."""
 from __future__ import annotations
 
 import asyncio
@@ -7,11 +7,14 @@ import os
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.bus import get_hub
 from app.providers import get_provider
 
 router = APIRouter(tags=["ws"])
 
 VALID_CHANNELS = {"candles", "book", "trades", "signals", "fills", "risk"}
+# Event types emitted on the wire (hub + provider):
+# signal | risk | fill | reject | trading_state | candle | book | trade | …
 
 
 @router.websocket("/api/v1/ws")
@@ -19,10 +22,20 @@ async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     provider = get_provider()
     providers = [os.getenv("DATA_PROVIDER", "mock")]
-    await websocket.send_json({"type": "hello", "version": 1, "providers": providers})
+    await websocket.send_json(
+        {
+            "type": "hello",
+            "version": 1,
+            "providers": providers,
+            "orderMode": "paper",
+            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state"],
+        }
+    )
 
     tasks: dict[str, asyncio.Task] = {}
     stop = asyncio.Event()
+    hub = get_hub()
+    hub_q = await hub.subscribe()
 
     async def pump(channel: str, symbol: str, interval: str | None):
         try:
@@ -33,7 +46,20 @@ async def ws_endpoint(websocket: WebSocket):
         except asyncio.CancelledError:
             raise
         except Exception:
-            # stream ended / client gone
+            return
+
+    async def hub_pump():
+        """Forward paper-path events (fill/reject/risk/trading_state/signal)."""
+        try:
+            while not stop.is_set():
+                try:
+                    event = await asyncio.wait_for(hub_q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                await websocket.send_json(event)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
             return
 
     async def heartbeat():
@@ -45,6 +71,7 @@ async def ws_endpoint(websocket: WebSocket):
             return
 
     hb = asyncio.create_task(heartbeat())
+    hub_task = asyncio.create_task(hub_pump())
 
     try:
         while True:
@@ -107,6 +134,8 @@ async def ws_endpoint(websocket: WebSocket):
     finally:
         stop.set()
         hb.cancel()
+        hub_task.cancel()
         for t in tasks.values():
             t.cancel()
-        await asyncio.gather(hb, *tasks.values(), return_exceptions=True)
+        await hub.unsubscribe(hub_q)
+        await asyncio.gather(hb, hub_task, *tasks.values(), return_exceptions=True)

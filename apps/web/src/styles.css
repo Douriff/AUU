@@ -121,3 +121,14 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .settings-dl dt { color: var(--muted); }
 .settings-dl dd { margin: 0; }
+
+.settings-section { margin: 1rem 0 1.5rem; }
+.settings-section h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+.data-source-toggle { display: inline-flex; gap: 0.35rem; }
+.data-source-toggle button {
+  background: #21262d; color: var(--muted); border: 1px solid var(--border);
+  padding: 0.4rem 0.9rem; border-radius: 6px;
+}
+.data-source-toggle button.active {
+  background: rgba(88,166,255,0.15); color: var(--accent); border-color: var(--accent);
+}

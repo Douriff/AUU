@@ -46,6 +46,7 @@ export interface Fill {
   fee?: number;
   slippage_bps?: number;
   tag?: string;
+  symbol?: string;
 }
 
 export interface SignalEvent {
@@ -61,6 +62,24 @@ export interface RiskEvent {
   t: number;
   risk: RiskOut;
 }
+
+export interface RejectEvent {
+  ts: number;
+  symbol: string;
+  tags: string[];
+  notes?: string;
+}
+
+export type TradingState = "active" | "reducing" | "halted";
+
+export interface TradingStateEvent {
+  state: TradingState;
+  reason?: string;
+  symbol?: string;
+  ts?: number;
+}
+
+export type DataSource = "mock" | "paper";
 
 export interface BookLevel {
   price: number;
