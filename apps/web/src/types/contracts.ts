@@ -295,6 +295,28 @@ export interface TradeTick {
   phase?: "curve" | "amm";
 }
 
+export interface LiveLimits {
+  max_notional_sol: number | null;
+  max_day_loss: number | null;
+  max_open_mints: number | null;
+}
+
+export interface LiveStatus {
+  liveDisabled: boolean;
+  liveArmed: boolean;
+  liveSendWired: boolean;
+  reasons: string[];
+  keypairConfigured: boolean;
+  keypairEnv: string;
+  keypairPathHint: string;
+  limits: LiveLimits;
+  limitsMissing: string[];
+  disabledSwitch: boolean;
+  armedFlag: boolean;
+  venue: "live";
+  sendEnabled: boolean;
+}
+
 export interface EnvelopeOk<T> {
   ok: true;
   data: T;

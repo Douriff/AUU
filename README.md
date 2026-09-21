@@ -60,12 +60,12 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 ## Mock vs pumpfun_paper vs Real
 
-| | Mock（默认） | pumpfun_paper | Real（未实现 / 禁止本轮） |
-|--|-------------|---------------|---------------------------|
-| 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 后续公共 RPC / DexScreener |
-| 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 真实 StrategyDecision 流 |
-| 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | 禁止 |
-| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **禁止**写入仓库 |
+| | Mock（默认） | pumpfun_paper | Live adapter（dark） |
+|--|-------------|---------------|----------------------|
+| 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 仍走 paper 行情 |
+| 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 不自动下单 |
+| 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | `LiveBroker` stub；**本轮不发链上 tx** |
+| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | 仅本机 `AUU_SOLANA_KEYPAIR_PATH`；未设 limits 无法 arm |
 
 切换行情源：环境变量 `DATA_PROVIDER=mock` 或 `DATA_PROVIDER=pumpfun_paper`。  
 `pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS`（逗号分隔 mint 白名单）播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）把 `new_token` 写入自选，**不**自动下单。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。始终 PaperBroker。
@@ -79,11 +79,13 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 - 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
 - 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 
-详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`。
+详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`、`docs/adapters/pumpfun-live-local-signer-v0.md`。
 
 ## 自动纸面单 + 成功概率
 
 `strategy_autopaper` / `auto_paper_orders` **默认关**。在 Settings / 行情 / 交易顶栏打开后（无需重启），`pump-paper-v1` 在 `trading_state=active` 时对自选做 decide → RiskGate → PaperBroker。实盘路径关闭（`liveDisabled=true`）；私钥 env 一旦出现则拒绝执行。
+
+**Live adapter**（`docs/adapters/pumpfun-live-local-signer-v0.md`）已脚手架：默认 `AUU_LIVE_DISABLED=true`、`live_armed=false`。未同时提供本机 keypair 路径 + 三个正数风控上限（max SOL / 日亏 / 并发 mint）时无法 arm。本 PR **不**发送链上交易。
 
 纸面成功概率（胜率、期望、回撤）来自本会话 `PaperTradeJournal` 已平仓 round-trip（自算，不嵌 QuantStats）。蒙特卡洛默认关：
 

@@ -22,6 +22,11 @@ REASON = {
     "OVERFILL",
     "DUP_FILL",
     "CURVE_NEAR_GRADUATION",
+    # Live extras (fail closed when unset). Paper check() ignores these tags.
+    "LIMITS_MISSING",
+    "LIVE_DISABLED",
+    "NO_KEYPAIR",
+    "MAX_OPEN_MINTS",
 }
 
 TradingState = Literal["active", "reducing", "halted"]
@@ -33,6 +38,12 @@ class RiskLimits:
     max_day_loss_pct: float = 0.05
     max_spread_bps: float = 80.0
     cooldown_sec_after_reject: float = 30.0
+    # Live extras (vn.py-style hard gates). None/0 = unset; live path fail-closed.
+    # Paper `check()` does not read these — paper keeps max_notional_per_symbol /
+    # max_day_loss_pct. Numbers are placeholders until the operator sets them.
+    max_notional_sol: Optional[float] = None
+    max_day_loss: Optional[float] = None
+    max_open_mints: Optional[int] = None
 
 
 @dataclass
@@ -178,6 +189,76 @@ class RiskGate:
             notes="; ".join(notes) if notes else "ok",
         )
 
+    def check_live(
+        self,
+        ctx: StrategyContext,
+        signal: SignalOut,
+        size: SizeIn,
+        *,
+        live_limits: Optional[dict] = None,
+    ) -> RiskOut:
+        """Live pre-order extras. Fail closed if any of the three limits is missing/zero.
+
+        Mapped from vn.py RiskManager (see docs/adapters/vnpy-riskmanager-v0.md):
+        max_notional_sol, max_day_loss, max_open_mints. Paper `check()` is unchanged.
+        """
+        src = live_limits or {}
+        max_notional_sol = _live_positive_float(
+            src.get("max_notional_sol", self.limits.max_notional_sol)
+        )
+        max_day_loss = _live_positive_float(src.get("max_day_loss", self.limits.max_day_loss))
+        max_open_mints = _live_positive_int(src.get("max_open_mints", self.limits.max_open_mints))
+        missing: list[str] = []
+        if max_notional_sol is None:
+            missing.append("max_notional_sol")
+        if max_day_loss is None:
+            missing.append("max_day_loss")
+        if max_open_mints is None:
+            missing.append("max_open_mints")
+        if missing:
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["LIMITS_MISSING"],
+                notes="live limits missing or zero: " + ",".join(missing),
+            )
+
+        notional = abs(float(size.target_notional))
+        if notional > float(max_notional_sol):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["MAX_NOTIONAL"],
+                notes=f"live notional {notional} > max_notional_sol {max_notional_sol}",
+            )
+
+        day_pnl = ctx.account.day_pnl if ctx.account.day_pnl is not None else self._day_pnl
+        if day_pnl <= -float(max_day_loss):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["DAY_LOSS_BREAKER"],
+                notes="live day-loss circuit breaker",
+            )
+
+        open_mints = 0
+        if ctx.meta and ctx.meta.get("open_mints") is not None:
+            try:
+                open_mints = int(ctx.meta.get("open_mints") or 0)
+            except (TypeError, ValueError):
+                open_mints = 0
+        is_open = signal.side != "flat" and not self._is_reducing(ctx.position, float(size.target_notional), signal.side)
+        if is_open and open_mints >= int(max_open_mints):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["MAX_OPEN_MINTS"],
+                notes=f"live open mints {open_mints} >= max_open_mints {max_open_mints}",
+            )
+
+        # Shared paper hard gates (spread, halt, honeypot, …) still apply.
+        return self.check(ctx, signal, size)
+
     def on_reject(self, ctx: StrategyContext, tags: list[str]) -> None:
         cd = self.limits.cooldown_sec_after_reject
         self._cooldown_until[ctx.symbol] = ctx.ts + int(cd * 1000)
@@ -246,6 +327,28 @@ class RiskGate:
 
 def _sign(x: float) -> float:
     return 1.0 if x >= 0 else -1.0
+
+
+def _live_positive_float(value: object) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        n = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return n
+
+
+def _live_positive_int(value: object) -> Optional[int]:
+    n = _live_positive_float(value)
+    if n is None:
+        return None
+    i = int(n)
+    if i <= 0:
+        return None
+    return i
 
 
 def _impact_side(signal: SignalOut, notional: float) -> str:

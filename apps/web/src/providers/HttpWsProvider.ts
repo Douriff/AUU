@@ -19,6 +19,8 @@ import type {
   SymbolInfo,
   TradeTick,
   TradingStateEvent,
+  LiveStatus,
+  LiveLimits,
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -135,6 +137,12 @@ export class HttpWsProvider {
     strategy_autopaper?: boolean;
     strategyId?: string;
     liveDisabled?: boolean;
+    liveArmed?: boolean;
+    liveSendWired?: boolean;
+    liveReasons?: string[];
+    liveLimits?: LiveLimits;
+    keypairConfigured?: boolean;
+    keypairEnv?: string;
     watch_mints?: string;
     discovery?: string;
     discoveryOptions?: string[];
@@ -193,6 +201,22 @@ export class HttpWsProvider {
 
   decideAndFill(body: unknown) {
     return postJson<PipelineResult>("/api/v1/pipeline/decide-and-fill", body);
+  }
+
+  getLiveStatus(): Promise<LiveStatus> {
+    return getJson("/api/v1/live/status");
+  }
+
+  putLiveLimits(body: Partial<LiveLimits>): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/limits", body);
+  }
+
+  putLiveDisabled(live_disabled: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/disabled", { live_disabled });
+  }
+
+  putLiveArm(armed: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/arm", { armed });
   }
 
   connect(handlers: Handlers): () => void {

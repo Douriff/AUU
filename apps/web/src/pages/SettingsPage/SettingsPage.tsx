@@ -11,6 +11,7 @@ import {
 } from "@/components/market/PaperStatsPanel";
 import { DATA_SOURCES, VENUE } from "@/venue";
 import type { DataSource } from "@/venue";
+import type { LiveStatus } from "@/types/contracts";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
@@ -21,6 +22,11 @@ export function SettingsPage() {
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
   const [discovery, setDiscovery] = useState<string>("…");
   const [portalKey, setPortalKey] = useState<boolean | null>(null);
+  const [live, setLive] = useState<LiveStatus | null>(null);
+  const [maxNotional, setMaxNotional] = useState("");
+  const [maxDayLoss, setMaxDayLoss] = useState("");
+  const [maxOpenMints, setMaxOpenMints] = useState("");
+  const [liveMsg, setLiveMsg] = useState("");
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
   const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
@@ -46,7 +52,63 @@ export function SettingsPage() {
         setPortalKey(Boolean(h.portal_key_configured));
       })
       .catch((e: Error) => setErr(e.message));
+    marketProvider
+      .getLiveStatus()
+      .then((st) => {
+        setLive(st);
+        setMaxNotional(st.limits.max_notional_sol != null ? String(st.limits.max_notional_sol) : "");
+        setMaxDayLoss(st.limits.max_day_loss != null ? String(st.limits.max_day_loss) : "");
+        setMaxOpenMints(st.limits.max_open_mints != null ? String(st.limits.max_open_mints) : "");
+      })
+      .catch(() => undefined);
   }, []);
+
+  const limitsReady =
+    Number(maxNotional) > 0 && Number(maxDayLoss) > 0 && Number(maxOpenMints) > 0;
+  const canTryArm = limitsReady && Boolean(live?.keypairConfigured);
+
+  const applyLive = (st: LiveStatus) => {
+    setLive(st);
+    setMaxNotional(st.limits.max_notional_sol != null ? String(st.limits.max_notional_sol) : "");
+    setMaxDayLoss(st.limits.max_day_loss != null ? String(st.limits.max_day_loss) : "");
+    setMaxOpenMints(st.limits.max_open_mints != null ? String(st.limits.max_open_mints) : "");
+  };
+
+  const saveLiveLimits = () => {
+    setLiveMsg("");
+    const body: { max_notional_sol: number | null; max_day_loss: number | null; max_open_mints: number | null } = {
+      max_notional_sol: Number(maxNotional) > 0 ? Number(maxNotional) : null,
+      max_day_loss: Number(maxDayLoss) > 0 ? Number(maxDayLoss) : null,
+      max_open_mints: Number(maxOpenMints) > 0 ? Number(maxOpenMints) : null,
+    };
+    void marketProvider
+      .putLiveLimits(body)
+      .then((st) => {
+        applyLive(st);
+        setLiveMsg("limits saved (placeholders; live still disabled)");
+      })
+      .catch((e: Error) => setLiveMsg(e.message));
+  };
+
+  const tryArmLive = () => {
+    setLiveMsg("");
+    if (!canTryArm) {
+      setLiveMsg("cannot arm: need positive limits and a local keypair path");
+      return;
+    }
+    void marketProvider
+      .putLiveDisabled(false)
+      .then(() => marketProvider.putLiveArm(true))
+      .then((st) => {
+        applyLive(st);
+        setLiveMsg(
+          st.liveArmed && !st.liveDisabled
+            ? "armed"
+            : "checklist updated; liveDisabled stays true until a later PR wires pump-sdk"
+        );
+      })
+      .catch((e: Error) => setLiveMsg(e.message));
+  };
 
   return (
     <div className="shell-page">
@@ -55,6 +117,8 @@ export function SettingsPage() {
         纸面默认；无实盘密钥、无钱包。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
         ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
         {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
+        {" "}
+        Live adapter is scaffolded but <strong>disabled</strong> (no chain submit).
       </p>
 
       <section className="settings-section">
@@ -113,6 +177,84 @@ export function SettingsPage() {
           {" · "}
           portal key={portalKey == null ? "…" : portalKey ? "configured" : "absent"}
         </p>
+      </section>
+
+      <section className="settings-section live-section">
+        <h2>Live adapter · Pump.fun local signer (dark)</h2>
+        <p className="muted">
+          Status = <strong>{live?.liveDisabled !== false ? "disabled" : "enabled"}</strong>
+          {" · "}
+          liveArmed=<code>{String(live?.liveArmed ?? false)}</code>
+          {" · "}
+          sendEnabled=<code>{String(live?.sendEnabled ?? false)}</code>
+          . This UI never uploads a keypair. Set <code>AUU_SOLANA_KEYPAIR_PATH</code> in a gitignored{" "}
+          <code>.env</code> on this machine. Do not paste a private key.
+        </p>
+        <p className="live-status-row">
+          <span className="mode-badge live-off">LIVE DISABLED</span>
+          {(live?.reasons ?? ["LIVE_DISABLED", "NO_KEYPAIR", "LIMITS_MISSING"]).map((tag) => (
+            <span key={tag} className="tag">
+              {tag}
+            </span>
+          ))}
+        </p>
+        <form
+          className="live-limits-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveLiveLimits();
+          }}
+        >
+          <label>
+            max_notional_sol
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="unset"
+              value={maxNotional}
+              onChange={(e) => setMaxNotional(e.target.value)}
+            />
+          </label>
+          <label>
+            max_day_loss
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="unset"
+              value={maxDayLoss}
+              onChange={(e) => setMaxDayLoss(e.target.value)}
+            />
+          </label>
+          <label>
+            max_open_mints
+            <input
+              type="number"
+              min={0}
+              step="1"
+              placeholder="unset"
+              value={maxOpenMints}
+              onChange={(e) => setMaxOpenMints(e.target.value)}
+            />
+          </label>
+          <div className="paper-actions">
+            <button type="submit" className="ghost">
+              Save limits
+            </button>
+            <button type="button" className="ghost" disabled={!canTryArm} onClick={tryArmLive}>
+              Arm live
+            </button>
+          </div>
+        </form>
+        <p className="muted">
+          Keypair: {live?.keypairConfigured ? "file present (path not shown)" : "absent"} via{" "}
+          <code>{live?.keypairEnv ?? "AUU_SOLANA_KEYPAIR_PATH"}</code>. Arm stays off unless all three
+          limits are positive, the local keypair file exists, <code>AUU_LIVE_DISABLED=false</code>, and{" "}
+          <code>live_armed=true</code>. Empty/zero limits refuse to arm. This PR does not send chain
+          transactions.
+        </p>
+        {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>
 
       <section className="settings-section">
@@ -183,6 +325,14 @@ export function SettingsPage() {
         <dt>portal key</dt>
         <dd>
           <code>{portalKey == null ? "…" : portalKey ? "configured" : "absent"}</code>
+        </dd>
+        <dt>liveDisabled</dt>
+        <dd>
+          <code>{String(live?.liveDisabled ?? true)}</code>
+        </dd>
+        <dt>liveArmed</dt>
+        <dd>
+          <code>{String(live?.liveArmed ?? false)}</code>
         </dd>
         <dt>API health</dt>
         <dd>

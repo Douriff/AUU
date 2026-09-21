@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, ws
+from app.routes import book, candles, curve, fills, health, live, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, ws
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AUU Market Terminal API",
     version="0.1.0",
-    description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. No live trading, no keys.",
+    description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. Live adapter is scaffolded but dark (no chain submit).",
     lifespan=lifespan,
 )
 
@@ -72,6 +72,7 @@ app.include_router(book.router)
 app.include_router(curve.router)
 app.include_router(risk.router)
 app.include_router(paper.router)
+app.include_router(live.router)
 app.include_router(pipeline.router)
 app.include_router(pumpfun.router)
 app.include_router(strategy.router)
@@ -95,6 +96,8 @@ def root():
             "endpoints": {
                 "preOrder": "POST /api/v1/risk/pre-order",
                 "paperOrders": "POST /api/v1/paper/orders",
+                "liveStatus": "GET /api/v1/live/status",
+                "liveOrders": "POST /api/v1/live/orders (403 unless armed; no chain submit)",
                 "postFill": "POST /api/v1/risk/post-fill",
                 "decideAndFill": "POST /api/v1/pipeline/decide-and-fill",
                 "book": "GET /api/v1/book?symbol=",

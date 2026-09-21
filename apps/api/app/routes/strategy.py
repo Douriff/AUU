@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.bus import get_hub
+from app.live.gate import evaluate
 from app.paper.ledger import build_performance, reset_paper_journal
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
@@ -55,7 +56,7 @@ def _state_payload() -> dict[str, Any]:
         "day_pnl": gate.day_pnl,
         "positions": positions,
         "last_decisions": engine.last_decisions(20),
-        "liveDisabled": True,
+        "liveDisabled": evaluate().live_disabled,
     }
 
 

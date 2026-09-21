@@ -8,3 +8,8 @@ venv/
 .DS_Store
 *.egg-info/
 .pytest_cache/
+
+# Solana / live signer — never commit keypairs
+*keypair*.json
+*.keypair.json
+id.json

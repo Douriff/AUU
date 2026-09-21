@@ -10,6 +10,9 @@ services:
       # PUMPFUN_DISCOVERY: off
       # PUMPFUN_PORTAL_API_KEY: ""  # env only; never commit
       CORS_ORIGINS: http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080
+      # Live adapter stays disabled. Do not pass keypair files into the image.
+      AUU_LIVE_DISABLED: "true"
+      AUU_LIVE_ARMED: "false"
     restart: unless-stopped
 
   web:

@@ -3,6 +3,7 @@ import os
 from fastapi import APIRouter
 
 from app.discovery import portal_key_configured, resolve_discovery_mode
+from app.live.gate import evaluate
 from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
@@ -16,6 +17,8 @@ def health():
     gate = get_risk_gate()
     provider = get_provider()
     venue = "Pump.fun" if provider.name == "pumpfun_paper" else "mock"
+    live = evaluate()
+    payload = live.as_dict()
     return ok(
         {
             "status": "up",
@@ -34,6 +37,12 @@ def health():
             "discovery": resolve_discovery_mode(),
             "discoveryOptions": ["pumpportal", "logs", "off"],
             "portal_key_configured": portal_key_configured(),
-            "liveDisabled": True,
+            "liveDisabled": payload["liveDisabled"],
+            "liveArmed": payload["liveArmed"],
+            "liveSendWired": payload["liveSendWired"],
+            "liveReasons": payload["reasons"],
+            "liveLimits": payload["limits"],
+            "keypairConfigured": payload["keypairConfigured"],
+            "keypairEnv": payload["keypairEnv"],
         }
     )

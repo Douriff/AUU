@@ -47,11 +47,14 @@ export function AppShell() {
           </span>
           <AutoPaperToggle
             compact
-          label="自动纸面"
+            label="自动纸面"
             checked={autoPaperOrders}
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />
           <div className="mode-badge">PAPER · PUMP.FUN</div>
+          <div className="mode-badge live-off" title="liveDisabled=true · adapter dark">
+            LIVE OFF
+          </div>
         </div>
       </header>
       <main className="main">

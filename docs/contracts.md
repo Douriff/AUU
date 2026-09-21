@@ -47,6 +47,7 @@ REST：
 - `POST /api/v1/paper/orders` → `{ fills, reject? }`（`risk.allow` 必须为 true）
 - `POST /api/v1/risk/post-fill`
 - `POST /api/v1/pipeline/decide-and-fill` — 一枪：provider mid/book + optional `PumpCtx` → signal → RiskGate → PaperBroker
+- `GET /api/v1/live/status` — live adapter (default `liveDisabled=true`; 403 on `/live/orders` unless armed)
 - `GET /api/v1/book?symbol=` — synth 深度快照（供 UI 组 ctx）
 - `GET/PUT /api/v1/strategy/pump-paper-v1` — `auto_paper_orders` / `strategy_autopaper`（默认 false，无需重启）
 - `GET /api/v1/strategy/pump-paper-v1/stats` — PaperTradeJournal 自算胜率 / 期望 / 回撤（不依赖 QuantStats）；`?mc=1` 才跑 trades-MC（默认关）
