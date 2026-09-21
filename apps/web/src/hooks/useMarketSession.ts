@@ -141,6 +141,10 @@ export function useMarketSession(symbol: string, interval = "1m") {
           setRiskTags((prev) => (prev.includes(t.reason!) ? prev : [...prev, t.reason!]));
         }
       },
+      onNewToken: () => {
+        marketProvider.listSymbols().then(setSymbols).catch(() => undefined);
+        window.dispatchEvent(new CustomEvent("auu:newToken"));
+      },
     });
 
     return unsub;

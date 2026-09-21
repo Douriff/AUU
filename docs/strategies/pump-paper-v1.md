@@ -23,6 +23,9 @@
 | `buy_notional_1m` / `sell_notional_1m` | tape 聚合 | 动能 |
 | `trade_count_1m` | tape | 活跃度 |
 | `unique_buyers_5m`（可选） | tape 地址粗计 | 分散度 |
+| `new_token` | 只读发现（PumpPortal / logs） | 入自选；**不**当作入场 |
+
+发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 **off**；有 key 默认 pumpportal）。Key 仅 env，永不入库。发现模块禁止交易。
 
 盘面 UI：新币表 + Progress + tape + 风险标签 + 策略信号叠加（见 `docs/viz/market-monitor-v1.md`）。
 
@@ -33,13 +36,15 @@
 **全部满足才发 `SignalOut.side=long`：**
 
 1. `not complete` 且 `not migrated`
-2. `1500 <= progress_bps <= 7500`（过早噪音大，过晚拥挤）
+2. `800 <= progress_bps <= 7500`（过早噪音大，过晚拥挤）
 3. `buy_notional_1m >= 2 * sell_notional_1m` 且 `trade_count_1m >= 8`
-4. `estimated_impact_bps(order_notional) <= max_impact_bps`（默认 **180**）
+4. `estimated_impact_bps(order_notional) <= max_impact_bps`（默认 **80**）
 5. 无标签：`HONEYPOT` / `TAX_HIGH` / `SPREAD_TOO_WIDE`（若有外部打标）
 6. 冷却：同 mint `cooldown_sec` 默认 **120s** 内不再开仓
 
-默认纸面名义：账户权益的 **1%**，且单笔绝对上限 `max_notional_sol`（默认仿真 **0.5 SOL 等值**）。
+默认纸面名义：账户权益的 **0.5%**，且单笔绝对上限 `max_notional_sol`（默认仿真 **0.5 SOL 等值**）。
+
+发现（`new_token`）只入自选表，**不等于入场**；仍须过上述 progress / 动能 / 冲击门。
 
 ---
 
@@ -78,24 +83,24 @@ Monitor tape/curve
   → Fill / reject → Overlay + 告警
 ```
 
-`auto_paper_orders`：**默认 false**。仅当 Settings 打开且未 halt 时，信号才自动打纸面单。
+`auto_paper_orders` / `strategy_autopaper`：**默认 false**。仅当 Settings 打开且未 halt 时，信号才自动打纸面单。发现模块不发单。
 
 ---
 
 ## 7. 参数表（可配置）
 
 ```yaml
-progress_bps_min: 1500
+progress_bps_min: 800
 progress_bps_max: 7500
-max_impact_bps: 180
+max_impact_bps: 80
 take_profit_pct: 0.25
 stop_loss_pct: 0.12
 max_hold_sec: 900
 cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3
-notional_pct_equity: 0.01
-auto_paper_orders: false
+notional_pct_equity: 0.005
+auto_paper_orders: false   # strategy_autopaper
 ```
 
 ---
@@ -106,5 +111,6 @@ auto_paper_orders: false
 - [ ] 满足入场条件时出现 long marker；拒单出现 risk/reject 无假 Fill
 - [ ] 打开 `auto_paper_orders` 后才自动出纸面成交
 - [ ] 触发日亏熔断后无法再开仓
+- [ ] `new_token` 入自选但不绕过入场门；发现模块无下单
 
-版本：v1。只加参数不改事件名。
+版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。

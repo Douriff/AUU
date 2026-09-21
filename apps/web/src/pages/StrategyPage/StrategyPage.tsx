@@ -23,8 +23,9 @@ export function StrategyPage() {
     <div className="shell-page">
       <h1>策略 / Strategy</h1>
       <p className="muted">
-        <code>pump-paper-v1</code> 纸面策略。默认不自动下单；打开{" "}
-        <code>auto_paper_orders</code> 后信号才走 RiskGate → PaperBroker。无钱包、无 sniper。
+        <code>pump-paper-v1</code> 纸面策略。默认 <code>progress_bps [800,7500]</code>、
+        <code>max_impact_bps 80</code>、名义 0.5% 权益；<code>auto_paper_orders</code> 默认关。
+        发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。无钱包、无 sniper。
       </p>
       <p className="muted">
         trading_state=<code>{tradingState}</code>

@@ -51,7 +51,12 @@ export function WatchlistTable({ rows, active, onSelect }: Props) {
               </span>
               <span className="watch-tags">
                 {(r.tags ?? []).slice(0, 4).map((t) => (
-                  <span key={t} className={`curve-chip ${t === "migrated" || t === "amm" ? "migrated" : ""}`}>
+                  <span
+                    key={t}
+                    className={`curve-chip ${
+                      t === "migrated" || t === "amm" ? "migrated" : t === "discovered" ? "discovered" : ""
+                    }`}
+                  >
                     {t}
                   </span>
                 ))}

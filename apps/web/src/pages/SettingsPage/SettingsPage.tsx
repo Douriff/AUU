@@ -12,6 +12,8 @@ export function SettingsPage() {
   const [tradingState, setTradingState] = useState<string>("…");
   const [venue, setVenue] = useState<string>("…");
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
+  const [discovery, setDiscovery] = useState<string>("…");
+  const [portalKey, setPortalKey] = useState<boolean | null>(null);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
   const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
@@ -26,6 +28,8 @@ export function SettingsPage() {
         setTradingState(h.trading_state ?? "active");
         setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? "Pump.fun" : "mock"));
         setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper"]);
+        setDiscovery(h.discovery ?? "off");
+        setPortalKey(Boolean(h.portal_key_configured));
       })
       .catch((e: Error) => setErr(e.message));
   }, []);
@@ -83,6 +87,20 @@ export function SettingsPage() {
       </section>
 
       <section className="settings-section">
+        <h2>Discovery · PUMPFUN_DISCOVERY</h2>
+        <p className="muted">
+          只读新币发现（进程环境变量）。<code>pumpportal</code> / <code>logs</code> / <code>off</code>
+          。无 <code>PUMPFUN_PORTAL_API_KEY</code> 时默认 off；有 key 默认 pumpportal。Key 仅 env，界面不展示。
+          发现写入自选并推 WS <code>new_token</code>，<strong>不</strong>下单、无 sniper。
+        </p>
+        <p className="muted">
+          当前 <code>PUMPFUN_DISCOVERY={discovery}</code>
+          {" · "}
+          portal key={portalKey == null ? "…" : portalKey ? "configured" : "absent"}
+        </p>
+      </section>
+
+      <section className="settings-section">
         <h2>pump-paper-v1 · auto_paper_orders</h2>
         <AutoPaperToggle
           checked={autoPaperOrders}
@@ -114,6 +132,14 @@ export function SettingsPage() {
         <dt>auto_paper_orders</dt>
         <dd>
           <code>{String(autoPaperOrders)}</code>
+        </dd>
+        <dt>PUMPFUN_DISCOVERY</dt>
+        <dd>
+          <code>{discovery}</code>
+        </dd>
+        <dt>portal key</dt>
+        <dd>
+          <code>{portalKey == null ? "…" : portalKey ? "configured" : "absent"}</code>
         </dd>
         <dt>API health</dt>
         <dd>

@@ -7,6 +7,8 @@ services:
       DATA_PROVIDER: mock
       # DATA_PROVIDER: pumpfun_paper
       # PUMPFUN_WATCH_MINTS: ""
+      # PUMPFUN_DISCOVERY: off
+      # PUMPFUN_PORTAL_API_KEY: ""  # env only; never commit
       CORS_ORIGINS: http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080
     restart: unless-stopped
 

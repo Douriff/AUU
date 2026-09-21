@@ -53,9 +53,14 @@ export function MarketPage() {
     };
     void tick();
     const id = window.setInterval(() => void tick(), 1000);
+    const onNew = () => {
+      void tick();
+    };
+    window.addEventListener("auu:newToken", onNew);
     return () => {
       stop = true;
       window.clearInterval(id);
+      window.removeEventListener("auu:newToken", onNew);
     };
   }, []);
 

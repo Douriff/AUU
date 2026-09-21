@@ -25,6 +25,7 @@ class PumpPaperParamsPatch(BaseModel):
     max_open_mints: Optional[int] = None
     notional_pct_equity: Optional[float] = None
     auto_paper_orders: Optional[bool] = None
+    strategy_autopaper: Optional[bool] = None
     max_notional_sol: Optional[float] = None
 
 
@@ -46,6 +47,7 @@ def _state_payload() -> dict[str, Any]:
         "strategyId": STRATEGY_ID,
         "params": engine.params.model_dump(),
         "auto_paper_orders": engine.params.auto_paper_orders,
+        "strategy_autopaper": engine.params.auto_paper_orders,
         "trading_state": gate.trading_state,
         "day_pnl": gate.day_pnl,
         "positions": positions,
@@ -61,7 +63,10 @@ def get_pump_paper():
 @router.post("/pump-paper-v1")
 def put_pump_paper(body: PumpPaperParamsPatch):
     engine = get_engine()
-    engine.update_params(body.model_dump(exclude_none=True))
+    patch = body.model_dump(exclude_none=True)
+    if "strategy_autopaper" in patch:
+        patch["auto_paper_orders"] = patch.pop("strategy_autopaper")
+    engine.update_params(patch)
     return ok(_state_payload())
 
 

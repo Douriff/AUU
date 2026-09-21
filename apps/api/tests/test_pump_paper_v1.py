@@ -46,6 +46,16 @@ def _hot_tape() -> TapeWindow:
     return TapeWindow(buy_notional_1m=4.0, sell_notional_1m=1.0, trade_count_1m=12)
 
 
+class ParamsDefaultsTests(unittest.TestCase):
+    def test_frozen_v1(self):
+        p = PumpPaperParams()
+        self.assertEqual(p.progress_bps_min, 800)
+        self.assertEqual(p.progress_bps_max, 7500)
+        self.assertEqual(p.max_impact_bps, 80.0)
+        self.assertAlmostEqual(p.notional_pct_equity, 0.005)
+        self.assertFalse(p.auto_paper_orders)
+
+
 class TapeTests(unittest.TestCase):
     def test_aggregate_1m(self):
         now = 1_000_000
@@ -95,6 +105,24 @@ class EvaluateTests(unittest.TestCase):
             impact_entry_bps=80.0,
         )
         self.assertEqual(sig.reason, "progress_band")
+
+        sig = evaluate(
+            snapshot=_snap(progress_bps=799),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "progress_band")
+
+        sig = evaluate(
+            snapshot=_snap(progress_bps=800),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.side, "long")
 
     def test_momentum_and_impact(self):
         cold = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.0, trade_count_1m=12)
@@ -207,6 +235,7 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         os.environ["DATA_PROVIDER"] = "pumpfun_paper"
         os.environ["PUMP_PAPER_LOOP"] = "0"
+        os.environ["PUMPFUN_DISCOVERY"] = "off"
         reset_provider()
         reset_engine()
         reset_risk_gate()
@@ -284,6 +313,7 @@ class ApiStrategyTests(unittest.TestCase):
     def setUpClass(cls):
         os.environ["DATA_PROVIDER"] = "pumpfun_paper"
         os.environ["PUMP_PAPER_LOOP"] = "0"
+        os.environ["PUMPFUN_DISCOVERY"] = "off"
         reset_provider()
         reset_engine()
         reset_risk_gate()
@@ -306,8 +336,11 @@ class ApiStrategyTests(unittest.TestCase):
         data = r.json()["data"]
         self.assertFalse(data["params"]["auto_paper_orders"])
         self.assertFalse(data["auto_paper_orders"])
-        self.assertEqual(data["params"]["progress_bps_min"], 1500)
-        self.assertEqual(data["params"]["max_impact_bps"], 180)
+        self.assertFalse(data["strategy_autopaper"])
+        self.assertEqual(data["params"]["progress_bps_min"], 800)
+        self.assertEqual(data["params"]["progress_bps_max"], 7500)
+        self.assertEqual(data["params"]["max_impact_bps"], 80)
+        self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
         self.assertIn(data["trading_state"], ("active", "reducing", "halted"))
 
     def test_put_auto_toggle(self):
@@ -317,6 +350,17 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertTrue(r.json()["data"]["auto_paper_orders"])
         r = self.client.post(
             "/api/v1/strategy/pump-paper-v1", json={"auto_paper_orders": False}
+        )
+        self.assertFalse(r.json()["data"]["auto_paper_orders"])
+
+    def test_put_strategy_autopaper_alias(self):
+        r = self.client.put(
+            "/api/v1/strategy/pump-paper-v1", json={"strategy_autopaper": True}
+        )
+        self.assertTrue(r.json()["data"]["auto_paper_orders"])
+        self.assertTrue(r.json()["data"]["strategy_autopaper"])
+        r = self.client.put(
+            "/api/v1/strategy/pump-paper-v1", json={"strategy_autopaper": False}
         )
         self.assertFalse(r.json()["data"]["auto_paper_orders"])
 

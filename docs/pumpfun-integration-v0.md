@@ -246,7 +246,9 @@ DATA_PROVIDER=mock
 # DATA_PROVIDER=pumpfun_paper
 # SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 # PUMPFUN_WATCH_MINTS=   # 逗号分隔，白名单；空=仅内置演示 mint
-# 禁止：PRIVATE_KEY / WALLET_SECRET / API 交易密钥
+# PUMPFUN_DISCOVERY=off  # pumpportal|logs|off；无 PUMPFUN_PORTAL_API_KEY 时默认 off
+# PUMPFUN_PORTAL_API_KEY=  # 仅 env，subscribeNewToken 只读
+# 禁止：PRIVATE_KEY / WALLET_SECRET / API 交易密钥 / sniper
 ```
 
 ---

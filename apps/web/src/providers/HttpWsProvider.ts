@@ -4,6 +4,7 @@ import type {
   Envelope,
   Fill,
   MonitorRow,
+  NewTokenEvent,
   PumpfunPaperSnapshot,
   PumpPaperParams,
   PumpPaperState,
@@ -34,6 +35,7 @@ export interface Handlers {
   onRisk?: (r: RiskEvent) => void;
   onReject?: (r: RejectEvent) => void;
   onTradingState?: (t: TradingStateEvent) => void;
+  onNewToken?: (t: NewTokenEvent) => void;
   onStatus?: (s: "connecting" | "open" | "closed" | "error") => void;
 }
 
@@ -123,6 +125,9 @@ export class HttpWsProvider {
     auto_paper_orders?: boolean;
     strategyId?: string;
     watch_mints?: string;
+    discovery?: string;
+    discoveryOptions?: string[];
+    portal_key_configured?: boolean;
   }> {
     return getJson("/api/v1/health");
   }
@@ -252,6 +257,7 @@ export class HttpWsProvider {
       if (type === "reject") this.handlers.onReject?.(msg.payload as RejectEvent);
       if (type === "trading_state")
         this.handlers.onTradingState?.(msg.payload as TradingStateEvent);
+      if (type === "new_token") this.handlers.onNewToken?.(msg.payload as NewTokenEvent);
     };
 
     ws.onerror = () => this.handlers.onStatus?.("error");

@@ -2,6 +2,7 @@ import os
 
 from fastapi import APIRouter
 
+from app.discovery import portal_key_configured, resolve_discovery_mode
 from app.providers import AVAILABLE_PROVIDERS, get_provider
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
@@ -26,5 +27,8 @@ def health():
             "auto_paper_orders": get_engine().params.auto_paper_orders,
             "strategyId": "pump-paper-v1",
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
+            "discovery": resolve_discovery_mode(),
+            "discoveryOptions": ["pumpportal", "logs", "off"],
+            "portal_key_configured": portal_key_configured(),
         }
     )

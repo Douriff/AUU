@@ -204,6 +204,17 @@ class PumpfunTradeTick(BaseModel):
     phase: Literal["curve", "amm"] = "curve"
 
 
+class NewTokenEvent(BaseModel):
+    """WS type=new_token — discovery only; never an order intent."""
+
+    mint: str
+    creator: str = ""
+    slot: Optional[int] = None
+    initial_reserves: dict[str, str] = Field(default_factory=dict)
+    ts: int
+    source: Literal["pumpportal", "logs"]
+
+
 def _reserve_int(obj: Any, name: str) -> int:
     val = getattr(obj, name, None)
     if val is None:

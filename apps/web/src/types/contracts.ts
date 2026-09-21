@@ -172,6 +172,15 @@ export interface PumpfunPaperSnapshot {
   synthetic?: boolean;
 }
 
+export interface NewTokenEvent {
+  mint: string;
+  creator: string;
+  slot?: number | null;
+  initial_reserves: Record<string, string>;
+  ts: number;
+  source: "pumpportal" | "logs";
+}
+
 export interface PumpfunTradeTick {
   mint: string;
   symbol: string;

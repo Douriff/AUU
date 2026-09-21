@@ -196,4 +196,5 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
   border: 1px solid var(--border); color: var(--warn);
 }
 .curve-chip.migrated { color: var(--green); }
+.curve-chip.discovered { color: var(--accent); }
 code.hl { color: var(--accent); }

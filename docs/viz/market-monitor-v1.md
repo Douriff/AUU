@@ -4,10 +4,12 @@
 
 ## 布局
 
-1. **左：新币/自选表** — symbol、progress_bps、1m 买卖名义、impact 预估、状态标签（curve/graduating/migrated）
+1. **左：新币/自选表** — symbol、progress_bps、1m 买卖名义、impact 预估、状态标签（curve/graduating/migrated/`discovered`）
 2. **中：K 线 + Overlay** — 策略 long/flat + Fill；`CurveProgressBar`
 3. **右：Tape + 风险条** — 成交流；`RiskOut.tags` / reject
 4. **顶栏** — `trading_state`、dataProvider、`auto_paper_orders` 开关（默认关）
+
+只读发现：WS `type:"new_token"` `{ mint, creator, slot?, initial_reserves, ts, source }` 写入 `pumpfun_paper` 自选；发现 ≠ 入场。
 
 ## 数据源
 

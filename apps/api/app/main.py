@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import candles, fills, health, paper, pumpfun, risk, signals, strategy, symbols, ws
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
+from app.discovery import get_discovery, resolve_discovery_mode
 
 load_dotenv()
 
@@ -19,18 +20,21 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     import asyncio
 
-    task = None
+    tasks: list[asyncio.Task] = []
     if loop_enabled():
-        engine = get_engine()
-        task = asyncio.create_task(engine.run_loop(), name="pump-paper-v1-loop")
+        tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
+    if resolve_discovery_mode() != "off":
+        tasks.append(asyncio.create_task(get_discovery().run_loop(), name="pumpfun-discovery"))
     try:
         yield
     finally:
-        if task is not None:
-            get_engine().stop()
-            task.cancel()
+        get_engine().stop()
+        get_discovery().stop()
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
             with suppress(asyncio.CancelledError):
-                await task
+                await t
 
 
 app = FastAPI(
@@ -89,6 +93,7 @@ def root():
                 "postFill": "POST /api/v1/risk/post-fill",
                 "strategy": "GET/PUT /api/v1/strategy/pump-paper-v1",
                 "monitor": "GET /api/v1/pumpfun/monitor",
+                "discovery": "env PUMPFUN_DISCOVERY=pumpportal|logs|off",
             },
         },
     }

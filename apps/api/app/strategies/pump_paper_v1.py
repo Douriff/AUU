@@ -44,16 +44,16 @@ TAPE_WINDOW_MS = 60_000
 class PumpPaperParams(BaseModel):
     """Configurable table from docs/strategies/pump-paper-v1.md §7."""
 
-    progress_bps_min: int = 1500
+    progress_bps_min: int = 800
     progress_bps_max: int = 7500
-    max_impact_bps: float = 180.0
+    max_impact_bps: float = 80.0
     take_profit_pct: float = 0.25
     stop_loss_pct: float = 0.12
     max_hold_sec: int = 900
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3
-    notional_pct_equity: float = 0.01
+    notional_pct_equity: float = 0.005
     auto_paper_orders: bool = False
     max_notional_sol: float = 0.5
 
@@ -448,6 +448,15 @@ class PumpPaperEngine:
                     tags.append("complete")
                 if snap.migrated:
                     tags.append("migrated")
+                flags = {}
+                getter = getattr(provider, "watch_flags", None)
+                if callable(getter):
+                    flags = getter(info.symbol) or {}
+                if flags.get("discovered"):
+                    tags.append("discovered")
+                    src = flags.get("source")
+                    if src and src not in tags:
+                        tags.append(str(src))
                 n = target_notional_sol(self.equity, self.params)
                 try:
                     impact = curve_impact_bps(snap, n, "buy")

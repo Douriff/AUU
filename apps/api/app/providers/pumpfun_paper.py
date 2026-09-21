@@ -101,6 +101,9 @@ class CurveMint:
     protocol_fee_bps: int = DEFAULT_PROTOCOL_FEE_BPS
     last_ms: int = 0
     last_price: float = 0.0
+    discovered: bool = False
+    discovery_source: str = ""
+    creator: str = ""
 
 
 @dataclass
@@ -109,6 +112,10 @@ class WatchSpec:
     base: str
     target_bps: int
     migrated: bool
+    discovered: bool = False
+    source: str = ""
+    creator: str = ""
+    reserves: dict[str, int] | None = None
 
 
 # Built-in paper demos (not real mints). Empty PUMPFUN_WATCH_MINTS → these.
@@ -170,7 +177,7 @@ class PumpfunPaperProvider(MarketDataProvider):
     def __init__(self, watch_mints: str | None = None):
         raw = watch_mints if watch_mints is not None else os.getenv("PUMPFUN_WATCH_MINTS", "")
         specs = _parse_watch_mints(raw)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._curves: dict[str, CurveMint] = {}
         self._by_mint: dict[str, str] = {}
         self._candles: dict[str, dict[str, list[Candle]]] = {}
@@ -184,11 +191,30 @@ class PumpfunPaperProvider(MarketDataProvider):
         for sym in list(self._curves):
             self._build_overlays(sym)
 
+    def _unique_base(self, base: str, mint: str) -> str:
+        ticker = "".join(ch for ch in (base or "").replace("/SOL", "").upper() if ch.isalnum())[:16]
+        if not ticker:
+            ticker = f"M{(mint or 'XXXX')[-4:]}".upper()
+        candidate = ticker
+        n = 0
+        while f"{candidate}/SOL" in self._curves:
+            n += 1
+            suf = str(n)
+            candidate = f"{ticker[: max(1, 16 - len(suf))]}{suf}"
+        return candidate
+
     def _init_mint(self, spec: WatchSpec, now_ms: int) -> None:
-        symbol = f"{spec.base}/SOL"
+        base = self._unique_base(spec.base, spec.mint)
+        symbol = f"{base}/SOL"
         migrated = bool(spec.migrated)
         target = 10_000 if migrated else spec.target_bps
-        vs, vt, rs, rt = reserves_at_progress_bps(target)
+        if spec.reserves and spec.reserves.get("virtual_sol") and spec.reserves.get("virtual_token"):
+            vs = int(spec.reserves["virtual_sol"])
+            vt = int(spec.reserves["virtual_token"])
+            rs = int(spec.reserves.get("real_sol") or 0)
+            rt = int(spec.reserves.get("real_token") or INITIAL_REAL_TOKEN_RESERVES)
+        else:
+            vs, vt, rs, rt = reserves_at_progress_bps(target)
         complete = rt <= 0 or target >= 10_000 or migrated
         if migrated:
             rt = 0
@@ -196,7 +222,7 @@ class PumpfunPaperProvider(MarketDataProvider):
         c = CurveMint(
             mint=spec.mint,
             symbol=symbol,
-            base=spec.base,
+            base=base,
             virtual_sol=vs,
             virtual_token=0 if migrated else vt,
             real_sol=0 if migrated else rs,
@@ -207,6 +233,9 @@ class PumpfunPaperProvider(MarketDataProvider):
             amm_sol=rs if migrated else 0,
             amm_token=AMM_INITIAL_TOKEN_RESERVES if migrated else 0,
             last_ms=now_ms,
+            discovered=bool(spec.discovered),
+            discovery_source=spec.source or "",
+            creator=spec.creator or "",
         )
         c.last_price = _spot(c)
         self._curves[symbol] = c
@@ -235,6 +264,67 @@ class PumpfunPaperProvider(MarketDataProvider):
             )
         self._trades[symbol] = list(reversed(primed))
         c.last_ms = now_ms
+
+    def watch_flags(self, symbol: str) -> dict:
+        with self._lock:
+            c = self._curves.get(symbol)
+            if c is None:
+                return {}
+            return {
+                "discovered": bool(c.discovered),
+                "source": c.discovery_source,
+                "creator": c.creator,
+            }
+
+    def register_watch_mint(
+        self,
+        mint: str,
+        *,
+        base: str | None = None,
+        progress_bps: int = 0,
+        reserves: dict[str, int] | None = None,
+        source: str = "",
+        creator: str = "",
+        max_discovered: int = 40,
+    ):
+        """Add a discovered mint to the paper watchlist. Does not place orders."""
+        mint = (mint or "").strip()
+        if not mint:
+            return None
+        with self._lock:
+            existing = self._by_mint.get(mint)
+            if existing:
+                return self._curves.get(existing)
+            discovered = [c for c in self._curves.values() if c.discovered]
+            while len(discovered) >= max(1, int(max_discovered)):
+                oldest = discovered[0]
+                self._drop_locked(oldest.symbol, oldest.mint)
+                discovered = [c for c in self._curves.values() if c.discovered]
+            ticker = (base or f"M{mint[-4:]}").replace("/SOL", "").upper()[:16]
+            spec = WatchSpec(
+                mint=mint,
+                base=ticker,
+                target_bps=max(0, min(10_000, int(progress_bps))),
+                migrated=False,
+                discovered=True,
+                source=source,
+                creator=creator,
+                reserves=reserves,
+            )
+            now_ms = int(time.time() * 1000)
+            self._init_mint(spec, now_ms)
+            # Discovery is watchlist-only: seed candles/tape, skip demo-momentum overlays.
+            sym = self._by_mint.get(mint)
+            return self._curves.get(sym) if sym else None
+
+    def _drop_locked(self, symbol: str, mint: str) -> None:
+        self._curves.pop(symbol, None)
+        self._by_mint.pop(mint, None)
+        self._candles.pop(symbol, None)
+        self._trades.pop(symbol, None)
+        self._signal_cache.pop(symbol, None)
+        self._fill_cache.pop(symbol, None)
+        self._risk_cache.pop(symbol, None)
 
     def _seed_history(self, c: CurveMint, now_ms: int) -> None:
         iv = INTERVAL_MS["1m"]
