@@ -259,7 +259,7 @@ class WatchApiTests(unittest.TestCase):
         added = self.client.put(
             "/api/v1/watch/traders",
             json={
-                "address": "WatchExtraWallet11111111111111111111111111",
+                "address": "WatchExtraAddr1111111111111111111111111111",
                 "label": "extra",
             },
         )

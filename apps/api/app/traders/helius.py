@@ -1,8 +1,8 @@
 """HeliusTraderReader — P0 readonly stub, default OFF.
 
 P0 truth source (research): user-selected wallets + on-chain/Helius parsed txs.
-This module does not scrape pump.fun frontend APIs, does not sendTransaction,
-and does not embed API keys. HELIUS_API_KEY is env-only and never logged.
+This module does not scrape pump.fun frontend APIs, does not submit chain
+transactions, and does not embed API keys. HELIUS_API_KEY is env-only and never logged.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class HeliusTraderReader:
         self, item: TraderWatchlistItem, *, now_ms: Optional[int] = None
     ) -> TraderSnapshot:
         # Default-off live path: even when TRADER_WATCH_READER=helius, P0 does not
-        # hit the network (no pump frontend, no sendTransaction). Mock tape keeps
+        # hit the network (no pump frontend, no chain submit). Mock tape keeps
         # paper distill tests deterministic.
         from app.traders.snapshot import mock_snapshot_for
 
