@@ -336,6 +336,11 @@ class PumpfunPaperProvider(MarketDataProvider):
         snap = self.get_pumpfun_snapshot(symbol)
         return snap.to_pump_ctx() if snap else None
 
+    def get_recent_trades(self, symbol: str) -> list[dict]:
+        with self._lock:
+            self._advance_locked(symbol, int(time.time() * 1000))
+            return list(self._trades.get(symbol, []))
+
     def _snapshot_locked(self, c: CurveMint) -> PumpfunPaperSnapshot:
         px = _spot(c)
         vs, vt = c.virtual_sol, c.virtual_token

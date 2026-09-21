@@ -1,3 +1,10 @@
-from .broker import PaperBroker, get_paper_broker
+from .broker import PaperBroker, get_paper_broker, reset_paper_broker
+from .pipeline import run_paper_order, run_pre_order
 
-__all__ = ["PaperBroker", "get_paper_broker"]
+__all__ = [
+    "PaperBroker",
+    "get_paper_broker",
+    "reset_paper_broker",
+    "run_paper_order",
+    "run_pre_order",
+]

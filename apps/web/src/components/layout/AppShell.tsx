@@ -1,4 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { useStrategyConfig } from "@/hooks/useStrategyConfig";
+import { useEffect, useState } from "react";
+import { marketProvider } from "@/providers/HttpWsProvider";
 
 const links = [
   { to: "/", label: "行情", end: true },
@@ -10,6 +13,16 @@ const links = [
 ];
 
 export function AppShell() {
+  const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
+  const [provider, setProvider] = useState("…");
+
+  useEffect(() => {
+    marketProvider
+      .getHealth()
+      .then((h) => setProvider(h.provider))
+      .catch(() => undefined);
+  }, []);
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -24,7 +37,23 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="mode-badge">PAPER / MOCK</div>
+        <div className="topbar-status">
+          <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
+            {tradingState}
+          </span>
+          <span className="muted topbar-provider" title="DATA_PROVIDER">
+            {provider}
+          </span>
+          <label className="auto-paper-toggle compact">
+            <input
+              type="checkbox"
+              checked={autoPaperOrders}
+              onChange={(e) => void setAutoPaperOrders(e.target.checked)}
+            />
+            auto_paper
+          </label>
+          <div className="mode-badge">PAPER</div>
+        </div>
       </header>
       <main className="main">
         <Outlet />

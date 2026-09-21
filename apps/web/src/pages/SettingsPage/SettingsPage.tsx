@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { useDataSource } from "@/hooks/useDataSource";
+import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import type { DataSource } from "@/types/contracts";
 
 export function SettingsPage() {
@@ -12,6 +13,7 @@ export function SettingsPage() {
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
+  const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
 
   useEffect(() => {
     marketProvider
@@ -79,6 +81,21 @@ export function SettingsPage() {
         </p>
       </section>
 
+      <section className="settings-section">
+        <h2>pump-paper-v1 · auto_paper_orders</h2>
+        <label className="auto-paper-toggle">
+          <input
+            type="checkbox"
+            checked={autoPaperOrders}
+            onChange={(e) => void setAutoPaperOrders(e.target.checked)}
+          />
+          自动纸面下单（默认关）
+        </label>
+        <p className="muted">
+          关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无钱包。
+        </p>
+      </section>
+
       <dl className="settings-dl">
         <dt>DATA_PROVIDER</dt>
         <dd>
@@ -94,7 +111,11 @@ export function SettingsPage() {
         </dd>
         <dt>trading_state</dt>
         <dd>
-          <code>{tradingState}</code>
+          <code>{stratState || tradingState}</code>
+        </dd>
+        <dt>auto_paper_orders</dt>
+        <dd>
+          <code>{String(autoPaperOrders)}</code>
         </dd>
         <dt>API health</dt>
         <dd>

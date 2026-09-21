@@ -3,7 +3,10 @@ import type {
   Candle,
   Envelope,
   Fill,
+  MonitorRow,
   PumpfunPaperSnapshot,
+  PumpPaperParams,
+  PumpPaperState,
   RejectEvent,
   RiskEvent,
   SignalOut,
@@ -109,6 +112,8 @@ export class HttpWsProvider {
     dataSourceOptions?: string[];
     marketProviderOptions?: string[];
     trading_state?: string;
+    auto_paper_orders?: boolean;
+    strategyId?: string;
     watch_mints?: string;
   }> {
     return getJson("/api/v1/health");
@@ -117,6 +122,18 @@ export class HttpWsProvider {
   getPumpfunSnapshot(symbol: string): Promise<PumpfunPaperSnapshot> {
     const q = new URLSearchParams({ symbol });
     return getJson(`/api/v1/pumpfun/snapshot?${q}`);
+  }
+
+  getMonitor(): Promise<MonitorRow[]> {
+    return getJson("/api/v1/pumpfun/monitor");
+  }
+
+  getStrategy(): Promise<PumpPaperState> {
+    return getJson("/api/v1/strategy/pump-paper-v1");
+  }
+
+  putStrategy(patch: Partial<PumpPaperParams>) {
+    return postJson<PumpPaperState>("/api/v1/strategy/pump-paper-v1", patch);
   }
 
   preOrder(body: unknown) {

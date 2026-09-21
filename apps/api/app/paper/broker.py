@@ -190,3 +190,8 @@ def get_paper_broker() -> PaperBroker:
     if _broker is None:
         _broker = PaperBroker()
     return _broker
+
+
+def reset_paper_broker() -> None:
+    global _broker
+    _broker = None

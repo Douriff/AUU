@@ -1,3 +1,3 @@
-from .gate import RiskGate, TradingState, get_risk_gate
+from .gate import RiskGate, TradingState, get_risk_gate, reset_risk_gate
 
-__all__ = ["RiskGate", "TradingState", "get_risk_gate"]
+__all__ = ["RiskGate", "TradingState", "get_risk_gate", "reset_risk_gate"]
