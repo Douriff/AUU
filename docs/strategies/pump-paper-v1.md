@@ -110,8 +110,9 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 
 - [ ] 盘面能列出仿真 mint 并刷新 progress / tape
 - [ ] 满足入场条件时出现 long marker；拒单出现 risk/reject 无假 Fill
-- [ ] 打开 `auto_paper_orders` 后才自动出纸面成交
-- [ ] 触发日亏熔断后无法再开仓
-- [ ] `new_token` 入自选但不绕过入场门；发现模块无下单
+- [x] 打开 `auto_paper_orders` / `strategy_autopaper` 后才自动出纸面成交（health 双字段，无需重启）
+- [x] 触发日亏熔断后无法再开仓
+- [x] `new_token` 入自选但不绕过入场门；发现模块无下单
+- [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 
 版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。

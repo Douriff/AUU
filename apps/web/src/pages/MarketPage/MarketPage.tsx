@@ -7,6 +7,7 @@ import { DepthPanel } from "@/components/market/DepthPanel";
 import { SymbolList } from "@/components/market/SymbolList";
 import { TradesTape } from "@/components/market/TradesTape";
 import { WatchlistTable } from "@/components/market/WatchlistTable";
+import { PaperStatsPanel } from "@/components/market/PaperStatsPanel";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import { useMarketSession } from "@/hooks/useMarketSession";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
@@ -106,12 +107,14 @@ export function MarketPage() {
           compact
           checked={autoPaperOrders}
           onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+          label="自动纸面（默认关）"
         />
         <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
           {tradingState}
         </span>
         <RiskTagBar tags={riskTags} allow={riskAllow} />
       </div>
+      <PaperStatsPanel compact />
       <div className="market-grid">
         <aside className="left">
           {watchRows.some((r) => r.progress_bps != null) ? (

@@ -78,6 +78,8 @@ export interface TradingStateEvent {
   reason?: string;
   symbol?: string;
   ts?: number;
+  auto_paper_orders?: boolean;
+  strategy_autopaper?: boolean;
 }
 
 export type DataSource = "mock" | "paper" | "pumpfun_paper";
@@ -97,6 +99,7 @@ export interface PumpPaperParams {
   max_open_mints: number;
   notional_pct_equity: number;
   auto_paper_orders: boolean;
+  strategy_autopaper?: boolean;
   max_notional_sol: number;
 }
 
@@ -113,9 +116,85 @@ export interface PumpPaperState {
   strategyId: string;
   params: PumpPaperParams;
   auto_paper_orders: boolean;
+  strategy_autopaper?: boolean;
   trading_state: TradingState;
   day_pnl?: number;
   positions: PumpPaperPosition[];
+  last_decisions?: AutoDecision[];
+  liveDisabled?: boolean;
+}
+
+export interface AutoDecision {
+  ts: number;
+  symbol: string;
+  action: string;
+  allow: boolean;
+  reason: string;
+  tags: string[];
+  notes?: string;
+}
+
+export interface MonteCarloSim {
+  n_paths: number;
+  method?: string;
+  seed?: number;
+  sample_ok: boolean;
+  note?: string;
+  p05_pnl?: number;
+  p50_pnl?: number;
+  p95_pnl?: number;
+  p05_dd?: number;
+  p50_dd?: number;
+  label?: string;
+}
+
+export interface RoundTrip {
+  id: string;
+  strategy_id: string;
+  symbol: string;
+  mint?: string | null;
+  entry_ts: number;
+  exit_ts: number;
+  entry_price: number;
+  exit_price: number;
+  qty: number;
+  pnl: number;
+  pnl_pct: number;
+  fees: number;
+  tags: string[];
+  source?: string;
+  side?: string;
+}
+
+export interface EquityPoint {
+  t: number;
+  equity: number;
+}
+
+export interface PaperPerformance {
+  mode: string;
+  liveDisabled: boolean;
+  window?: string | number;
+  n_trades: number;
+  trade_count?: number;
+  wins: number;
+  losses: number;
+  win_rate: number | null;
+  expectancy: number | null;
+  max_drawdown_pct: number | null;
+  sample_ok: boolean;
+  mc?: boolean;
+  open_lots?: number | null;
+  fill_count?: number;
+  monte_carlo: MonteCarloSim | null;
+  equity: EquityPoint[];
+  journal: RoundTrip[];
+  equity_0?: number;
+  disclaimer?: string;
+  empty: boolean;
+  auto_paper_orders?: boolean;
+  strategy_autopaper?: boolean;
+  strategyId?: string;
 }
 
 export interface MonitorRow {

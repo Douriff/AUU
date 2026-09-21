@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, strategy, symbols, ws
+from app.routes import book, candles, curve, fills, health, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, ws
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
@@ -75,6 +75,7 @@ app.include_router(paper.router)
 app.include_router(pipeline.router)
 app.include_router(pumpfun.router)
 app.include_router(strategy.router)
+app.include_router(stats.router)
 app.include_router(ws.router)
 
 
@@ -100,6 +101,8 @@ def root():
                 "curve": "GET /api/v1/curve?symbol=",
                 "pumpfunSnapshot": "GET /api/v1/pumpfun/snapshot?symbol=",
                 "strategy": "GET/PUT /api/v1/strategy/pump-paper-v1",
+                "strategyStats": "GET /api/v1/strategy/pump-paper-v1/stats",
+                "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "monitor": "GET /api/v1/pumpfun/monitor",
                 "discovery": "env PUMPFUN_DISCOVERY=pumpportal|logs|off",
             },

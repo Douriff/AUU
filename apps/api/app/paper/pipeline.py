@@ -4,12 +4,17 @@ Used by REST routes and the pump-paper-v1 loop so auto orders hit the same path.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from app.bus import get_hub
 from app.models.contracts import OrderIntent, RiskOut, SignalOut, SizeIn, StrategyContext
 from app.paper.broker import get_paper_broker
+from app.paper.guard import live_execution_blocked
+from app.paper.ledger import get_paper_ledger
 from app.risk import get_risk_gate
+
+log = logging.getLogger("auu.paper.pipeline")
 
 
 async def run_pre_order(
@@ -55,8 +60,13 @@ async def run_paper_order(
     risk: RiskOut,
     *,
     auto_post_fill: bool = True,
+    close_reason: str = "",
 ) -> dict[str, Any]:
     """Submit to PaperBroker. Never fabricates a Fill when denied / empty."""
+    blocked, why = live_execution_blocked()
+    if blocked:
+        log.warning("paper submit refused: %s", why)
+        return {"fills": [], "reject": {"tags": ["LIVE_DISABLED"], "notes": why}}
     if not risk.allow:
         return {"fills": [], "reject": {"tags": ["RISK_DENIED"], "notes": "risk.allow must be true"}}
 
@@ -85,10 +95,15 @@ async def run_paper_order(
     gate = get_risk_gate()
     fill_payloads: list[dict[str, Any]] = []
     trading_state: Optional[str] = None
+    ledger = get_paper_ledger()
+    mint = None
+    if ctx.meta:
+        mint = ctx.meta.get("mint")
     for f in fills:
         dumped = f.model_dump()
         dumped["symbol"] = ctx.symbol
         fill_payloads.append(dumped)
+        ledger.record_fill(ctx.symbol, f, reason=close_reason, mint=str(mint) if mint else None)
         await hub.publish({"type": "fill", "payload": dumped})
         if auto_post_fill:
             result = gate.post_fill(ctx, f)

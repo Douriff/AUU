@@ -367,6 +367,10 @@ class ApiStrategyTests(unittest.TestCase):
     def test_health_and_monitor(self):
         h = self.client.get("/api/v1/health")
         self.assertIn("auto_paper_orders", h.json()["data"])
+        self.assertIn("strategy_autopaper", h.json()["data"])
+        self.assertEqual(
+            h.json()["data"]["auto_paper_orders"], h.json()["data"]["strategy_autopaper"]
+        )
         self.assertIn("trading_state", h.json()["data"])
         m = self.client.get("/api/v1/pumpfun/monitor")
         self.assertEqual(m.status_code, 200)

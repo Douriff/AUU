@@ -28,6 +28,7 @@ def health():
             "marketProviderOptions": list(AVAILABLE_PROVIDERS),
             "trading_state": gate.trading_state,
             "auto_paper_orders": get_engine().params.auto_paper_orders,
+            "strategy_autopaper": get_engine().params.auto_paper_orders,
             "strategyId": "pump-paper-v1",
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
             "discovery": resolve_discovery_mode(),

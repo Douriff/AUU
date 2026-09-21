@@ -264,4 +264,49 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .curve-chip.migrated { color: var(--green); }
 .curve-chip.discovered { color: var(--accent); }
+.paper-stats {
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0.45rem 0.75rem 0.5rem;
+}
+.paper-stats header {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.paper-stats .mc-toggle {
+  font-size: 0.72rem; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  flex: 0 0 auto; white-space: nowrap; cursor: pointer;
+}
+.paper-stats-row {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.equity-spark { color: var(--accent); flex-shrink: 0; }
+.journal-table {
+  width: auto; min-width: 28rem; max-width: 100%;
+  border-collapse: collapse; margin-top: 0.35rem;
+  font-family: ui-monospace, monospace; font-size: 0.7rem;
+}
+.journal-table th, .journal-table td { text-align: left; padding: 0.15rem 0.35rem; }
+.journal-table tr.buy td { color: var(--green); }
+.journal-table tr.sell td { color: var(--red); }
+.paper-stats h2 {
+  margin: 0; font-size: 0.8rem; font-weight: 600;
+}
+.paper-stats.compact { padding: 0.35rem 0.75rem 0.4rem; }
+.paper-stats dl {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.4rem;
+  margin: 0.35rem 0 0.2rem;
+}
+.paper-stats dl div { display: flex; gap: 0.4rem; align-items: baseline; }
+.paper-stats dt { color: var(--muted); font-size: 0.75rem; }
+.paper-stats dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.paper-stats .mc-line {
+  margin: 0.25rem 0 0; font-size: 0.72rem; color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+.paper-stats .disclaimer { margin: 0.2rem 0 0; }
+.trade-page .paper-stats {
+  border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
+}
+.curve-chip.discovered { color: var(--accent); }
 code.hl { color: var(--accent); }

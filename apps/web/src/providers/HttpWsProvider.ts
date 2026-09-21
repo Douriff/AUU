@@ -7,6 +7,7 @@ import type {
   MonitorRow,
   NewTokenEvent,
   PaperOrderResult,
+  PaperPerformance,
   PipelineResult,
   PumpfunPaperSnapshot,
   PumpPaperParams,
@@ -131,6 +132,7 @@ export class HttpWsProvider {
     marketProviderOptions?: string[];
     trading_state?: string;
     auto_paper_orders?: boolean;
+    strategy_autopaper?: boolean;
     strategyId?: string;
     liveDisabled?: boolean;
     watch_mints?: string;
@@ -162,6 +164,12 @@ export class HttpWsProvider {
 
   getStrategy(): Promise<PumpPaperState> {
     return getJson("/api/v1/strategy/pump-paper-v1");
+  }
+
+  getPaperPerformance(window = "session", opts?: { mc?: boolean }): Promise<PaperPerformance> {
+    const q = new URLSearchParams({ window: String(window) });
+    if (opts?.mc) q.set("mc", "1");
+    return getJson(`/api/v1/strategy/pump-paper-v1/stats?${q}`);
   }
 
   putStrategy(patch: Partial<PumpPaperParams>) {

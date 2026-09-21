@@ -1,11 +1,14 @@
 """GET/PUT /api/v1/strategy/pump-paper-v1 — paper strategy params + monitor."""
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.bus import get_hub
+from app.paper.ledger import build_performance, reset_paper_journal
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -51,6 +54,8 @@ def _state_payload() -> dict[str, Any]:
         "trading_state": gate.trading_state,
         "day_pnl": gate.day_pnl,
         "positions": positions,
+        "last_decisions": engine.last_decisions(20),
+        "liveDisabled": True,
     }
 
 
@@ -66,10 +71,57 @@ def put_pump_paper(body: PumpPaperParamsPatch):
     patch = body.model_dump(exclude_none=True)
     if "strategy_autopaper" in patch:
         patch["auto_paper_orders"] = patch.pop("strategy_autopaper")
+    prev_auto = bool(engine.params.auto_paper_orders)
     engine.update_params(patch)
+    if "auto_paper_orders" in patch and bool(engine.params.auto_paper_orders) != prev_auto:
+        gate = get_risk_gate()
+        auto = bool(engine.params.auto_paper_orders)
+        get_hub().publish_sync(
+            {
+                "type": "trading_state",
+                "payload": {
+                    "state": gate.trading_state,
+                    "reason": "autopaper_on" if auto else "autopaper_off",
+                    "symbol": "",
+                    "ts": int(time.time() * 1000),
+                    "auto_paper_orders": auto,
+                    "strategy_autopaper": auto,
+                },
+            }
+        )
     return ok(_state_payload())
 
 
 @router.get("/pump-paper-v1/monitor")
 def get_monitor():
     return ok(get_engine().monitor_rows())
+
+
+@router.get("/pump-paper-v1/stats")
+def get_pump_paper_stats(
+    window: str = "session",
+    mc: str = "0",
+    n_paths: int = 500,
+    seed: int = 42,
+    method: str = "shuffle",
+):
+    """PaperTradeJournal PaperStats. MC off unless mc=1. Win rate from round-trips only."""
+    enabled = str(mc).strip().lower() in {"1", "true", "yes", "on"}
+    if method in {"resample", "bootstrap"}:
+        mc_method = "bootstrap"
+    else:
+        mc_method = "shuffle"
+    data = build_performance(
+        window=window,
+        n_paths=n_paths,
+        seed=seed,
+        mc=enabled,
+        mc_method=mc_method,
+    )
+    return ok(data)
+
+
+@router.post("/pump-paper-v1/stats/reset")
+def reset_pump_paper_stats():
+    reset_paper_journal()
+    return ok(build_performance())

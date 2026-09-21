@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDataSource } from "@/hooks/useDataSource";
+import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { marketProvider } from "@/providers/HttpWsProvider";
+import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
+import { PaperStatsPanel } from "@/components/market/PaperStatsPanel";
 import type {
   BookSnapshot,
   Fill,
@@ -28,6 +31,7 @@ function fmt(n: number, digits = 6): string {
 
 export function TradePage() {
   const { dataSource, setDataSource } = useDataSource();
+  const { autoPaperOrders, setAutoPaperOrders, tradingState } = useStrategyConfig();
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
   const [symbol, setSymbol] = useState("");
   const [notional, setNotional] = useState("0.1");
@@ -244,7 +248,13 @@ export function TradePage() {
         <div className="ws-status" data-status={wsStatus}>
           WS {wsStatus}
           {mid != null ? ` · mid ${fmt(mid)}` : ""}
+          {` · ${tradingState}`}
         </div>
+        <AutoPaperToggle
+          checked={autoPaperOrders}
+          onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+          label="自动纸面（默认关）"
+        />
         <div className="data-source-toggle" role="group" aria-label="dataSource">
           {DATA_SOURCES.map((opt) => (
             <button
@@ -261,6 +271,8 @@ export function TradePage() {
           Settings
         </Link>
       </div>
+
+      <PaperStatsPanel />
 
       <section className="paper-order-panel" aria-label="paper order">
         <h2>Paper order</h2>
