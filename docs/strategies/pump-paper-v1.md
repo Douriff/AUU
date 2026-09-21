@@ -100,7 +100,8 @@ cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3
 notional_pct_equity: 0.005
-auto_paper_orders: false   # strategy_autopaper
+auto_paper_orders: false
+strategy_autopaper: false   # alias of auto_paper_orders; default off
 ```
 
 ---
