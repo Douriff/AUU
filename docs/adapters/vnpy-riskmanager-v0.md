@@ -16,13 +16,13 @@
 
 ## Live extras（独立路径 · 默认关）
 
-实盘脚手架在 `app.live` / `RiskGate.check_live`。纸面 `check()` **不读**这些字段。任一 limit 未设或 ≤0 → `LIMITS_MISSING` 闭门（不 clip、不发链）。
+实盘脚手架在 `app.live` / `RiskGate.check_live`。纸面 `check()` **不读**这些字段。锁定上限（用户授权）：
 
 | vn.py 概念 | AUU live | 行为 |
 |------------|----------|------|
-| 单笔数量 / 名义 | `max_notional_sol` | 超限 `MAX_NOTIONAL`（fail closed） |
-| 日亏熔断 | `max_day_loss`（SOL） | `DAY_LOSS_BREAKER` |
-| 持仓个数 | `max_open_mints` | `MAX_OPEN_MINTS` |
+| 单笔数量 / 名义 | `max_notional_sol` **= 1.0 SOL** | 超限 `MAX_NOTIONAL`（fail closed） |
+| 日亏熔断 | `max_day_loss_pct` **= 0.045** | `DAY_LOSS_BREAKER`（纸面仍 5%） |
+| 持仓个数 | `max_open_mints` **= 10** | `MAX_OPEN_MINTS` |
 | 交易开关 | `AUU_LIVE_DISABLED` + `live_armed` | `LIVE_DISABLED`；默认关 |
 | 密钥 | `AUU_SOLANA_KEYPAIR_PATH` 本机文件 | 缺文件 `NO_KEYPAIR` |
 

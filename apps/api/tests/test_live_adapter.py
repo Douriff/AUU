@@ -1,4 +1,4 @@
-"""Live adapter: disabled by default; cannot arm without limits + local keypair."""
+"""Live adapter: disabled by default; locked caps; cannot arm without local keypair."""
 from __future__ import annotations
 
 import json
@@ -11,15 +11,17 @@ from app.live.gate import (
     ENV_KEYPAIR_PATH,
     ENV_LIVE_ARMED,
     ENV_LIVE_DISABLED,
-    ENV_MAX_DAY_LOSS,
+    ENV_MAX_DAY_LOSS_PCT,
     ENV_MAX_NOTIONAL_SOL,
     ENV_MAX_OPEN_MINTS,
+    LOCKED_MAX_DAY_LOSS_PCT,
+    LOCKED_MAX_NOTIONAL_SOL,
+    LOCKED_MAX_OPEN_MINTS,
     REASON_LIMITS_MISSING,
     REASON_LIVE_DISABLED,
     REASON_NO_KEYPAIR,
     evaluate,
     reset_live_state,
-    set_limits,
     try_set_armed,
     try_set_disabled,
 )
@@ -48,10 +50,16 @@ _LIVE_ENV = (
     ENV_LIVE_ARMED,
     ENV_KEYPAIR_PATH,
     ENV_MAX_NOTIONAL_SOL,
-    ENV_MAX_DAY_LOSS,
+    ENV_MAX_DAY_LOSS_PCT,
     ENV_MAX_OPEN_MINTS,
     "LIVE_TRADING",
 )
+
+LOCKED_LIMITS = {
+    "max_notional_sol": LOCKED_MAX_NOTIONAL_SOL,
+    "max_day_loss_pct": LOCKED_MAX_DAY_LOSS_PCT,
+    "max_open_mints": LOCKED_MAX_OPEN_MINTS,
+}
 
 
 def _clear_live_env() -> None:
@@ -75,79 +83,68 @@ class LiveGateDefaultTests(unittest.TestCase):
         _clear_live_env()
         reset_live_state()
 
-    def test_live_disabled_by_default(self):
+    def test_live_disabled_by_default_with_locked_caps(self):
         st = evaluate()
         self.assertTrue(st.live_disabled)
         self.assertFalse(st.live_armed)
         self.assertFalse(st.live_send_wired)
         self.assertIn(REASON_LIVE_DISABLED, st.reasons)
         self.assertIn(REASON_NO_KEYPAIR, st.reasons)
-        self.assertIn(REASON_LIMITS_MISSING, st.reasons)
+        self.assertNotIn(REASON_LIMITS_MISSING, st.reasons)
         self.assertFalse(st.armed)
         self.assertFalse(st.keypair_configured)
-        self.assertEqual(
-            st.limits.as_dict(),
-            {"max_notional_sol": None, "max_day_loss": None, "max_open_mints": None},
-        )
+        self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
         self.assertTrue(paper_live_disabled())
 
-    def test_missing_limits_cannot_arm(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ[ENV_LIVE_DISABLED] = "false"
-            os.environ[ENV_LIVE_ARMED] = "true"
-            os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
-            st = evaluate()
-            self.assertFalse(st.armed)
-            self.assertIn(REASON_LIMITS_MISSING, st.reasons)
-            self.assertNotIn(REASON_NO_KEYPAIR, st.reasons)
-            ok_arm, st2 = try_set_armed(True)
-            self.assertFalse(ok_arm)
-            self.assertIn(REASON_LIMITS_MISSING, st2.reasons)
-
-    def test_zero_limits_cannot_arm(self):
+    def test_zero_env_falls_back_to_locked_caps(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ[ENV_LIVE_DISABLED] = "false"
             os.environ[ENV_LIVE_ARMED] = "true"
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
             os.environ[ENV_MAX_NOTIONAL_SOL] = "0"
-            os.environ[ENV_MAX_DAY_LOSS] = "0"
+            os.environ[ENV_MAX_DAY_LOSS_PCT] = "0"
             os.environ[ENV_MAX_OPEN_MINTS] = "0"
             st = evaluate()
-            self.assertIn(REASON_LIMITS_MISSING, st.reasons)
-            self.assertFalse(st.armed)
+            self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
+            self.assertNotIn(REASON_LIMITS_MISSING, st.reasons)
+            self.assertTrue(st.armed)
+
+    def test_env_cannot_loosen_locked_caps(self):
+        os.environ[ENV_MAX_NOTIONAL_SOL] = "9"
+        os.environ[ENV_MAX_DAY_LOSS_PCT] = "0.5"
+        os.environ[ENV_MAX_OPEN_MINTS] = "99"
+        st = evaluate()
+        self.assertEqual(st.limits.max_notional_sol, LOCKED_MAX_NOTIONAL_SOL)
+        self.assertEqual(st.limits.max_day_loss_pct, LOCKED_MAX_DAY_LOSS_PCT)
+        self.assertEqual(st.limits.max_open_mints, LOCKED_MAX_OPEN_MINTS)
 
     def test_missing_keypair_cannot_arm(self):
         os.environ[ENV_LIVE_DISABLED] = "false"
         os.environ[ENV_LIVE_ARMED] = "true"
-        os.environ[ENV_MAX_NOTIONAL_SOL] = "0.1"
-        os.environ[ENV_MAX_DAY_LOSS] = "0.5"
-        os.environ[ENV_MAX_OPEN_MINTS] = "2"
         st = evaluate()
         self.assertFalse(st.armed)
         self.assertIn(REASON_NO_KEYPAIR, st.reasons)
+        self.assertNotIn(REASON_LIMITS_MISSING, st.reasons)
         ok_arm, st2 = try_set_armed(True)
         self.assertFalse(ok_arm)
         self.assertIn(REASON_NO_KEYPAIR, st2.reasons)
 
-    def test_live_armed_defaults_false_even_with_keypair_and_limits(self):
+    def test_live_armed_defaults_false_even_with_keypair(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ[ENV_LIVE_DISABLED] = "false"
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
-            os.environ[ENV_MAX_NOTIONAL_SOL] = "0.1"
-            os.environ[ENV_MAX_DAY_LOSS] = "0.5"
-            os.environ[ENV_MAX_OPEN_MINTS] = "2"
             st = evaluate()
             self.assertFalse(st.armed_flag)
             self.assertIn(REASON_LIVE_DISABLED, st.reasons)
             self.assertFalse(st.armed)
+            self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
 
-    def test_settings_cannot_disable_switch_without_limits(self):
+    def test_settings_cannot_disable_switch_without_keypair(self):
+        ok, st = try_set_disabled(False)
+        self.assertFalse(ok)
+        self.assertTrue(st.disabled_switch)
         with tempfile.TemporaryDirectory() as tmp:
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
-            ok, st = try_set_disabled(False)
-            self.assertFalse(ok)
-            self.assertTrue(st.disabled_switch)
-            set_limits(max_notional_sol=0.1, max_day_loss=0.25, max_open_mints=1, present={"max_notional_sol", "max_day_loss", "max_open_mints"})
             ok2, st2 = try_set_disabled(False)
             self.assertTrue(ok2)
             self.assertFalse(st2.disabled_switch)
@@ -183,7 +180,18 @@ class RiskGateLiveExtrasTests(unittest.TestCase):
         for tag in ("LIMITS_MISSING", "LIVE_DISABLED", "NO_KEYPAIR", "MAX_OPEN_MINTS"):
             self.assertIn(tag, REASON)
 
-    def test_check_live_fail_closed_when_limits_missing(self):
+    def test_check_live_uses_locked_defaults(self):
+        gate = RiskGate()
+        ctx = StrategyContext(
+            symbol="PUMPDEMO/SOL",
+            ts=1,
+            account=AccountCtx(equity=10_000.0, day_pnl=0.0),
+            liquidity=LiquidityCtx(spread_bps=10, adv_usd=1_000_000),
+        )
+        risk = gate.check_live(ctx, SignalOut(side="long"), SizeIn(target_notional=0.5))
+        self.assertTrue(risk.allow)
+
+    def test_check_live_fail_closed_when_limits_zeroed(self):
         gate = RiskGate()
         ctx = StrategyContext(
             symbol="PUMPDEMO/SOL",
@@ -195,40 +203,52 @@ class RiskGateLiveExtrasTests(unittest.TestCase):
             ctx,
             SignalOut(side="long"),
             SizeIn(target_notional=0.05),
-            live_limits={},
+            live_limits={"max_notional_sol": 0, "max_day_loss_pct": 0, "max_open_mints": 0},
         )
         self.assertFalse(risk.allow)
         self.assertIn("LIMITS_MISSING", risk.tags)
 
-    def test_check_live_enforces_notional_and_open_mints(self):
+    def test_check_live_enforces_locked_notional_open_mints_and_day_loss(self):
         gate = RiskGate()
         ctx = StrategyContext(
             symbol="PUMPDEMO/SOL",
             ts=1,
-            account=AccountCtx(day_pnl=0.0),
+            account=AccountCtx(equity=100.0, day_pnl=0.0),
             liquidity=LiquidityCtx(spread_bps=10, adv_usd=1_000_000),
-            meta={"open_mints": 2},
+            meta={"open_mints": 10},
         )
-        limits = {"max_notional_sol": 0.1, "max_day_loss": 1.0, "max_open_mints": 2}
         over = gate.check_live(
-            ctx, SignalOut(side="long"), SizeIn(target_notional=0.5), live_limits=limits
+            ctx, SignalOut(side="long"), SizeIn(target_notional=1.01)
         )
         self.assertFalse(over.allow)
         self.assertIn("MAX_NOTIONAL", over.tags)
         caps = gate.check_live(
-            ctx, SignalOut(side="long"), SizeIn(target_notional=0.05), live_limits=limits
+            ctx, SignalOut(side="long"), SizeIn(target_notional=0.5)
         )
         self.assertFalse(caps.allow)
         self.assertIn("MAX_OPEN_MINTS", caps.tags)
+        loss_ctx = StrategyContext(
+            symbol="PUMPDEMO/SOL",
+            ts=1,
+            account=AccountCtx(equity=100.0, day_pnl=-4.6),
+            liquidity=LiquidityCtx(spread_bps=10, adv_usd=1_000_000),
+        )
+        loss = gate.check_live(
+            loss_ctx, SignalOut(side="long"), SizeIn(target_notional=0.5)
+        )
+        self.assertFalse(loss.allow)
+        self.assertIn("DAY_LOSS_BREAKER", loss.tags)
 
-    def test_paper_check_ignores_unset_live_limits(self):
+    def test_paper_check_keeps_five_pct_day_loss(self):
         gate = RiskGate()
+        self.assertEqual(gate.limits.max_day_loss_pct, 0.05)
         ctx = StrategyContext(
             symbol="PUMPDEMO/SOL",
             ts=1,
-            account=AccountCtx(),
+            account=AccountCtx(equity=10_000.0, day_pnl=-460.0),
             liquidity=LiquidityCtx(spread_bps=10, adv_usd=1_000_000),
         )
+        # 4.6% < paper 5% — still allow on paper path
         risk = gate.check(ctx, SignalOut(side="long"), SizeIn(target_notional=50))
         self.assertTrue(risk.allow)
 
@@ -281,8 +301,11 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertFalse(data["liveSendWired"])
         self.assertIn(REASON_LIVE_DISABLED, data["liveReasons"])
         self.assertIn(REASON_NO_KEYPAIR, data["liveReasons"])
-        self.assertIn(REASON_LIMITS_MISSING, data["liveReasons"])
+        self.assertNotIn(REASON_LIMITS_MISSING, data["liveReasons"])
         self.assertFalse(data["keypairConfigured"])
+        self.assertEqual(data["liveLimits"]["max_notional_sol"], LOCKED_MAX_NOTIONAL_SOL)
+        self.assertEqual(data["liveLimits"]["max_day_loss_pct"], LOCKED_MAX_DAY_LOSS_PCT)
+        self.assertEqual(data["liveLimits"]["max_open_mints"], LOCKED_MAX_OPEN_MINTS)
 
     def test_live_orders_403_when_disabled(self):
         body = {
@@ -297,29 +320,30 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         r = self.client.post("/api/v1/live/orders", json=body)
         self.assertEqual(r.status_code, 403)
         err = r.json()["error"]
-        self.assertIn(err["code"], {REASON_LIVE_DISABLED, REASON_NO_KEYPAIR, REASON_LIMITS_MISSING})
+        self.assertIn(err["code"], {REASON_LIVE_DISABLED, REASON_NO_KEYPAIR})
         self.assertIn(REASON_LIVE_DISABLED, err["reasons"])
         self.assertIn(REASON_NO_KEYPAIR, err["reasons"])
-        self.assertIn(REASON_LIMITS_MISSING, err["reasons"])
+        self.assertNotIn(REASON_LIMITS_MISSING, err["reasons"])
 
-    def test_arm_without_limits_403(self):
+    def test_arm_without_keypair_403(self):
         r = self.client.put("/api/v1/live/arm", json={"armed": True})
         self.assertEqual(r.status_code, 403)
-        self.assertIn(REASON_LIMITS_MISSING, r.json()["error"]["reasons"])
+        self.assertIn(REASON_NO_KEYPAIR, r.json()["error"]["reasons"])
+        self.assertNotIn(REASON_LIMITS_MISSING, r.json()["error"]["reasons"])
 
     def test_armed_stub_does_not_fill(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ[ENV_LIVE_DISABLED] = "false"
             os.environ[ENV_LIVE_ARMED] = "true"
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
-            os.environ[ENV_MAX_NOTIONAL_SOL] = "0.2"
-            os.environ[ENV_MAX_DAY_LOSS] = "1"
-            os.environ[ENV_MAX_OPEN_MINTS] = "3"
             reset_live_state()
             st = self.client.get("/api/v1/live/status").json()["data"]
             self.assertTrue(st["liveArmed"])
             self.assertTrue(st["liveDisabled"])
             self.assertFalse(st["sendEnabled"])
+            self.assertEqual(st["limits"]["max_notional_sol"], 1.0)
+            self.assertEqual(st["limits"]["max_day_loss_pct"], 0.045)
+            self.assertEqual(st["limits"]["max_open_mints"], 10)
             body = {
                 "ctx": {
                     "symbol": "PUMPDEMO/SOL",
@@ -356,12 +380,18 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertGreaterEqual(len(data["fills"]), 1)
         self.assertNotIn("reject", data)
 
-    def test_put_limits_empty_does_not_arm(self):
-        r = self.client.put("/api/v1/live/limits", json={})
+    def test_put_limits_cannot_change_locked_caps(self):
+        r = self.client.put(
+            "/api/v1/live/limits",
+            json={"max_notional_sol": 9, "max_day_loss_pct": 0.5, "max_open_mints": 99},
+        )
         self.assertEqual(r.status_code, 200)
         data = r.json()["data"]
+        self.assertTrue(data["limitsLocked"])
+        self.assertEqual(data["limits"]["max_notional_sol"], LOCKED_MAX_NOTIONAL_SOL)
+        self.assertEqual(data["limits"]["max_day_loss_pct"], LOCKED_MAX_DAY_LOSS_PCT)
+        self.assertEqual(data["limits"]["max_open_mints"], LOCKED_MAX_OPEN_MINTS)
         self.assertFalse(data["liveArmed"])
-        self.assertIn(REASON_LIMITS_MISSING, data["reasons"])
 
 
 class NoCommittedKeypairTests(unittest.TestCase):
@@ -409,7 +439,6 @@ class NoCommittedKeypairTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
     def test_live_python_does_not_load_private_key_env_strings(self):
-        # Names split in paper/guard.py; live signer must also not concatenate them.
         needle = "PRIVATE" + "_KEY"
         hits: list[str] = []
         for path in LIVE_PY.rglob("*.py"):

@@ -1,7 +1,7 @@
 """LiveBroker stub — same order lifecycle as PaperBroker, venue=live, blocked by the gate.
 
 This PR does not submit chain transactions. When the hard gate is closed, submit
-rejects with LIVE_DISABLED / NO_KEYPAIR / LIMITS_MISSING. When the checklist
+rejects with LIVE_DISABLED / NO_KEYPAIR. When the checklist
 passes, submit still refuses with LIVE_STUB. Official `@pump-fun/pump-sdk`
 buy/sell wiring is documented in docs/adapters/pumpfun-live-local-signer-v0.md
 and is not called here.

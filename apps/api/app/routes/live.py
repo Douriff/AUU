@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/live", tags=["live"])
 
 class LiveLimitsBody(BaseModel):
     max_notional_sol: Optional[float] = None
-    max_day_loss: Optional[float] = None
+    max_day_loss_pct: Optional[float] = None
     max_open_mints: Optional[int] = None
 
 
@@ -68,20 +68,18 @@ def live_limits():
 
 @router.put("/limits")
 def put_live_limits(body: LiveLimitsBody):
-    """Save placeholder limits. Zero/null does not arm. Keypair is never uploaded."""
-    dumped = body.model_dump(exclude_unset=True)
+    """Limits are locked. Body is ignored; always returns authorized caps."""
     st = set_limits(
-        max_notional_sol=dumped.get("max_notional_sol"),
-        max_day_loss=dumped.get("max_day_loss"),
-        max_open_mints=dumped.get("max_open_mints"),
-        present=set(dumped.keys()),
+        max_notional_sol=body.max_notional_sol,
+        max_day_loss_pct=body.max_day_loss_pct,
+        max_open_mints=body.max_open_mints,
     )
     return ok(st.as_dict())
 
 
 @router.put("/disabled")
 def put_live_disabled(body: LiveDisabledBody):
-    """LiveDisabled switch. Turning it off requires keypair + all three limits."""
+    """LiveDisabled switch. Turning it off requires a local keypair (limits are locked)."""
     ok_set, st = try_set_disabled(body.live_disabled)
     if not ok_set:
         return _blocked(st)
@@ -90,7 +88,7 @@ def put_live_disabled(body: LiveDisabledBody):
 
 @router.put("/arm")
 def put_live_arm(body: LiveArmBody):
-    """Explicit arm. Refuses unless switch is off, keypair exists, and limits are set."""
+    """Explicit arm. Refuses unless switch is off and a local keypair exists."""
     ok_set, st = try_set_armed(body.armed)
     if not ok_set:
         return _blocked(st)

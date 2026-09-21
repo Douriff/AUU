@@ -23,9 +23,6 @@ export function SettingsPage() {
   const [discovery, setDiscovery] = useState<string>("…");
   const [portalKey, setPortalKey] = useState<boolean | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
-  const [maxNotional, setMaxNotional] = useState("");
-  const [maxDayLoss, setMaxDayLoss] = useState("");
-  const [maxOpenMints, setMaxOpenMints] = useState("");
   const [liveMsg, setLiveMsg] = useState("");
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
@@ -54,46 +51,20 @@ export function SettingsPage() {
       .catch((e: Error) => setErr(e.message));
     marketProvider
       .getLiveStatus()
-      .then((st) => {
-        setLive(st);
-        setMaxNotional(st.limits.max_notional_sol != null ? String(st.limits.max_notional_sol) : "");
-        setMaxDayLoss(st.limits.max_day_loss != null ? String(st.limits.max_day_loss) : "");
-        setMaxOpenMints(st.limits.max_open_mints != null ? String(st.limits.max_open_mints) : "");
-      })
+      .then((st) => setLive(st))
       .catch(() => undefined);
   }, []);
 
-  const limitsReady =
-    Number(maxNotional) > 0 && Number(maxDayLoss) > 0 && Number(maxOpenMints) > 0;
-  const canTryArm = limitsReady && Boolean(live?.keypairConfigured);
+  const canTryArm = Boolean(live?.keypairConfigured);
 
   const applyLive = (st: LiveStatus) => {
     setLive(st);
-    setMaxNotional(st.limits.max_notional_sol != null ? String(st.limits.max_notional_sol) : "");
-    setMaxDayLoss(st.limits.max_day_loss != null ? String(st.limits.max_day_loss) : "");
-    setMaxOpenMints(st.limits.max_open_mints != null ? String(st.limits.max_open_mints) : "");
-  };
-
-  const saveLiveLimits = () => {
-    setLiveMsg("");
-    const body: { max_notional_sol: number | null; max_day_loss: number | null; max_open_mints: number | null } = {
-      max_notional_sol: Number(maxNotional) > 0 ? Number(maxNotional) : null,
-      max_day_loss: Number(maxDayLoss) > 0 ? Number(maxDayLoss) : null,
-      max_open_mints: Number(maxOpenMints) > 0 ? Number(maxOpenMints) : null,
-    };
-    void marketProvider
-      .putLiveLimits(body)
-      .then((st) => {
-        applyLive(st);
-        setLiveMsg("limits saved (placeholders; live still disabled)");
-      })
-      .catch((e: Error) => setLiveMsg(e.message));
   };
 
   const tryArmLive = () => {
     setLiveMsg("");
     if (!canTryArm) {
-      setLiveMsg("cannot arm: need positive limits and a local keypair path");
+      setLiveMsg("cannot arm: need a local keypair path (AUU_SOLANA_KEYPAIR_PATH)");
       return;
     }
     void marketProvider
@@ -182,77 +153,46 @@ export function SettingsPage() {
       <section className="settings-section live-section">
         <h2>Live adapter · Pump.fun local signer (dark)</h2>
         <p className="muted">
-          Status = <strong>{live?.liveDisabled !== false ? "disabled" : "enabled"}</strong>
+          Status = <strong>disabled</strong>
           {" · "}
           liveArmed=<code>{String(live?.liveArmed ?? false)}</code>
           {" · "}
           sendEnabled=<code>{String(live?.sendEnabled ?? false)}</code>
-          . This UI never uploads a keypair. Set <code>AUU_SOLANA_KEYPAIR_PATH</code> in a gitignored{" "}
-          <code>.env</code> on this machine. Do not paste a private key.
+          . Caps are locked. This UI never uploads a keypair. Set{" "}
+          <code>AUU_SOLANA_KEYPAIR_PATH</code> in a gitignored <code>.env</code> on this machine.
         </p>
         <p className="live-status-row">
           <span className="mode-badge live-off">LIVE DISABLED</span>
-          {(live?.reasons ?? ["LIVE_DISABLED", "NO_KEYPAIR", "LIMITS_MISSING"]).map((tag) => (
+          <span className="mode-badge live-off">NOT ARMED</span>
+          {(live?.reasons ?? ["LIVE_DISABLED", "NO_KEYPAIR"]).map((tag) => (
             <span key={tag} className="tag">
               {tag}
             </span>
           ))}
         </p>
-        <form
-          className="live-limits-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveLiveLimits();
-          }}
-        >
-          <label>
-            max_notional_sol
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="unset"
-              value={maxNotional}
-              onChange={(e) => setMaxNotional(e.target.value)}
-            />
-          </label>
-          <label>
-            max_day_loss
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="unset"
-              value={maxDayLoss}
-              onChange={(e) => setMaxDayLoss(e.target.value)}
-            />
-          </label>
-          <label>
-            max_open_mints
-            <input
-              type="number"
-              min={0}
-              step="1"
-              placeholder="unset"
-              value={maxOpenMints}
-              onChange={(e) => setMaxOpenMints(e.target.value)}
-            />
-          </label>
-          <div className="paper-actions">
-            <button type="submit" className="ghost">
-              Save limits
-            </button>
-            <button type="button" className="ghost" disabled={!canTryArm} onClick={tryArmLive}>
-              Arm live
-            </button>
-          </div>
-        </form>
+        <dl className="settings-dl live-caps">
+          <dt>max_notional_sol</dt>
+          <dd>
+            <code>{live?.limits.max_notional_sol ?? 1}</code> SOL / order (locked)
+          </dd>
+          <dt>max_day_loss_pct</dt>
+          <dd>
+            <code>{live?.limits.max_day_loss_pct ?? 0.045}</code> (4.5%) (locked)
+          </dd>
+          <dt>max_open_mints</dt>
+          <dd>
+            <code>{live?.limits.max_open_mints ?? 10}</code> concurrent (locked)
+          </dd>
+        </dl>
+        <div className="paper-actions">
+          <button type="button" className="ghost" disabled={!canTryArm} onClick={tryArmLive}>
+            Arm live
+          </button>
+        </div>
         <p className="muted">
           Keypair: {live?.keypairConfigured ? "file present (path not shown)" : "absent"} via{" "}
-          <code>{live?.keypairEnv ?? "AUU_SOLANA_KEYPAIR_PATH"}</code>. Arm stays off unless all three
-          limits are positive, the local keypair file exists, <code>AUU_LIVE_DISABLED=false</code>, and{" "}
-          <code>live_armed=true</code>. Empty/zero limits refuse to arm. This PR does not send chain
-          transactions.
+          <code>{live?.keypairEnv ?? "AUU_SOLANA_KEYPAIR_PATH"}</code>. <code>live_armed</code> defaults
+          false. Arm stays off without a local keypair. This PR does not send chain transactions.
         </p>
         {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>
@@ -333,6 +273,14 @@ export function SettingsPage() {
         <dt>liveArmed</dt>
         <dd>
           <code>{String(live?.liveArmed ?? false)}</code>
+        </dd>
+        <dt>live caps</dt>
+        <dd>
+          <code>
+            {live
+              ? `${live.limits.max_notional_sol} SOL / ${live.limits.max_day_loss_pct} / ${live.limits.max_open_mints}`
+              : "1 SOL / 0.045 / 10"}
+          </code>
         </dd>
         <dt>API health</dt>
         <dd>

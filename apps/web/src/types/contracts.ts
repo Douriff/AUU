@@ -296,9 +296,9 @@ export interface TradeTick {
 }
 
 export interface LiveLimits {
-  max_notional_sol: number | null;
-  max_day_loss: number | null;
-  max_open_mints: number | null;
+  max_notional_sol: number;
+  max_day_loss_pct: number;
+  max_open_mints: number;
 }
 
 export interface LiveStatus {
@@ -310,6 +310,7 @@ export interface LiveStatus {
   keypairEnv: string;
   keypairPathHint: string;
   limits: LiveLimits;
+  limitsLocked: boolean;
   limitsMissing: string[];
   disabledSwitch: boolean;
   armedFlag: boolean;
