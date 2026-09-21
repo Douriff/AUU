@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PaperPerformance } from "@/types/contracts";
 
-export function usePaperPerformance(pollMs = 2500) {
+export function usePaperPerformance(pollMs = 2500, mc = false) {
   const [stats, setStats] = useState<PaperPerformance | null>(null);
   const [err, setErr] = useState("");
 
@@ -10,7 +10,7 @@ export function usePaperPerformance(pollMs = 2500) {
     let stop = false;
     const tick = async () => {
       try {
-        const data = await marketProvider.getPaperPerformance();
+        const data = await marketProvider.getPaperPerformance("session", { mc });
         if (!stop) {
           setStats(data);
           setErr("");
@@ -21,16 +21,11 @@ export function usePaperPerformance(pollMs = 2500) {
     };
     void tick();
     const id = window.setInterval(() => void tick(), pollMs);
-    const onFill = () => {
-      void tick();
-    };
-    window.addEventListener("auu:fill", onFill);
     return () => {
       stop = true;
       window.clearInterval(id);
-      window.removeEventListener("auu:fill", onFill);
     };
-  }, [pollMs]);
+  }, [pollMs, mc]);
 
   return { stats, err };
 }

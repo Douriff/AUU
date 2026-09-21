@@ -38,6 +38,8 @@ class LedgerUnitTests(unittest.TestCase):
         self.assertAlmostEqual(stats["win_rate"], 1.0)
         self.assertAlmostEqual(stats["expectancy_pnl_pct"], 10.0)
         self.assertFalse(stats["empty"])
+        self.assertFalse(stats["sample_ok"])
+        self.assertIsNone(stats["monte_carlo"])
         self.assertIn("simulation from paper history", stats["disclaimer"])
 
     def test_loss_and_drawdown(self):
@@ -46,23 +48,25 @@ class LedgerUnitTests(unittest.TestCase):
         led.record_fill("A/SOL", Fill(ts=2, price=8.0, qty=-1.0, fee=0.0))
         led.record_fill("A/SOL", Fill(ts=3, price=8.0, qty=1.0, fee=0.0))
         led.record_fill("A/SOL", Fill(ts=4, price=9.0, qty=-1.0, fee=0.0))
-        stats = summarize(led.closed, n_paths=50, seed=7)
+        stats = summarize(led.closed, n_paths=50, seed=7, mc=True)
         self.assertEqual(stats["wins"], 1)
         self.assertEqual(stats["losses"], 1)
         self.assertAlmostEqual(stats["win_rate"], 0.5)
         self.assertGreater(stats["max_drawdown_pct"], 0)
         mc = stats["monte_carlo"]
-        self.assertEqual(mc["n_paths"], 50)
-        self.assertIsNotNone(mc["p_equity_positive"])
-        self.assertIn("not a promise", mc["label"])
+        self.assertFalse(mc["sample_ok"])
+        self.assertEqual(mc["note"], "样本不足")
+        self.assertNotIn("final_equity_pct_p5", mc)
 
     def test_monte_carlo_seed_stable(self):
-        rets = [0.1, -0.05, 0.02, -0.12, 0.08]
+        rets = [0.1, -0.05, 0.02, -0.12, 0.08, 0.03, -0.01, 0.04, 0.02, 0.01]
         a = monte_carlo(rets, n_paths=300, seed=42)
         b = monte_carlo(rets, n_paths=300, seed=42)
         self.assertEqual(a, b)
+        self.assertTrue(a["sample_ok"])
         self.assertGreaterEqual(a["p_equity_positive"], 0)
         self.assertLessEqual(a["p_equity_positive"], 1)
+        self.assertIn("final_equity_pct_p50", a)
 
     def test_empty_summarize(self):
         stats = summarize([])
@@ -70,6 +74,7 @@ class LedgerUnitTests(unittest.TestCase):
         self.assertIsNone(stats["win_rate"])
         self.assertIsNone(stats["monte_carlo"])
         self.assertEqual(stats["trade_count"], 0)
+        self.assertFalse(stats["sample_ok"])
 
 
 class GuardTests(unittest.TestCase):
@@ -126,7 +131,7 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_empty_performance(self):
-        r = self.client.get("/api/v1/stats/paper-performance")
+        r = self.client.get("/api/v1/strategy/pump-paper-v1/stats")
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertTrue(body["ok"])
@@ -136,9 +141,15 @@ class StatsApiTests(unittest.TestCase):
         self.assertIsNone(data["win_rate"])
         self.assertTrue(data["liveDisabled"])
         self.assertEqual(data["mode"], "paper")
+        self.assertFalse(data["mc"])
+        self.assertIsNone(data["monte_carlo"])
+        self.assertFalse(data["sample_ok"])
         self.assertIn("simulation from paper history", data["disclaimer"])
         self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["strategy_autopaper"])
+        alias = self.client.get("/api/v1/stats/paper-performance")
+        self.assertTrue(alias.json()["ok"])
+        self.assertIsNone(alias.json()["data"]["monte_carlo"])
 
     def test_round_trip_updates_stats(self):
         buy = self.client.post(
@@ -153,17 +164,23 @@ class StatsApiTests(unittest.TestCase):
         )
         self.assertEqual(sell.status_code, 200)
         self.assertGreaterEqual(len(sell.json()["data"]["fills"]), 1)
-        r = self.client.get("/api/v1/stats/paper-performance")
+        r = self.client.get("/api/v1/strategy/pump-paper-v1/stats")
         data = r.json()["data"]
         self.assertGreaterEqual(data["trade_count"], 1)
         self.assertFalse(data["empty"])
         self.assertIsNotNone(data["win_rate"])
-        self.assertIn("monte_carlo", data)
-        mc = data["monte_carlo"]
-        self.assertEqual(mc["n_paths"], 1000)
-        self.assertIn("not a promise", mc["label"])
-        self.assertIsNotNone(mc["p_equity_positive"])
-        self.assertIn("p_hit_day_loss", mc)
+        self.assertFalse(data["mc"])
+        self.assertIsNone(data["monte_carlo"])
+        self.assertIn("journal", data)
+        self.assertGreaterEqual(len(data["journal"]), 1)
+        self.assertIn("equity", data)
+        mc_r = self.client.get("/api/v1/strategy/pump-paper-v1/stats", params={"mc": "1"})
+        mc_data = mc_r.json()["data"]
+        self.assertTrue(mc_data["mc"])
+        mc = mc_data["monte_carlo"]
+        self.assertFalse(mc["sample_ok"])
+        self.assertEqual(mc["note"], "样本不足")
+        self.assertNotIn("final_equity_pct_p5", mc)
 
     def test_health_strategy_autopaper_alias_and_toggle(self):
         h = self.client.get("/api/v1/health")

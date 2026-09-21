@@ -272,6 +272,21 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .paper-stats header {
   display: flex; align-items: baseline; gap: 0.5rem;
 }
+.paper-stats .mc-toggle {
+  margin-left: auto; font-size: 0.72rem; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.paper-stats-row {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.equity-spark { color: var(--accent); flex-shrink: 0; }
+.journal-table {
+  width: 100%; border-collapse: collapse; margin-top: 0.35rem;
+  font-family: ui-monospace, monospace; font-size: 0.7rem;
+}
+.journal-table th, .journal-table td { text-align: left; padding: 0.15rem 0.35rem; }
+.journal-table tr.buy td { color: var(--green); }
+.journal-table tr.sell td { color: var(--red); }
 .paper-stats h2 {
   margin: 0; font-size: 0.8rem; font-weight: 600;
 }

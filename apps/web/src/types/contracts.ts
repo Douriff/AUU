@@ -135,17 +135,45 @@ export interface AutoDecision {
 }
 
 export interface MonteCarloSim {
+  enabled?: boolean;
+  method?: string;
   n_paths: number;
   trade_count: number;
   seed: number;
-  p_equity_positive: number | null;
-  p_equity_above_start: number | null;
-  p_hit_day_loss: number | null;
-  final_equity_pct_p5: number | null;
-  final_equity_pct_p50: number | null;
-  final_equity_pct_p95: number | null;
+  sample_ok?: boolean;
+  note?: string;
+  p_equity_positive?: number | null;
+  p_equity_above_start?: number | null;
+  p_hit_day_loss?: number | null;
+  final_equity_pct_p5?: number | null;
+  final_equity_pct_p50?: number | null;
+  final_equity_pct_p95?: number | null;
   day_loss_pct?: number;
-  label: string;
+  label?: string;
+}
+
+export interface RoundTrip {
+  symbol: string;
+  side: string;
+  qty: number;
+  entry_price: number;
+  exit_price: number;
+  entry_ts: number;
+  exit_ts: number;
+  fee: number;
+  pnl: number;
+  pnl_pct: number;
+  tag?: string;
+  tags?: string[];
+  reason?: string;
+  source?: string;
+}
+
+export interface EquityPoint {
+  t: number;
+  equity: number;
+  symbol?: string;
+  pnl_pct?: number;
 }
 
 export interface PaperPerformance {
@@ -161,14 +189,19 @@ export interface PaperPerformance {
   expectancy_r: number | null;
   max_drawdown_pct: number | null;
   sharpe_like: number | null;
+  sample_ok?: boolean;
+  mc?: boolean;
   open_lots: number | null;
   fill_count?: number;
   monte_carlo: MonteCarloSim | null;
+  equity?: EquityPoint[];
+  journal?: RoundTrip[];
   disclaimer: string;
   empty: boolean;
   auto_paper_orders?: boolean;
   strategy_autopaper?: boolean;
   strategyId?: string;
+  recent?: RoundTrip[];
 }
 
 export interface MonitorRow {

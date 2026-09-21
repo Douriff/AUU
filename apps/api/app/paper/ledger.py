@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.models.contracts import Fill
@@ -11,6 +11,7 @@ from app.models.contracts import Fill
 DEFAULT_MC_PATHS = 1000
 DEFAULT_MC_SEED = 42
 MIN_SHARPE_N = 5
+MIN_SAMPLE_OK = 10
 DISCLAIMER = (
     "simulation from paper history, not a promise — 纸面历史重抽样，非实盘承诺"
 )
@@ -27,7 +28,9 @@ class OpenLot:
 
 
 @dataclass
-class ClosedTrade:
+class RoundTrip:
+    """Closed paper round-trip (FIFO). Manual Trade and autopaper share this journal."""
+
     symbol: str
     side: str  # long | short
     qty: float
@@ -39,7 +42,9 @@ class ClosedTrade:
     pnl: float
     pnl_pct: float
     tag: str = ""
+    tags: list[str] = field(default_factory=list)
     reason: str = ""
+    source: str = "manual"  # manual | autopaper
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -54,17 +59,30 @@ class ClosedTrade:
             "pnl": self.pnl,
             "pnl_pct": self.pnl_pct,
             "tag": self.tag,
+            "tags": list(self.tags),
             "reason": self.reason,
+            "source": self.source,
         }
 
 
-class PaperLedger:
+# Back-compat alias used by early tests.
+ClosedTrade = RoundTrip
+
+
+def _source_from_tag(tag: str) -> str:
+    t = (tag or "").lower()
+    if "pump-paper-v1" in t or "autopaper" in t:
+        return "autopaper"
+    return "manual"
+
+
+class PaperTradeJournal:
     """FIFO round-trip matcher for PaperBroker fills (session memory)."""
 
     def __init__(self) -> None:
         self.fills: list[dict[str, Any]] = []
         self.lots: dict[str, list[OpenLot]] = {}
-        self.closed: list[ClosedTrade] = []
+        self.closed: list[RoundTrip] = []
 
     def record_fill(
         self,
@@ -72,7 +90,7 @@ class PaperLedger:
         fill: Fill,
         *,
         reason: str = "",
-    ) -> list[ClosedTrade]:
+    ) -> list[RoundTrip]:
         qty = float(fill.qty)
         px = float(fill.price)
         fee = float(fill.fee or 0.0)
@@ -85,7 +103,7 @@ class PaperLedger:
         self.fills.append(dumped)
         opened = self.lots.setdefault(symbol, [])
         remaining = qty
-        new_closed: list[ClosedTrade] = []
+        new_closed: list[RoundTrip] = []
 
         # Cover opposite lots first (FIFO).
         i = 0
@@ -114,7 +132,8 @@ class PaperLedger:
                 pnl_pct = (lot.price - px) / lot.price
             if lot.price * take > 0:
                 pnl_pct -= fee_share / (lot.price * take)
-            trade = ClosedTrade(
+            src_tag = tag or lot.tag
+            trade = RoundTrip(
                 symbol=symbol,
                 side=side,
                 qty=take,
@@ -125,8 +144,10 @@ class PaperLedger:
                 fee=fee_share,
                 pnl=pnl,
                 pnl_pct=pnl_pct,
-                tag=tag or lot.tag,
+                tag=src_tag,
+                tags=[x for x in (src_tag, reason) if x],
                 reason=reason,
+                source=_source_from_tag(src_tag),
             )
             self.closed.append(trade)
             new_closed.append(trade)
@@ -161,7 +182,7 @@ class PaperLedger:
         window: Optional[int] = None,
         from_ts: Optional[int] = None,
         to_ts: Optional[int] = None,
-    ) -> list[ClosedTrade]:
+    ) -> list[RoundTrip]:
         rows = list(self.closed)
         if from_ts is not None:
             rows = [t for t in rows if t.exit_ts >= from_ts]
@@ -201,29 +222,41 @@ def _sharpe_like(returns: list[float]) -> Optional[float]:
     return mean / std
 
 
+def _equity_curve(trades: list[RoundTrip]) -> list[dict[str, Any]]:
+    eq = 1.0
+    out = [{"t": trades[0].entry_ts if trades else 0, "equity": 1.0}] if trades else []
+    if not trades:
+        return out
+    out = [{"t": trades[0].entry_ts, "equity": 1.0}]
+    for t in trades:
+        eq *= 1.0 + t.pnl_pct
+        out.append({"t": t.exit_ts, "equity": eq, "symbol": t.symbol, "pnl_pct": t.pnl_pct})
+    return out
+
+
 def monte_carlo(
     returns: list[float],
     *,
     n_paths: int = DEFAULT_MC_PATHS,
     seed: int = DEFAULT_MC_SEED,
     day_loss_pct: float = 0.05,
+    method: str = "resample",
 ) -> dict[str, Any]:
-    """Resample closed-trade pnl_pct with replacement. Label as paper simulation."""
+    """P1 trades-MC: resample or reshuffle round-trip pnl, rebuild equity. Not a promise."""
     n = len(returns)
-    empty = {
+    sample_ok = n >= MIN_SAMPLE_OK
+    base = {
+        "enabled": True,
+        "method": method,
         "n_paths": n_paths,
         "trade_count": n,
         "seed": seed,
-        "p_equity_positive": None,
-        "p_equity_above_start": None,
-        "p_hit_day_loss": None,
-        "final_equity_pct_p5": None,
-        "final_equity_pct_p50": None,
-        "final_equity_pct_p95": None,
+        "sample_ok": sample_ok,
         "label": DISCLAIMER,
     }
-    if n == 0:
-        return empty
+    if not sample_ok:
+        base["note"] = "样本不足"
+        return base
     rng = random.Random(seed)
     n_paths = max(1, int(n_paths))
     finals: list[float] = []
@@ -234,8 +267,12 @@ def monte_carlo(
     for _ in range(n_paths):
         eq = 1.0
         hit = False
-        for _j in range(n):
-            r = returns[rng.randrange(n)]
+        if method == "reshuffle":
+            seq = list(returns)
+            rng.shuffle(seq)
+        else:
+            seq = [returns[rng.randrange(n)] for _j in range(n)]
+        for r in seq:
             eq *= 1.0 + r
             if eq <= threshold:
                 hit = True
@@ -249,34 +286,33 @@ def monte_carlo(
     finals.sort()
 
     def pctile(p: float) -> float:
-        if not finals:
-            return 0.0
         idx = min(len(finals) - 1, max(0, int(round((p / 100.0) * (len(finals) - 1)))))
         return (finals[idx] - 1.0) * 100.0
 
-    return {
-        "n_paths": n_paths,
-        "trade_count": n,
-        "seed": seed,
-        "p_equity_positive": n_pos / n_paths,
-        "p_equity_above_start": n_above / n_paths,
-        "p_hit_day_loss": n_dd / n_paths,
-        "final_equity_pct_p5": pctile(5),
-        "final_equity_pct_p50": pctile(50),
-        "final_equity_pct_p95": pctile(95),
-        "day_loss_pct": day_loss_pct,
-        "label": DISCLAIMER,
-    }
+    base.update(
+        {
+            "p_equity_positive": n_pos / n_paths,
+            "p_equity_above_start": n_above / n_paths,
+            "p_hit_day_loss": n_dd / n_paths,
+            "final_equity_pct_p5": pctile(5),
+            "final_equity_pct_p50": pctile(50),
+            "final_equity_pct_p95": pctile(95),
+            "day_loss_pct": day_loss_pct,
+        }
+    )
+    return base
 
 
 def summarize(
-    trades: list[ClosedTrade],
+    trades: list[RoundTrip],
     *,
     stop_loss_pct: float = 0.12,
     day_loss_pct: float = 0.05,
     n_paths: int = DEFAULT_MC_PATHS,
     seed: int = DEFAULT_MC_SEED,
     window: str | int = "session",
+    mc: bool = False,
+    mc_method: str = "resample",
 ) -> dict[str, Any]:
     n = len(trades)
     wins = sum(1 for t in trades if t.pnl > 0)
@@ -287,7 +323,12 @@ def summarize(
     exp = (sum(returns) / n) if n else None
     sl = max(float(stop_loss_pct), 1e-9)
     exp_r = (sum(r / sl for r in returns) / n) if n else None
-    mc = monte_carlo(returns, n_paths=n_paths, seed=seed, day_loss_pct=day_loss_pct) if n else None
+    sample_ok = n >= MIN_SAMPLE_OK
+    mc_payload = None
+    if mc:
+        mc_payload = monte_carlo(
+            returns, n_paths=n_paths, seed=seed, day_loss_pct=day_loss_pct, method=mc_method
+        )
     return {
         "mode": "paper",
         "liveDisabled": True,
@@ -301,24 +342,79 @@ def summarize(
         "expectancy_r": exp_r,
         "max_drawdown_pct": _max_drawdown_pct(returns),
         "sharpe_like": _sharpe_like(returns),
+        "sample_ok": sample_ok,
+        "mc": bool(mc),
         "open_lots": None,
-        "monte_carlo": mc,
+        "monte_carlo": mc_payload,
+        "equity": _equity_curve(trades),
+        "journal": [t.as_dict() for t in trades[-24:]],
         "disclaimer": DISCLAIMER,
         "empty": n == 0,
         "recent": [t.as_dict() for t in trades[-8:]],
     }
 
 
-_ledger: Optional[PaperLedger] = None
+PaperLedger = PaperTradeJournal
+_ledger: Optional[PaperTradeJournal] = None
 
 
-def get_paper_ledger() -> PaperLedger:
+def get_paper_ledger() -> PaperTradeJournal:
     global _ledger
     if _ledger is None:
-        _ledger = PaperLedger()
+        _ledger = PaperTradeJournal()
     return _ledger
+
+
+def get_paper_journal() -> PaperTradeJournal:
+    return get_paper_ledger()
 
 
 def reset_paper_ledger() -> None:
     global _ledger
     _ledger = None
+
+
+def reset_paper_journal() -> None:
+    reset_paper_ledger()
+
+
+def build_performance(
+    *,
+    window: str = "session",
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
+    n_paths: int = DEFAULT_MC_PATHS,
+    seed: int = DEFAULT_MC_SEED,
+    mc: bool = False,
+    mc_method: str = "resample",
+) -> dict[str, Any]:
+    from app.strategies.pump_paper_v1 import get_engine
+
+    engine = get_engine()
+    n_window: Optional[int] = None
+    window_label: str | int = "session"
+    raw = str(window).strip().lower()
+    if raw not in {"", "session", "all"}:
+        try:
+            n_window = max(1, int(raw))
+            window_label = n_window
+        except ValueError:
+            window_label = "session"
+    journal = get_paper_journal()
+    trades = journal.closed_in_window(window=n_window, from_ts=from_ts, to_ts=to_ts)
+    data = summarize(
+        trades,
+        stop_loss_pct=float(engine.params.stop_loss_pct),
+        day_loss_pct=float(engine.params.max_day_loss_pct),
+        n_paths=n_paths,
+        seed=seed,
+        window=window_label,
+        mc=mc,
+        mc_method=mc_method,
+    )
+    data["open_lots"] = sum(len(v) for v in journal.lots.values())
+    data["fill_count"] = len(journal.fills)
+    data["auto_paper_orders"] = engine.params.auto_paper_orders
+    data["strategy_autopaper"] = engine.params.auto_paper_orders
+    data["strategyId"] = "pump-paper-v1"
+    return data

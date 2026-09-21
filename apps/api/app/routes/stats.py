@@ -1,15 +1,20 @@
-"""GET /api/v1/stats/paper-performance — paper session stats + Monte Carlo sim."""
+"""GET /api/v1/stats/paper-performance — alias of strategy pump-paper-v1/stats."""
 from __future__ import annotations
 
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.paper.ledger import get_paper_ledger, summarize
+from app.paper.ledger import build_performance
 from app.routes.envelope import ok
-from app.strategies.pump_paper_v1 import get_engine
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
+
+
+def _mc_flag(mc: str | bool) -> bool:
+    if isinstance(mc, bool):
+        return mc
+    return str(mc).strip().lower() in {"1", "true", "yes", "on"}
 
 
 @router.get("/paper-performance")
@@ -19,30 +24,16 @@ def paper_performance(
     to_ts: Optional[int] = Query(None, alias="to"),
     n_paths: int = Query(1000, ge=1, le=20_000),
     seed: int = Query(42),
+    mc: str = Query("0", description="1 to run trades-MC; default off"),
+    method: str = Query("resample", description="resample | reshuffle"),
 ):
-    engine = get_engine()
-    n_window: Optional[int] = None
-    window_label: str | int = "session"
-    raw = str(window).strip().lower()
-    if raw not in {"", "session", "all"}:
-        try:
-            n_window = max(1, int(raw))
-            window_label = n_window
-        except ValueError:
-            window_label = "session"
-    ledger = get_paper_ledger()
-    trades = ledger.closed_in_window(window=n_window, from_ts=from_ts, to_ts=to_ts)
-    data = summarize(
-        trades,
-        stop_loss_pct=float(engine.params.stop_loss_pct),
-        day_loss_pct=float(engine.params.max_day_loss_pct),
+    data = build_performance(
+        window=window,
+        from_ts=from_ts,
+        to_ts=to_ts,
         n_paths=n_paths,
         seed=seed,
-        window=window_label,
+        mc=_mc_flag(mc),
+        mc_method=method if method in {"resample", "reshuffle"} else "resample",
     )
-    data["open_lots"] = sum(len(v) for v in ledger.lots.values())
-    data["fill_count"] = len(ledger.fills)
-    data["auto_paper_orders"] = engine.params.auto_paper_orders
-    data["strategy_autopaper"] = engine.params.auto_paper_orders
-    data["strategyId"] = "pump-paper-v1"
     return ok(data)

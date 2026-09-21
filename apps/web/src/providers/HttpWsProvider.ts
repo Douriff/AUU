@@ -166,9 +166,10 @@ export class HttpWsProvider {
     return getJson("/api/v1/strategy/pump-paper-v1");
   }
 
-  getPaperPerformance(window = "session"): Promise<PaperPerformance> {
+  getPaperPerformance(window = "session", opts?: { mc?: boolean }): Promise<PaperPerformance> {
     const q = new URLSearchParams({ window: String(window) });
-    return getJson(`/api/v1/stats/paper-performance?${q}`);
+    if (opts?.mc) q.set("mc", "1");
+    return getJson(`/api/v1/strategy/pump-paper-v1/stats?${q}`);
   }
 
   putStrategy(patch: Partial<PumpPaperParams>) {

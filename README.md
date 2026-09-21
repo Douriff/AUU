@@ -88,7 +88,8 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 纸面成功概率（胜率、期望、回撤、蒙特卡洛）来自本会话已平仓 Fill：
 
 ```bash
-curl -sS 'http://localhost:8000/api/v1/stats/paper-performance'
+curl -sS 'http://localhost:8000/api/v1/strategy/pump-paper-v1/stats'
+curl -sS 'http://localhost:8000/api/v1/strategy/pump-paper-v1/stats?mc=1'
 curl -sS http://localhost:8000/api/v1/strategy/pump-paper-v1 \
   -X PUT -H 'Content-Type: application/json' \
   -d '{"strategy_autopaper": true}'
@@ -124,7 +125,9 @@ curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
   -d '{"symbol":"PUMPDEMO/SOL","side":"buy","notional":0.1,"spread_bps":200}'
 ```
 
-`GET /api/v1/health` 应含 `venue=Pump.fun`（当 `DATA_PROVIDER=pumpfun_paper`）、`dataSourceOptions=["mock","paper","pumpfun_paper"]`。
+`GET /api/v1/health` 应含 `venue=Pump.fun`（当 `DATA_PROVIDER=pumpfun_paper`）、`dataSourceOptions=["mock","paper","pumpfun_paper"]`、`strategy_autopaper`。
+
+纸面统计：`GET /api/v1/strategy/pump-paper-v1/stats`（`?mc=1` 才跑蒙特卡洛）。
 
 ## 端口
 

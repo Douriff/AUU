@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.bus import get_hub
+from app.paper.ledger import build_performance
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -94,3 +95,23 @@ def put_pump_paper(body: PumpPaperParamsPatch):
 @router.get("/pump-paper-v1/monitor")
 def get_monitor():
     return ok(get_engine().monitor_rows())
+
+
+@router.get("/pump-paper-v1/stats")
+def get_pump_paper_stats(
+    window: str = "session",
+    mc: str = "0",
+    n_paths: int = 1000,
+    seed: int = 42,
+    method: str = "resample",
+):
+    """PaperTradeJournal performance. MC off unless mc=1. Win rate from round-trips only."""
+    enabled = str(mc).strip().lower() in {"1", "true", "yes", "on"}
+    data = build_performance(
+        window=window,
+        n_paths=n_paths,
+        seed=seed,
+        mc=enabled,
+        mc_method=method if method in {"resample", "reshuffle"} else "resample",
+    )
+    return ok(data)
