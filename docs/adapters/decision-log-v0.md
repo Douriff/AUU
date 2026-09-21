@@ -12,7 +12,8 @@
 | 码 | 来源 | 含义 |
 |----|------|------|
 | `progress_band` | pump-paper-v1 | 未过 progress 入场窗 |
-| `momentum` | pump-paper-v1 | tape 动能不足 |
+| `momentum` | pump-paper-v1 | tape 动能不足（买名义 &lt; 2× 卖，或 `trade_count_1m` &lt; 8） |
+| `WEAK_TAPE` | pump-paper-v1 | 纸面开仓 tape 不够强（默认 `trade_count_1m` &lt; 10，或买名义 &lt; 2.5× 卖）；出场不使用。桶为 `other`，不改 Go 门 |
 | `impact` | pump-paper-v1 / 预估 | 试算冲击未过策略闸 |
 | `SLIPPAGE_CAP` | RiskGate | 硬顶/冲击超限 |
 | `DEPTH_THIN` / `SPREAD_TOO_WIDE` | RiskGate | 流动性 |

@@ -86,6 +86,7 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(classify_reject_bucket("LIVE_DISABLED", ["LIVE_DISABLED"]), "risk")
         self.assertEqual(classify_reject_bucket("auto_paper_orders=false", ["AUTOPAPER_OFF"]), "none")
         self.assertEqual(classify_reject_bucket("momentum"), "none")
+        self.assertEqual(classify_reject_bucket("WEAK_TAPE", ["WEAK_TAPE"]), "none")
 
 
 class ShadowMathTests(unittest.TestCase):
