@@ -34,6 +34,8 @@ class PumpPaperParamsPatch(BaseModel):
     auto_paper_orders: Optional[bool] = None
     strategy_autopaper: Optional[bool] = None
     max_notional_sol: Optional[float] = None
+    entry_impact_budget_bps: Optional[float] = None
+    impact_fee_bps: Optional[float] = None
 
 
 def _state_payload() -> dict[str, Any]:

@@ -99,6 +99,20 @@ class CurveFormulaTests(unittest.TestCase):
         )
         self.assertNotAlmostEqual(no_proto, with_proto, places=4)
 
+    def test_smaller_notional_yields_lower_buy_impact(self):
+        """Curve impact rises with size. Paper clips rely on this, not on a fake fill."""
+        vs, vt, rs, rt = reserves_at_progress_bps(4200)
+        larger = estimated_curve_impact_bps(vs, vt, rs, rt, 0.05, "buy")
+        smaller = estimated_curve_impact_bps(vs, vt, rs, rt, 0.01, "buy")
+        self.assertGreater(larger, 0)
+        self.assertGreater(smaller, 0)
+        self.assertLess(smaller, larger)
+        # Same ordering under the paper quote fee (100) and the library default (125).
+        paper_large = estimated_curve_impact_bps(vs, vt, rs, rt, 0.05, "buy", fee_bps=100)
+        paper_small = estimated_curve_impact_bps(vs, vt, rs, rt, 0.01, "buy", fee_bps=100)
+        self.assertLess(paper_small, paper_large)
+        self.assertLess(paper_small, smaller)
+
     def test_buy_and_sell_impacts_differ_same_notional(self):
         vs, vt, rs, rt = reserves_at_progress_bps(4200)
         buy = estimated_curve_impact_bps(vs, vt, rs, rt, 0.4, "buy")

@@ -10,12 +10,19 @@ from app.paper.broker import reset_paper_broker
 from app.providers import reset_provider
 from app.risk.gate import reset_risk_gate
 from app.strategies.pump_paper_v1 import (
+    IMPACT_HARD_CAP_BPS,
+    PAPER_ENTRY_IMPACT_BUDGET_BPS,
+    PAPER_IMPACT_FEE_BPS,
+    PAPER_MAX_NOTIONAL_SOL,
     PositionState,
     PumpPaperEngine,
     PumpPaperParams,
     TapeWindow,
     aggregate_tape,
+    curve_impact_bps,
+    entry_impact_budget,
     evaluate,
+    fit_notional,
     reset_engine,
 )
 
@@ -54,6 +61,77 @@ class ParamsDefaultsTests(unittest.TestCase):
         self.assertEqual(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
+        self.assertAlmostEqual(p.max_notional_sol, PAPER_MAX_NOTIONAL_SOL)
+        self.assertAlmostEqual(p.entry_impact_budget_bps, PAPER_ENTRY_IMPACT_BUDGET_BPS)
+        self.assertAlmostEqual(p.impact_fee_bps, PAPER_IMPACT_FEE_BPS)
+        self.assertLess(p.entry_impact_budget_bps, 60.0)
+        self.assertLessEqual(p.max_impact_bps, IMPACT_HARD_CAP_BPS)
+
+    def test_hard_cap_cannot_be_raised(self):
+        p = PumpPaperParams(max_impact_bps=400, entry_impact_budget_bps=200)
+        self.assertEqual(p.max_impact_bps, IMPACT_HARD_CAP_BPS)
+        self.assertEqual(p.entry_impact_budget_bps, IMPACT_HARD_CAP_BPS)
+        self.assertEqual(entry_impact_budget(p), IMPACT_HARD_CAP_BPS)
+
+    def test_live_stays_off(self):
+        from app.live.gate import evaluate as live_evaluate
+        from app.paper.executability import LIVE_ENABLED
+
+        self.assertFalse(LIVE_ENABLED)
+        self.assertFalse(live_evaluate().live_enabled)
+
+
+class PaperEntryImpactTests(unittest.TestCase):
+    """Default paper clip targets executability median < 60 without fake fills."""
+
+    def _at(self, progress: int) -> PumpfunPaperSnapshot:
+        from app.providers.pumpfun_curve_math import price_sol, reserves_at_progress_bps
+
+        vs, vt, rs, rt = reserves_at_progress_bps(progress)
+        return _snap(
+            progress_bps=progress,
+            virtual_sol_reserves=str(vs),
+            virtual_token_reserves=str(vt),
+            real_sol_reserves=str(rs),
+            real_token_reserves=str(rt),
+            price_sol=price_sol(vs, vt),
+        )
+
+    def test_smaller_notional_lower_curve_impact(self):
+        snap = self._at(4200)
+        params = PumpPaperParams()
+        big = curve_impact_bps(snap, 0.05, "buy", fee_bps=params.impact_fee_bps)
+        small = curve_impact_bps(snap, params.max_notional_sol, "buy", fee_bps=params.impact_fee_bps)
+        self.assertLess(params.max_notional_sol, 0.05)
+        self.assertLess(small, big)
+
+    def test_default_band_median_under_60(self):
+        params = PumpPaperParams()
+        impacts: list[float] = []
+        for progress in range(800, 7501, 50):
+            snap = self._at(progress)
+            sized = fit_notional(snap, 10_000.0, params, "buy")
+            self.assertIsNotNone(sized)
+            assert sized is not None
+            self.assertLessEqual(sized, params.max_notional_sol)
+            impact = curve_impact_bps(snap, sized, "buy", fee_bps=params.impact_fee_bps)
+            self.assertLessEqual(impact, entry_impact_budget(params))
+            self.assertLessEqual(impact, IMPACT_HARD_CAP_BPS)
+            impacts.append(impact)
+        impacts.sort()
+        mid = impacts[len(impacts) // 2]
+        self.assertLess(mid, 60.0)
+        self.assertLessEqual(max(impacts), 80.0)
+        # Old clip (0.5 SOL, library fee 125, sized up to the 80 cap) sits near ~78.
+        legacy = curve_impact_bps(self._at(4200), 0.03125, "buy", fee_bps=125)
+        self.assertGreater(legacy, 70.0)
+        self.assertLess(mid, legacy)
+
+    def test_over_budget_curve_does_not_fall_back_to_large_clip(self):
+        """A quote that cannot meet the budget returns None instead of the 0.5 SOL clip."""
+        params = PumpPaperParams(max_notional_sol=0.5, impact_fee_bps=125, entry_impact_budget_bps=55)
+        sized = fit_notional(self._at(4200), 10_000.0, params, "buy")
+        self.assertIsNone(sized)
 
 
 class TapeTests(unittest.TestCase):
@@ -282,6 +360,24 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
         hist = engine.history_for("PUMPDEMO/SOL")
         self.assertTrue(any(e.signal.side == "long" for e in hist))
 
+    async def test_default_clip_fill_impact_under_60(self):
+        from app.paper.decision_log import get_decision_log, reset_decision_log
+
+        reset_decision_log()
+        self._seed_buy_tape()
+        engine = PumpPaperEngine(PumpPaperParams(auto_paper_orders=True))
+        self.assertAlmostEqual(engine.params.max_notional_sol, 0.01)
+        await engine.tick()
+        self.assertIn("PUMPDEMO/SOL", engine.positions)
+        fills = [r for r in get_decision_log().all() if r.outcome in {"fill", "partial"}]
+        self.assertTrue(fills)
+        impact = fills[-1].impact_bps_est
+        self.assertIsNotNone(impact)
+        assert impact is not None
+        self.assertLess(impact, 60.0)
+        self.assertLessEqual(impact, 80.0)
+        self.assertLessEqual(float(fills[-1].notional_sol or 0.0), 0.01 + 1e-9)
+
     async def test_auto_true_opens_paper_fill(self):
         self._seed_buy_tape()
         engine = PumpPaperEngine(
@@ -341,6 +437,10 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertEqual(data["params"]["progress_bps_max"], 7500)
         self.assertEqual(data["params"]["max_impact_bps"], 80)
         self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
+        self.assertAlmostEqual(data["params"]["max_notional_sol"], 0.01)
+        self.assertAlmostEqual(data["params"]["entry_impact_budget_bps"], 55)
+        self.assertAlmostEqual(data["params"]["impact_fee_bps"], 100)
+        self.assertTrue(data["liveDisabled"])
         self.assertIn(data["trading_state"], ("active", "reducing", "halted"))
 
     def test_put_auto_toggle(self):

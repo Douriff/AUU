@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.contracts import (
     AccountCtx,
@@ -39,8 +39,22 @@ EXIT_IMPACT_BPS = 250.0
 SELL_PRESSURE_SEC = 30.0
 REJECT_STREAK_MAX = 5
 REJECT_COOLDOWN_SEC = 600
-MIN_NOTIONAL_SOL = 0.02
+# Dust floor for the halving walk. Paper clips are smaller than this used to be
+# (0.02) so a 0.01 SOL default can still step down on a thin curve.
+MIN_NOTIONAL_SOL = 0.001
 TAPE_WINDOW_MS = 60_000
+# Hard reject. Distill and executability share this ceiling; do not raise it.
+IMPACT_HARD_CAP_BPS = 80.0
+# Sizing budget, strictly under the executability median gate (60).
+# fit_notional stops here instead of climbing up to the 80 bps hard cap.
+PAPER_ENTRY_IMPACT_BUDGET_BPS = 55.0
+# Library curve quotes still default to fee_bps=125 (add-on 62.5), which floors
+# every print above the <60 median gate. Paper entries quote the protocol fee
+# (100): one-sided add-on = 50 bps, so a small notional can land under 60.
+PAPER_IMPACT_FEE_BPS = 100.0
+# Absolute paper clip. Equity percent (0.5%) still applies; this cap binds first
+# at the default 10_000 equity (raw 50 SOL → 0.01).
+PAPER_MAX_NOTIONAL_SOL = 0.01
 
 
 class PumpPaperParams(BaseModel):
@@ -48,7 +62,7 @@ class PumpPaperParams(BaseModel):
 
     progress_bps_min: int = 800
     progress_bps_max: int = 7500
-    max_impact_bps: float = 80.0
+    max_impact_bps: float = IMPACT_HARD_CAP_BPS
     take_profit_pct: float = 0.25
     stop_loss_pct: float = 0.12
     max_hold_sec: int = 900
@@ -57,7 +71,27 @@ class PumpPaperParams(BaseModel):
     max_open_mints: int = 3
     notional_pct_equity: float = 0.005
     auto_paper_orders: bool = False
-    max_notional_sol: float = 0.5
+    max_notional_sol: float = PAPER_MAX_NOTIONAL_SOL
+    # Paper-only. Hard cap stays max_impact_bps (80). Budget cannot exceed it.
+    entry_impact_budget_bps: float = PAPER_ENTRY_IMPACT_BUDGET_BPS
+    impact_fee_bps: float = PAPER_IMPACT_FEE_BPS
+
+    @field_validator("max_impact_bps")
+    @classmethod
+    def _hard_impact_cap(cls, v: float) -> float:
+        return min(float(v), IMPACT_HARD_CAP_BPS)
+
+    @field_validator("impact_fee_bps", "max_notional_sol", "notional_pct_equity", "entry_impact_budget_bps")
+    @classmethod
+    def _non_negative(cls, v: float) -> float:
+        return max(0.0, float(v))
+
+    @model_validator(mode="after")
+    def _budget_under_hard_cap(self) -> "PumpPaperParams":
+        hard = min(IMPACT_HARD_CAP_BPS, float(self.max_impact_bps))
+        if float(self.entry_impact_budget_bps) > hard:
+            self.entry_impact_budget_bps = hard
+        return self
 
 
 @dataclass
@@ -114,13 +148,24 @@ def aggregate_tape(
     )
 
 
-def curve_impact_bps(snap: PumpfunPaperSnapshot, notional: float, side: str) -> float:
+def curve_impact_bps(
+    snap: PumpfunPaperSnapshot,
+    notional: float,
+    side: str,
+    fee_bps: Optional[float] = None,
+) -> float:
+    """Curve impact for a paper quote.
+
+    ``fee_bps=None`` keeps the library default (125). Pump-paper-v1 passes
+    ``params.impact_fee_bps`` so entry prints use the paper fee, not a second model.
+    """
     liq = LiquidityCtx(
         virtual_sol_reserves=snap.virtual_sol_reserves,
         virtual_token_reserves=snap.virtual_token_reserves,
         real_sol_reserves=snap.real_sol_reserves,
         real_token_reserves=snap.real_token_reserves,
         creator_fee_bps=snap.creator_fee_bps,
+        fee_bps=fee_bps,
     )
     return liq.estimated_impact_bps(abs(notional), side=side, pump=snap.to_pump_ctx())
 
@@ -130,17 +175,29 @@ def target_notional_sol(equity: float, params: PumpPaperParams) -> float:
     return min(raw, float(params.max_notional_sol))
 
 
+def entry_impact_budget(params: PumpPaperParams) -> float:
+    """Paper sizing ceiling: min(hard cap 80, max_impact_bps, entry budget)."""
+    hard = min(IMPACT_HARD_CAP_BPS, float(params.max_impact_bps))
+    return min(hard, float(params.entry_impact_budget_bps))
+
+
 def fit_notional(
     snap: PumpfunPaperSnapshot, equity: float, params: PumpPaperParams, side: str = "buy"
 ) -> Optional[float]:
-    """Walk notional down until estimated_impact_bps <= max_impact_bps."""
+    """Largest clip at or under target whose curve impact is within the paper budget.
+
+    Does not invent a size. Returns None when even the dust floor is over the
+    budget (caller must not fall back to a larger notional).
+    """
+    limit = entry_impact_budget(params)
+    fee = float(params.impact_fee_bps)
     n = target_notional_sol(equity, params)
-    while n >= MIN_NOTIONAL_SOL:
+    while n + 1e-12 >= MIN_NOTIONAL_SOL:
         try:
-            impact = curve_impact_bps(snap, n, side)
+            impact = curve_impact_bps(snap, n, side, fee_bps=fee)
         except ValueError:
             return None
-        if impact <= params.max_impact_bps:
+        if impact <= limit:
             return n
         n *= 0.5
     return None
@@ -274,7 +331,10 @@ class PumpPaperEngine:
     def update_params(self, patch: dict[str, Any]) -> PumpPaperParams:
         allowed = set(PumpPaperParams.model_fields)
         clean = {k: v for k, v in patch.items() if k in allowed}
-        self.params = self.params.model_copy(update=clean)
+        merged = self.params.model_dump()
+        merged.update(clean)
+        # Re-validate so max_impact_bps cannot rise above 80 and the budget stays under it.
+        self.params = PumpPaperParams.model_validate(merged)
         self._sync_risk_limits()
         return self.params
 
@@ -433,6 +493,8 @@ class PumpPaperEngine:
         spread = float(book.get("spread_bps") or 20.0)
         pos = self.positions.get(symbol)
         gate = get_risk_gate()
+        fee = float(self.params.impact_fee_bps)
+        pump = snap.to_pump_ctx().model_copy(update={"fee_bps": int(fee)})
         return StrategyContext(
             symbol=symbol,
             ts=now_ms,
@@ -445,10 +507,11 @@ class PumpPaperEngine:
                 real_sol_reserves=snap.real_sol_reserves,
                 real_token_reserves=snap.real_token_reserves,
                 creator_fee_bps=snap.creator_fee_bps,
+                fee_bps=fee,
             ),
             position=pos.qty if pos else 0.0,
             tick=TickCtx(mid=max(float(snap.price_sol), 1e-18)),
-            pump=snap.to_pump_ctx(),
+            pump=pump,
             meta=extra_meta or {},
         )
 
@@ -669,9 +732,13 @@ class PumpPaperEngine:
                     src = flags.get("source")
                     if src and src not in tags:
                         tags.append(str(src))
-                n = target_notional_sol(self.equity, self.params)
+                n = fit_notional(snap, self.equity, self.params, "buy")
+                if n is None:
+                    n = target_notional_sol(self.equity, self.params)
                 try:
-                    impact = curve_impact_bps(snap, n, "buy")
+                    impact = curve_impact_bps(
+                        snap, n, "buy", fee_bps=self.params.impact_fee_bps
+                    )
                 except ValueError:
                     impact = None
             last = self._last_emitted.get(info.symbol)
@@ -718,27 +785,36 @@ class PumpPaperEngine:
                 pressure_ms = 0
 
             pos = self.positions.get(info.symbol)
-            sized = fit_notional(snap, self.equity, self.params, "buy") or target_notional_sol(
-                self.equity, self.params
-            )
+            fee = float(self.params.impact_fee_bps)
+            budget = entry_impact_budget(self.params)
+            fitted = fit_notional(snap, self.equity, self.params, "buy")
+            # Do not substitute a larger clip when the budget cannot be met.
+            sized = fitted if fitted is not None else target_notional_sol(self.equity, self.params)
             try:
-                impact_in = curve_impact_bps(snap, sized, "buy")
+                impact_in = curve_impact_bps(snap, sized, "buy", fee_bps=fee)
             except ValueError:
                 impact_in = 1e9
             impact_out = 0.0
             if pos is not None:
                 close_n = abs(pos.qty) * max(float(snap.price_sol), 1e-18)
                 try:
-                    impact_out = curve_impact_bps(snap, close_n, "sell")
+                    impact_out = curve_impact_bps(snap, close_n, "sell", fee_bps=fee)
                 except ValueError:
                     impact_out = 0.0
+
+            # Real curve quote is what we log. Over-budget entry is rejected on the
+            # hard gate (no fill) instead of printing a capped impact number.
+            gate_impact = impact_in
+            over_budget = fitted is None or impact_in > budget
+            if pos is None and over_budget:
+                gate_impact = max(impact_in, float(self.params.max_impact_bps) + 1.0)
 
             signal = evaluate(
                 snapshot=snap,
                 tape=tape,
                 params=self.params,
                 now_ms=now_ms,
-                impact_entry_bps=impact_in,
+                impact_entry_bps=gate_impact,
                 impact_exit_bps=impact_out,
                 position=pos,
                 last_open_ts=self._last_open_ts.get(snap.mint),

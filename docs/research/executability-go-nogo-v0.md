@@ -30,6 +30,7 @@ Pump.fun 曲线是虚拟储备恒定乘积（`price = virtual_sol / virtual_toke
 
 - 名义越大、曲线越浅（低进度或薄虚拟储备），冲击非线性上升。
 - 策略硬顶仍是 `max_impact_bps = 80`（pump-paper-v1 冻结；蒸馏不得抬高）。可执行性 **中位** 更严：入场 `estimated_impact_bps` 中位数 **< 60**。任一入场 **> 80** → 硬顶失败（80 与策略 `<= max_impact_bps` 对齐）。
+- 未覆盖 `fee_bps` 时曲线公式附加 **125**（`fee/2 = 62.5`），地板已高于 60，缩小名义也无法让该报价的中位 `< 60`。`pump-paper-v1` 纸面默认因此单独报价 `impact_fee_bps=100`（单边 50），并把名义夹在 `max_notional_sol=0.01`、按 `entry_impact_budget_bps=55` 下调。这不放宽 60/80 两道门，也不打开 `liveEnabled`。Fill 价仍由 PaperBroker 按当时报价记账，不造假成交。
 
 纸面 CEX 平方根冲击（无 `ctx.pump`）**不能**当作 Pump 可执行性证据；聚合时仍记账，但 `curve_quote_ok` 需要当时有曲线报价（`tick.mid` / `price_sol`）。
 
@@ -159,7 +160,7 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 
 | 字段 | 冻结上限 | 相对纸面 |
 |------|----------|----------|
-| `max_notional_sol` | **1** | 纸面策略默认 0.5；实盘不得高于 1 |
+| `max_notional_sol` | **1** | 纸面策略默认 0.01；实盘不得高于 1 |
 | `max_day_loss_pct` | **0.045** | 严于纸面 0.05 |
 | `max_open_mints` | **10** | 纸面同时持仓默认 3；实盘上限 10，不得再抬 |
 

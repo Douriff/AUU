@@ -7,6 +7,8 @@ const FIELDS: { key: keyof PumpPaperParams; label: string; step?: string }[] = [
   { key: "progress_bps_min", label: "progress_bps_min" },
   { key: "progress_bps_max", label: "progress_bps_max" },
   { key: "max_impact_bps", label: "max_impact_bps", step: "1" },
+  { key: "entry_impact_budget_bps", label: "entry_impact_budget_bps", step: "1" },
+  { key: "impact_fee_bps", label: "impact_fee_bps", step: "1" },
   { key: "take_profit_pct", label: "take_profit_pct", step: "0.01" },
   { key: "stop_loss_pct", label: "stop_loss_pct", step: "0.01" },
   { key: "max_hold_sec", label: "max_hold_sec" },
@@ -14,7 +16,7 @@ const FIELDS: { key: keyof PumpPaperParams; label: string; step?: string }[] = [
   { key: "max_day_loss_pct", label: "max_day_loss_pct", step: "0.01" },
   { key: "max_open_mints", label: "max_open_mints" },
   { key: "notional_pct_equity", label: "notional_pct_equity", step: "0.001" },
-  { key: "max_notional_sol", label: "max_notional_sol", step: "0.01" },
+  { key: "max_notional_sol", label: "max_notional_sol", step: "0.001" },
 ];
 
 export function StrategyPage() {
@@ -25,7 +27,8 @@ export function StrategyPage() {
       <h1>策略 / Strategy</h1>
         <p className="muted">
           <code>pump-paper-v1</code> 纸面策略。默认 <code>progress_bps [800,7500]</code>、
-          <code>max_impact_bps 80</code>、名义 0.5% 权益；<code>auto_paper_orders</code> /{" "}
+          <code>max_impact_bps 80</code>（硬顶）、入场预算 <code>55</code> bps、名义 0.5% 权益且单笔 ≤{" "}
+          <code>0.01 SOL</code>；<code>auto_paper_orders</code> /{" "}
           <code>strategy_autopaper</code> 默认关。行情/交易页可看纸面成功概率（平仓后）。
           发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。无钱包、无 sniper。
         </p>

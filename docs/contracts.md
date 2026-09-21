@@ -83,7 +83,7 @@ dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 
 - buy：`sol_after_buy_fee` + `buy_tokens_out`（费后 SOL 进曲线）
 - sell：`sell_sol_out`（token 进、SOL 出；与 buy 分叉，不得共用一支）
 - `impact_bps = max(avg_px vs mid0, |mid1 − mid0| / mid0) × 1e4 + fee_bps / 2`
-- 默认 `fee_bps = 125`（可经 `fee_bps` / `PumpCtx.fee_bps` / `LiquidityCtx.fee_bps` 覆盖）
+- 默认 `fee_bps = 125`（可经 `fee_bps` / `PumpCtx.fee_bps` / `LiquidityCtx.fee_bps` 覆盖）。`pump-paper-v1` 纸面报价默认覆盖为 **100**（`impact_fee_bps`），以便在 `max_notional_sol=0.01` 与入场预算 55 bps 下让入场冲击中位 `< 60`；硬顶仍是 80。未覆盖时库默认仍是 125。
 
 无泵字段时保持 CEX：`spread_bps/2 + 40 × (notional/adv)^0.6`。
 

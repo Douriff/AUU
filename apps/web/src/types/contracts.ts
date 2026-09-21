@@ -106,6 +106,8 @@ export interface PumpPaperParams {
   auto_paper_orders: boolean;
   strategy_autopaper?: boolean;
   max_notional_sol: number;
+  entry_impact_budget_bps: number;
+  impact_fee_bps: number;
 }
 
 export interface PumpPaperPosition {

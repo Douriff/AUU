@@ -38,11 +38,15 @@
 1. `not complete` 且 `not migrated`
 2. `800 <= progress_bps <= 7500`（过早噪音大，过晚拥挤）
 3. `buy_notional_1m >= 2 * sell_notional_1m` 且 `trade_count_1m >= 8`
-4. `estimated_impact_bps(order_notional) <= max_impact_bps`（默认 **80**）
+4. `estimated_impact_bps(order_notional) <= max_impact_bps`（硬顶 **80**，不得抬高）
 5. 无标签：`HONEYPOT` / `TAX_HIGH` / `SPREAD_TOO_WIDE`（若有外部打标）
 6. 冷却：同 mint `cooldown_sec` 默认 **120s** 内不再开仓
 
-默认纸面名义：账户权益的 **0.5%**，且单笔绝对上限 `max_notional_sol`（默认仿真 **0.5 SOL 等值**）。
+默认纸面名义：账户权益的 **0.5%**，且单笔绝对上限 `max_notional_sol`（纸面默认 **0.01 SOL**）。
+
+`fit_notional` 从该上限往下减，直到曲线冲击 `<= entry_impact_budget_bps`（默认 **55**，且不超过硬顶 80）。减不到预算则**不成交**（不回退到更大名义，不改 Fill 价）。
+
+纸面报价的冲击附加是 `impact_fee_bps`（默认 **100**，单边 `fee/2 = 50` bps，对齐协议费 100 的一半）。曲线库在未传入 `fee_bps` 时仍是 **125**（`fee/2 = 62.5`）。62.5 已经高于可执行性中位门槛 60，所以只把名义从 0.5 往下砍、仍用 125，中位不可能 `< 60`。旧路径还会把名义减到「刚好 ≤ 80」（约 0.03125 SOL），入场冲击挤在 ~72–80 bps（中位约 78）。纸面默认改为 **0.01 SOL + 预算 55 + 附加 100**，在入场带 `progress_bps` 800–7500 的标准曲线上，报价中位 **< 60**，任一样本仍 **≤ 80**。`liveEnabled` 保持 false；实盘 `LiveLimits.max_notional_sol` 仍是 **1**。
 
 发现（`new_token`）只入自选表，**不等于入场**；仍须过上述 progress / 动能 / 冲击门。
 
@@ -92,7 +96,9 @@ Monitor tape/curve
 ```yaml
 progress_bps_min: 800
 progress_bps_max: 7500
-max_impact_bps: 80
+max_impact_bps: 80                 # hard cap; cannot be raised
+entry_impact_budget_bps: 55       # paper sizing; min(this, max_impact_bps)
+impact_fee_bps: 100               # paper quote only; library default stays 125
 take_profit_pct: 0.25
 stop_loss_pct: 0.12
 max_hold_sec: 900
@@ -100,6 +106,7 @@ cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3
 notional_pct_equity: 0.005
+max_notional_sol: 0.01            # paper clip; live LiveLimits stay at 1
 auto_paper_orders: false
 strategy_autopaper: false   # alias of auto_paper_orders; default off
 ```
@@ -115,7 +122,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] `new_token` 入自选但不绕过入场门；发现模块无下单
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 
-版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`，`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。
+版本：v1。只加参数不改事件名。 Frozen params（2026-09-21）：`progress_bps [800,7500]`，`max_impact_bps 80`（硬顶，不得抬高），`notional_pct_equity 0.005`，`strategy_autopaper`/`auto_paper_orders` default false。纸面尺寸（同日，可执行性中位）：`max_notional_sol 0.01`，`entry_impact_budget_bps 55`，`impact_fee_bps 100`。库默认冲击附加仍 125。`liveEnabled` 保持 false。
 
 ---
 
