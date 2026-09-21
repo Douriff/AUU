@@ -48,6 +48,9 @@ export interface Fill {
   slippage_bps?: number;
   tag?: string;
   symbol?: string;
+  quote_price?: number | null;
+  estimated_impact_bps?: number | null;
+  shadow_slippage_bps?: number | null;
 }
 
 export interface SignalEvent {
@@ -164,6 +167,12 @@ export interface RoundTrip {
   tags: string[];
   source?: string;
   side?: string;
+  entry_estimated_impact_bps?: number | null;
+  entry_quote_price?: number | null;
+  entry_shadow_slippage_bps?: number | null;
+  exit_estimated_impact_bps?: number | null;
+  exit_quote_price?: number | null;
+  exit_shadow_slippage_bps?: number | null;
 }
 
 export interface EquityPoint {
@@ -483,6 +492,60 @@ export interface CompareReport {
     reference_only?: boolean;
   };
   note: string;
+}
+
+export interface RejectRateBucket {
+  count: number;
+  rate: number;
+}
+
+export interface ExecutabilityGate {
+  ok: boolean;
+  [key: string]: unknown;
+}
+
+export interface ExecutabilityReport {
+  mode: string;
+  verdict: "go" | "no-go";
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  live_limits: {
+    max_notional_sol: number;
+    max_day_loss_pct: number;
+    max_open_mints: number;
+  };
+  window?: string | number;
+  n_trades: number;
+  sample_ok: boolean;
+  expectancy: number | null;
+  median_entry_impact_bps: number | null;
+  max_entry_impact_bps?: number | null;
+  impact_cap_go_bps: number;
+  hard_max_impact_bps: number;
+  params_max_impact_bps?: number | null;
+  reject_rate: {
+    progress_band: RejectRateBucket;
+    impact: RejectRateBucket;
+    risk: RejectRateBucket;
+  };
+  n_entry_evals?: number;
+  shadow_slippage: {
+    median_bps: number | null;
+    x_bps: number;
+    n: number;
+    ok: boolean;
+  };
+  gates: {
+    sample_ok: ExecutabilityGate;
+    expectancy: ExecutabilityGate;
+    median_entry_impact: ExecutabilityGate;
+    reject_rate: ExecutabilityGate;
+    shadow_slippage: ExecutabilityGate;
+    live: ExecutabilityGate;
+  };
+  theory_ref?: string;
+  disclaimer?: string;
+  empty: boolean;
 }
 
 export interface PaperOrderResult {

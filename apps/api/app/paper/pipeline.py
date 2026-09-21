@@ -10,6 +10,7 @@ from typing import Any, Optional
 from app.bus import get_hub
 from app.models.contracts import OrderIntent, RiskOut, SignalOut, SizeIn, StrategyContext
 from app.paper.broker import get_paper_broker
+from app.paper.executability import annotate_fill_executability
 from app.paper.guard import live_execution_blocked
 from app.paper.ledger import get_paper_ledger
 from app.risk import get_risk_gate
@@ -71,7 +72,9 @@ async def run_paper_order(
         return {"fills": [], "reject": {"tags": ["RISK_DENIED"], "notes": "risk.allow must be true"}}
 
     broker = get_paper_broker()
-    fills = broker.submit(ctx, intent)
+    fills = [
+        annotate_fill_executability(f, ctx, intent) for f in broker.submit(ctx, intent)
+    ]
     hub = get_hub()
 
     if not fills:

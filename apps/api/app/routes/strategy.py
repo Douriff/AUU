@@ -127,6 +127,7 @@ def get_pump_paper_stats(
 @router.post("/pump-paper-v1/stats/reset")
 def reset_pump_paper_stats():
     reset_paper_journal()
+    get_engine().reset_eval_counts()
     return ok(build_performance())
 
 

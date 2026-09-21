@@ -47,6 +47,10 @@ class Fill(BaseModel):
     fee: Optional[float] = None
     slippage_bps: Optional[float] = None
     tag: Optional[str] = None
+    # Additive executability extras (paper evidence; not a live send).
+    quote_price: Optional[float] = None
+    estimated_impact_bps: Optional[float] = None
+    shadow_slippage_bps: Optional[float] = None
 
 
 class SignalEvent(BaseModel):

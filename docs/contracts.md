@@ -14,7 +14,8 @@
 `{ strategyId, symbol, t, signal: SignalOut }`
 
 ## Fill
-`{ ts, price, qty, fee?, slippage_bps?, tag? }` — 图上菱形/方块 marker。
+`{ ts, price, qty, fee?, slippage_bps?, tag? }` — 图上菱形/方块 marker。  
+可追加纸面证据：`quote_price?` · `estimated_impact_bps?` · `shadow_slippage_bps?`（可执行性；非链上 send）。
 
 ## RiskOut
 `{ allow, clipped_size?, tags[], notes? }`
@@ -52,6 +53,11 @@ REST：
 - `GET /api/v1/strategy/pump-paper-v1/stats` — PaperTradeJournal 自算胜率 / 期望 / 回撤（不依赖 QuantStats）；`?mc=1` 才跑 trades-MC（默认关）
 - `POST /api/v1/strategy/pump-paper-v1/stats/reset` — 清 session journal
 - `GET /api/v1/stats/paper-performance` — 同上别名
+- `GET /api/v1/stats/executability` — 纸面成交 vs 曲线报价的可执行性证据（`verdict=go|no-go`）；`liveEnabled` 恒 false。合同：`docs/research/executability-go-nogo-v0.md`
+
+## 可执行性（additive · 纸面证据，非实盘）
+
+`ExecutabilityReport`：`verdict` · `sample_ok`（≥30 已平仓）· `expectancy` · `median_entry_impact_bps`（go &lt;60，硬顶 80）· `reject_rate.{progress_band,impact,risk}` · `shadow_slippage`（成交价 vs 当时 `tick.mid`，X=40bps）· `liveEnabled=false` · `live_limits` 冻结上限。无私钥、无 send。
 
 dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 只订 PaperBroker Fill）。
 

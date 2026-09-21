@@ -1,0 +1,27 @@
+{
+  "n": 30,
+  "pnl": 0.05,
+  "entry_estimated_impact_bps": 42.0,
+  "entry_quote_price": 1.0,
+  "entry_price": 1.0015,
+  "entry_shadow_slippage_bps": 15.0,
+  "eval_counts": {
+    "total": 200,
+    "by_bucket": {
+      "progress_band": 120,
+      "impact": 18,
+      "risk": 12,
+      "other": 30,
+      "attempt": 20
+    },
+    "by_reason": {
+      "progress_band": 100,
+      "not_curve": 20,
+      "impact": 18,
+      "momentum": 30,
+      "blocked_tag": 8,
+      "cooldown": 4,
+      "pump_paper_v1_entry": 20
+    }
+  }
+}

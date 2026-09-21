@@ -305,6 +305,26 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
   font-family: ui-monospace, monospace;
 }
 .paper-stats .disclaimer { margin: 0.2rem 0 0; }
+.exec-panel {
+  margin-top: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.exec-panel header {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+}
+.exec-panel h3 {
+  margin: 0; font-size: 0.75rem; font-weight: 600;
+}
+.exec-verdict {
+  font-size: 0.7rem; font-family: ui-monospace, monospace;
+  padding: 0.05rem 0.4rem; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.exec-verdict.go { color: var(--green); }
+.exec-verdict.nogo { color: var(--warn); }
+.exec-rejects { margin: 0.2rem 0 0; color: var(--muted); font-family: ui-monospace, monospace; }
+.exec-note { margin: 0.2rem 0 0; }
 .trade-page .paper-stats {
   border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
 }

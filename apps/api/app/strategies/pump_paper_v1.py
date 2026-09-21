@@ -27,6 +27,7 @@ from app.models.contracts import (
 )
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.paper.guard import live_execution_blocked
+from app.paper.executability import classify_reject_reason
 from app.providers import get_provider
 from app.risk import get_risk_gate
 
@@ -261,6 +262,9 @@ class PumpPaperEngine:
         self._running = False
         self._decisions: list[AutoDecision] = []
         self._last_decision_key: dict[str, tuple] = {}
+        self._eval_total = 0
+        self._eval_by_bucket: dict[str, int] = {}
+        self._eval_by_reason: dict[str, int] = {}
         self._sync_risk_limits()
 
     def _sync_risk_limits(self) -> None:
@@ -289,6 +293,39 @@ class PumpPaperEngine:
 
     def last_decisions(self, limit: int = 20) -> list[dict[str, Any]]:
         return [d.as_dict() for d in self._decisions[-limit:]]
+
+    def eval_snapshot(self) -> dict[str, Any]:
+        return {
+            "total": int(self._eval_total),
+            "by_bucket": dict(self._eval_by_bucket),
+            "by_reason": dict(self._eval_by_reason),
+        }
+
+    def reset_eval_counts(self) -> None:
+        self._eval_total = 0
+        self._eval_by_bucket = {}
+        self._eval_by_reason = {}
+
+    def record_entry_eval(self, signal: SignalOut) -> None:
+        """Count one no-position evaluate() for reject_rate (autopaper-off skips ignored)."""
+        reason = signal.reason or "unknown"
+        if reason == "hold":
+            return
+        self._eval_total += 1
+        self._eval_by_reason[reason] = self._eval_by_reason.get(reason, 0) + 1
+        if signal.side == "long":
+            self._eval_by_bucket["attempt"] = self._eval_by_bucket.get("attempt", 0) + 1
+            return
+        bucket = classify_reject_reason(reason, signal.tags) or "other"
+        self._eval_by_bucket[bucket] = self._eval_by_bucket.get(bucket, 0) + 1
+
+    def record_order_reject(self, reason: str, tags: Optional[list[str]] = None) -> None:
+        bucket = classify_reject_reason(reason, tags) or "risk"
+        if bucket == "other":
+            bucket = "risk"
+        self._eval_by_bucket[bucket] = self._eval_by_bucket.get(bucket, 0) + 1
+        key = reason or "order_reject"
+        self._eval_by_reason[key] = self._eval_by_reason.get(key, 0) + 1
 
     def _note(
         self,
@@ -480,31 +517,34 @@ class PumpPaperEngine:
         blocked, why = live_execution_blocked()
         if blocked:
             self._note(symbol, now_ms, action="refuse", allow=False, reason="LIVE_DISABLED", notes=why)
+            self.record_order_reject("LIVE_DISABLED", ["LIVE_DISABLED"])
             return
         gate = get_risk_gate()
         if gate.trading_state == "halted":
-            self._note(
-                symbol,
-                now_ms,
-                action="deny",
-                allow=False,
-                reason="TRADING_HALTED",
-                tags=["TRADING_HALTED"],
-                notes=signal.reason,
-            )
-            return
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="deny",
+                    allow=False,
+                    reason="TRADING_HALTED",
+                    tags=["TRADING_HALTED"],
+                    notes=signal.reason,
+                )
+                self.record_order_reject("TRADING_HALTED", ["TRADING_HALTED"])
+                return
         pos = self.positions.get(symbol)
         if gate.trading_state == "reducing" and signal.side == "long" and pos is None:
-            self._note(
-                symbol,
-                now_ms,
-                action="deny",
-                allow=False,
-                reason="REDUCE_ONLY",
-                tags=["REDUCE_ONLY"],
-                notes=signal.reason,
-            )
-            return
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="deny",
+                    allow=False,
+                    reason="REDUCE_ONLY",
+                    tags=["REDUCE_ONLY"],
+                    notes=signal.reason,
+                )
+                self.record_order_reject("REDUCE_ONLY", ["REDUCE_ONLY"])
+                return
         ctx = self._build_ctx(symbol, snap, now_ms)
 
         if signal.side == "long" and pos is None and signal.reason != "hold":
@@ -537,6 +577,7 @@ class PumpPaperEngine:
                     tags=tags,
                     notes=notes,
                 )
+                self.record_order_reject(signal.reason, tags)
             return
 
         if signal.side == "flat" and pos is not None:
@@ -573,6 +614,8 @@ class PumpPaperEngine:
                 tags=signal.tags or last_tags,
                 notes=last_notes or f"flat slices={slices}",
             )
+            if not filled_any:
+                self.record_order_reject(signal.reason, signal.tags or last_tags)
 
     def _tape_for(self, provider: Any, symbol: str, now_ms: int) -> TapeWindow:
         trades: list[dict[str, Any]] = []
@@ -682,6 +725,8 @@ class PumpPaperEngine:
                 sell_pressure_ms=pressure_ms,
                 reject_cooldown=cool,
             )
+            if pos is None:
+                self.record_entry_eval(signal)
             if self._should_emit(info.symbol, signal):
                 await self.publish_signal(info.symbol, now_ms, signal)
             self._last_emitted[info.symbol] = signal

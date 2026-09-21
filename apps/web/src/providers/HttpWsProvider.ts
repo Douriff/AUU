@@ -8,6 +8,7 @@ import type {
   NewTokenEvent,
   PaperOrderResult,
   PaperPerformance,
+  ExecutabilityReport,
   PipelineResult,
   PumpfunPaperSnapshot,
   PumpPaperParams,
@@ -188,6 +189,11 @@ export class HttpWsProvider {
     const q = new URLSearchParams({ window: String(window) });
     if (opts?.mc) q.set("mc", "1");
     return getJson(`/api/v1/strategy/pump-paper-v1/stats?${q}`);
+  }
+
+  getExecutability(window = "session"): Promise<ExecutabilityReport> {
+    const q = new URLSearchParams({ window: String(window) });
+    return getJson(`/api/v1/stats/executability?${q}`);
   }
 
   putStrategy(patch: Partial<PumpPaperParams>) {

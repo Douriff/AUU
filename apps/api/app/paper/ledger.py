@@ -37,6 +37,9 @@ class OpenLot:
     tag: str = ""
     mint: Optional[str] = None
     strategy_id: str = "manual-paper"
+    estimated_impact_bps: Optional[float] = None
+    quote_price: Optional[float] = None
+    shadow_slippage_bps: Optional[float] = None
 
 
 @dataclass
@@ -58,6 +61,12 @@ class RoundTrip:
     tags: list[str] = field(default_factory=list)
     source: str = "manual"  # signal | manual
     side: str = "long"
+    entry_estimated_impact_bps: Optional[float] = None
+    entry_quote_price: Optional[float] = None
+    entry_shadow_slippage_bps: Optional[float] = None
+    exit_estimated_impact_bps: Optional[float] = None
+    exit_quote_price: Optional[float] = None
+    exit_shadow_slippage_bps: Optional[float] = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +85,12 @@ class RoundTrip:
             "tags": list(self.tags),
             "source": self.source,
             "side": self.side,
+            "entry_estimated_impact_bps": self.entry_estimated_impact_bps,
+            "entry_quote_price": self.entry_quote_price,
+            "entry_shadow_slippage_bps": self.entry_shadow_slippage_bps,
+            "exit_estimated_impact_bps": self.exit_estimated_impact_bps,
+            "exit_quote_price": self.exit_quote_price,
+            "exit_shadow_slippage_bps": self.exit_shadow_slippage_bps,
         }
 
 
@@ -180,6 +195,12 @@ class PaperTradeJournal:
                 tags=_tags_for(reason, src_tag),
                 source=src,
                 side=side,
+                entry_estimated_impact_bps=lot.estimated_impact_bps,
+                entry_quote_price=lot.quote_price,
+                entry_shadow_slippage_bps=lot.shadow_slippage_bps,
+                exit_estimated_impact_bps=getattr(fill, "estimated_impact_bps", None),
+                exit_quote_price=getattr(fill, "quote_price", None),
+                exit_shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
             )
             self.closed.append(trade)
             new_closed.append(trade)
@@ -204,6 +225,9 @@ class PaperTradeJournal:
                     tag=tag,
                     mint=mint,
                     strategy_id=strategy_id,
+                    estimated_impact_bps=getattr(fill, "estimated_impact_bps", None),
+                    quote_price=getattr(fill, "quote_price", None),
+                    shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
                 )
             )
         if not opened:

@@ -106,6 +106,7 @@ def root():
                 "watchTraders": "GET/PUT/DELETE /api/v1/watch/traders",
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
+                "executability": "GET /api/v1/stats/executability",
                 "monitor": "GET /api/v1/pumpfun/monitor",
                 "discovery": "env PUMPFUN_DISCOVERY=pumpportal|logs|off",
             },
