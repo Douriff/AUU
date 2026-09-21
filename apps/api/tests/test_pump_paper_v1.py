@@ -307,6 +307,61 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(sig)
         self.assertEqual(engine.positions, {})
 
+    async def test_orphan_position_exits_on_max_hold(self):
+        """Held mint dropped from the watch list still flats after max_hold_sec.
+
+        No live snapshot: tick synthesizes a paper mark and closes the position.
+        liveEnabled stays false; no chain send.
+        """
+        from unittest.mock import patch
+
+        from app.live.gate import live_enabled
+        from app.live.send import send_wired
+        from app.paper.ledger import get_paper_ledger, reset_paper_ledger
+        from app.providers import get_provider
+
+        self.assertFalse(live_enabled())
+        self.assertFalse(send_wired())
+        reset_paper_ledger()
+
+        self._seed_buy_tape()
+        engine = PumpPaperEngine(
+            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=900)
+        )
+        await engine.tick()
+        self.assertIn("PUMPDEMO/SOL", engine.positions)
+        pos = engine.positions["PUMPDEMO/SOL"]
+        self.assertGreater(pos.qty, 0)
+
+        provider = get_provider()
+        with provider._lock:  # type: ignore[attr-defined]
+            provider._drop_locked(pos.symbol, pos.mint)  # type: ignore[attr-defined]
+        engine._last_snap.pop(pos.symbol, None)
+
+        listed = {s.symbol for s in provider.list_symbols()}
+        self.assertNotIn("PUMPDEMO/SOL", listed)
+        self.assertIsNone(provider.get_pumpfun_snapshot("PUMPDEMO/SOL"))
+        covered = engine._symbols_for_tick(provider)
+        self.assertTrue(listed.issubset(set(covered)))
+        self.assertIn("PUMPDEMO/SOL", covered)
+        self.assertEqual(set(covered), listed | set(engine.positions))
+
+        future = time.time() + float(engine.params.max_hold_sec) + 5.0
+        with patch("app.strategies.pump_paper_v1.time.time", return_value=future):
+            await engine.tick()
+
+        self.assertNotIn("PUMPDEMO/SOL", engine.positions)
+        sig = engine.last_signal("PUMPDEMO/SOL")
+        self.assertIsNotNone(sig)
+        self.assertEqual(sig.side, "flat")  # type: ignore[union-attr]
+        self.assertEqual(sig.reason, "max_hold")  # type: ignore[union-attr]
+        self.assertIn("ORPHAN_EXIT", sig.tags)  # type: ignore[union-attr]
+        closed = [t for t in get_paper_ledger().closed if t.symbol == "PUMPDEMO/SOL"]
+        self.assertEqual(len(closed), 1)
+        self.assertIn("MAX_HOLD", closed[0].tags)
+        self.assertFalse(live_enabled())
+        self.assertFalse(send_wired())
+
 
 class ApiStrategyTests(unittest.TestCase):
     @classmethod
