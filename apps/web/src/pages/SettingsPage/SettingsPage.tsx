@@ -103,14 +103,15 @@ export function SettingsPage() {
       </section>
 
       <section className="settings-section">
-        <h2>pump-paper-v1 · auto_paper_orders</h2>
+        <h2>pump-paper-v1 · auto_paper_orders / strategy_autopaper</h2>
         <AutoPaperToggle
           checked={autoPaperOrders}
           onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           label="自动纸面下单（默认关）"
         />
         <p className="muted">
-          关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无钱包。
+          关：只发 <code>signal</code> 叠加。开：满足入场才走 pre-order → PaperBroker。无需重启。
+          成功概率见行情/交易页面板或 <code>GET /api/v1/stats/paper-performance</code>（纸面历史模拟，非承诺）。无钱包。
         </p>
       </section>
 
@@ -132,6 +133,10 @@ export function SettingsPage() {
           <code>{stratState || tradingState}</code>
         </dd>
         <dt>auto_paper_orders</dt>
+        <dd>
+          <code>{String(autoPaperOrders)}</code>
+        </dd>
+        <dt>strategy_autopaper</dt>
         <dd>
           <code>{String(autoPaperOrders)}</code>
         </dd>

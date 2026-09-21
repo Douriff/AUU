@@ -26,6 +26,7 @@ from app.models.contracts import (
     TickCtx,
 )
 from app.paper.pipeline import run_paper_order, run_pre_order
+from app.paper.guard import live_execution_blocked
 from app.providers import get_provider
 from app.risk import get_risk_gate
 
@@ -218,6 +219,28 @@ def evaluate(
     )
 
 
+@dataclass
+class AutoDecision:
+    ts: int
+    symbol: str
+    action: str  # skip | submit | deny | fill | refuse
+    allow: bool
+    reason: str
+    tags: list[str] = field(default_factory=list)
+    notes: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ts": self.ts,
+            "symbol": self.symbol,
+            "action": self.action,
+            "allow": self.allow,
+            "reason": self.reason,
+            "tags": self.tags,
+            "notes": self.notes,
+        }
+
+
 class PumpPaperEngine:
     def __init__(self, params: Optional[PumpPaperParams] = None, equity: float = 10_000.0):
         env_auto = os.getenv("AUTO_PAPER_ORDERS", "").strip().lower()
@@ -236,6 +259,8 @@ class PumpPaperEngine:
         self._reject_streak = 0
         self._reject_cool_until = 0
         self._running = False
+        self._decisions: list[AutoDecision] = []
+        self._last_decision_key: dict[str, tuple] = {}
         self._sync_risk_limits()
 
     def _sync_risk_limits(self) -> None:
@@ -261,6 +286,51 @@ class PumpPaperEngine:
 
     def last_signal(self, symbol: str) -> Optional[SignalOut]:
         return self._last_emitted.get(symbol)
+
+    def last_decisions(self, limit: int = 20) -> list[dict[str, Any]]:
+        return [d.as_dict() for d in self._decisions[-limit:]]
+
+    def _note(
+        self,
+        symbol: str,
+        now_ms: int,
+        *,
+        action: str,
+        allow: bool,
+        reason: str,
+        tags: Optional[list[str]] = None,
+        notes: str = "",
+    ) -> None:
+        rec = AutoDecision(
+            ts=now_ms,
+            symbol=symbol,
+            action=action,
+            allow=allow,
+            reason=reason,
+            tags=list(tags or []),
+            notes=notes,
+        )
+        key = (action, reason, tuple(rec.tags), notes)
+        debounce = action in {"skip", "refuse"} or (
+            action == "deny" and reason in {"TRADING_HALTED", "REDUCE_ONLY"}
+        )
+        if debounce and self._last_decision_key.get(symbol) == key:
+            return
+        self._last_decision_key[symbol] = key
+        self._decisions.append(rec)
+        if len(self._decisions) > 200:
+            del self._decisions[: len(self._decisions) - 150]
+        level = logging.INFO if action in {"deny", "fill", "refuse", "submit"} else logging.DEBUG
+        log.log(
+            level,
+            "autopaper %s %s allow=%s reason=%s tags=%s notes=%s",
+            action,
+            symbol,
+            allow,
+            reason,
+            rec.tags,
+            notes,
+        )
 
     async def publish_signal(self, symbol: str, now_ms: int, signal: SignalOut) -> SignalEvent:
         ev = SignalEvent(strategyId=STRATEGY_ID, symbol=symbol, t=now_ms, signal=signal)
@@ -373,7 +443,9 @@ class PumpPaperEngine:
             max_slippage_bps=size.max_slippage_bps,
             client_tag=tag,
         )
-        data = await run_paper_order(ctx, intent, risk, auto_post_fill=True)
+        data = await run_paper_order(
+            ctx, intent, risk, auto_post_fill=True, close_reason=signal.reason or tag
+        )
         if data.get("reject"):
             self._on_reject()
         elif data.get("fills"):
@@ -394,8 +466,45 @@ class PumpPaperEngine:
         notional: float,
     ) -> None:
         if not self.params.auto_paper_orders:
+            if signal.side == "long" and signal.reason != "hold":
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="skip",
+                    allow=False,
+                    reason="auto_paper_orders=false",
+                    tags=["AUTOPAPER_OFF"],
+                    notes=signal.reason,
+                )
+            return
+        blocked, why = live_execution_blocked()
+        if blocked:
+            self._note(symbol, now_ms, action="refuse", allow=False, reason="LIVE_DISABLED", notes=why)
+            return
+        gate = get_risk_gate()
+        if gate.trading_state == "halted":
+            self._note(
+                symbol,
+                now_ms,
+                action="deny",
+                allow=False,
+                reason="TRADING_HALTED",
+                tags=["TRADING_HALTED"],
+                notes=signal.reason,
+            )
             return
         pos = self.positions.get(symbol)
+        if gate.trading_state == "reducing" and signal.side == "long" and pos is None:
+            self._note(
+                symbol,
+                now_ms,
+                action="deny",
+                allow=False,
+                reason="REDUCE_ONLY",
+                tags=["REDUCE_ONLY"],
+                notes=signal.reason,
+            )
+            return
         ctx = self._build_ctx(symbol, snap, now_ms)
 
         if signal.side == "long" and pos is None and signal.reason != "hold":
@@ -403,9 +512,31 @@ class PumpPaperEngine:
                 ctx, signal, "buy", notional, f"paper:{STRATEGY_ID}"
             )
             fills = [Fill(**{k: v for k, v in f.items() if k != "symbol"}) for f in data.get("fills") or []]
+            reject = data.get("reject")
             if fills:
                 self._last_open_ts[snap.mint] = now_ms
                 self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="fill",
+                    allow=True,
+                    reason=signal.reason,
+                    tags=signal.tags,
+                    notes=f"buy fills={len(fills)}",
+                )
+            else:
+                tags = (reject or {}).get("tags") or ["RISK_DENIED"]
+                notes = (reject or {}).get("notes") or ""
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="deny",
+                    allow=False,
+                    reason=signal.reason,
+                    tags=tags,
+                    notes=notes,
+                )
             return
 
         if signal.side == "flat" and pos is not None:
@@ -415,6 +546,9 @@ class PumpPaperEngine:
                 return
             slices = 2 if "SPLIT_REDUCE" in signal.tags else 1
             remaining = close_notional
+            filled_any = False
+            last_tags: list[str] = []
+            last_notes = ""
             for i in range(slices):
                 chunk = remaining if i == slices - 1 else close_notional / slices
                 data = await self._submit(
@@ -424,7 +558,21 @@ class PumpPaperEngine:
                 if fills:
                     self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
                     remaining -= chunk
+                    filled_any = True
+                else:
+                    reject = data.get("reject") or {}
+                    last_tags = reject.get("tags") or []
+                    last_notes = reject.get("notes") or ""
                 ctx = self._build_ctx(symbol, snap, now_ms)
+            self._note(
+                symbol,
+                now_ms,
+                action="fill" if filled_any else "deny",
+                allow=filled_any,
+                reason=signal.reason,
+                tags=signal.tags or last_tags,
+                notes=last_notes or f"flat slices={slices}",
+            )
 
     def _tape_for(self, provider: Any, symbol: str, now_ms: int) -> TapeWindow:
         trades: list[dict[str, Any]] = []

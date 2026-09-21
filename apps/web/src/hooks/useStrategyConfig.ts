@@ -53,11 +53,12 @@ export async function patchStrategy(next: Partial<PumpPaperParams>): Promise<Pum
   inflight += 1;
   lastPatchAt = Date.now();
   if (snapshot) {
-    snapshot = {
-      ...snapshot,
-      params: { ...snapshot.params, ...next },
-      auto_paper_orders: next.auto_paper_orders ?? snapshot.auto_paper_orders,
-    };
+      snapshot = {
+        ...snapshot,
+        params: { ...snapshot.params, ...next },
+        auto_paper_orders: next.auto_paper_orders ?? next.strategy_autopaper ?? snapshot.auto_paper_orders,
+        strategy_autopaper: next.strategy_autopaper ?? next.auto_paper_orders ?? snapshot.strategy_autopaper,
+      };
     emit();
   }
   try {
@@ -98,7 +99,10 @@ export function useStrategyConfig() {
   }, []);
 
   const patch = useCallback((next: Partial<PumpPaperParams>) => patchStrategy(next), []);
-  const setAutoPaperOrders = useCallback((v: boolean) => patchStrategy({ auto_paper_orders: v }), []);
+  const setAutoPaperOrders = useCallback(
+    (v: boolean) => patchStrategy({ auto_paper_orders: v, strategy_autopaper: v }),
+    []
+  );
 
   return {
     state: snapshot,

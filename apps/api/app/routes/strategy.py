@@ -1,11 +1,13 @@
 """GET/PUT /api/v1/strategy/pump-paper-v1 — paper strategy params + monitor."""
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.bus import get_hub
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -51,6 +53,8 @@ def _state_payload() -> dict[str, Any]:
         "trading_state": gate.trading_state,
         "day_pnl": gate.day_pnl,
         "positions": positions,
+        "last_decisions": engine.last_decisions(20),
+        "liveDisabled": True,
     }
 
 
@@ -66,7 +70,24 @@ def put_pump_paper(body: PumpPaperParamsPatch):
     patch = body.model_dump(exclude_none=True)
     if "strategy_autopaper" in patch:
         patch["auto_paper_orders"] = patch.pop("strategy_autopaper")
+    prev_auto = bool(engine.params.auto_paper_orders)
     engine.update_params(patch)
+    if "auto_paper_orders" in patch and bool(engine.params.auto_paper_orders) != prev_auto:
+        gate = get_risk_gate()
+        auto = bool(engine.params.auto_paper_orders)
+        get_hub().publish_sync(
+            {
+                "type": "trading_state",
+                "payload": {
+                    "state": gate.trading_state,
+                    "reason": "autopaper_on" if auto else "autopaper_off",
+                    "symbol": "",
+                    "ts": int(time.time() * 1000),
+                    "auto_paper_orders": auto,
+                    "strategy_autopaper": auto,
+                },
+            }
+        )
     return ok(_state_payload())
 
 

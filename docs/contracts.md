@@ -48,6 +48,8 @@ REST：
 - `POST /api/v1/risk/post-fill`
 - `POST /api/v1/pipeline/decide-and-fill` — 一枪：provider mid/book + optional `PumpCtx` → signal → RiskGate → PaperBroker
 - `GET /api/v1/book?symbol=` — synth 深度快照（供 UI 组 ctx）
+- `GET/PUT /api/v1/strategy/pump-paper-v1` — `auto_paper_orders` / `strategy_autopaper`（默认 false，无需重启）
+- `GET /api/v1/stats/paper-performance` — 纸面胜率 / 期望 / 回撤 / 蒙特卡洛（`docs/viz/paper-stats-v1.md`）
 
 dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 只订 PaperBroker Fill）。
 

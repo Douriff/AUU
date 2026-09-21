@@ -17,9 +17,12 @@ async def execute_paper_order(
     risk: RiskOut,
     *,
     auto_post_fill: bool = True,
+    close_reason: str = "",
 ) -> dict[str, Any]:
     """Submit to PaperBroker. Never fabricates a Fill on reject.
 
     Caller must ensure risk.allow is True (route returns RISK_DENIED otherwise).
     """
-    return await run_paper_order(ctx, intent, risk, auto_post_fill=auto_post_fill)
+    return await run_paper_order(
+        ctx, intent, risk, auto_post_fill=auto_post_fill, close_reason=close_reason
+    )

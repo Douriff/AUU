@@ -79,7 +79,22 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 - 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
 - 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 
-详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`。
+详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`。
+
+## 自动纸面单 + 成功概率
+
+`strategy_autopaper` / `auto_paper_orders` **默认关**。在 Settings / 行情 / 交易顶栏打开后（无需重启），`pump-paper-v1` 在 `trading_state=active` 时对自选做 decide → RiskGate → PaperBroker。实盘路径关闭（`liveDisabled=true`）；私钥 env 一旦出现则拒绝执行。
+
+纸面成功概率（胜率、期望、回撤、蒙特卡洛）来自本会话已平仓 Fill：
+
+```bash
+curl -sS 'http://localhost:8000/api/v1/stats/paper-performance'
+curl -sS http://localhost:8000/api/v1/strategy/pump-paper-v1 \
+  -X PUT -H 'Content-Type: application/json' \
+  -d '{"strategy_autopaper": true}'
+```
+
+行情页与交易页有「成功概率 · 纸面模拟」面板。这是纸面历史重抽样，**不是**收益承诺。
 
 ## 试一笔纸面单
 

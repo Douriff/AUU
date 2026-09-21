@@ -47,7 +47,7 @@ export function AppShell() {
           </span>
           <AutoPaperToggle
             compact
-            label="auto_paper"
+          label="自动纸面"
             checked={autoPaperOrders}
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />

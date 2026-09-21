@@ -78,6 +78,8 @@ export interface TradingStateEvent {
   reason?: string;
   symbol?: string;
   ts?: number;
+  auto_paper_orders?: boolean;
+  strategy_autopaper?: boolean;
 }
 
 export type DataSource = "mock" | "paper" | "pumpfun_paper";
@@ -97,6 +99,7 @@ export interface PumpPaperParams {
   max_open_mints: number;
   notional_pct_equity: number;
   auto_paper_orders: boolean;
+  strategy_autopaper?: boolean;
   max_notional_sol: number;
 }
 
@@ -113,9 +116,59 @@ export interface PumpPaperState {
   strategyId: string;
   params: PumpPaperParams;
   auto_paper_orders: boolean;
+  strategy_autopaper?: boolean;
   trading_state: TradingState;
   day_pnl?: number;
   positions: PumpPaperPosition[];
+  last_decisions?: AutoDecision[];
+  liveDisabled?: boolean;
+}
+
+export interface AutoDecision {
+  ts: number;
+  symbol: string;
+  action: string;
+  allow: boolean;
+  reason: string;
+  tags: string[];
+  notes?: string;
+}
+
+export interface MonteCarloSim {
+  n_paths: number;
+  trade_count: number;
+  seed: number;
+  p_equity_positive: number | null;
+  p_equity_above_start: number | null;
+  p_hit_day_loss: number | null;
+  final_equity_pct_p5: number | null;
+  final_equity_pct_p50: number | null;
+  final_equity_pct_p95: number | null;
+  day_loss_pct?: number;
+  label: string;
+}
+
+export interface PaperPerformance {
+  mode: string;
+  liveDisabled: boolean;
+  window: string | number;
+  trade_count: number;
+  wins: number;
+  losses: number;
+  flats?: number;
+  win_rate: number | null;
+  expectancy_pnl_pct: number | null;
+  expectancy_r: number | null;
+  max_drawdown_pct: number | null;
+  sharpe_like: number | null;
+  open_lots: number | null;
+  fill_count?: number;
+  monte_carlo: MonteCarloSim | null;
+  disclaimer: string;
+  empty: boolean;
+  auto_paper_orders?: boolean;
+  strategy_autopaper?: boolean;
+  strategyId?: string;
 }
 
 export interface MonitorRow {

@@ -264,4 +264,32 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .curve-chip.migrated { color: var(--green); }
 .curve-chip.discovered { color: var(--accent); }
+.paper-stats {
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0.45rem 0.75rem 0.5rem;
+}
+.paper-stats header {
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.paper-stats h2 {
+  margin: 0; font-size: 0.8rem; font-weight: 600;
+}
+.paper-stats.compact { padding: 0.35rem 0.75rem 0.4rem; }
+.paper-stats dl {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.4rem;
+  margin: 0.35rem 0 0.2rem;
+}
+.paper-stats dl div { display: flex; gap: 0.4rem; align-items: baseline; }
+.paper-stats dt { color: var(--muted); font-size: 0.75rem; }
+.paper-stats dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.paper-stats .mc-line {
+  margin: 0.25rem 0 0; font-size: 0.72rem; color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+.paper-stats .disclaimer { margin: 0.2rem 0 0; }
+.trade-page .paper-stats {
+  border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
+}
+.curve-chip.discovered { color: var(--accent); }
 code.hl { color: var(--accent); }
