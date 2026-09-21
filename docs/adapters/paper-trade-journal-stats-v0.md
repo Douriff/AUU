@@ -23,7 +23,12 @@ RoundTrip:
   fees: float
   tags: list[str]           # TAKE_PROFIT / STOP_LOSS / graduation…
   source: signal|manual
+  entry_estimated_impact_gross_bps   # 含费；别名 entry_estimated_impact_bps
+  entry_protocol_fee_bps             # 曲线 62.5 / AMM 10
+  entry_estimated_impact_net_bps     # max(0, gross − fee)
 ```
+
+平仓时这三项与开仓 Fill 一起写入，使可执行性门的 `median_entry_impact.n` 能与 `n_closed` 对齐。缺 gross 时不编造冲击。
 
 写入时机：
 - 开仓 Fill → 建 `open_lot`

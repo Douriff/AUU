@@ -56,9 +56,11 @@ class PumpPaperParams(BaseModel):
     progress_bps_min: int = 800
     progress_bps_max: int = 7500
     max_impact_bps: float = 80.0
-    take_profit_pct: float = 0.25
-    stop_loss_pct: float = 0.12
-    max_hold_sec: int = 900
+    # Exit mix on 30 closes was MAX_HOLD-heavy (timeout before the 25% target).
+    # Closer TP, slightly tighter SL, shorter hold. Hard caps below stay put.
+    take_profit_pct: float = 0.12
+    stop_loss_pct: float = 0.10
+    max_hold_sec: int = 300
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3
@@ -515,6 +517,7 @@ class PumpPaperEngine:
         signal: SignalOut,
         now_ms: int,
         notional: float,
+        entry_impact_bps: Optional[float] = None,
     ) -> None:
         if not self.params.auto_paper_orders:
             if signal.side == "long" and signal.reason != "hold":
@@ -578,7 +581,10 @@ class PumpPaperEngine:
                 )
                 self.record_order_reject("REDUCE_ONLY", ["REDUCE_ONLY"])
                 return
-        ctx = self._build_ctx(symbol, snap, now_ms)
+        meta: dict[str, Any] = {"mint": snap.mint, "phase": snap.phase}
+        if pos is None and entry_impact_bps is not None and entry_impact_bps < 1e8:
+            meta["entry_impact_bps"] = float(entry_impact_bps)
+        ctx = self._build_ctx(symbol, snap, now_ms, extra_meta=meta)
 
         if signal.side == "long" and pos is None and signal.reason != "hold":
             data = await self._submit(
@@ -934,7 +940,9 @@ class PumpPaperEngine:
                 await self.publish_signal(symbol, now_ms, signal)
             self._last_emitted[symbol] = signal
             try:
-                await self.maybe_execute(symbol, snap, signal, now_ms, sized)
+                await self.maybe_execute(
+                    symbol, snap, signal, now_ms, sized, entry_impact_bps=impact_in
+                )
             except Exception:
                 log.exception("pump-paper-v1 execute failed for %s", symbol)
             held = self.positions.get(symbol)

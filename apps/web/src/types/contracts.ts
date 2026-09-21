@@ -50,6 +50,9 @@ export interface Fill {
   symbol?: string;
   quote_price?: number | null;
   estimated_impact_bps?: number | null;
+  estimated_impact_gross_bps?: number | null;
+  estimated_impact_net_bps?: number | null;
+  protocol_fee_bps?: number | null;
   shadow_slippage_bps?: number | null;
 }
 
@@ -170,6 +173,9 @@ export interface RoundTrip {
   source?: string;
   side?: string;
   entry_estimated_impact_bps?: number | null;
+  entry_estimated_impact_gross_bps?: number | null;
+  entry_estimated_impact_net_bps?: number | null;
+  entry_protocol_fee_bps?: number | null;
   entry_quote_price?: number | null;
   entry_shadow_slippage_bps?: number | null;
   exit_estimated_impact_bps?: number | null;

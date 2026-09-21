@@ -54,6 +54,15 @@ class ParamsDefaultsTests(unittest.TestCase):
         self.assertEqual(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
+        # Exit mix was MAX_HOLD-heavy; closer TP / tighter SL / shorter hold.
+        self.assertAlmostEqual(p.take_profit_pct, 0.12)
+        self.assertAlmostEqual(p.stop_loss_pct, 0.10)
+        self.assertGreater(p.take_profit_pct, p.stop_loss_pct)
+        self.assertEqual(p.max_hold_sec, 300)
+        self.assertLess(p.max_hold_sec, 900)
+        self.assertEqual(p.max_day_loss_pct, 0.05)
+        self.assertEqual(p.max_open_mints, 3)
+        self.assertEqual(p.max_notional_sol, 0.5)
 
 
 class TapeTests(unittest.TestCase):

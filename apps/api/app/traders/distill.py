@@ -123,14 +123,14 @@ def distill_profile(
             suggested["progress_bps_min"] = int(new_min)
             suggested["progress_bps_max"] = int(new_max)
     elif primary.tag == "flip":
-        cur_hold = int(params.get("max_hold_sec", 900))
+        cur_hold = int(params.get("max_hold_sec", 300))
         suggested["max_hold_sec"] = int(min(cur_hold, 180))
-        cur_tp = float(params.get("take_profit_pct", 0.25))
+        cur_tp = float(params.get("take_profit_pct", 0.12))
         suggested["take_profit_pct"] = round(max(0.08, cur_tp * 0.8), 4)
     elif primary.tag == "bag":
-        cur_hold = int(params.get("max_hold_sec", 900))
+        cur_hold = int(params.get("max_hold_sec", 300))
         suggested["max_hold_sec"] = int(max(cur_hold, 3600))
-        cur_sl = float(params.get("stop_loss_pct", 0.12))
+        cur_sl = float(params.get("stop_loss_pct", 0.10))
         suggested["stop_loss_pct"] = round(max(0.04, min(cur_sl, 0.08)), 4)
 
     # Never propose raising the impact hard cap; paper remains gated at 80.

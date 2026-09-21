@@ -184,6 +184,31 @@ def impact_net_bps(impact_gross_bps: float, protocol_fee_bps: float) -> float:
     return max(0.0, float(impact_gross_bps) - float(protocol_fee_bps))
 
 
+def split_impact_gross_fee_net(
+    gross_bps: float | None,
+    *,
+    protocol_fee_bps: float | None = None,
+    net_bps: float | None = None,
+    phase: str | None = None,
+    impact_fee_bps: float | None = None,
+) -> tuple[float | None, float | None, float | None]:
+    """Normalize one entry impact to ``(gross, protocol_fee, net)``.
+
+    Gross is the existing estimated impact (curve walk + fee floor). Net is
+    ``max(0, gross − fee)``. Missing fee uses the phase floor. A missing gross
+    stays missing — this does not invent an impact.
+    """
+    if gross_bps is None:
+        return None, None, None
+    gross = float(gross_bps)
+    if protocol_fee_bps is None:
+        fee = protocol_fee_bps_for_phase(phase or "curve", impact_fee_bps=impact_fee_bps)
+    else:
+        fee = float(protocol_fee_bps)
+    net = float(net_bps) if net_bps is not None else impact_net_bps(gross, fee)
+    return gross, fee, net
+
+
 def _bps_vs_mid(px: float, mid0: float) -> float:
     if mid0 <= 0 or px <= 0:
         return UNFILLABLE_IMPACT_BPS
