@@ -62,6 +62,7 @@ export interface RiskEvent {
   symbol?: string;
   t: number;
   risk: RiskOut;
+  venue?: string;
 }
 
 export interface RejectEvent {
@@ -69,6 +70,7 @@ export interface RejectEvent {
   symbol: string;
   tags: string[];
   notes?: string;
+  venue?: string;
 }
 
 export type TradingState = "active" | "reducing" | "halted";

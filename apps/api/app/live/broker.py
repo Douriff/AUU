@@ -129,7 +129,6 @@ async def run_live_pre_order(
         }
     )
     if not risk.allow:
-        gate.on_reject(ctx, risk.tags)
         await hub.publish(
             {
                 "type": "reject",
@@ -185,7 +184,6 @@ async def run_live_order(
         reject = broker.last_reject
         tags = reject.tags if reject else ["LIVE_STUB"]
         notes = reject.notes if reject else "no fill"
-        get_risk_gate().on_reject(ctx, tags)
         await hub.publish(
             {
                 "type": "reject",
@@ -207,8 +205,6 @@ async def run_live_order(
     # lifecycle matches PaperBroker if a later PR wires official pump-sdk.
     # Live fills go to the live ledger only — never PaperTradeJournal.
     fill_payloads: list[dict[str, Any]] = []
-    trading_state: Optional[str] = None
-    gate = get_risk_gate()
     ledger = get_live_ledger()
     mint = None
     if ctx.meta:
@@ -221,10 +217,4 @@ async def run_live_order(
         fill_payloads.append(dumped)
         ledger.record_fill(ctx.symbol, f, mint=str(mint) if mint else None)
         await hub.publish({"type": "fill", "payload": dumped})
-        if auto_post_fill:
-            result = gate.post_fill(ctx, f)
-            trading_state = result["trading_state"]
-    data: dict[str, Any] = {"fills": fill_payloads, "venue": VENUE}
-    if trading_state:
-        data["trading_state"] = trading_state
-    return data
+    return {"fills": fill_payloads, "venue": VENUE}

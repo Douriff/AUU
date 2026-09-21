@@ -477,6 +477,14 @@ class LiveRouteAndPaperTests(unittest.TestCase):
         self.assertIn(REASON_NO_KEYPAIR, err["reasons"])
         self.assertNotIn(REASON_LIMITS_MISSING, err["reasons"])
         self.assertIn(REASON_LIVE_DISABLED, err["risk"]["tags"])
+        # live refuse must not trip the paper RiskGate cooldown
+        paper = self.client.post(
+            "/api/v1/pipeline/decide-and-fill",
+            json={"symbol": "PUMPDEMO/SOL", "side": "buy", "notional": 0.1},
+        )
+        self.assertEqual(paper.status_code, 200)
+        self.assertTrue(paper.json()["data"]["risk"]["allow"])
+        self.assertGreaterEqual(len(paper.json()["data"]["fills"]), 1)
 
     def test_arm_without_keypair_403(self):
         r = self.client.put("/api/v1/live/arm", json={"armed": True})
