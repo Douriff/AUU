@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { usePaperPerformance } from "@/hooks/usePaperPerformance";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
-import type { EquityPoint } from "@/types/contracts";
+import { marketProvider } from "@/providers/HttpWsProvider";
+import { habitLabel } from "@/components/watch/HabitTagChips";
+import type { CompareReport, EquityPoint } from "@/types/contracts";
 
 const STATS_KEY = "auu:show_paper_stats";
 const MC_KEY = "auu:show_monte_carlo";
@@ -75,6 +77,10 @@ interface Props {
 export function PaperStatsPanel({ compact }: Props) {
   const [showStats, setShowStats] = useState(true);
   const [mcOn, setMcOn] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compare, setCompare] = useState<CompareReport | null>(null);
+  const [compareErr, setCompareErr] = useState("");
+  const [watchReady, setWatchReady] = useState(false);
   const { stats, err } = usePaperPerformance(2500, mcOn);
   const { autoPaperOrders, tradingState } = useStrategyConfig();
 
@@ -83,6 +89,49 @@ export function PaperStatsPanel({ compact }: Props) {
     setMcOn(readShowMonteCarlo());
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void marketProvider
+      .listWatchedTraders()
+      .then((data) => {
+        if (!cancelled) setWatchReady(data.items.length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setWatchReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggleCompare() {
+    if (!watchReady) return;
+    const next = !compareOpen;
+    setCompareOpen(next);
+    if (!next) return;
+    try {
+      let watchId = "";
+      try {
+        watchId = localStorage.getItem("auu:watchCompareId") || "";
+      } catch {
+        watchId = "";
+      }
+      if (!watchId) {
+        const data = await marketProvider.listWatchedTraders();
+        watchId = data.items[0]?.watch_id || "";
+      }
+      if (!watchId) {
+        setCompareErr("先选择观察对象并生成对照");
+        return;
+      }
+      const report = await marketProvider.compareTrader(watchId);
+      setCompare(report);
+      setCompareErr("");
+    } catch (e) {
+      setCompareErr(e instanceof Error ? e.message : "对照加载失败");
+    }
+  }
+
   if (!showStats) return null;
 
   const empty = !stats || stats.empty || (stats.n_trades ?? stats.trade_count ?? 0) === 0;
@@ -90,6 +139,22 @@ export function PaperStatsPanel({ compact }: Props) {
   const mc = stats?.monte_carlo;
   const sampleOk = Boolean(stats?.sample_ok);
   const journal = stats?.journal ?? [];
+  const selfN =
+    compare && typeof compare.self === "object" && compare.self != null && "n_trades" in compare.self
+      ? Number((compare.self as { n_trades?: number }).n_trades ?? n)
+      : n;
+
+  const compareBtn = (
+    <button
+      type="button"
+      className="ghost tiny compare-fold-btn"
+      disabled={!watchReady}
+      title={watchReady ? "观察对照（仅参考）" : "先选择观察对象并生成对照"}
+      onClick={() => void toggleCompare()}
+    >
+      对照 {compareOpen ? "▴" : "▾"}
+    </button>
+  );
 
   return (
     <section className={`paper-stats ${compact ? "compact" : ""}`} aria-label="paper stats">
@@ -115,62 +180,86 @@ export function PaperStatsPanel({ compact }: Props) {
       </header>
       {err ? <p className="error tiny">{err}</p> : null}
       {empty ? (
-        <p className="muted tiny">暂无已平仓纸面交易</p>
+        <div className="paper-stats-row">
+          <p className="muted tiny">暂无已平仓纸面交易</p>
+          {compareBtn}
+        </div>
       ) : (
-        <>
-          <div className="paper-stats-row">
-            <dl>
-              <div>
-                <dt>胜率</dt>
-                <dd>{rate(stats.win_rate)}</dd>
-              </div>
-              <div>
-                <dt>期望</dt>
-                <dd>{num(stats.expectancy)}</dd>
-              </div>
-              <div>
-                <dt>回撤</dt>
-                <dd>{pct(stats.max_drawdown_pct)}</dd>
-              </div>
-              <div>
-                <dt>笔数</dt>
-                <dd>
-                  {n}
-                  <span className="muted">
-                    {" "}
-                    ({stats.wins}胜{stats.losses}负)
-                  </span>
-                </dd>
-              </div>
-            </dl>
-            {stats.equity && stats.equity.length > 1 ? <EquitySpark points={stats.equity} /> : null}
-          </div>
-          {journal.length ? (
-            <table className="journal-table">
-              <thead>
-                <tr>
-                  <th>symbol</th>
-                  <th>entry</th>
-                  <th>exit</th>
-                  <th>pnl</th>
-                  <th>tags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {journal.slice(compact ? -4 : -8).reverse().map((row) => (
-                  <tr key={row.id} className={row.pnl >= 0 ? "buy" : "sell"}>
-                    <td>{row.symbol}</td>
-                    <td>{num(row.entry_price, 3)}</td>
-                    <td>{num(row.exit_price, 3)}</td>
-                    <td>{num(row.pnl)}</td>
-                    <td>{(row.tags ?? []).join(",")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-        </>
+        <div className="paper-stats-row">
+          <dl>
+            <div>
+              <dt>胜率</dt>
+              <dd>{rate(stats.win_rate)}</dd>
+            </div>
+            <div>
+              <dt>期望</dt>
+              <dd>{num(stats.expectancy)}</dd>
+            </div>
+            <div>
+              <dt>回撤</dt>
+              <dd>{pct(stats.max_drawdown_pct)}</dd>
+            </div>
+            <div>
+              <dt>笔数</dt>
+              <dd>
+                {n}
+                <span className="muted">
+                  {" "}
+                  ({stats.wins}胜{stats.losses}负)
+                </span>
+              </dd>
+            </div>
+          </dl>
+          {compareBtn}
+          {stats.equity && stats.equity.length > 1 ? <EquitySpark points={stats.equity} /> : null}
+        </div>
       )}
+      {compareOpen ? (
+        <div className="compare-fold">
+          <h3>观察对照（仅参考）</h3>
+          {compareErr ? <p className="error tiny">{compareErr}</p> : null}
+          {compare ? (
+            <>
+              <p className="tiny muted">
+                自有纸面 n={selfN}
+                {" · "}
+                观察对象 n={compare.trader_ref.n_trades} / approx_pnl={compare.trader_ref.approx_pnl} / tags=
+                {compare.trader_ref.tags_hist.map(habitLabel).join("、") || "—"}
+              </p>
+              <p className="tiny muted">reference_only — 非复制交易归因；胜率分母仍只含自有纸面 Journal</p>
+            </>
+          ) : (
+            <p className="tiny muted">加载对照…</p>
+          )}
+        </div>
+      ) : null}
+      {!empty && journal.length ? (
+        <table className="journal-table">
+          <thead>
+            <tr>
+              <th>symbol</th>
+              <th>entry</th>
+              <th>exit</th>
+              <th>pnl</th>
+              <th>tags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {journal
+              .slice(compact ? -4 : -8)
+              .reverse()
+              .map((row) => (
+                <tr key={row.id} className={row.pnl >= 0 ? "buy" : "sell"}>
+                  <td>{row.symbol}</td>
+                  <td>{num(row.entry_price, 3)}</td>
+                  <td>{num(row.exit_price, 3)}</td>
+                  <td>{num(row.pnl)}</td>
+                  <td>{(row.tags ?? []).join(",")}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      ) : null}
       {mcOn ? (
         sampleOk && mc && mc.p50_pnl != null ? (
           <p className="mc-line">

@@ -12,3 +12,4 @@ P0 开源调研：
 - 权益 = `equity_0`（默认 10000）+ 累计已实现 pnl
 - RiskGate 对照 vn.py RiskManager：`docs/adapters/vnpy-riskmanager-v0.md`；**无新风控钩子**；成交只 `PaperBroker`
 - 不嵌 GPL/AGPL、vectorbt、QC 密钥；无真仓 / sniper
+- 观察对照：胜率旁「对照」折叠，见 `docs/viz/trader-watch-ui-v0.md` §5；`trader_ref` **不**并入胜率分母

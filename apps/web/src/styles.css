@@ -206,7 +206,7 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .paper-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
 .paper-form label.checkbox { flex-direction: row; align-items: center; gap: 0.4rem; padding-bottom: 0.2rem; }
-.paper-form input[type="number"], .paper-form select {
+.paper-form input[type="number"], .paper-form input[type="text"], .paper-form select {
   background: #0d1117; color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.4rem 0.55rem; min-width: 160px;
 }
@@ -310,3 +310,74 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 }
 .curve-chip.discovered { color: var(--accent); }
 code.hl { color: var(--accent); }
+.observe-table { max-width: 1100px; }
+.observe-table tr { cursor: default; }
+.observe-table tr.active-row { background: rgba(88,166,255,0.08); }
+.watch-table { font-size: 0.8rem; }
+.watch-table .paper-actions { margin: 0; gap: 0.25rem; }
+.watch-table a.ghost, .paper-actions a.ghost {
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.45rem;
+  background: #21262d; color: var(--muted); font-size: 0.75rem;
+}
+.src-badge {
+  font-size: 0.65rem; padding: 0.05rem 0.35rem; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.risk-bang { color: var(--warn); margin-left: 0.25rem; cursor: help; }
+.habit-chip-row { list-style: none; margin: 0.4rem 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.habit-chip {
+  background: #21262d; border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.35rem 0.55rem; min-width: 8rem; font-size: 0.8rem;
+}
+.habit-chip.inline { display: inline-block; min-width: 0; padding: 0.1rem 0.35rem; font-size: 0.72rem; }
+.habit-chip.primary { box-shadow: 0 0 0 1px var(--accent); transform: scale(1.02); }
+.habit-chip-title { display: flex; align-items: center; gap: 0.35rem; }
+.habit-primary-badge {
+  font-style: normal; font-size: 0.65rem; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 999px; padding: 0 0.3rem;
+}
+.habit-sniper { border-color: var(--warn); color: var(--warn); }
+.habit-mid_curve { border-color: var(--green); color: var(--green); }
+.habit-graduation_chase { border-color: var(--red); color: var(--red); }
+.habit-flip { border-color: #a371f7; color: #a371f7; }
+.habit-bag { border-color: #8b949e; color: #8b949e; }
+.compare-fold-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.habit-conf {
+  display: block; height: 4px; background: #0d1117; border-radius: 99px; overflow: hidden; margin: 0.25rem 0;
+}
+.habit-conf i { display: block; height: 100%; background: currentColor; }
+.habit-chip details { margin-top: 0.2rem; color: var(--muted); }
+.habit-chip details ul { margin: 0.15rem 0 0; padding-left: 1rem; }
+.observe-json {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.6rem 0.75rem; overflow: auto; max-height: 220px;
+}
+.checkbox-row {
+  display: flex; align-items: flex-start; gap: 0.45rem;
+  margin: 0.6rem 0; font-size: 0.85rem; color: var(--muted);
+}
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 40;
+}
+.modal-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.1rem; max-width: 480px; width: calc(100% - 2rem);
+}
+.modal-card h2 { margin: 0 0 0.6rem; font-size: 1.05rem; }
+.modal-card ol { margin: 0 0 0.75rem; padding-left: 1.1rem; color: var(--muted); }
+.hist-bars {
+  display: flex; align-items: flex-end; gap: 4px; height: 32px; margin: 0.35rem 0 0.6rem;
+}
+.hist-bars i {
+  width: 14px; background: var(--accent); border-radius: 2px 2px 0 0; display: block;
+}
+.weight-bars { display: grid; gap: 0.25rem; margin: 0.5rem 0; }
+.weight-bars label { display: grid; grid-template-columns: 80px 1fr auto; gap: 0.4rem; align-items: center; }
+.compare-fold {
+  margin: 0.35rem 0 0.2rem; padding: 0.35rem 0.5rem;
+  border: 1px dashed var(--border); border-radius: 6px;
+}
+.compare-fold h3 { margin: 0 0 0.25rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.compare-fold-btn { margin-left: auto; }
+.snapshot-strip { margin: 0.5rem 0 1rem; }
