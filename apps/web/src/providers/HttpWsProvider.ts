@@ -81,6 +81,8 @@ export class HttpWsProvider {
   private pendingSubs: { channel: Channel; symbol: string; interval?: string }[] = [];
   private reconnectTimer: number | null = null;
   private intentionalClose = false;
+  /** Bumps on each connect() so StrictMode unmount cannot reconnect a stale socket. */
+  private epoch = 0;
 
   listSymbols(): Promise<SymbolInfo[]> {
     return getJson("/api/v1/symbols");
@@ -138,12 +140,21 @@ export class HttpWsProvider {
   connect(handlers: Handlers): () => void {
     this.handlers = handlers;
     this.intentionalClose = false;
-    this.open();
+    const epoch = ++this.epoch;
+    this.open(epoch);
     return () => {
+      if (epoch !== this.epoch) return;
       this.intentionalClose = true;
-      if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
-      this.ws?.close();
+      if (this.reconnectTimer) {
+        window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      const ws = this.ws;
       this.ws = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
     };
   }
 
@@ -167,16 +178,24 @@ export class HttpWsProvider {
     }
   }
 
-  private open() {
+  private open(epoch: number) {
+    if (epoch !== this.epoch) return;
     this.handlers.onStatus?.("connecting");
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
     const ws = new WebSocket(wsUrl());
     this.ws = ws;
 
     ws.onopen = () => {
+      if (epoch !== this.epoch) return;
       this.handlers.onStatus?.("open");
     };
 
     ws.onmessage = (ev) => {
+      if (epoch !== this.epoch) return;
       let msg: Record<string, unknown>;
       try {
         msg = JSON.parse(String(ev.data));
@@ -224,11 +243,15 @@ export class HttpWsProvider {
         this.handlers.onTradingState?.(msg.payload as TradingStateEvent);
     };
 
-    ws.onerror = () => this.handlers.onStatus?.("error");
+    ws.onerror = () => {
+      if (epoch !== this.epoch) return;
+      this.handlers.onStatus?.("error");
+    };
     ws.onclose = () => {
+      if (epoch !== this.epoch) return;
       this.handlers.onStatus?.("closed");
       if (!this.intentionalClose) {
-        this.reconnectTimer = window.setTimeout(() => this.open(), 2000);
+        this.reconnectTimer = window.setTimeout(() => this.open(epoch), 2000);
       }
     };
   }

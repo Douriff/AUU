@@ -94,10 +94,9 @@ export function TradePage() {
   }, []);
 
   useEffect(() => {
+    // Book snapshot for mid. Paper fill/reject/risk/signal arrive via hub
+    // without mock-channel subscribe (avoids demo-momentum tape noise).
     marketProvider.subscribe("book", symbol);
-    marketProvider.subscribe("fills", symbol);
-    marketProvider.subscribe("risk", symbol);
-    marketProvider.subscribe("signals", symbol);
   }, [symbol]);
 
   const mid = book?.mid;
