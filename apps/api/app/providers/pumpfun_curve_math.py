@@ -17,6 +17,10 @@ TOKEN_DECIMALS = 6
 LAMPORTS_PER_SOL = 1_000_000_000
 DEFAULT_PROTOCOL_FEE_BPS = 100
 DEFAULT_CREATOR_FEE_BPS = 0
+# Paper impact add-on / fee-aware path default (overridable).
+DEFAULT_IMPACT_FEE_BPS = 125
+# When the curve cannot fill, report a full-notional shock rather than 0.
+UNFILLABLE_IMPACT_BPS = 10_000.0
 # Unsold supply that typically seeds PumpSwap on migrate (~206.9M whole tokens).
 AMM_INITIAL_TOKEN_RESERVES = TOKEN_TOTAL_SUPPLY - INITIAL_REAL_TOKEN_RESERVES
 
@@ -126,6 +130,87 @@ def sell_sol_out(
     fee_amt = gross * fee // 10_000
     net = max(0, gross - fee_amt)
     return net, gross
+
+
+def _bps_vs_mid(px: float, mid0: float) -> float:
+    if mid0 <= 0 or px <= 0:
+        return UNFILLABLE_IMPACT_BPS
+    return abs(px - mid0) / mid0 * 10_000.0
+
+
+def _normalize_impact_side(side: str | None) -> str:
+    """Map long/short aliases; do not default buy↔sell to the same branch."""
+    s = (side or "").strip().lower()
+    if s in {"buy", "long"}:
+        return "buy"
+    if s in {"sell", "short"}:
+        return "sell"
+    raise ValueError(f"curve impact requires side buy|sell (or long|short), got {side!r}")
+
+
+def estimated_curve_impact_bps(
+    virtual_sol_reserves: int,
+    virtual_token_reserves: int,
+    real_sol_reserves: int,
+    real_token_reserves: int,
+    notional_sol: float,
+    side: str,
+    fee_bps: int = DEFAULT_IMPACT_FEE_BPS,
+    protocol_fee_bps: int | None = None,
+    creator_fee_bps: int = 0,
+) -> float:
+    """Paper curve impact in bps: max(avg-price vs mid0, mid move) + fee_bps/2.
+
+    Buy uses ``buy_tokens_out`` + ``sol_after_buy_fee`` (protocol+creator on the
+    SOL in path; default protocol 100 bps). Sell uses ``sell_sol_out``.
+    The two paths are not a single signed constant-product branch.
+
+    ``fee_bps`` is the impact add-on (default 125, overridable). ``complete`` /
+    ``migrated`` are *not* inputs: callers may apply a near-graduation
+    multiplier separately. Only virtual/real reserves feed the formula.
+    """
+    vs = int(virtual_sol_reserves)
+    vt = int(virtual_token_reserves)
+    rs = int(real_sol_reserves)
+    rt = int(real_token_reserves)
+    addon = max(0, int(fee_bps))
+    proto = int(protocol_fee_bps) if protocol_fee_bps is not None else DEFAULT_PROTOCOL_FEE_BPS
+    creator = max(0, int(creator_fee_bps))
+    direction = _normalize_impact_side(side)
+
+    mid0 = price_sol(vs, vt)
+    if mid0 <= 0 or vs <= 0 or vt <= 0 or rs < 0 or rt < 0:
+        return UNFILLABLE_IMPACT_BPS + addon / 2.0
+
+    sol_lamports = int(abs(float(notional_sol)) * LAMPORTS_PER_SOL)
+    if sol_lamports <= 0:
+        return addon / 2.0
+
+    if direction == "buy":
+        tokens = buy_tokens_out(vs, vt, rt, sol_lamports, proto, creator)
+        net_sol = sol_after_buy_fee(sol_lamports, proto, creator)
+        if tokens <= 0 or net_sol <= 0:
+            return UNFILLABLE_IMPACT_BPS + addon / 2.0
+        avg_px = net_sol / tokens
+        new_vs = vs + net_sol
+        new_vt = vt - tokens
+        mid1 = price_sol(new_vs, new_vt)
+    else:
+        # Quote notional → tokens at mid0; SOL out via sell_sol_out (not buy).
+        token_amount = sol_lamports * vt // vs
+        if token_amount <= 0:
+            return UNFILLABLE_IMPACT_BPS + addon / 2.0
+        _net, gross = sell_sol_out(vs, vt, token_amount, proto, creator)
+        if gross <= 0 or gross > vs:
+            return UNFILLABLE_IMPACT_BPS + addon / 2.0
+        avg_px = gross / token_amount
+        new_vs = vs - gross
+        new_vt = vt + token_amount
+        mid1 = price_sol(new_vs, new_vt)
+
+    avg_bps = _bps_vs_mid(avg_px, mid0)
+    mid_bps = _bps_vs_mid(mid1, mid0) if mid1 > 0 else UNFILLABLE_IMPACT_BPS
+    return max(avg_bps, mid_bps) + addon / 2.0
 
 
 @dataclass(frozen=True)

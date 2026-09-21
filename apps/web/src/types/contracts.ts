@@ -92,6 +92,8 @@ export interface PumpCtx {
   real_sol_reserves: string;
   real_token_reserves: string;
   creator_fee_bps: number;
+  protocol_fee_bps?: number | null;
+  fee_bps?: number | null;
   complete: boolean;
   migrated: boolean;
   amm_pool?: string | null;

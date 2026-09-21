@@ -74,8 +74,31 @@ class AccountCtx(BaseModel):
 class LiquidityCtx(BaseModel):
     spread_bps: float = 20.0
     adv_usd: float = 100_000.0
+    # Optional Pump.fun curve fields. When virtual reserves are >0 (here or via
+    # `pump=`), estimated_impact_bps uses bonding-curve math instead of CEX sqrt.
+    virtual_sol_reserves: Optional[str] = None
+    virtual_token_reserves: Optional[str] = None
+    real_sol_reserves: Optional[str] = None
+    real_token_reserves: Optional[str] = None
+    fee_bps: Optional[float] = None
+    protocol_fee_bps: Optional[int] = None
+    creator_fee_bps: Optional[int] = None
 
-    def estimated_impact_bps(self, notional: float) -> float:
+    def estimated_impact_bps(
+        self,
+        notional: float,
+        side: Optional[str] = None,
+        pump: Optional[Any] = None,
+        fee_bps: Optional[float] = None,
+    ) -> float:
+        src = pump if pump is not None else self
+        if _has_curve_reserves(src):
+            return _curve_impact_from_source(
+                src,
+                notional,
+                side,
+                fee_bps if fee_bps is not None else self.fee_bps,
+            )
         adv = max(self.adv_usd, 1.0)
         # conservative square-root impact + half-spread
         return self.spread_bps / 2 + 40.0 * ((abs(notional) / adv) ** 0.6)
@@ -104,6 +127,8 @@ class PumpCtx(BaseModel):
     real_sol_reserves: str = "0"
     real_token_reserves: str = "0"
     creator_fee_bps: int = 0
+    protocol_fee_bps: Optional[int] = None
+    fee_bps: Optional[int] = None  # impact fee override; default 125 in curve math
     complete: bool = False
     migrated: bool = False
     amm_pool: Optional[str] = None
@@ -177,6 +202,57 @@ class PumpfunTradeTick(BaseModel):
     sol_amount: float
     signature: Optional[str] = None
     phase: Literal["curve", "amm"] = "curve"
+
+
+def _reserve_int(obj: Any, name: str) -> int:
+    val = getattr(obj, name, None)
+    if val is None:
+        return 0
+    try:
+        return int(str(val).strip() or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
+def _has_curve_reserves(obj: Any) -> bool:
+    """True when virtual reserves can drive CP impact (complete/migrated ignored)."""
+    return _reserve_int(obj, "virtual_sol_reserves") > 0 and _reserve_int(
+        obj, "virtual_token_reserves"
+    ) > 0
+
+
+def _curve_impact_from_source(
+    src: Any,
+    notional: float,
+    side: Optional[str],
+    fee_bps: Optional[float],
+) -> float:
+    # Lazy import: models stay usable without loading the provider package first.
+    from app.providers.pumpfun_curve_math import (
+        DEFAULT_IMPACT_FEE_BPS,
+        estimated_curve_impact_bps,
+    )
+
+    if not side:
+        raise ValueError("curve impact requires side='buy'|'sell' (do not share one branch)")
+    addon = fee_bps
+    if addon is None:
+        addon = getattr(src, "fee_bps", None)
+    if addon is None:
+        addon = DEFAULT_IMPACT_FEE_BPS
+    proto = getattr(src, "protocol_fee_bps", None)
+    creator = int(getattr(src, "creator_fee_bps", 0) or 0)
+    return estimated_curve_impact_bps(
+        _reserve_int(src, "virtual_sol_reserves"),
+        _reserve_int(src, "virtual_token_reserves"),
+        _reserve_int(src, "real_sol_reserves"),
+        _reserve_int(src, "real_token_reserves"),
+        abs(float(notional)),
+        side,
+        fee_bps=int(addon),
+        protocol_fee_bps=int(proto) if proto is not None else None,
+        creator_fee_bps=creator,
+    )
 
 
 class OrderIntent(BaseModel):
