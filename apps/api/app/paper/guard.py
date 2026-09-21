@@ -1,4 +1,9 @@
-"""Hard paper-only guard. Never load wallets, never route live chain orders."""
+"""Hard paper-only guard. Never load wallets, never route live chain orders.
+
+Live adapter lives in `app.live` and is disabled by default. Paper execution
+still refuses if a live/key *string* env is present. Local keypair *paths*
+(AUU_SOLANA_KEYPAIR_PATH) are not treated as paper-blocking.
+"""
 from __future__ import annotations
 
 import os

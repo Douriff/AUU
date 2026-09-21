@@ -26,6 +26,8 @@ import type {
   CompareReport,
   TraderSnapshot,
   TradingStateEvent,
+  LiveStatus,
+  LiveLimits,
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -150,7 +152,18 @@ export class HttpWsProvider {
     auto_paper_orders?: boolean;
     strategy_autopaper?: boolean;
     strategyId?: string;
+    liveEnabled?: boolean;
+    liveConfirmed?: boolean;
     liveDisabled?: boolean;
+    liveArmed?: boolean;
+    liveSendWired?: boolean;
+    liveReasons?: string[];
+    liveLimits?: LiveLimits;
+    keypairConfigured?: boolean;
+    keypairMounted?: boolean;
+    pubkey?: string | null;
+    keypairRelpath?: string;
+    keypairEnv?: string;
     watch_mints?: string;
     discovery?: string;
     discoveryOptions?: string[];
@@ -266,6 +279,26 @@ export class HttpWsProvider {
 
   decideAndFill(body: unknown) {
     return postJson<PipelineResult>("/api/v1/pipeline/decide-and-fill", body);
+  }
+
+  getLiveStatus(): Promise<LiveStatus> {
+    return getJson("/api/v1/live/status");
+  }
+
+  putLiveLimits(body: Partial<LiveLimits>): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/limits", body);
+  }
+
+  putLiveDisabled(live_disabled: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/disabled", { live_disabled });
+  }
+
+  putLiveEnabled(liveEnabled: boolean, confirmed: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/enabled", { liveEnabled, confirmed });
+  }
+
+  putLiveArm(armed: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/arm", { armed });
   }
 
   connect(handlers: Handlers): () => void {

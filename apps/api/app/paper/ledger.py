@@ -182,6 +182,7 @@ def _is_live_tag(tag: str) -> bool:
 def _ids_from_tag(tag: str) -> tuple[str, str]:
     t = (tag or "").lower()
     if _is_live_tag(t):
+        # Live fills belong on the live ledger — paper journal never claims them.
         return "live", "live"
     if "pump-paper-v1" in t or "autopaper" in t:
         return "pump-paper-v1", "signal"
@@ -230,6 +231,7 @@ class PaperTradeJournal:
         ts = int(fill.ts)
         tag = fill.tag or ""
         if _is_live_tag(tag):
+            # PaperTradeJournal / stats win-rate stay paper-only.
             return []
         strategy_id, source = _ids_from_tag(tag)
         if source == "live":

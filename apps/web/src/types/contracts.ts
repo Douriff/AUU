@@ -65,6 +65,7 @@ export interface RiskEvent {
   symbol?: string;
   t: number;
   risk: RiskOut;
+  venue?: string;
 }
 
 export interface RejectEvent {
@@ -72,6 +73,7 @@ export interface RejectEvent {
   symbol: string;
   tags: string[];
   notes?: string;
+  venue?: string;
 }
 
 export type TradingState = "active" | "reducing" | "halted";
@@ -302,6 +304,34 @@ export interface TradeTick {
   qty: number;
   side: "buy" | "sell";
   phase?: "curve" | "amm";
+}
+
+export interface LiveLimits {
+  max_notional_sol: number;
+  max_day_loss_pct: number;
+  max_open_mints: number;
+}
+
+export interface LiveStatus {
+  liveEnabled: boolean;
+  liveConfirmed: boolean;
+  liveDisabled: boolean;
+  liveArmed: boolean;
+  liveSendWired: boolean;
+  reasons: string[];
+  keypairConfigured: boolean;
+  keypairMounted: boolean;
+  pubkey?: string | null;
+  keypairEnv: string;
+  keypairRelpath?: string;
+  keypairPathHint: string;
+  limits: LiveLimits;
+  limitsLocked: boolean;
+  limitsMissing: string[];
+  disabledSwitch: boolean;
+  armedFlag: boolean;
+  venue: "live";
+  sendEnabled: boolean;
 }
 
 export interface EnvelopeOk<T> {

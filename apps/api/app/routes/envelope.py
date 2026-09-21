@@ -11,9 +11,12 @@ def ok(data, status: int = 200) -> JSONResponse:
     return resp
 
 
-def err(code: str, message: str, status: int = 400) -> JSONResponse:
+def err(code: str, message: str, status: int = 400, extra: dict | None = None) -> JSONResponse:
+    error = {"code": code, "message": message}
+    if extra:
+        error.update(extra)
     resp = JSONResponse(
-        content={"ok": False, "error": {"code": code, "message": message}},
+        content={"ok": False, "error": error},
         status_code=status,
     )
     resp.headers["X-Api-Version"] = API_VERSION

@@ -22,6 +22,11 @@ REASON = {
     "OVERFILL",
     "DUP_FILL",
     "CURVE_NEAR_GRADUATION",
+    # Live extras (fail closed when unset). Paper check() ignores these tags.
+    "LIMITS_MISSING",
+    "LIVE_DISABLED",
+    "NO_KEYPAIR",
+    "MAX_OPEN_MINTS",
 }
 
 TradingState = Literal["active", "reducing", "halted"]
@@ -29,6 +34,8 @@ TradingState = Literal["active", "reducing", "halted"]
 
 @dataclass
 class RiskLimits:
+    """Paper-only limits. Live caps live on app.live.gate.LiveLimits — do not add them here."""
+
     max_notional_per_symbol: float = 2_000.0
     max_day_loss_pct: float = 0.05
     max_spread_bps: float = 80.0
@@ -178,6 +185,118 @@ class RiskGate:
             notes="; ".join(notes) if notes else "ok",
         )
 
+    def check_live(
+        self,
+        ctx: StrategyContext,
+        signal: SignalOut,
+        size: SizeIn,
+        *,
+        live_limits: Optional[dict] = None,
+    ) -> RiskOut:
+        """Live pre-order extras using LiveLimits only — never paper RiskLimits.
+
+        Mapped from vn.py RiskManager (see docs/adapters/vnpy-riskmanager-v0.md):
+        max_notional_sol=1.0, max_day_loss_pct=0.045, max_open_mints=10.
+        Paper `check()` is unchanged and is not called here.
+
+        Rejects with LIVE_DISABLED (RiskOut.tags) unless keypair mounted AND
+        secondary confirm AND liveEnabled AND limits present.
+        """
+        from app.live.gate import (
+            LOCKED_MAX_DAY_LOSS_PCT,
+            LOCKED_MAX_NOTIONAL_SOL,
+            LOCKED_MAX_OPEN_MINTS,
+            REASON_LIMITS_MISSING,
+            REASON_LIVE_DISABLED,
+            REASON_NO_KEYPAIR,
+            evaluate,
+        )
+
+        status = evaluate()
+        gate_tags: list[str] = []
+        if not status.armed:
+            gate_tags.append(REASON_LIVE_DISABLED)
+            for t in status.reasons:
+                if t not in gate_tags:
+                    gate_tags.append(t)
+            if not status.keypair_configured and REASON_NO_KEYPAIR not in gate_tags:
+                gate_tags.append(REASON_NO_KEYPAIR)
+
+        src = live_limits if live_limits is not None else status.limits.as_dict()
+        max_notional_sol = _live_positive_float(src.get("max_notional_sol") if isinstance(src, dict) else None)
+        max_day_loss_pct = _live_positive_float(src.get("max_day_loss_pct") if isinstance(src, dict) else None)
+        max_open_mints = _live_positive_int(src.get("max_open_mints") if isinstance(src, dict) else None)
+        missing: list[str] = []
+        if max_notional_sol is None:
+            missing.append("max_notional_sol")
+        if max_day_loss_pct is None:
+            missing.append("max_day_loss_pct")
+        if max_open_mints is None:
+            missing.append("max_open_mints")
+        if missing or REASON_LIMITS_MISSING in status.reasons:
+            tags = list(gate_tags)
+            if REASON_LIMITS_MISSING not in tags:
+                tags.append(REASON_LIMITS_MISSING)
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=tags or [REASON_LIMITS_MISSING],
+                notes="live limits missing or zero: " + ",".join(missing or status.limits_missing),
+            )
+
+        if gate_tags:
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=gate_tags,
+                notes="live gate closed: " + ",".join(status.reasons),
+            )
+
+        max_notional_sol = min(float(max_notional_sol), LOCKED_MAX_NOTIONAL_SOL)
+        max_day_loss_pct = min(float(max_day_loss_pct), LOCKED_MAX_DAY_LOSS_PCT)
+        max_open_mints = min(int(max_open_mints), LOCKED_MAX_OPEN_MINTS)
+
+        notional = abs(float(size.target_notional))
+        if notional > float(max_notional_sol):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["MAX_NOTIONAL"],
+                notes=f"live notional {notional} > max_notional_sol {max_notional_sol}",
+            )
+
+        eq = max(ctx.account.equity, 1e-9)
+        day_pnl = ctx.account.day_pnl if ctx.account.day_pnl is not None else self._day_pnl
+        if day_pnl / eq <= -float(max_day_loss_pct):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["DAY_LOSS_BREAKER"],
+                notes="live day-loss circuit breaker",
+            )
+
+        open_mints = 0
+        if ctx.meta and ctx.meta.get("open_mints") is not None:
+            try:
+                open_mints = int(ctx.meta.get("open_mints") or 0)
+            except (TypeError, ValueError):
+                open_mints = 0
+        is_open = signal.side != "flat" and not self._is_reducing(ctx.position, float(size.target_notional), signal.side)
+        if is_open and open_mints >= int(max_open_mints):
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=["MAX_OPEN_MINTS"],
+                notes=f"live open mints {open_mints} >= max_open_mints {max_open_mints}",
+            )
+
+        return RiskOut(
+            allow=True,
+            clipped_size=abs(notional),
+            tags=[],
+            notes="ok",
+        )
+
     def on_reject(self, ctx: StrategyContext, tags: list[str]) -> None:
         cd = self.limits.cooldown_sec_after_reject
         self._cooldown_until[ctx.symbol] = ctx.ts + int(cd * 1000)
@@ -246,6 +365,28 @@ class RiskGate:
 
 def _sign(x: float) -> float:
     return 1.0 if x >= 0 else -1.0
+
+
+def _live_positive_float(value: object) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        n = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return n
+
+
+def _live_positive_int(value: object) -> Optional[int]:
+    n = _live_positive_float(value)
+    if n is None:
+        return None
+    i = int(n)
+    if i <= 0:
+        return None
+    return i
 
 
 def _impact_side(signal: SignalOut, notional: float) -> str:
