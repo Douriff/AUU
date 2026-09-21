@@ -16,7 +16,7 @@ REQ = ROOT / "apps" / "api" / "requirements.txt"
 WEB_PKG = ROOT / "apps" / "web" / "package.json"
 ROOT_PKG = ROOT / "package.json"
 
-BANNED = ("jesse", "quantstats", "vectorbt", "vnpy", "freqtrade")
+BANNED = ("jesse", "quantstats", "vectorbt", "vnpy", "freqtrade", "hftbacktest", "nautilus", "backtrader")
 
 
 def _iter_py(root: Path):

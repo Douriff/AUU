@@ -338,6 +338,57 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
   font-family: ui-monospace, monospace;
 }
 .paper-stats .disclaimer { margin: 0.2rem 0 0; }
+.exec-panel {
+  margin-top: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.exec-panel header {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+}
+.exec-panel h3 {
+  margin: 0; font-size: 0.75rem; font-weight: 600;
+}
+.exec-lamp {
+  width: 0.65rem; height: 0.65rem; border-radius: 50%;
+  background: #6e7681; display: inline-block;
+}
+.exec-lamp.green { background: var(--green); }
+.exec-lamp.red { background: var(--red); }
+.exec-lamp.gray { background: #6e7681; }
+.exec-verdict {
+  font-size: 0.7rem; font-family: ui-monospace, monospace;
+  padding: 0.05rem 0.4rem; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.exec-verdict.go { color: var(--green); }
+.exec-verdict.nogo { color: var(--warn); }
+.exec-nogo { margin: 0.2rem 0 0; color: var(--muted); }
+.exec-panel dd.warn { color: var(--warn); }
+.sample-badge {
+  margin-left: 0.35rem; font-size: 0.65rem; padding: 0.02rem 0.3rem;
+  border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+}
+.sample-badge.ok { color: var(--green); }
+.exec-bars {
+  display: grid; gap: 0.2rem; margin: 0.35rem 0 0.2rem; max-width: 22rem;
+}
+.exec-bars label {
+  display: grid; grid-template-columns: 2.4rem 1fr auto; gap: 0.4rem;
+  align-items: center; font-size: 0.7rem; color: var(--muted);
+}
+.exec-bars i {
+  height: 6px; background: var(--accent); border-radius: 3px; display: block;
+}
+.exec-bars em { font-style: normal; font-family: ui-monospace, monospace; }
+.exec-live-checks {
+  list-style: none; margin: 0.3rem 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.55rem; font-size: 0.7rem; color: var(--muted);
+}
+.exec-live-checks li::before { content: "☐ "; }
+.exec-live-checks li[data-on="1"]::before { content: "☑ "; color: var(--green); }
+.exec-note { margin: 0.2rem 0 0; }
+.exec-rejects { margin: 0.2rem 0 0; color: var(--muted); font-family: ui-monospace, monospace; }
 .trade-page .paper-stats {
   border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
 }

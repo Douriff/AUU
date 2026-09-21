@@ -14,7 +14,8 @@
 `{ strategyId, symbol, t, signal: SignalOut }`
 
 ## Fill
-`{ ts, price, qty, fee?, slippage_bps?, tag? }` — 图上菱形/方块 marker。
+`{ ts, price, qty, fee?, slippage_bps?, tag? }` — 图上菱形/方块 marker。  
+可追加纸面证据：`quote_price?` · `estimated_impact_bps?` · `shadow_slippage_bps?`（可执行性；非链上 send）。
 
 ## RiskOut
 `{ allow, clipped_size?, tags[], notes? }`
@@ -54,6 +55,14 @@ REST：
 - `GET /api/v1/strategy/pump-paper-v1/stats` — PaperTradeJournal 自算胜率 / 期望 / 回撤（不依赖 QuantStats）；`?mc=1` 才跑 trades-MC（默认关）
 - `POST /api/v1/strategy/pump-paper-v1/stats/reset` — 清 session journal
 - `GET /api/v1/stats/paper-performance` — 同上别名
+- `GET /api/v1/stats/executability` — 纸面成交 vs 曲线报价的可执行性证据（`verdict=go|no-go`）；`liveEnabled` 恒 false。合同：`docs/research/executability-go-nogo-v0.md` · `docs/adapters/decision-log-v0.md` · `docs/viz/executability-panel-v0.md`
+- `GET /api/v1/strategy/pump-paper-v1/decision-log?from=&to=` — `DecisionLog` 行（`reject_bucket=progress|impact|risk|none`）
+
+## 可执行性（additive · 纸面证据，非实盘）
+
+`ExecutabilityReport`：`lamp` · `nogo_reason` · `n_closed` / `sample_ok`（≥30）· `expectancy` · `median_entry_impact_bps`（go <60，硬顶 80）· `reject_rate.{progress,impact,risk}`（DecisionLog 聚合）· `shadow_slippage.{p50_bps,p90_bps}` · `impact_error.{p50_bps,p90_bps}` · `liveEnabled=false` · `live_checks` 三勾只读（与 live-ui-gates 同源，本栈不置 true）。无私钥、无 send。
+
+`DecisionLogRow`：`ts, strategy_id, symbol, mint?, stage, signal_*, risk_*, notional_sol?, decision_px? / arrival_px?, impact_bps_est? / estimated_impact_bps?, paper_fill_px? / fill_px?, shadow_fill_px?, shadow_slippage_bps?, impact_error_bps?, shadow_source?, outcome, reject_bucket`。P0 replay=`next_trade|next_open`。不改冻结 Signal/Risk/Fill 事件名。IS 本 v0 不做。
 
 dataSource：`mock | paper | pumpfun_paper`（`paper` / `pumpfun_paper` overlay 只订 PaperBroker Fill）。
 

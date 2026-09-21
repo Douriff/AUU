@@ -1,0 +1,20 @@
+{
+  "n": 30,
+  "pnl": -0.04,
+  "entry_estimated_impact_bps": 35.0,
+  "entry_shadow_slippage_bps": 12.0,
+  "eval_counts": {
+    "total": 80,
+    "by_bucket": {
+      "progress_band": 40,
+      "impact": 10,
+      "risk": 10,
+      "other": 10,
+      "attempt": 10
+    },
+    "by_reason": {
+      "progress_band": 40,
+      "impact": 10
+    }
+  }
+}

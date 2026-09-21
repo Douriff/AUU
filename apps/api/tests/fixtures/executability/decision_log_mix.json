@@ -1,0 +1,71 @@
+{
+  "items": [
+    {
+      "ts": 1,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "A/SOL",
+      "stage": "signal",
+      "signal_side": "flat",
+      "signal_reason": "progress_band",
+      "signal_tags": [],
+      "outcome": "reject",
+      "reject_bucket": "progress"
+    },
+    {
+      "ts": 2,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "A/SOL",
+      "stage": "signal",
+      "signal_side": "flat",
+      "signal_reason": "progress_band",
+      "signal_tags": [],
+      "outcome": "reject",
+      "reject_bucket": "progress"
+    },
+    {
+      "ts": 3,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "B/SOL",
+      "stage": "signal",
+      "signal_side": "flat",
+      "signal_reason": "impact",
+      "signal_tags": ["SLIPPAGE_CAP"],
+      "outcome": "reject",
+      "reject_bucket": "impact"
+    },
+    {
+      "ts": 4,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "C/SOL",
+      "stage": "pre_order",
+      "signal_side": "long",
+      "signal_reason": "pump_paper_v1_entry",
+      "risk_allow": false,
+      "risk_tags": ["DEPTH_THIN"],
+      "outcome": "reject",
+      "reject_bucket": "impact"
+    },
+    {
+      "ts": 5,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "D/SOL",
+      "stage": "live_blocked",
+      "signal_reason": "LIVE_DISABLED",
+      "risk_tags": ["LIVE_DISABLED"],
+      "outcome": "reject",
+      "reject_bucket": "risk"
+    },
+    {
+      "ts": 6,
+      "strategy_id": "pump-paper-v1",
+      "symbol": "E/SOL",
+      "stage": "paper_submit",
+      "signal_side": "buy",
+      "signal_reason": "pump_paper_v1_entry",
+      "outcome": "fill",
+      "reject_bucket": "none",
+      "impact_bps_est": 42,
+      "shadow_slippage_bps": 12
+    }
+  ]
+}

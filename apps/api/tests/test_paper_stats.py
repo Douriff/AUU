@@ -11,6 +11,7 @@ from app.paper.ledger import (
     EQUITY_0,
     MIN_SAMPLE_OK,
     PaperLedger,
+    get_paper_journal,
     monte_carlo,
     reset_paper_ledger,
     summarize,
@@ -268,6 +269,66 @@ class AutopaperLiveRefuseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(engine.positions, {})
         dec = engine.last_decisions()
         self.assertTrue(any(d["action"] == "refuse" for d in dec))
+
+
+class JournalPersistTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+        self._tmp.close()
+        os.unlink(self._tmp.name)
+        self._old = os.environ.get("PAPER_JOURNAL_STORE")
+        os.environ["PAPER_JOURNAL_STORE"] = self._tmp.name
+        reset_paper_ledger(wipe_store=True)
+
+    def tearDown(self):
+        reset_paper_ledger(wipe_store=True)
+        if self._old is None:
+            os.environ.pop("PAPER_JOURNAL_STORE", None)
+        else:
+            os.environ["PAPER_JOURNAL_STORE"] = self._old
+        try:
+            os.unlink(self._tmp.name)
+        except FileNotFoundError:
+            pass
+
+    def test_closed_trades_reload_after_reset_memory(self):
+        j = get_paper_journal()
+        j.record_fill(
+            "PUMPDEMO/SOL",
+            Fill(
+                ts=1,
+                price=1.0,
+                qty=2.0,
+                estimated_impact_bps=41.0,
+                shadow_slippage_bps=10.0,
+                tag="paper:pump-paper-v1",
+            ),
+        )
+        j.record_fill(
+            "PUMPDEMO/SOL",
+            Fill(
+                ts=2,
+                price=1.1,
+                qty=-2.0,
+                tag="paper:pump-paper-v1:flat",
+            ),
+        )
+        self.assertEqual(len(j.closed), 1)
+        reset_paper_ledger(wipe_store=False)
+        j2 = get_paper_journal()
+        self.assertEqual(len(j2.closed), 1)
+        self.assertAlmostEqual(j2.closed[0].pnl, 0.2)
+        self.assertAlmostEqual(j2.closed[0].entry_estimated_impact_bps, 41.0)
+
+    def test_api_reset_wipes_store(self):
+        j = get_paper_journal()
+        j.record_fill("A/SOL", Fill(ts=1, price=1.0, qty=1.0, tag="paper-trade-ui"))
+        j.record_fill("A/SOL", Fill(ts=2, price=1.1, qty=-1.0, tag="paper-trade-ui"))
+        reset_paper_ledger(wipe_store=True)
+        j2 = get_paper_journal()
+        self.assertEqual(len(j2.closed), 0)
 
 
 if __name__ == "__main__":

@@ -14,3 +14,4 @@ P0 开源调研：
 - RiskGate 对照 vn.py RiskManager：`docs/adapters/vnpy-riskmanager-v0.md`；**无新风控钩子**；成交只 `PaperBroker`
 - 不嵌 GPL/AGPL、vectorbt、QC 密钥；无真仓 / sniper
 - 观察对照：胜率旁「对照」折叠，见 `docs/viz/trader-watch-ui-v0.md` §5；`trader_ref` **不**并入胜率分母
+- 可执行性：PaperStats 下「可执行性证据」；`GET /api/v1/stats/executability` 聚合 Journal + **DecisionLog**；桶为 `progress|impact|risk`；影子 replay 见 `docs/research/shadow-fill-v0.md`（望舒清单 `docs/research/auu-shadow-fill-impact-refs.md`，不嵌 GPL/LGPL）；`liveEnabled` 仍关。见 `docs/viz/executability-panel-v0.md`、`docs/adapters/decision-log-v0.md`

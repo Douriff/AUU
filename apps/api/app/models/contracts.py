@@ -47,6 +47,10 @@ class Fill(BaseModel):
     fee: Optional[float] = None
     slippage_bps: Optional[float] = None
     tag: Optional[str] = None
+    # Additive executability extras (paper evidence; not a live send).
+    quote_price: Optional[float] = None
+    estimated_impact_bps: Optional[float] = None
+    shadow_slippage_bps: Optional[float] = None
 
 
 class SignalEvent(BaseModel):
@@ -385,6 +389,36 @@ class OrderIntent(BaseModel):
 class RejectOut(BaseModel):
     tags: list[str] = Field(default_factory=list)
     notes: str = ""
+
+
+class DecisionLogRow(BaseModel):
+    """Additive paper DecisionLog — does not rename Signal/Risk/Fill events."""
+
+    ts: int
+    strategy_id: str
+    symbol: str
+    mint: Optional[str] = None
+    stage: Literal["signal", "pre_order", "paper_submit", "live_blocked"]
+    signal_side: Optional[str] = None
+    signal_reason: Optional[str] = None
+    signal_tags: list[str] = Field(default_factory=list)
+    risk_allow: Optional[bool] = None
+    risk_tags: list[str] = Field(default_factory=list)
+    risk_notes: Optional[str] = None
+    notional_sol: Optional[float] = None
+    impact_bps_est: Optional[float] = None
+    impact_bps_cap: Optional[float] = None
+    estimated_impact_bps: Optional[float] = None  # alias of impact_bps_est
+    decision_px: Optional[float] = None
+    arrival_px: Optional[float] = None
+    fill_px: Optional[float] = None
+    paper_fill_px: Optional[float] = None
+    shadow_fill_px: Optional[float] = None
+    shadow_slippage_bps: Optional[float] = None
+    impact_error_bps: Optional[float] = None  # shadow_slippage_bps − estimated
+    shadow_source: Optional[str] = None  # next_trade | next_open | fill_quote
+    outcome: Literal["emit_signal", "reject", "fill", "partial"]
+    reject_bucket: Literal["progress", "impact", "risk", "none"] = "none"
 
 
 class EnvelopeOk(BaseModel):

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { usePaperPerformance } from "@/hooks/usePaperPerformance";
+import { useExecutability } from "@/hooks/useExecutability";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { habitLabel } from "@/components/watch/HabitTagChips";
+import { ExecutabilityPanel } from "@/components/market/ExecutabilityPanel";
 import type { CompareReport, EquityPoint } from "@/types/contracts";
 
 const STATS_KEY = "auu:show_paper_stats";
@@ -82,6 +84,7 @@ export function PaperStatsPanel({ compact }: Props) {
   const [compareErr, setCompareErr] = useState("");
   const [watchReady, setWatchReady] = useState(false);
   const { stats, err } = usePaperPerformance(2500, mcOn);
+  const { report: exec, err: execErr } = useExecutability(2500);
   const { autoPaperOrders, tradingState } = useStrategyConfig();
 
   useEffect(() => {
@@ -270,6 +273,7 @@ export function PaperStatsPanel({ compact }: Props) {
           <p className="mc-line">样本不足</p>
         )
       ) : null}
+      <ExecutabilityPanel report={exec} err={execErr} compact={compact} />
     </section>
   );
 }

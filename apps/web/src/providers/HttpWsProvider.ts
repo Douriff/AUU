@@ -8,6 +8,7 @@ import type {
   NewTokenEvent,
   PaperOrderResult,
   PaperPerformance,
+  ExecutabilityReport,
   PipelineResult,
   PumpfunPaperSnapshot,
   PumpPaperParams,
@@ -201,6 +202,21 @@ export class HttpWsProvider {
     const q = new URLSearchParams({ window: String(window) });
     if (opts?.mc) q.set("mc", "1");
     return getJson(`/api/v1/strategy/pump-paper-v1/stats?${q}`);
+  }
+
+  getExecutability(window = "session"): Promise<ExecutabilityReport> {
+    const q = new URLSearchParams({ window: String(window) });
+    return getJson(`/api/v1/stats/executability?${q}`);
+  }
+
+  getDecisionLog(fromTs?: number, toTs?: number) {
+    const q = new URLSearchParams();
+    if (fromTs != null) q.set("from", String(fromTs));
+    if (toTs != null) q.set("to", String(toTs));
+    const qs = q.toString();
+    return getJson<{ items: Record<string, unknown>[]; n: number; liveEnabled: boolean }>(
+      `/api/v1/strategy/pump-paper-v1/decision-log${qs ? `?${qs}` : ""}`
+    );
   }
 
   putStrategy(patch: Partial<PumpPaperParams>) {

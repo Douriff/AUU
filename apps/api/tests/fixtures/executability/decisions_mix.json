@@ -1,0 +1,10 @@
+{
+  "decisions": [
+    {"ts": 1, "symbol": "A/SOL", "action": "skip", "allow": false, "reason": "progress_band", "tags": []},
+    {"ts": 2, "symbol": "A/SOL", "action": "skip", "allow": false, "reason": "progress_band", "tags": []},
+    {"ts": 3, "symbol": "B/SOL", "action": "skip", "allow": false, "reason": "impact", "tags": ["SLIPPAGE_CAP"]},
+    {"ts": 4, "symbol": "C/SOL", "action": "deny", "allow": false, "reason": "blocked_tag", "tags": ["HONEYPOT_FLAG"]},
+    {"ts": 5, "symbol": "D/SOL", "action": "skip", "allow": false, "reason": "auto_paper_orders=false", "tags": ["AUTOPAPER_OFF"]},
+    {"ts": 6, "symbol": "E/SOL", "action": "fill", "allow": true, "reason": "pump_paper_v1_entry", "tags": ["pump-paper-v1"]}
+  ]
+}
