@@ -3,29 +3,37 @@ import type {
   Candle,
   Envelope,
   Fill,
+  RejectEvent,
   RiskEvent,
   SignalOut,
   SymbolInfo,
   TradeTick,
+  TradingStateEvent,
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
 
 export interface Handlers {
-  onHello?: (msg: { version: number; providers: string[] }) => void;
+  onHello?: (msg: {
+    version: number;
+    providers: string[];
+    orderMode?: string;
+    eventTypes?: string[];
+  }) => void;
   onCandle?: (c: Candle) => void;
   onBook?: (b: BookSnapshot) => void;
   onTrade?: (t: TradeTick) => void;
   onSignal?: (s: SignalOut & { t: number; strategyId?: string; symbol?: string }) => void;
   onFill?: (f: Fill) => void;
   onRisk?: (r: RiskEvent) => void;
+  onReject?: (r: RejectEvent) => void;
+  onTradingState?: (t: TradingStateEvent) => void;
   onStatus?: (s: "connecting" | "open" | "closed" | "error") => void;
 }
 
 function apiBase(): string {
   const env = import.meta.env.VITE_API_BASE;
   if (env) return env.replace(/\/$/, "");
-  // same-origin / vite proxy
   return "";
 }
 
@@ -49,6 +57,19 @@ async function getJson<T>(path: string): Promise<T> {
     throw new Error(body.error?.message ?? "request failed");
   }
   return body.data;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const env = (await res.json()) as Envelope<T>;
+  if (!env.ok) {
+    throw new Error(env.error?.message ?? "request failed");
+  }
+  return env.data;
 }
 
 export class HttpWsProvider {
@@ -77,8 +98,32 @@ export class HttpWsProvider {
     return getJson(`/api/v1/fills?${q}`);
   }
 
-  getHealth(): Promise<{ status: string; provider: string; mode: string }> {
+  getHealth(): Promise<{
+    status: string;
+    provider: string;
+    mode: string;
+    dataSourceOptions?: string[];
+    trading_state?: string;
+  }> {
     return getJson("/api/v1/health");
+  }
+
+  preOrder(body: unknown) {
+    return postJson<import("@/types/contracts").RiskOut>("/api/v1/risk/pre-order", body);
+  }
+
+  paperOrder(body: unknown) {
+    return postJson<{ fills: Fill[]; reject?: { tags: string[]; notes: string } }>(
+      "/api/v1/paper/orders",
+      body
+    );
+  }
+
+  postFill(body: unknown) {
+    return postJson<{ trading_state?: string; tags: string[]; notes: string }>(
+      "/api/v1/risk/post-fill",
+      body
+    );
   }
 
   connect(handlers: Handlers): () => void {
@@ -104,6 +149,15 @@ export class HttpWsProvider {
     }
   }
 
+  unsubscribe(channel: Channel, symbol: string, interval?: string) {
+    this.pendingSubs = this.pendingSubs.filter(
+      (s) => !(s.channel === channel && s.symbol === symbol)
+    );
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "unsubscribe", channel, symbol, interval }));
+    }
+  }
+
   private open() {
     this.handlers.onStatus?.("connecting");
     const ws = new WebSocket(wsUrl());
@@ -125,6 +179,8 @@ export class HttpWsProvider {
         this.handlers.onHello?.({
           version: msg.version as number,
           providers: (msg.providers as string[]) ?? [],
+          orderMode: msg.orderMode as string | undefined,
+          eventTypes: msg.eventTypes as string[] | undefined,
         });
         for (const s of this.pendingSubs) {
           ws.send(JSON.stringify({ type: "subscribe", ...s }));
@@ -154,6 +210,9 @@ export class HttpWsProvider {
       }
       if (type === "fill") this.handlers.onFill?.(msg.payload as Fill);
       if (type === "risk") this.handlers.onRisk?.(msg.payload as RiskEvent);
+      if (type === "reject") this.handlers.onReject?.(msg.payload as RejectEvent);
+      if (type === "trading_state")
+        this.handlers.onTradingState?.(msg.payload as TradingStateEvent);
     };
 
     ws.onerror = () => this.handlers.onStatus?.("error");

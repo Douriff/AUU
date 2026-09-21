@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import candles, fills, health, signals, symbols, ws
+from app.routes import candles, fills, health, paper, risk, signals, symbols, ws
 from app.routes.envelope import API_VERSION
 
 load_dotenv()
@@ -42,6 +42,8 @@ app.include_router(symbols.router)
 app.include_router(candles.router)
 app.include_router(signals.router)
 app.include_router(fills.router)
+app.include_router(risk.router)
+app.include_router(paper.router)
 app.include_router(ws.router)
 
 
@@ -55,5 +57,11 @@ def root():
             "health": "/api/v1/health",
             "ws": "/api/v1/ws",
             "provider": os.getenv("DATA_PROVIDER", "mock"),
+            "orderMode": "paper",
+            "endpoints": {
+                "preOrder": "POST /api/v1/risk/pre-order",
+                "paperOrders": "POST /api/v1/paper/orders",
+                "postFill": "POST /api/v1/risk/post-fill",
+            },
         },
     }
