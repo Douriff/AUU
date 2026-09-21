@@ -11,6 +11,7 @@ class SymbolInfo(BaseModel):
     base: str
     quote: str
     kind: str = "meme_mock"
+    mint: Optional[str] = None
 
 
 class Candle(BaseModel):
@@ -94,6 +95,20 @@ class TickCtx(BaseModel):
     mid: float
 
 
+class PumpCtx(BaseModel):
+    """Optional StrategyContext.pump — Pump.fun curve snapshot for paper risk/fill."""
+
+    curve_progress_bps: int = 0
+    virtual_sol_reserves: str = "0"
+    virtual_token_reserves: str = "0"
+    real_sol_reserves: str = "0"
+    real_token_reserves: str = "0"
+    creator_fee_bps: int = 0
+    complete: bool = False
+    migrated: bool = False
+    amm_pool: Optional[str] = None
+
+
 class SizeIn(BaseModel):
     """Sizer output consumed by RiskGate — clipped_size echoes target_notional."""
 
@@ -112,6 +127,56 @@ class StrategyContext(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
     book: Optional[BookCtx] = None
     tick: Optional[TickCtx] = None
+    pump: Optional[PumpCtx] = None
+
+
+class PumpfunPaperSnapshot(BaseModel):
+    """WS/REST additive payload: Pump.fun curve paper market."""
+
+    mint: str
+    symbol: str
+    phase: Literal["curve", "graduating", "amm"] = "curve"
+    progress_bps: int = 0
+    complete: bool = False
+    migrated: bool = False
+    virtual_sol_reserves: str
+    virtual_token_reserves: str
+    real_sol_reserves: str
+    real_token_reserves: str
+    token_total_supply: str
+    price_sol: float
+    price_sol_str: Optional[str] = None
+    market_cap_sol: Optional[float] = None
+    creator_fee_bps: int = 0
+    pool: Optional[str] = None
+    slot: Optional[int] = None
+    updated_ts: int
+    synthetic: bool = True
+
+    def to_pump_ctx(self) -> "PumpCtx":
+        return PumpCtx(
+            curve_progress_bps=self.progress_bps,
+            virtual_sol_reserves=self.virtual_sol_reserves,
+            virtual_token_reserves=self.virtual_token_reserves,
+            real_sol_reserves=self.real_sol_reserves,
+            real_token_reserves=self.real_token_reserves,
+            creator_fee_bps=self.creator_fee_bps,
+            complete=self.complete,
+            migrated=self.migrated,
+            amm_pool=self.pool,
+        )
+
+
+class PumpfunTradeTick(BaseModel):
+    mint: str
+    symbol: str
+    ts: int
+    side: Literal["buy", "sell"]
+    price: float
+    qty: float
+    sol_amount: float
+    signature: Optional[str] = None
+    phase: Literal["curve", "amm"] = "curve"
 
 
 class OrderIntent(BaseModel):

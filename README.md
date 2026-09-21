@@ -12,14 +12,15 @@ flowchart TB
   Browser --> Web
   Web -->|"REST /api/v1/*"| API
   Web -->|"WS /api/v1/ws"| API
-  API --> Mock["MarketDataProvider=mock<br/>确定性蜡烛 + demo 策略信号"]
+  API --> Mock["MarketDataProvider=mock | pumpfun_paper"]
 ```
 
 | 组件 | 职责 |
 |------|------|
-| MarketPage `/` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar |
-| `/strategy` `/trade` `/backtest` `/alerts` `/settings` | P0 路由壳；Settings 展示 `DATA_PROVIDER=mock` |
+| MarketPage `/` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar |
+| `/strategy` `/trade` `/backtest` `/alerts` `/settings` | P0 路由壳；Settings 展示 `DATA_PROVIDER=mock\|pumpfun_paper` + 纸面 PaperBroker |
 | Mock provider | 固定 5 个伪模因对；seed=symbol+interval 可复现 |
+| pumpfun_paper | 本地 bonding-curve 模拟（venue=Pump.fun，paper-only）；watch-mints env 播种，无钱包密钥 |
 
 ## 快速启动
 
@@ -52,23 +53,24 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 可选：复制根目录 `.env.example` → `.env`（勿填真实密钥）。
 
-## Mock vs Real
+## Mock vs pumpfun_paper vs Real
 
-| | Mock（默认） | Real（未实现 / 禁止本轮） |
-|--|-------------|---------------------------|
-| 行情 | 确定性 RNG 蜡烛 / book / trades | 后续 `ccxt_public` / DexScreener 官方 API |
-| 信号 | `demo-momentum-v0` 周期 long/short | 真实 StrategyDecision 流 |
-| 成交 | 纸面 Fill（deny 时不画） | PaperBroker 同源回放 |
-| 密钥 | 无 | **禁止**写入仓库 |
+| | Mock（默认） | pumpfun_paper | Real（未实现 / 禁止本轮） |
+|--|-------------|---------------|---------------------------|
+| 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 后续公共 RPC / DexScreener |
+| 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 真实 StrategyDecision 流 |
+| 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | 禁止 |
+| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **禁止**写入仓库 |
 
-切换：环境变量 `DATA_PROVIDER=mock`（P0 仅 mock；其它值回退 mock）。
+切换行情源：环境变量 `DATA_PROVIDER=mock` 或 `DATA_PROVIDER=pumpfun_paper`。  
+`pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS`（逗号分隔 mint 白名单）播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK。下单路径 `dataSource=mock|paper` 与行情源正交，始终 PaperBroker。
 
 ## 合同摘要
 
 - REST 包络 `{ ok, data|error }` + 头 `X-Api-Version: 1`
-- WS 首帧 `{ type:"hello", version:1, providers:["mock"] }`，再 `subscribe` channels：`candles|book|trades|signals|fills|risk`
-- 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}`
-- 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）
+- WS 首帧 `{ type:"hello", version:1, providers:["mock","pumpfun_paper"] }`，再 `subscribe` channels：`candles|book|trades|signals|fills|risk`；可选 `type:"pumpfun_curve"`
+- 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
+- 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 
 详见 `docs/contracts.md`。
 

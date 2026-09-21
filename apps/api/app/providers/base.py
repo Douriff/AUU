@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import AsyncIterator
 
-from app.models.contracts import Candle, Fill, RiskEvent, SignalEvent, SymbolInfo
+from app.models.contracts import Candle, Fill, PumpfunPaperSnapshot, RiskEvent, SignalEvent, SymbolInfo
 
 
 class MarketDataProvider(ABC):
@@ -30,6 +30,10 @@ class MarketDataProvider(ABC):
         self, symbol: str, from_ts: int | None = None, to_ts: int | None = None
     ) -> list[Fill]:
         ...
+
+    def get_pumpfun_snapshot(self, symbol: str) -> PumpfunPaperSnapshot | None:
+        """Optional Pump.fun curve snapshot. Mock returns None."""
+        return None
 
     @abstractmethod
     async def stream(self, channel: str, symbol: str, interval: str | None = None) -> AsyncIterator[dict]:

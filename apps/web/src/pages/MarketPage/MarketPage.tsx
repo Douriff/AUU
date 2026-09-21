@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CandleChart } from "@/components/chart/CandleChart";
 import { RiskTagBar } from "@/components/alerts/RiskTagBar";
+import { CurveProgressBar } from "@/components/market/CurveProgressBar";
 import { DepthPanel } from "@/components/market/DepthPanel";
 import { SymbolList } from "@/components/market/SymbolList";
 import { TradesTape } from "@/components/market/TradesTape";
 import { useMarketSession } from "@/hooks/useMarketSession";
 
 export function MarketPage() {
-  const [symbol, setSymbol] = useState("MOCK/USDC");
+  const [symbol, setSymbol] = useState("");
   const [interval] = useState("1m");
   const {
     symbols,
@@ -23,7 +24,15 @@ export function MarketPage() {
     providers,
     dataProvider,
     dataSource,
+    pumpSnapshot,
   } = useMarketSession(symbol, interval);
+
+  useEffect(() => {
+    if (!symbols.length) return;
+    if (!symbol || !symbols.some((s) => s.symbol === symbol)) {
+      setSymbol(symbols[0].symbol);
+    }
+  }, [symbols, symbol]);
 
   return (
     <div className="market-page">
@@ -46,11 +55,12 @@ export function MarketPage() {
         </aside>
         <section className="center">
           <div className="chart-header">
-            <strong>{symbol}</strong>
+            <strong>{symbol || "…"}</strong>
             <span className="muted">{interval}</span>
             <span className="muted">
               signals {signals.filter((s) => s.side !== "flat").length} · fills {fills.length}
             </span>
+            <CurveProgressBar snapshot={pumpSnapshot} />
           </div>
           <CandleChart candles={candles} signals={signals} fills={fills} />
         </section>

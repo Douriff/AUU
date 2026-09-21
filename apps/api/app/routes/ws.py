@@ -8,7 +8,7 @@ import os
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.bus import get_hub
-from app.providers import get_provider
+from app.providers import AVAILABLE_PROVIDERS, get_provider
 
 router = APIRouter(tags=["ws"])
 
@@ -21,14 +21,18 @@ VALID_CHANNELS = {"candles", "book", "trades", "signals", "fills", "risk"}
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     provider = get_provider()
-    providers = [os.getenv("DATA_PROVIDER", "mock")]
+    active = os.getenv("DATA_PROVIDER", "mock").lower().strip()
+    if active not in AVAILABLE_PROVIDERS:
+        active = provider.name
+    providers = [active] + [p for p in AVAILABLE_PROVIDERS if p != active]
     await websocket.send_json(
         {
             "type": "hello",
             "version": 1,
             "providers": providers,
             "orderMode": "paper",
-            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state"],
+            "venue": "Pump.fun" if provider.name == "pumpfun_paper" else "mock",
+            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state", "pumpfun_curve"],
         }
     )
 
