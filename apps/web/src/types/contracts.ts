@@ -302,11 +302,14 @@ export interface LiveLimits {
 }
 
 export interface LiveStatus {
+  liveEnabled: boolean;
+  liveConfirmed: boolean;
   liveDisabled: boolean;
   liveArmed: boolean;
   liveSendWired: boolean;
   reasons: string[];
   keypairConfigured: boolean;
+  keypairMounted: "yes" | "no";
   keypairEnv: string;
   keypairPathHint: string;
   limits: LiveLimits;

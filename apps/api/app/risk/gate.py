@@ -6,12 +6,6 @@ from typing import Literal, Optional
 
 from app.models.contracts import Fill, RiskOut, SignalOut, SizeIn, StrategyContext
 
-# Live adapter caps (user-authorized). Paper `check()` does not read these.
-# Keep in sync with app.live.gate LOCKED_* constants.
-LIVE_MAX_NOTIONAL_SOL = 1.0
-LIVE_MAX_DAY_LOSS_PCT = 0.045
-LIVE_MAX_OPEN_MINTS = 10
-
 REASON = {
     "DAY_LOSS_BREAKER",
     "SPREAD_TOO_WIDE",
@@ -40,16 +34,12 @@ TradingState = Literal["active", "reducing", "halted"]
 
 @dataclass
 class RiskLimits:
+    """Paper-only limits. Live caps live on app.live.gate.LiveLimits — do not add them here."""
+
     max_notional_per_symbol: float = 2_000.0
     max_day_loss_pct: float = 0.05
     max_spread_bps: float = 80.0
     cooldown_sec_after_reject: float = 30.0
-    # Live extras (vn.py-style hard gates). Locked user-authorized caps.
-    # Paper `check()` does not read these — paper keeps max_notional_per_symbol /
-    # max_day_loss_pct (5%).
-    max_notional_sol: float = LIVE_MAX_NOTIONAL_SOL
-    live_max_day_loss_pct: float = LIVE_MAX_DAY_LOSS_PCT
-    max_open_mints: int = LIVE_MAX_OPEN_MINTS
 
 
 @dataclass
@@ -203,24 +193,39 @@ class RiskGate:
         *,
         live_limits: Optional[dict] = None,
     ) -> RiskOut:
-        """Live pre-order extras. Locked caps; fail closed if a caller passes zero.
+        """Live pre-order extras using LiveLimits only — never paper RiskLimits.
 
         Mapped from vn.py RiskManager (see docs/adapters/vnpy-riskmanager-v0.md):
         max_notional_sol=1.0, max_day_loss_pct=0.045, max_open_mints=10.
-        Paper `check()` is unchanged.
+        Paper `check()` is unchanged and is not called here.
+
+        Rejects with LIVE_DISABLED (RiskOut.tags) unless keypair mounted AND
+        secondary confirm AND liveEnabled AND limits present.
         """
-        src = live_limits or {}
-        max_notional_sol = _live_positive_float(
-            src["max_notional_sol"] if "max_notional_sol" in src else self.limits.max_notional_sol
+        from app.live.gate import (
+            LOCKED_MAX_DAY_LOSS_PCT,
+            LOCKED_MAX_NOTIONAL_SOL,
+            LOCKED_MAX_OPEN_MINTS,
+            REASON_LIMITS_MISSING,
+            REASON_LIVE_DISABLED,
+            REASON_NO_KEYPAIR,
+            evaluate,
         )
-        max_day_loss_pct = _live_positive_float(
-            src["max_day_loss_pct"]
-            if "max_day_loss_pct" in src
-            else self.limits.live_max_day_loss_pct
-        )
-        max_open_mints = _live_positive_int(
-            src["max_open_mints"] if "max_open_mints" in src else self.limits.max_open_mints
-        )
+
+        status = evaluate()
+        gate_tags: list[str] = []
+        if not status.armed:
+            gate_tags.append(REASON_LIVE_DISABLED)
+            for t in status.reasons:
+                if t not in gate_tags:
+                    gate_tags.append(t)
+            if not status.keypair_configured and REASON_NO_KEYPAIR not in gate_tags:
+                gate_tags.append(REASON_NO_KEYPAIR)
+
+        src = live_limits if live_limits is not None else status.limits.as_dict()
+        max_notional_sol = _live_positive_float(src.get("max_notional_sol") if isinstance(src, dict) else None)
+        max_day_loss_pct = _live_positive_float(src.get("max_day_loss_pct") if isinstance(src, dict) else None)
+        max_open_mints = _live_positive_int(src.get("max_open_mints") if isinstance(src, dict) else None)
         missing: list[str] = []
         if max_notional_sol is None:
             missing.append("max_notional_sol")
@@ -228,17 +233,28 @@ class RiskGate:
             missing.append("max_day_loss_pct")
         if max_open_mints is None:
             missing.append("max_open_mints")
-        if missing:
+        if missing or REASON_LIMITS_MISSING in status.reasons:
+            tags = list(gate_tags)
+            if REASON_LIMITS_MISSING not in tags:
+                tags.append(REASON_LIMITS_MISSING)
             return RiskOut(
                 allow=False,
                 clipped_size=None,
-                tags=["LIMITS_MISSING"],
-                notes="live limits missing or zero: " + ",".join(missing),
+                tags=tags or [REASON_LIMITS_MISSING],
+                notes="live limits missing or zero: " + ",".join(missing or status.limits_missing),
             )
 
-        max_notional_sol = min(float(max_notional_sol), LIVE_MAX_NOTIONAL_SOL)
-        max_day_loss_pct = min(float(max_day_loss_pct), LIVE_MAX_DAY_LOSS_PCT)
-        max_open_mints = min(int(max_open_mints), LIVE_MAX_OPEN_MINTS)
+        if gate_tags:
+            return RiskOut(
+                allow=False,
+                clipped_size=None,
+                tags=gate_tags,
+                notes="live gate closed: " + ",".join(status.reasons),
+            )
+
+        max_notional_sol = min(float(max_notional_sol), LOCKED_MAX_NOTIONAL_SOL)
+        max_day_loss_pct = min(float(max_day_loss_pct), LOCKED_MAX_DAY_LOSS_PCT)
+        max_open_mints = min(int(max_open_mints), LOCKED_MAX_OPEN_MINTS)
 
         notional = abs(float(size.target_notional))
         if notional > float(max_notional_sol):
@@ -274,8 +290,12 @@ class RiskGate:
                 notes=f"live open mints {open_mints} >= max_open_mints {max_open_mints}",
             )
 
-        # Shared paper hard gates (spread, halt, honeypot, …) still apply.
-        return self.check(ctx, signal, size)
+        return RiskOut(
+            allow=True,
+            clipped_size=abs(notional),
+            tags=[],
+            notes="ok",
+        )
 
     def on_reject(self, ctx: StrategyContext, tags: list[str]) -> None:
         cd = self.limits.cooldown_sec_after_reject

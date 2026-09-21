@@ -37,12 +37,15 @@ def health():
             "discovery": resolve_discovery_mode(),
             "discoveryOptions": ["pumpportal", "logs", "off"],
             "portal_key_configured": portal_key_configured(),
+            "liveEnabled": payload["liveEnabled"],
+            "liveConfirmed": payload["liveConfirmed"],
             "liveDisabled": payload["liveDisabled"],
             "liveArmed": payload["liveArmed"],
             "liveSendWired": payload["liveSendWired"],
             "liveReasons": payload["reasons"],
             "liveLimits": payload["limits"],
             "keypairConfigured": payload["keypairConfigured"],
+            "keypairMounted": payload["keypairMounted"],
             "keypairEnv": payload["keypairEnv"],
         }
     )

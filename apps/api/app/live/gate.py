@@ -1,17 +1,19 @@
 """LiveDisabled hard gate — fail closed. This PR does not submit chain transactions.
 
-Locked live caps (user-authorized, not placeholders):
+LiveLimits is a separate type from paper RiskLimits (do not reuse paper caps):
   max_notional_sol = 1.0
   max_day_loss_pct = 0.045
   max_open_mints = 10
 
-Arming still requires:
-  1. live_disabled switch OFF (env AUU_LIVE_DISABLED + settings; default ON)
-  2. explicit live_armed=true (env AUU_LIVE_ARMED + settings; default false)
-  3. local keypair file at AUU_SOLANA_KEYPAIR_PATH (never a private-key string)
+Reject with LIVE_DISABLED (also RiskOut.tags) unless ALL of:
+  1. liveEnabled true (default false)
+  2. user explicit secondary confirm (liveConfirmed)
+  3. local keypair mounted at AUU_SOLANA_KEYPAIR_PATH (never a private-key string)
+  4. LiveLimits present (locked caps above)
 
-LIVE_SEND_WIRED is False in this scaffold, so health.liveDisabled stays true
-even if the arm checklist later passes.
+The send gate lives in app.live.send and is independent of the liveEnabled
+switch. LIVE_SEND_WIRED is False, so the default runtime sends zero chain txs
+even if the four-part checklist later passes.
 """
 from __future__ import annotations
 
@@ -21,7 +23,9 @@ from typing import Any, Optional
 
 from app.live.signer import LocalSigner, SignerStatus
 
+ENV_LIVE_ENABLED = "AUU_LIVE_ENABLED"
 ENV_LIVE_DISABLED = "AUU_LIVE_DISABLED"
+ENV_LIVE_CONFIRMED = "AUU_LIVE_CONFIRMED"
 ENV_LIVE_ARMED = "AUU_LIVE_ARMED"
 ENV_KEYPAIR_PATH = "AUU_SOLANA_KEYPAIR_PATH"
 ENV_MAX_NOTIONAL_SOL = "AUU_LIVE_MAX_NOTIONAL_SOL"
@@ -110,6 +114,8 @@ def clamp_live_open_mints(value: Any) -> int:
 
 @dataclass
 class LiveLimits:
+    """Live-only caps. Never read paper RiskLimits / pump-paper-v1 params."""
+
     max_notional_sol: float = LOCKED_MAX_NOTIONAL_SOL
     max_day_loss_pct: float = LOCKED_MAX_DAY_LOSS_PCT
     max_open_mints: int = LOCKED_MAX_OPEN_MINTS
@@ -139,12 +145,14 @@ class LiveLimits:
 class LiveOverlay:
     """In-process Settings overlay. Limits are locked; overlay cannot loosen them."""
 
-    live_disabled: Optional[bool] = None
-    live_armed: Optional[bool] = None
+    live_enabled: Optional[bool] = None
+    live_confirmed: Optional[bool] = None
 
 
 @dataclass
 class LiveStatus:
+    live_enabled: bool
+    live_confirmed: bool
     live_disabled: bool
     live_armed: bool
     live_send_wired: bool
@@ -161,6 +169,10 @@ class LiveStatus:
         """True only when every arm condition holds (still no chain submit here)."""
         return not self.reasons
 
+    @property
+    def checklist_ok(self) -> bool:
+        return self.armed
+
     def primary_reason(self) -> str:
         for code in (REASON_LIVE_DISABLED, REASON_NO_KEYPAIR, REASON_LIMITS_MISSING):
             if code in self.reasons:
@@ -168,12 +180,16 @@ class LiveStatus:
         return REASON_LIVE_DISABLED
 
     def as_dict(self) -> dict[str, Any]:
+        mounted = "yes" if self.keypair_configured else "no"
         return {
+            "liveEnabled": self.live_enabled,
+            "liveConfirmed": self.live_confirmed,
             "liveDisabled": self.live_disabled,
             "liveArmed": self.live_armed,
             "liveSendWired": self.live_send_wired,
             "reasons": list(self.reasons),
             "keypairConfigured": self.keypair_configured,
+            "keypairMounted": mounted,
             "keypairEnv": self.keypair_env,
             "keypairPathHint": (
                 "set AUU_SOLANA_KEYPAIR_PATH on this machine (gitignored .env); "
@@ -220,49 +236,73 @@ def effective_limits() -> LiveLimits:
     )
 
 
+def live_enabled() -> bool:
+    """User switch. Default false. AUU_LIVE_DISABLED remains an inverse alias."""
+    if _overlay.live_enabled is not None:
+        return bool(_overlay.live_enabled)
+    if os.getenv(ENV_LIVE_ENABLED) is not None and str(os.getenv(ENV_LIVE_ENABLED)).strip():
+        return _env_bool(ENV_LIVE_ENABLED, False)
+    if os.getenv(ENV_LIVE_DISABLED) is not None and str(os.getenv(ENV_LIVE_DISABLED)).strip():
+        return not _env_bool(ENV_LIVE_DISABLED, True)
+    return False
+
+
+def live_confirmed() -> bool:
+    """Explicit secondary confirm. Default false. AUU_LIVE_ARMED is an alias."""
+    if _overlay.live_confirmed is not None:
+        return bool(_overlay.live_confirmed)
+    if os.getenv(ENV_LIVE_CONFIRMED) is not None and str(os.getenv(ENV_LIVE_CONFIRMED)).strip():
+        return _env_bool(ENV_LIVE_CONFIRMED, False)
+    if os.getenv(ENV_LIVE_ARMED) is not None and str(os.getenv(ENV_LIVE_ARMED)).strip():
+        return _env_bool(ENV_LIVE_ARMED, False)
+    return False
+
+
 def disabled_switch() -> bool:
-    if _overlay.live_disabled is not None:
-        return bool(_overlay.live_disabled)
-    return _env_bool(ENV_LIVE_DISABLED, True)
+    """Inverse of liveEnabled (compat for older liveDisabled clients)."""
+    return not live_enabled()
 
 
 def armed_flag() -> bool:
-    if _overlay.live_armed is not None:
-        return bool(_overlay.live_armed)
-    return _env_bool(ENV_LIVE_ARMED, False)
+    """Secondary confirm flag (compat: live_armed)."""
+    return live_confirmed()
 
 
 def evaluate() -> LiveStatus:
     limits = effective_limits()
     missing = limits.missing_names()
     signer = inspect_keypair()
-    switch = disabled_switch()
-    flag = armed_flag()
+    enabled = live_enabled()
+    confirmed = live_confirmed()
+    keypair_ok = bool(signer.ok)
+    limits_ok = not missing
+    checklist = enabled and confirmed and keypair_ok and limits_ok
     reasons: list[str] = []
-    if switch or not flag:
+    if not checklist:
         reasons.append(REASON_LIVE_DISABLED)
-    if not signer.ok:
+    if not keypair_ok:
         reasons.append(REASON_NO_KEYPAIR)
     if missing:
         reasons.append(REASON_LIMITS_MISSING)
-    gate_armed = not reasons
-    live_disabled = (not gate_armed) or (not LIVE_SEND_WIRED)
+    live_disabled = (not checklist) or (not LIVE_SEND_WIRED)
     return LiveStatus(
+        live_enabled=enabled,
+        live_confirmed=confirmed,
         live_disabled=live_disabled,
-        live_armed=gate_armed,
+        live_armed=checklist,
         live_send_wired=LIVE_SEND_WIRED,
         reasons=reasons,
-        keypair_configured=bool(signer.ok),
+        keypair_configured=keypair_ok,
         keypair_env=ENV_KEYPAIR_PATH,
         limits=limits,
         limits_missing=missing,
-        disabled_switch=switch,
-        armed_flag=flag,
+        disabled_switch=not enabled,
+        armed_flag=confirmed,
     )
 
 
 def can_arm() -> tuple[bool, list[str]]:
-    """True when keypair exists, switch is off, and live_armed is set. Limits are locked."""
+    """True when keypair exists, liveEnabled, confirmed, and limits present."""
     st = evaluate()
     return st.armed, list(st.reasons)
 
@@ -281,25 +321,43 @@ def set_limits(
 
 def try_set_disabled(want_disabled: bool) -> tuple[bool, LiveStatus]:
     """Flip the LiveDisabled switch. Turning it OFF requires a local keypair."""
-    if want_disabled:
-        _overlay.live_disabled = True
-        _overlay.live_armed = False
+    return try_set_enabled(not want_disabled, confirmed=False)
+
+
+def try_set_enabled(want_enabled: bool, *, confirmed: bool = False) -> tuple[bool, LiveStatus]:
+    """liveEnabled switch. Enabling without secondary confirm still stays LIVE_DISABLED."""
+    if not want_enabled:
+        _overlay.live_enabled = False
+        _overlay.live_confirmed = False
         return True, evaluate()
     signer = inspect_keypair()
     if not signer.ok or not effective_limits().complete():
         return False, evaluate()
-    _overlay.live_disabled = False
+    _overlay.live_enabled = True
+    if confirmed:
+        _overlay.live_confirmed = True
     return True, evaluate()
 
 
 def try_set_armed(want_armed: bool) -> tuple[bool, LiveStatus]:
-    """Explicit arm flag. Refuses if the switch is on or keypair is missing."""
+    """Explicit secondary confirm. Refuses if liveEnabled is off or keypair is missing."""
     if not want_armed:
-        _overlay.live_armed = False
+        _overlay.live_confirmed = False
         return True, evaluate()
     signer = inspect_keypair()
-    switch = disabled_switch()
-    if switch or not signer.ok or not effective_limits().complete():
+    if (not live_enabled()) or (not signer.ok) or (not effective_limits().complete()):
         return False, evaluate()
-    _overlay.live_armed = True
+    _overlay.live_confirmed = True
     return True, evaluate()
+
+
+def try_set_enabled_with_confirm(want_enabled: bool, *, confirmed: bool) -> tuple[bool, LiveStatus]:
+    """Settings path: liveEnabled + secondary confirm in one shot."""
+    if not want_enabled:
+        return try_set_enabled(False)
+    if not confirmed:
+        return False, evaluate()
+    ok_en, st = try_set_enabled(True, confirmed=False)
+    if not ok_en:
+        return False, st
+    return try_set_armed(True)

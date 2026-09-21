@@ -24,6 +24,7 @@ export function SettingsPage() {
   const [portalKey, setPortalKey] = useState<boolean | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [liveMsg, setLiveMsg] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
   const { autoPaperOrders, setAutoPaperOrders, tradingState: stratState } = useStrategyConfig();
@@ -55,28 +56,51 @@ export function SettingsPage() {
       .catch(() => undefined);
   }, []);
 
-  const canTryArm = Boolean(live?.keypairConfigured);
+  const mounted = live?.keypairConfigured === true || live?.keypairMounted === "yes";
+  const liveEnabled = Boolean(live?.liveEnabled);
 
   const applyLive = (st: LiveStatus) => {
     setLive(st);
   };
 
-  const tryArmLive = () => {
+  const requestEnable = () => {
     setLiveMsg("");
-    if (!canTryArm) {
-      setLiveMsg("cannot arm: need a local keypair path (AUU_SOLANA_KEYPAIR_PATH)");
+    if (!mounted) {
+      setLiveMsg("cannot enable: keypair mounted = no");
       return;
     }
+    setConfirmOpen(true);
+  };
+
+  const cancelConfirm = () => {
+    setConfirmOpen(false);
+    setLiveMsg("liveEnabled stays off (confirm cancelled)");
+  };
+
+  const confirmEnable = () => {
+    setConfirmOpen(false);
+    setLiveMsg("");
     void marketProvider
-      .putLiveDisabled(false)
-      .then(() => marketProvider.putLiveArm(true))
+      .putLiveEnabled(true, true)
       .then((st) => {
         applyLive(st);
         setLiveMsg(
-          st.liveArmed && !st.liveDisabled
-            ? "armed"
-            : "checklist updated; liveDisabled stays true until a later PR wires pump-sdk"
+          st.liveArmed && st.liveEnabled
+            ? "checklist updated; send gate stays closed (zero chain txs)"
+            : "liveEnabled requested; LIVE_DISABLED until keypair + confirm + limits"
         );
+      })
+      .catch((e: Error) => setLiveMsg(e.message));
+  };
+
+  const disableLive = () => {
+    setLiveMsg("");
+    setConfirmOpen(false);
+    void marketProvider
+      .putLiveEnabled(false, false)
+      .then((st) => {
+        applyLive(st);
+        setLiveMsg("liveEnabled=false");
       })
       .catch((e: Error) => setLiveMsg(e.message));
   };
@@ -89,7 +113,7 @@ export function SettingsPage() {
         ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
         {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
         {" "}
-        Live adapter is scaffolded but <strong>disabled</strong> (no chain submit).
+        Live adapter is scaffolded but <strong>liveEnabled defaults off</strong> (no chain submit).
       </p>
 
       <section className="settings-section">
@@ -153,18 +177,17 @@ export function SettingsPage() {
       <section className="settings-section live-section">
         <h2>Live adapter · Pump.fun local signer (dark)</h2>
         <p className="muted">
-          Status = <strong>disabled</strong>
+          liveEnabled=<code>{String(live?.liveEnabled ?? false)}</code>
           {" · "}
-          liveArmed=<code>{String(live?.liveArmed ?? false)}</code>
+          liveConfirmed=<code>{String(live?.liveConfirmed ?? false)}</code>
           {" · "}
           sendEnabled=<code>{String(live?.sendEnabled ?? false)}</code>
-          . Caps are locked. This UI never uploads a keypair. Set{" "}
-          <code>AUU_SOLANA_KEYPAIR_PATH</code> in a gitignored <code>.env</code> on this machine.
+          . Caps are locked (read-only). This UI never accepts a secret blob.
         </p>
         <p className="live-status-row">
           <span className="mode-badge live-off">LIVE DISABLED</span>
-          <span className="mode-badge live-off">NOT ARMED</span>
-          {(live?.reasons ?? ["LIVE_DISABLED", "NO_KEYPAIR"]).map((tag) => (
+          <span className="mode-badge live-off">{liveEnabled ? "ENABLED (SEND OFF)" : "liveEnabled OFF"}</span>
+          {(live?.reasons ?? ["LIVE_DISABLED"]).map((tag) => (
             <span key={tag} className="tag">
               {tag}
             </span>
@@ -183,19 +206,49 @@ export function SettingsPage() {
           <dd>
             <code>{live?.limits.max_open_mints ?? 10}</code> concurrent (locked)
           </dd>
+          <dt>keypair</dt>
+          <dd>
+            mounted: <code>{mounted ? "yes" : "no"}</code>
+          </dd>
         </dl>
         <div className="paper-actions">
-          <button type="button" className="ghost" disabled={!canTryArm} onClick={tryArmLive}>
-            Arm live
-          </button>
+          {liveEnabled ? (
+            <button type="button" className="ghost" onClick={disableLive}>
+              Turn liveEnabled off
+            </button>
+          ) : (
+            <button type="button" className="ghost" disabled={!mounted} onClick={requestEnable}>
+              Enable live…
+            </button>
+          )}
         </div>
         <p className="muted">
-          Keypair: {live?.keypairConfigured ? "file present (path not shown)" : "absent"} via{" "}
-          <code>{live?.keypairEnv ?? "AUU_SOLANA_KEYPAIR_PATH"}</code>. <code>live_armed</code> defaults
-          false. Arm stays off without a local keypair. This PR does not send chain transactions.
+          liveEnabled defaults off. Enabling requires a secondary confirm dialog, a mounted
+          local keypair, and the three locked caps. This runtime still sends zero chain txs.
         </p>
         {liveMsg ? <p className="muted">{liveMsg}</p> : null}
       </section>
+
+      {confirmOpen ? (
+        <div className="live-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="live-confirm-title">
+          <div className="live-confirm-dialog">
+            <h2 id="live-confirm-title">Confirm liveEnabled</h2>
+            <p>
+              Secondary confirm required. Keypair mounted: <code>{mounted ? "yes" : "no"}</code>.
+              Caps stay locked at 1 SOL / 4.5% / 10 mints. Send gate stays closed — zero chain
+              transactions in this runtime.
+            </p>
+            <div className="paper-actions">
+              <button type="button" className="ghost" onClick={cancelConfirm}>
+                Cancel
+              </button>
+              <button type="button" className="buy" onClick={confirmEnable}>
+                Confirm liveEnabled
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="settings-section">
         <h2>pump-paper-v1 · auto_paper_orders / strategy_autopaper</h2>
@@ -266,13 +319,21 @@ export function SettingsPage() {
         <dd>
           <code>{portalKey == null ? "…" : portalKey ? "configured" : "absent"}</code>
         </dd>
+        <dt>liveEnabled</dt>
+        <dd>
+          <code>{String(live?.liveEnabled ?? false)}</code>
+        </dd>
+        <dt>liveConfirmed</dt>
+        <dd>
+          <code>{String(live?.liveConfirmed ?? false)}</code>
+        </dd>
         <dt>liveDisabled</dt>
         <dd>
           <code>{String(live?.liveDisabled ?? true)}</code>
         </dd>
-        <dt>liveArmed</dt>
+        <dt>keypair mounted</dt>
         <dd>
-          <code>{String(live?.liveArmed ?? false)}</code>
+          <code>{mounted ? "yes" : "no"}</code>
         </dd>
         <dt>live caps</dt>
         <dd>

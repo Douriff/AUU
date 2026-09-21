@@ -10,7 +10,15 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.live.broker import run_live_order, run_live_pre_order
-from app.live.gate import evaluate, set_limits, try_set_armed, try_set_disabled
+from app.live.gate import (
+    REASON_LIVE_DISABLED,
+    evaluate,
+    set_limits,
+    try_set_armed,
+    try_set_disabled,
+    try_set_enabled_with_confirm,
+)
+from app.live.ledger import build_live_ledger
 from app.models.contracts import OrderIntent, RiskOut, SignalOut, SizeIn, StrategyContext
 from app.routes.envelope import err, ok
 
@@ -31,6 +39,13 @@ class LiveDisabledBody(BaseModel):
     live_disabled: bool = True
 
 
+class LiveEnabledBody(BaseModel):
+    liveEnabled: bool = False
+    confirmed: bool = False
+    live_enabled: Optional[bool] = None
+    live_confirmed: Optional[bool] = None
+
+
 class LiveOrderBody(BaseModel):
     ctx: StrategyContext
     intent: OrderIntent
@@ -40,14 +55,20 @@ class LiveOrderBody(BaseModel):
     auto_post_fill: bool = True
 
 
-def _blocked(status) -> Any:
+def _blocked(status, risk: Optional[RiskOut] = None) -> Any:
     reasons = list(status.reasons)
-    code = status.primary_reason()
+    if REASON_LIVE_DISABLED not in reasons:
+        reasons = [REASON_LIVE_DISABLED] + reasons
+    code = status.primary_reason() if status.reasons else REASON_LIVE_DISABLED
+    extra: dict[str, Any] = {"reasons": reasons, "tags": list(reasons)}
+    if risk is not None:
+        extra["risk"] = risk.model_dump()
+        extra["tags"] = list(risk.tags)
     return err(
         code,
         "live refused: " + ",".join(reasons) if reasons else "live refused",
         403,
-        extra={"reasons": reasons},
+        extra=extra,
     )
 
 
@@ -61,9 +82,18 @@ def live_limits():
     st = evaluate()
     data = st.limits.as_dict()
     data["missing"] = list(st.limits_missing)
+    data["liveEnabled"] = st.live_enabled
+    data["liveConfirmed"] = st.live_confirmed
     data["liveDisabled"] = st.live_disabled
     data["liveArmed"] = st.live_armed
+    data["keypairMounted"] = "yes" if st.keypair_configured else "no"
     return ok(data)
+
+
+@router.get("/ledger")
+def live_ledger():
+    """source=live fills only. Empty in this PR; never mixed into paper win-rate."""
+    return ok(build_live_ledger())
 
 
 @router.put("/limits")
@@ -86,6 +116,17 @@ def put_live_disabled(body: LiveDisabledBody):
     return ok(st.as_dict())
 
 
+@router.put("/enabled")
+def put_live_enabled(body: LiveEnabledBody):
+    """liveEnabled + secondary confirm. Enabling without confirmed=true stays LIVE_DISABLED."""
+    want = body.live_enabled if body.live_enabled is not None else body.liveEnabled
+    confirmed = body.live_confirmed if body.live_confirmed is not None else body.confirmed
+    ok_set, st = try_set_enabled_with_confirm(bool(want), confirmed=bool(confirmed))
+    if not ok_set:
+        return _blocked(st)
+    return ok(st.as_dict())
+
+
 @router.put("/arm")
 def put_live_arm(body: LiveArmBody):
     """Explicit arm. Refuses unless switch is off and a local keypair exists."""
@@ -98,22 +139,20 @@ def put_live_arm(body: LiveArmBody):
 @router.post("/pre-order")
 async def live_pre_order(body: LiveOrderBody):
     status = evaluate()
-    if not status.armed:
-        return _blocked(status)
     signal = body.signal or SignalOut(side="long" if body.intent.side == "buy" else "short")
     size = body.size or SizeIn(
         target_notional=abs(float(body.intent.qty_or_notional)),
         max_slippage_bps=body.intent.max_slippage_bps,
     )
     risk = await run_live_pre_order(body.ctx, signal, size)
+    if not status.armed:
+        return _blocked(status, risk=risk)
     return ok({**risk.model_dump(), "venue": "live"})
 
 
 @router.post("/orders")
 async def live_orders(body: LiveOrderBody):
     status = evaluate()
-    if not status.armed:
-        return _blocked(status)
     signal = body.signal or SignalOut(side="long" if body.intent.side == "buy" else "short")
     size = body.size or SizeIn(
         target_notional=abs(float(body.intent.qty_or_notional)),
@@ -122,6 +161,8 @@ async def live_orders(body: LiveOrderBody):
     risk = body.risk
     if risk is None:
         risk = await run_live_pre_order(body.ctx, signal, size)
+    if not status.armed:
+        return _blocked(status, risk=risk)
     if not risk.allow:
         return ok(
             {

@@ -2,9 +2,9 @@
 
 This PR does not submit chain transactions. When the hard gate is closed, submit
 rejects with LIVE_DISABLED / NO_KEYPAIR. When the checklist
-passes, submit still refuses with LIVE_STUB. Official `@pump-fun/pump-sdk`
-buy/sell wiring is documented in docs/adapters/pumpfun-live-local-signer-v0.md
-and is not called here.
+passes, intent is built from official pump-sdk method names only, then the
+send gate (outside liveDisabled) refuses. Official `@pump-fun/pump-sdk`
+buyInstructions / sellInstructions are documented, not called.
 """
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.live.gate import REASON_LIMITS_MISSING, evaluate
+from app.live.gate import REASON_LIVE_DISABLED, evaluate
+from app.live.intent import build_intent_for_order
+from app.live.ledger import get_live_ledger
+from app.live.send import refuse_send, send_allowed
 from app.models.contracts import Fill, OrderIntent, RejectOut, RiskOut, SignalOut, SizeIn, StrategyContext
 from app.risk import get_risk_gate
 
@@ -20,27 +23,38 @@ log = logging.getLogger("auu.live.broker")
 
 VENUE = "live"
 
-# Future (not this PR): PumpSdk.buyInstructions / sellInstructions from the
-# official MIT pump-sdk, signed by LocalSigner, only after evaluate().armed
-# and LIVE_SEND_WIRED. See docs/adapters/pumpfun-live-local-signer-v0.md.
-
 
 @dataclass
 class LiveBroker:
     venue: str = VENUE
     open_orders: list[OrderIntent] = field(default_factory=list)
     last_reject: Optional[RejectOut] = None
+    last_intent: Optional[dict[str, Any]] = None
 
     def submit(self, ctx: StrategyContext, intent: OrderIntent) -> list[Fill]:
         """Reject unless armed; even when armed, do not submit a chain transaction."""
         self.last_reject = None
+        self.last_intent = None
         status = evaluate()
         if not status.armed:
             notes = "live gate closed: " + ",".join(status.reasons)
             log.info("live submit blocked (%s)", ",".join(status.reasons))
             self._reject(list(status.reasons), notes)
             return []
-        log.info("live submit armed but stubbed; no chain submit in this PR")
+        mint = ""
+        if ctx.meta:
+            mint = str(ctx.meta.get("mint") or "")
+        self.last_intent = build_intent_for_order(
+            side=intent.side,
+            mint=mint or ctx.symbol,
+            qty_or_notional=float(intent.qty_or_notional),
+        )
+        if not send_allowed():
+            tags, notes = refuse_send()
+            log.info("live submit intent built; send gate closed")
+            self._reject(tags, notes)
+            return []
+        log.info("live submit send latch open but stubbed; no chain submit in this PR")
         self._reject(
             ["LIVE_STUB"],
             "live broker is a stub; official pump-sdk buy/sell is documented, not called",
@@ -91,15 +105,16 @@ async def run_live_pre_order(
 
     status = evaluate()
     gate = get_risk_gate()
-    if not status.limits.complete() or REASON_LIMITS_MISSING in status.reasons:
+    risk = gate.check_live(ctx, signal, size, live_limits=status.limits.as_dict())
+    if not status.armed and REASON_LIVE_DISABLED not in risk.tags:
+        merged = [REASON_LIVE_DISABLED] + [t for t in risk.tags if t != REASON_LIVE_DISABLED]
+        extra = [t for t in status.reasons if t not in merged]
         risk = RiskOut(
             allow=False,
             clipped_size=None,
-            tags=["LIMITS_MISSING"],
-            notes="live limits missing or zero: " + ",".join(status.limits_missing),
+            tags=merged + extra,
+            notes=risk.notes or ("live gate closed: " + ",".join(status.reasons)),
         )
-    else:
-        risk = gate.check_live(ctx, signal, size, live_limits=status.limits.as_dict())
     hub = get_hub()
     await hub.publish(
         {
@@ -143,6 +158,9 @@ async def run_live_order(
     status = evaluate()
     if not status.armed:
         notes = "live gate closed: " + ",".join(status.reasons)
+        tags = list(status.reasons)
+        if REASON_LIVE_DISABLED not in tags:
+            tags = [REASON_LIVE_DISABLED] + tags
         hub = get_hub()
         await hub.publish(
             {
@@ -150,15 +168,15 @@ async def run_live_order(
                 "payload": {
                     "ts": ctx.ts,
                     "symbol": ctx.symbol,
-                    "tags": list(status.reasons),
+                    "tags": tags,
                     "notes": notes,
                     "venue": VENUE,
                 },
             }
         )
-        return _reject_payload(ctx, list(status.reasons), notes)
+        return _reject_payload(ctx, tags, notes)
     if not risk.allow:
-        return _reject_payload(ctx, ["RISK_DENIED"], "risk.allow must be true")
+        return _reject_payload(ctx, list(risk.tags) or ["RISK_DENIED"], risk.notes or "risk.allow must be true")
 
     broker = get_live_broker()
     fills = broker.submit(ctx, intent)
@@ -180,18 +198,28 @@ async def run_live_order(
                 },
             }
         )
-        return _reject_payload(ctx, tags, notes)
+        payload = _reject_payload(ctx, tags, notes)
+        if broker.last_intent:
+            payload["intent"] = broker.last_intent
+        return payload
 
     # Unreachable in this PR: LiveBroker never returns fills. Kept so the
     # lifecycle matches PaperBroker if a later PR wires official pump-sdk.
+    # Live fills go to the live ledger only — never PaperTradeJournal.
     fill_payloads: list[dict[str, Any]] = []
     trading_state: Optional[str] = None
     gate = get_risk_gate()
+    ledger = get_live_ledger()
+    mint = None
+    if ctx.meta:
+        mint = ctx.meta.get("mint")
     for f in fills:
         dumped = f.model_dump()
         dumped["symbol"] = ctx.symbol
         dumped["venue"] = VENUE
+        dumped["source"] = "live"
         fill_payloads.append(dumped)
+        ledger.record_fill(ctx.symbol, f, mint=str(mint) if mint else None)
         await hub.publish({"type": "fill", "payload": dumped})
         if auto_post_fill:
             result = gate.post_fill(ctx, f)

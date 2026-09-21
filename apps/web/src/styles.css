@@ -209,8 +209,20 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
   background: #0d1117; color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.4rem 0.55rem; min-width: 160px;
 }
-.live-section .paper-actions button.ghost { color: var(--muted); }
-.live-section .paper-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.risk-tag-bar .tag.live-disabled-tag {
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.live-confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 40;
+}
+.live-confirm-dialog {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.1rem 1.25rem; max-width: 420px;
+}
+.live-confirm-dialog h2 { margin: 0 0 0.6rem; font-size: 1rem; }
+.live-confirm-dialog p { color: var(--muted); font-size: 0.85rem; }
 
 .trade-toolbar {
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.5rem 0 1rem;

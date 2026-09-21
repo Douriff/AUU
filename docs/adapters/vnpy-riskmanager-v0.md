@@ -16,14 +16,14 @@
 
 ## Live extras（独立路径 · 默认关）
 
-实盘脚手架在 `app.live` / `RiskGate.check_live`。纸面 `check()` **不读**这些字段。锁定上限（用户授权）：
+实盘脚手架在 `app.live` / `RiskGate.check_live`。纸面 `check()` **不读** `LiveLimits`（独立类型：`max_notional_sol=1`、`max_day_loss_pct=0.045`、`max_open_mints=10`）。
 
 | vn.py 概念 | AUU live | 行为 |
 |------------|----------|------|
 | 单笔数量 / 名义 | `max_notional_sol` **= 1.0 SOL** | 超限 `MAX_NOTIONAL`（fail closed） |
 | 日亏熔断 | `max_day_loss_pct` **= 0.045** | `DAY_LOSS_BREAKER`（纸面仍 5%） |
 | 持仓个数 | `max_open_mints` **= 10** | `MAX_OPEN_MINTS` |
-| 交易开关 | `AUU_LIVE_DISABLED` + `live_armed` | `LIVE_DISABLED`；默认关 |
+| 交易开关 | `liveEnabled` (default false) + secondary confirm | `LIVE_DISABLED`；默认关 |
 | 密钥 | `AUU_SOLANA_KEYPAIR_PATH` 本机文件 | 缺文件 `NO_KEYPAIR` |
 
 详见 `docs/adapters/pumpfun-live-local-signer-v0.md`。本轮 **不** `sendTransaction`。

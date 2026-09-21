@@ -19,6 +19,7 @@ export function MarketPage() {
   const [symbol, setSymbol] = useState("");
   const [interval] = useState("1m");
   const [monitor, setMonitor] = useState<MonitorRow[]>([]);
+  const [liveDisabledTag, setLiveDisabledTag] = useState("LIVE_DISABLED");
   const {
     symbols,
     candles,
@@ -67,6 +68,20 @@ export function MarketPage() {
     };
   }, []);
 
+  useEffect(() => {
+    marketProvider
+      .getHealth()
+      .then((h) => {
+        const reasons = h.liveReasons ?? [];
+        if (reasons.includes("LIVE_DISABLED") || h.liveDisabled !== false) {
+          setLiveDisabledTag("LIVE_DISABLED");
+        } else {
+          setLiveDisabledTag("");
+        }
+      })
+      .catch(() => setLiveDisabledTag("LIVE_DISABLED"));
+  }, []);
+
   const watchRows =
     monitor.length > 0
       ? monitor
@@ -112,7 +127,10 @@ export function MarketPage() {
         <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
           {tradingState}
         </span>
-        <RiskTagBar tags={riskTags} allow={riskAllow} />
+        <RiskTagBar
+          tags={liveDisabledTag ? [liveDisabledTag, ...riskTags.filter((t) => t !== liveDisabledTag)] : riskTags}
+          allow={riskAllow}
+        />
       </div>
       <PaperStatsPanel compact />
       <div className="market-grid">

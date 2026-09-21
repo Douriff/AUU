@@ -136,12 +136,15 @@ export class HttpWsProvider {
     auto_paper_orders?: boolean;
     strategy_autopaper?: boolean;
     strategyId?: string;
+    liveEnabled?: boolean;
+    liveConfirmed?: boolean;
     liveDisabled?: boolean;
     liveArmed?: boolean;
     liveSendWired?: boolean;
     liveReasons?: string[];
     liveLimits?: LiveLimits;
     keypairConfigured?: boolean;
+    keypairMounted?: "yes" | "no";
     keypairEnv?: string;
     watch_mints?: string;
     discovery?: string;
@@ -213,6 +216,10 @@ export class HttpWsProvider {
 
   putLiveDisabled(live_disabled: boolean): Promise<LiveStatus> {
     return putJson<LiveStatus>("/api/v1/live/disabled", { live_disabled });
+  }
+
+  putLiveEnabled(liveEnabled: boolean, confirmed: boolean): Promise<LiveStatus> {
+    return putJson<LiveStatus>("/api/v1/live/enabled", { liveEnabled, confirmed });
   }
 
   putLiveArm(armed: boolean): Promise<LiveStatus> {

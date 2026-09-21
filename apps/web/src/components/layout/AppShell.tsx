@@ -16,11 +16,15 @@ const links = [
 export function AppShell() {
   const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
   const [provider, setProvider] = useState("…");
+  const [liveOff, setLiveOff] = useState(true);
 
   useEffect(() => {
     marketProvider
       .getHealth()
-      .then((h) => setProvider(h.provider))
+      .then((h) => {
+        setProvider(h.provider);
+        setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -52,8 +56,8 @@ export function AppShell() {
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />
           <div className="mode-badge">PAPER · PUMP.FUN</div>
-          <div className="mode-badge live-off" title="liveDisabled=true · adapter dark">
-            LIVE OFF
+          <div className="mode-badge live-off" title="liveEnabled=false · LIVE_DISABLED">
+            {liveOff ? "LIVE OFF · LIVE_DISABLED" : "LIVE CHECKLIST"}
           </div>
         </div>
       </header>

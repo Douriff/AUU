@@ -79,13 +79,13 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 - 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
 - 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 
-详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`、`docs/adapters/pumpfun-live-local-signer-v0.md`。
+详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`、`docs/viz/live-ui-gates-v0.md`、`docs/adapters/pumpfun-live-local-signer-v0.md`。
 
 ## 自动纸面单 + 成功概率
 
 `strategy_autopaper` / `auto_paper_orders` **默认关**。在 Settings / 行情 / 交易顶栏打开后（无需重启），`pump-paper-v1` 在 `trading_state=active` 时对自选做 decide → RiskGate → PaperBroker。实盘路径关闭（`liveDisabled=true`）；私钥 env 一旦出现则拒绝执行。
 
-**Live adapter**（`docs/adapters/pumpfun-live-local-signer-v0.md`）已脚手架：默认 `AUU_LIVE_DISABLED=true`、`live_armed=false`。锁定上限 **1.0 SOL / 单笔**、**日亏 4.5%**、**最多 10 个并发 mint**。未提供本机 keypair 路径时无法 arm。本 PR **不**发送链上交易。
+**Live adapter**（`docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/viz/live-ui-gates-v0.md`）：`liveEnabled` **默认 false**。独立 `LiveLimits` **1.0 SOL / 单笔**、**日亏 4.5%**、**最多 10 个并发 mint**（不复用纸面 limits）。需本机 keypair mounted **且**二次确认 **且** liveEnabled **且** limits 才离开 `LIVE_DISABLED`。纸面 journal / 胜率永不混入 live。本 PR **不**发送链上交易。
 
 纸面成功概率（胜率、期望、回撤）来自本会话 `PaperTradeJournal` 已平仓 round-trip（自算，不嵌 QuantStats）。蒙特卡洛默认关：
 
