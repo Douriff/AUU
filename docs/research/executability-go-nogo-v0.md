@@ -54,7 +54,7 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 
 ### 1.4 毕业风险
 
-- 入场窗冻结：`800 ≤ progress_bps ≤ 7500`；毕业/迁移（`complete`/`migrated`）禁止新开
+- 入场窗（纸面默认，paper round 4）：`1200 ≤ progress_bps ≤ 6500`；毕业/迁移（`complete`/`migrated`）禁止新开。指标与参数见 §7。
 - 持仓在 `progress_bps ≥ 9000` 或 complete 时强制平仓（拥挤）
 - 毕业后 venue 变为 PumpSwap AMM，**曲线纸面成交不能**当作 AMM 可执行
 
@@ -235,3 +235,30 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 
 版本：v0。只追加门，不改已锁阈值，除非另开 RFC。  
 2026-09-22 用户选择：G3 中位从含费改为扣协议费（&lt;60 不变，硬顶 80 仍看含费）。`liveEnabled` 默认仍 false。
+
+---
+
+## 7. Paper round 4 Go 窗（2026-09-21）
+
+纸面 round 4 在下列 `PumpPaperParams` **进程默认**下得到 `verdict=go`。这是默认值，不是运行时 PUT。`liveEnabled` 仍为 **false**。`auto_paper_orders` 默认仍 **false**。实盘 `max_notional_sol` 硬顶仍是 **1.0 SOL**。含费硬拒仍是 **> 80**（等于 80 仍过）。Go 门不放宽：样本 ≥ 30、期望 ≥ 0、扣费中位 < 60、含费硬顶 80。
+
+| 指标 | round 4 |
+|------|---------|
+| `verdict` | **go** |
+| `n_closed` | **30** |
+| expectancy | **≈ +0.00123** |
+| median net impact | **≈ 12.4 bps** |
+| max gross impact | **≈ 75.7 bps** |
+| exit mix | **TP 16 / MAX_HOLD 12 / STOP_LOSS 1** |
+
+| 参数 | 纸面默认 |
+|------|----------|
+| `take_profit_pct` | **0.10** |
+| `stop_loss_pct` | **0.07** |
+| `max_hold_sec` | **300** |
+| `progress_bps_min` | **1200** |
+| `progress_bps_max` | **6500** |
+| `max_impact_bps` | **75**（硬拒仍是含费 > 80） |
+| `max_notional_sol` | **0.12** |
+
+习惯分桶（`0_800` … `7500_9000`、`pct_entries_800_7500`）仍是观察标签，不随这组入场窗改写。

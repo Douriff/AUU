@@ -49,16 +49,17 @@ def _hot_tape() -> TapeWindow:
 class ParamsDefaultsTests(unittest.TestCase):
     def test_frozen_v1(self):
         p = PumpPaperParams()
-        self.assertEqual(p.progress_bps_min, 800)
-        self.assertEqual(p.progress_bps_max, 7500)
+        # Paper round 4 Go window. Hard reject remains gross impact > 80.
+        self.assertEqual(p.progress_bps_min, 1200)
+        self.assertEqual(p.progress_bps_max, 6500)
         self.assertEqual(p.max_impact_bps, 75.0)
         self.assertLess(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
-        self.assertAlmostEqual(p.take_profit_pct, 0.14)
-        self.assertAlmostEqual(p.stop_loss_pct, 0.09)
+        self.assertAlmostEqual(p.take_profit_pct, 0.10)
+        self.assertAlmostEqual(p.stop_loss_pct, 0.07)
         self.assertGreater(p.take_profit_pct, p.stop_loss_pct)
-        self.assertEqual(p.max_hold_sec, 420)
+        self.assertEqual(p.max_hold_sec, 300)
         self.assertLess(p.max_hold_sec, 900)
         self.assertEqual(p.max_day_loss_pct, 0.05)
         self.assertEqual(p.max_open_mints, 3)
@@ -116,7 +117,7 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.reason, "progress_band")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=799),
+            snapshot=_snap(progress_bps=1199),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
@@ -125,13 +126,31 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.reason, "progress_band")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=800),
+            snapshot=_snap(progress_bps=1200),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
             impact_entry_bps=40.0,
         )
         self.assertEqual(sig.side, "long")
+
+        sig = evaluate(
+            snapshot=_snap(progress_bps=6500),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.side, "long")
+
+        sig = evaluate(
+            snapshot=_snap(progress_bps=6501),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=40.0,
+        )
+        self.assertEqual(sig.reason, "progress_band")
 
     def test_momentum_and_impact(self):
         cold = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.0, trade_count_1m=12)
@@ -440,13 +459,13 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertFalse(data["params"]["auto_paper_orders"])
         self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["strategy_autopaper"])
-        self.assertEqual(data["params"]["progress_bps_min"], 800)
-        self.assertEqual(data["params"]["progress_bps_max"], 7500)
+        self.assertEqual(data["params"]["progress_bps_min"], 1200)
+        self.assertEqual(data["params"]["progress_bps_max"], 6500)
         self.assertEqual(data["params"]["max_impact_bps"], 75)
         self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
-        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.14)
-        self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.09)
-        self.assertEqual(data["params"]["max_hold_sec"], 420)
+        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.10)
+        self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.07)
+        self.assertEqual(data["params"]["max_hold_sec"], 300)
         self.assertEqual(data["params"]["max_notional_sol"], 0.12)
         raised = self.client.put(
             "/api/v1/strategy/pump-paper-v1", json={"max_impact_bps": 200}

@@ -138,7 +138,10 @@ class DistillMappingTests(unittest.TestCase):
         bag, _ = self._result("bag", "w-bag", "WatchBagHolder1111111111111111111111111111", "b")
         self.assertIsNone(bag.reject_reason)
         self.assertGreater(bag.suggested_params["max_hold_sec"], self.params["max_hold_sec"])
-        self.assertLess(bag.suggested_params["stop_loss_pct"], self.params["stop_loss_pct"])
+        # Go-window SL 0.07 is already inside the bag clamp (≤ 0.08). Do not loosen it.
+        self.assertLessEqual(bag.suggested_params["stop_loss_pct"], self.params["stop_loss_pct"])
+        self.assertLessEqual(bag.suggested_params["stop_loss_pct"], 0.08)
+        self.assertGreaterEqual(bag.suggested_params["stop_loss_pct"], 0.04)
 
     def test_sanitize_refuses_window_widen_and_strips_autopaper(self):
         current = PumpPaperParams().model_dump()
@@ -370,9 +373,9 @@ class WatchApiTests(unittest.TestCase):
         data = applied.json()["data"]
         self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["params"]["auto_paper_orders"])
-        self.assertNotEqual(data["params"]["progress_bps_min"], 800)
-        self.assertLessEqual(data["params"]["progress_bps_max"], 7500)
-        self.assertGreaterEqual(data["params"]["progress_bps_min"], 800)
+        self.assertGreaterEqual(data["params"]["progress_bps_min"], 1200)
+        self.assertLessEqual(data["params"]["progress_bps_max"], 6500)
+        self.assertLess(data["params"]["progress_bps_max"], prev_max)
         self.assertFalse(data["copy_trade_enabled"])
         self.assertTrue(data["liveDisabled"])
         path = Path(data["distill"]["overlay_path"])
