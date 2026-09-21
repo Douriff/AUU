@@ -51,18 +51,18 @@ class ParamsDefaultsTests(unittest.TestCase):
         p = PumpPaperParams()
         self.assertEqual(p.progress_bps_min, 800)
         self.assertEqual(p.progress_bps_max, 7500)
-        self.assertEqual(p.max_impact_bps, 80.0)
+        self.assertEqual(p.max_impact_bps, 75.0)
+        self.assertLess(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
-        # Strategy-engineer paper defaults: TP 15%, hold 480s, SL 9%.
-        self.assertAlmostEqual(p.take_profit_pct, 0.15)
+        self.assertAlmostEqual(p.take_profit_pct, 0.14)
         self.assertAlmostEqual(p.stop_loss_pct, 0.09)
         self.assertGreater(p.take_profit_pct, p.stop_loss_pct)
-        self.assertEqual(p.max_hold_sec, 480)
+        self.assertEqual(p.max_hold_sec, 420)
         self.assertLess(p.max_hold_sec, 900)
         self.assertEqual(p.max_day_loss_pct, 0.05)
         self.assertEqual(p.max_open_mints, 3)
-        self.assertEqual(p.max_notional_sol, 0.5)
+        self.assertEqual(p.max_notional_sol, 0.12)
 
 
 class TapeTests(unittest.TestCase):
@@ -90,7 +90,7 @@ class EvaluateTests(unittest.TestCase):
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
-            impact_entry_bps=80.0,
+            impact_entry_bps=75.0,
         )
         self.assertEqual(sig.side, "long")
         self.assertEqual(sig.reason, "pump_paper_v1_entry")
@@ -154,13 +154,52 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.reason, "impact")
         self.assertIn("SLIPPAGE_CAP", sig.tags)
 
+        # Buffer: 75 passes, anything above the default buffer rejects.
+        at_buffer = evaluate(
+            snapshot=_snap(),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=75.0,
+        )
+        self.assertEqual(at_buffer.side, "long")
+        over_buffer = evaluate(
+            snapshot=_snap(),
+            tape=_hot_tape(),
+            params=self.params,
+            now_ms=self.now,
+            impact_entry_bps=75.1,
+        )
+        self.assertEqual(over_buffer.reason, "impact")
+
+        # Hard max 80: equal is allowed when the param is 80; above 80 always rejects.
+        at_hard = PumpPaperParams(max_impact_bps=80.0)
+        allowed = evaluate(
+            snapshot=_snap(),
+            tape=_hot_tape(),
+            params=at_hard,
+            now_ms=self.now,
+            impact_entry_bps=80.0,
+        )
+        self.assertEqual(allowed.side, "long")
+        over_hard = evaluate(
+            snapshot=_snap(),
+            tape=_hot_tape(),
+            params=PumpPaperParams(max_impact_bps=200.0),
+            now_ms=self.now,
+            impact_entry_bps=80.1,
+        )
+        self.assertEqual(over_hard.reason, "impact")
+        self.assertIn("GROSS_IMPACT_HARD", over_hard.tags)
+        self.assertIn("SLIPPAGE_CAP", over_hard.tags)
+
     def test_forbidden_tags_and_cooldown(self):
         sig = evaluate(
             snapshot=_snap(),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
-            impact_entry_bps=80.0,
+            impact_entry_bps=75.0,
             extra_tags=["HONEYPOT"],
         )
         self.assertEqual(sig.reason, "blocked_tag")
@@ -170,7 +209,7 @@ class EvaluateTests(unittest.TestCase):
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
-            impact_entry_bps=80.0,
+            impact_entry_bps=75.0,
             last_open_ts=self.now - 10_000,
         )
         self.assertEqual(sig.reason, "cooldown")
@@ -403,11 +442,17 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertFalse(data["strategy_autopaper"])
         self.assertEqual(data["params"]["progress_bps_min"], 800)
         self.assertEqual(data["params"]["progress_bps_max"], 7500)
-        self.assertEqual(data["params"]["max_impact_bps"], 80)
+        self.assertEqual(data["params"]["max_impact_bps"], 75)
         self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
-        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.15)
+        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.14)
         self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.09)
-        self.assertEqual(data["params"]["max_hold_sec"], 480)
+        self.assertEqual(data["params"]["max_hold_sec"], 420)
+        self.assertEqual(data["params"]["max_notional_sol"], 0.12)
+        raised = self.client.put(
+            "/api/v1/strategy/pump-paper-v1", json={"max_impact_bps": 200}
+        )
+        self.assertLessEqual(raised.json()["data"]["params"]["max_impact_bps"], 80.0)
+        self.client.put("/api/v1/strategy/pump-paper-v1", json={"max_impact_bps": 75})
         self.assertIn(data["trading_state"], ("active", "reducing", "halted"))
         live = self.client.get("/api/v1/live/status")
         self.assertEqual(live.status_code, 200)

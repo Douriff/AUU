@@ -383,7 +383,10 @@ def _nogo_reason(
         return "证据不足"
     if not gates["expectancy"]["ok"]:
         return f"期望 {expectancy:.4g} < 0"
-    if median_impact is None or not gates["median_entry_impact"]["ok"]:
+    impact_gate = gates["median_entry_impact"]
+    if impact_gate.get("ok") and not impact_gate.get("coverage_ok", True):
+        return f"入场冲击样本 {impact_gate.get('n', 0)}/{MIN_CLOSED_TRADES}"
+    if median_impact is None or not impact_gate["ok"]:
         if median_impact is None or median_net is None:
             return "证据不足：缺少入场冲击样本"
         hard_fail = max_gross is not None and max_gross > IMPACT_HARD_MAX_BPS
@@ -496,13 +499,15 @@ def aggregate_executability(
     impact_coverage_ok = impact_n >= MIN_CLOSED_TRADES if n >= MIN_CLOSED_TRADES else bool(impacts) and n > 0
     if n == 0:
         impact_coverage_ok = False
-    # Go median is net of protocol fee. Hard ceiling stays on gross.
-    median_ok = (
-        median_net is not None
-        and impact_coverage_ok
-        and median_net < IMPACT_MEDIAN_MAX_BPS
-        and (max_impact is None or max_impact <= IMPACT_HARD_MAX_BPS)
-    )
+    # Threshold fail is only these two. A short sample is coverage, not a 60/80 fail.
+    # net median >= 60  OR  any gross sample > 80.
+    # Gross == 80 passes. Net == 60 fails. The 75 bps entry buffer is not this gate.
+    net_fail = median_net is not None and median_net >= IMPACT_MEDIAN_MAX_BPS
+    gross_fail = max_impact is not None and max_impact > IMPACT_HARD_MAX_BPS
+    if median_net is None and max_impact is None:
+        median_ok = False
+    else:
+        median_ok = not (net_fail or gross_fail)
     protocol_fee_bps = (
         float(median_fee) if median_fee is not None else float(CURVE_IMPACT_FEE_FLOOR_BPS)
     )
@@ -536,6 +541,7 @@ def aggregate_executability(
         sample_ok
         and bool(expectancy_ok)
         and bool(median_ok)
+        and bool(impact_coverage_ok)
         and bool(shadow_ok)
         and bool(reject["ok"])
     )
@@ -573,9 +579,13 @@ def aggregate_executability(
             max_bps=max_impact,
             max_gross_bps=max_impact,
             n=impact_n,
+            coverage_ok=bool(impact_coverage_ok),
             go_max=IMPACT_MEDIAN_MAX_BPS,
             hard_max=IMPACT_HARD_MAX_BPS,
             basis="net_of_protocol_fee",
+            net_fail=bool(net_fail),
+            gross_fail=bool(gross_fail),
+            fails_only_on="net_median>=60 OR any_gross>80",
         ),
         "reject_rate": _gate(
             bool(reject["ok"]),

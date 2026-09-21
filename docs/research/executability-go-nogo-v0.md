@@ -29,7 +29,7 @@ Pump.fun 曲线是虚拟储备恒定乘积（`price = virtual_sol / virtual_toke
 因此：
 
 - 名义越大、曲线越浅（低进度或薄虚拟储备），冲击非线性上升。
-- 策略硬顶仍是 `max_impact_bps = 80`（pump-paper-v1 冻结；蒸馏不得抬高）。硬顶看 **含费** `impact_gross_bps`：任一入场 **> 80** → 硬顶失败（80 与策略 `<= max_impact_bps` 对齐）。
+- 纸面入场默认 `max_impact_bps = 75`（硬顶 80 下的缓冲）。含费冲击 **> 80** 一律拒单（`GROSS_IMPACT_HARD`）；蒸馏不得把冲击上限抬过 80。Go 硬顶看 **含费** `impact_gross_bps`：任一入场 **> 80** 失败，等于 80 仍过。75 的缓冲不参与这道 Go 门。
 - **Go 中位看扣费**（用户选择 2026-09-22）：`impact_net_bps = max(0, impact_gross_bps − protocol_fee_bps)`，中位 **< 60**。`impact_gross_bps` 就是现有 `estimated_impact_bps`（曲线行走 + 费地板）。见 §2.4。
 
 纸面 CEX 平方根冲击（无 `ctx.pump`）**不能**当作 Pump 可执行性证据；聚合时仍记账，但 `curve_quote_ok` 需要当时有曲线报价（`tick.mid` / `price_sol`）。
@@ -126,6 +126,12 @@ impact_gross_bps = estimated_impact_bps          # 现有入场冲击（含费�
 impact_net_bps   = max(0, impact_gross_bps − protocol_fee_bps)
 Go(G3)           = median(impact_net_bps) < 60
                  ∧ max(impact_gross_bps) ≤ 80
+
+gates.median_entry_impact.ok 为 false **只有**两种：
+  扣费中位 >= 60
+  或 任一含费样本 > 80
+等于 80 仍过。入场缓冲 max_impact_bps=75 不参与这道门。
+样本条数不够是 coverage（总 verdict 仍 no-go、灯为灰），不是这道门的失败。
 ```
 
 `protocol_fee_bps` 按阶段取模型里的费地板（`protocol_fee_bps_for_phase`），不另写魔法数：
@@ -151,7 +157,7 @@ G3 中位是 **一笔已平仓一条**。分母是 `PaperTradeJournal` 的 close
 
 Fill 上对应 `estimated_impact_gross_bps` / `estimated_impact_net_bps` / `protocol_fee_bps`。只有含费 gross、尚未拆费的旧 lot，平仓时用阶段地板补上 fee 与 net。closed 缺字段时，只从 **已经记在** 开仓 fill 或 DecisionLog 上的冲击回填，不新造数字。
 
-`n_closed ≥ 30` 且入场冲击条数 ≥ 30、扣费中位 < 60、含费最大 ≤ 80 → `gates.median_entry_impact.ok=true`（`basis=net_of_protocol_fee`）。`sample_ok` 仍是 ≥30。`liveEnabled` 仍为 false。
+`gates.median_entry_impact.ok`（`basis=net_of_protocol_fee`）**只**在扣费中位 ≥ 60，或任一含费样本 > 80 时为 false。短样本记在 `coverage_ok`：总 `verdict` 仍要入场冲击条数 ≥ 30 才可能 go，灯为灰（证据不足），但这不是 60/80 失败。`sample_ok` 仍是 ≥30。`liveEnabled` 仍为 false。纸面入场在含费冲击 > 80 时直接拒单；默认 `max_impact_bps=75` 是硬顶下的缓冲。
 
 ---
 
@@ -202,7 +208,7 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 
 | 字段 | 冻结上限 | 相对纸面 |
 |------|----------|----------|
-| `max_notional_sol` | **1** | 纸面策略默认 0.5；实盘不得高于 1 |
+| `max_notional_sol` | **1** | 纸面策略默认 0.12；实盘不得高于 1 |
 | `max_day_loss_pct` | **0.045** | 严于纸面 0.05 |
 | `max_open_mints` | **10** | 纸面同时持仓默认 3；实盘上限 10，不得再抬 |
 

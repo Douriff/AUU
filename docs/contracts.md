@@ -60,7 +60,7 @@ REST：
 
 ## 可执行性（additive · 纸面证据，非实盘）
 
-`ExecutabilityReport`：`lamp` · `nogo_reason` · `n_closed` / `sample_ok`（≥30）· `expectancy` · `median_entry_impact_gross_bps`（含费）· `median_entry_impact_net_bps`（扣费；go 中位 <60）· `protocol_fee_bps`（曲线地板 62.5 / AMM 10）· 含费硬顶 80 · `reject_rate.{progress,impact,risk}`（DecisionLog 聚合）· `shadow_slippage.{p50_bps,p90_bps}` · `impact_error.{p50_bps,p90_bps}` · `liveEnabled=false` · `live_checks` 三勾只读（与 live-ui-gates 同源，本栈不置 true）。无私钥、无 send。`median_entry_impact_bps` 仍是含费中位。`gates.median_entry_impact.n` 按已平仓逐笔计（journal 优先）；扣费中位 <60 且该 n≥30、含费最大≤80 时 `ok=true`。
+`ExecutabilityReport`：`lamp` · `nogo_reason` · `n_closed` / `sample_ok`（≥30）· `expectancy` · `median_entry_impact_gross_bps`（含费）· `median_entry_impact_net_bps`（扣费；go 中位 <60）· `protocol_fee_bps`（曲线地板 62.5 / AMM 10）· 含费硬顶 80 · `reject_rate.{progress,impact,risk}`（DecisionLog 聚合）· `shadow_slippage.{p50_bps,p90_bps}` · `impact_error.{p50_bps,p90_bps}` · `liveEnabled=false` · `live_checks` 三勾只读（与 live-ui-gates 同源，本栈不置 true）。无私钥、无 send。`median_entry_impact_bps` 仍是含费中位。`gates.median_entry_impact.n` 按已平仓逐笔计（journal 优先）。`gates.median_entry_impact.ok` 为 false **只**在扣费中位 ≥60，或任一含费样本 >80（等于 80 仍过；`fails_only_on=net_median>=60 OR any_gross>80`）。短样本是 `coverage_ok=false`：总 `verdict` 仍要入场冲击条数 ≥30 才可能 go，灯为灰，但这不是 60/80 失败。纸面入场在含费冲击 >80 时直接拒单；默认 `max_impact_bps=75` 是硬顶下的缓冲。`liveEnabled` 仍为 false。
 
 `RoundTrip` 追加开仓冲击：`entry_estimated_impact_gross_bps` · `entry_protocol_fee_bps` · `entry_estimated_impact_net_bps`（Fill 上为 `estimated_impact_gross_bps` / `protocol_fee_bps` / `estimated_impact_net_bps`）。
 

@@ -446,8 +446,8 @@ class ExpectancyAndImpactCoverageTests(unittest.TestCase):
         self.assertEqual(data["verdict"], "no-go")
         self.assertFalse(data["liveEnabled"])
 
-    def test_sparse_impacts_stay_not_ok_even_if_net_median_is_under_60(self):
-        """Coverage still needs ≥30 entry impacts once 30 trades are closed."""
+    def test_sparse_impacts_do_not_fail_the_60_or_80_gate(self):
+        """A short impact sample is missing evidence, not a net>=60 or gross>80 fail."""
         recipe = _load("go_30.json")
         trades = _expand_trades(recipe)
         for row in trades:
@@ -468,9 +468,53 @@ class ExpectancyAndImpactCoverageTests(unittest.TestCase):
         self.assertEqual(data["n_closed"], 30)
         self.assertEqual(data["gates"]["median_entry_impact"]["n"], 3)
         self.assertAlmostEqual(data["median_entry_impact_net_bps"], 17.0)
-        self.assertFalse(data["gates"]["median_entry_impact"]["ok"])
+        gate = data["gates"]["median_entry_impact"]
+        self.assertTrue(gate["ok"])
+        self.assertFalse(gate["net_fail"])
+        self.assertFalse(gate["gross_fail"])
+        self.assertFalse(gate["coverage_ok"])
+        self.assertEqual(gate["fails_only_on"], "net_median>=60 OR any_gross>80")
         self.assertEqual(data["verdict"], "no-go")
         self.assertFalse(data["liveEnabled"])
+
+    def test_impact_gate_fails_only_on_net_60_or_gross_over_80(self):
+        recipe = _load("go_30.json")
+        trades = _expand_trades(recipe)
+
+        def _run(gross: float) -> dict:
+            rows = [dict(row) for row in trades]
+            for row in rows:
+                row["entry_estimated_impact_bps"] = gross
+            return aggregate_executability(rows, eval_counts=recipe["eval_counts"])
+
+        at_hard = _run(80.0)
+        self.assertAlmostEqual(at_hard["median_entry_impact_gross_bps"], 80.0)
+        self.assertAlmostEqual(at_hard["median_entry_impact_net_bps"], 17.5)
+        self.assertTrue(at_hard["gates"]["median_entry_impact"]["ok"])
+        self.assertFalse(at_hard["gates"]["median_entry_impact"]["gross_fail"])
+        self.assertFalse(at_hard["gates"]["median_entry_impact"]["net_fail"])
+
+        over_hard = _run(80.1)
+        self.assertFalse(over_hard["gates"]["median_entry_impact"]["ok"])
+        self.assertTrue(over_hard["gates"]["median_entry_impact"]["gross_fail"])
+        self.assertLess(over_hard["median_entry_impact_net_bps"], IMPACT_MEDIAN_MAX_BPS)
+
+        net_60 = _expand_trades(recipe)
+        for row in net_60:
+            row["entry_estimated_impact_bps"] = 80.0
+            row["entry_estimated_impact_gross_bps"] = 80.0
+            row["entry_protocol_fee_bps"] = 20.0
+            row["entry_estimated_impact_net_bps"] = 60.0
+        net_hit = aggregate_executability(net_60, eval_counts=recipe["eval_counts"])
+        self.assertAlmostEqual(net_hit["median_entry_impact_net_bps"], 60.0)
+        self.assertAlmostEqual(net_hit["max_entry_impact_gross_bps"], 80.0)
+        self.assertFalse(net_hit["gates"]["median_entry_impact"]["ok"])
+        self.assertTrue(net_hit["gates"]["median_entry_impact"]["net_fail"])
+        self.assertFalse(net_hit["gates"]["median_entry_impact"]["gross_fail"])
+        self.assertEqual(net_hit["verdict"], "no-go")
+        self.assertFalse(net_hit["liveEnabled"])
+        self.assertEqual(IMPACT_MEDIAN_MAX_BPS, 60.0)
+        self.assertEqual(IMPACT_HARD_MAX_BPS, 80.0)
 
     def test_fill_backfill_makes_impact_n_match_n_closed(self):
         recipe = _load("go_30.json")

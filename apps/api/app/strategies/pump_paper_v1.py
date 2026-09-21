@@ -43,6 +43,10 @@ log = logging.getLogger("auu.pump_paper_v1")
 STRATEGY_ID = "pump-paper-v1"
 FORBIDDEN_TAGS = {"HONEYPOT", "HONEYPOT_FLAG", "TAX_HIGH", "SPREAD_TOO_WIDE"}
 EXIT_IMPACT_BPS = 250.0
+# Gross entry impact hard ceiling. Go uses the same 80. Entries reject above it.
+HARD_MAX_ENTRY_IMPACT_BPS = 80.0
+# Operating buffer under the hard ceiling. Default max_impact_bps.
+ENTRY_IMPACT_BUFFER_BPS = 75.0
 SELL_PRESSURE_SEC = 30.0
 REJECT_STREAK_MAX = 5
 REJECT_COOLDOWN_SEC = 600
@@ -55,19 +59,20 @@ class PumpPaperParams(BaseModel):
 
     progress_bps_min: int = 800
     progress_bps_max: int = 7500
-    max_impact_bps: float = 80.0
-    # Confirmed paper defaults (strategy engineer, 2026-09-21).
-    # Exit mix was MAX_HOLD-heavy versus a 25% target at 900s.
-    # TP stays above SL. Hard caps below stay put. liveEnabled stays false.
-    take_profit_pct: float = 0.15
+    # Buffer under HARD_MAX_ENTRY_IMPACT_BPS (80). Cannot be raised past 80.
+    max_impact_bps: float = ENTRY_IMPACT_BUFFER_BPS
+    # Paper exits: closer TP and a shorter hold than the 900s timeout mix.
+    # TP stays above SL. liveEnabled stays false.
+    take_profit_pct: float = 0.14
     stop_loss_pct: float = 0.09
-    max_hold_sec: int = 480
+    max_hold_sec: int = 420
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3
     notional_pct_equity: float = 0.005
     auto_paper_orders: bool = False
-    max_notional_sol: float = 0.5
+    # Smaller paper clip keeps curve impact under the 75 bps buffer.
+    max_notional_sol: float = 0.12
 
 
 @dataclass
@@ -135,6 +140,11 @@ def curve_impact_bps(snap: PumpfunPaperSnapshot, notional: float, side: str) -> 
     return liq.estimated_impact_bps(abs(notional), side=side, pump=snap.to_pump_ctx())
 
 
+def entry_impact_limit_bps(params: PumpPaperParams) -> float:
+    """Entry cap: operating buffer, never above the gross hard max of 80."""
+    return min(float(params.max_impact_bps), HARD_MAX_ENTRY_IMPACT_BPS)
+
+
 def target_notional_sol(equity: float, params: PumpPaperParams) -> float:
     raw = max(float(equity), 0.0) * float(params.notional_pct_equity)
     return min(raw, float(params.max_notional_sol))
@@ -143,14 +153,15 @@ def target_notional_sol(equity: float, params: PumpPaperParams) -> float:
 def fit_notional(
     snap: PumpfunPaperSnapshot, equity: float, params: PumpPaperParams, side: str = "buy"
 ) -> Optional[float]:
-    """Walk notional down until estimated_impact_bps <= max_impact_bps."""
+    """Walk notional down until gross impact is within the entry cap (<= 80)."""
+    limit = entry_impact_limit_bps(params)
     n = target_notional_sol(equity, params)
     while n >= MIN_NOTIONAL_SOL:
         try:
             impact = curve_impact_bps(snap, n, side)
         except ValueError:
             return None
-        if impact <= params.max_impact_bps:
+        if impact <= limit and impact <= HARD_MAX_ENTRY_IMPACT_BPS:
             return n
         n *= 0.5
     return None
@@ -210,8 +221,13 @@ def evaluate(
         return SignalOut(side="flat", strength=0.0, reason="progress_band")
     if tape.buy_notional_1m < 2.0 * tape.sell_notional_1m or tape.trade_count_1m < 8:
         return SignalOut(side="flat", strength=0.0, reason="momentum")
-    if impact_entry_bps > params.max_impact_bps:
-        return SignalOut(side="flat", strength=0.0, reason="impact", tags=["SLIPPAGE_CAP"])
+    # Hard reject: gross impact above 80 never enters, even if max_impact_bps is higher.
+    # Default buffer is 75, so a print between 75 and 80 is also rejected.
+    if impact_entry_bps > HARD_MAX_ENTRY_IMPACT_BPS or impact_entry_bps > entry_impact_limit_bps(params):
+        tags = ["SLIPPAGE_CAP"]
+        if impact_entry_bps > HARD_MAX_ENTRY_IMPACT_BPS:
+            tags.append("GROSS_IMPACT_HARD")
+        return SignalOut(side="flat", strength=0.0, reason="impact", tags=tags)
     if blocked:
         return SignalOut(side="flat", strength=0.0, reason="blocked_tag", tags=blocked)
     if reject_cooldown:
@@ -287,6 +303,8 @@ class PumpPaperEngine:
     def update_params(self, patch: dict[str, Any]) -> PumpPaperParams:
         allowed = set(PumpPaperParams.model_fields)
         clean = {k: v for k, v in patch.items() if k in allowed}
+        if clean.get("max_impact_bps") is not None:
+            clean["max_impact_bps"] = min(float(clean["max_impact_bps"]), HARD_MAX_ENTRY_IMPACT_BPS)
         self.params = self.params.model_copy(update=clean)
         self._sync_risk_limits()
         return self.params
@@ -474,9 +492,15 @@ class PumpPaperEngine:
         notional: float,
         tag: str,
     ) -> dict[str, Any]:
+        # Entries cannot slip past the gross hard max (80) or the 75 bps buffer.
+        # Exits stay on the wider cap so a paper flat is not stuck behind entry impact.
+        if side == "buy":
+            slip_cap = entry_impact_limit_bps(self.params)
+        else:
+            slip_cap = max(float(self.params.max_impact_bps), 150.0)
         size = SizeIn(
             target_notional=abs(notional),
-            max_slippage_bps=max(float(self.params.max_impact_bps), 150.0),
+            max_slippage_bps=slip_cap,
         )
         # RiskGate curve impact: long→buy, short→sell. Flatten uses short/sell.
         risk_signal = signal if side == "buy" else SignalOut(
