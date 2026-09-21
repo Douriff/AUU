@@ -36,6 +36,11 @@ def build_mock_ctx(
     if callable(snapshot_fn):
         snap = snapshot_fn(symbol) or {}
 
+    curve: dict[str, Any] = {}
+    curve_fn = getattr(provider, "snapshot_curve", None)
+    if callable(curve_fn):
+        curve = curve_fn(symbol) or {}
+
     mid = float(snap.get("mid") or 0.0)
     if mid <= 0:
         candles = provider.get_candles(symbol, "1m")
@@ -52,13 +57,25 @@ def build_mock_ctx(
             asks=[BookLevel(price=float(x["price"]), size=float(x["size"])) for x in asks_raw],
         )
 
+    merged_meta: dict[str, Any] = {
+        "venue": curve.get("venue") or "pump.fun",
+        "mint": curve.get("mint") or symbol,
+        "curve_progress": curve.get("curve_progress"),
+        "virtual_sol_reserves": curve.get("virtual_sol_reserves"),
+        "virtual_token_reserves": curve.get("virtual_token_reserves"),
+        "graduated": curve.get("graduated", False),
+        "migrated": curve.get("migrated", False),
+    }
+    if meta:
+        merged_meta.update(meta)
+
     return StrategyContext(
         symbol=symbol,
         ts=ts or int(time.time() * 1000),
         account=account or AccountCtx(),
         liquidity=LiquidityCtx(spread_bps=spr, adv_usd=adv_usd),
         position=position,
-        meta=meta or {},
+        meta=merged_meta,
         book=book,
         tick=TickCtx(mid=mid),
     )

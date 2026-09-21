@@ -8,7 +8,7 @@ export function DepthPanel({ book }: Props) {
   return (
     <div className="depth-panel">
       <div className="panel-title">
-        深度 Depth
+        深度 synth
         {book ? (
           <span className="muted"> spread {book.spread_bps.toFixed(1)} bps</span>
         ) : null}

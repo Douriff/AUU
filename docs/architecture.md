@@ -14,17 +14,22 @@ flowchart LR
     Mock[MockMarketDataProvider]
     Demo[demo-momentum-v0 signals]
     Paper[RiskGate + PaperBroker]
+    Pump[PumpFunPaperProvider]
   end
   HttpWsProvider -->|REST+WS| REST
   HttpWsProvider --> WS
   REST --> Mock
   REST --> Paper
+  REST --> Pump
   WS --> Mock
   WS --> Paper
   Mock --> Demo
+  Pump --> Mock
 ```
 
-- **默认** `DATA_PROVIDER=mock`：确定性 RNG 蜡烛 + 周期信号/成交/风控。
-- **禁止**：GPL fork（Freqtrade/FreqUI）、真实密钥、实盘下单。
+- **Venue** `pump.fun`（Solana bonding curve）。符号 = mock mint / SOL，不是 CEX 现货对。
+- **默认** `DATA_PROVIDER=mock`：确定性 RNG 蜡烛 + **曲线仿真**（virtual reserves / progress / 毕业迁移）。
+- **`pumpfun_paper`**：`PumpFunPaperProvider` 槽位；v0 复用 mock 曲线，不接 live。
+- **禁止**：GPL fork、钱包私钥、sniper、实盘下单。
 - **纸面路径**：`pre-order` → `paper/orders`；可选 `POST /api/v1/pipeline/decide-and-fill`。
-- **后续**：`ccxt_public` / `dexscreener` provider（仅 public）。
+- **后续只读**：公开曲线账户数据；仍禁止 keys / auto-buy。

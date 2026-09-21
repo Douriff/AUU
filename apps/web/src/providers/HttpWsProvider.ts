@@ -1,6 +1,7 @@
 import type {
   BookSnapshot,
   Candle,
+  CurveSnapshot,
   Envelope,
   Fill,
   PaperOrderResult,
@@ -107,8 +108,12 @@ export class HttpWsProvider {
     status: string;
     provider: string;
     mode: string;
+    venue?: string;
+    quote?: string;
+    defaultSymbol?: string;
     dataSourceOptions?: string[];
     trading_state?: string;
+    liveDisabled?: boolean;
   }> {
     return getJson("/api/v1/health");
   }
@@ -116,6 +121,11 @@ export class HttpWsProvider {
   getBook(symbol: string): Promise<BookSnapshot> {
     const q = new URLSearchParams({ symbol });
     return getJson(`/api/v1/book?${q}`);
+  }
+
+  getCurve(symbol: string): Promise<CurveSnapshot> {
+    const q = new URLSearchParams({ symbol });
+    return getJson(`/api/v1/curve?${q}`);
   }
 
   preOrder(body: unknown) {

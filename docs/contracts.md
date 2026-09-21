@@ -47,3 +47,12 @@ REST：
 Hub WS event types（非 subscribe channel）：`signal | risk | fill | reject | trading_state`  
 `allow=false` / reject **永不** 伪造 Fill。
 
+## Venue（additive）
+
+`venue=pump.fun`（Solana bonding curve）。符号为 mock mint，报价 SOL。
+
+- `GET /api/v1/curve?symbol=` → virtual SOL/token reserves、curve_progress、graduated/migrated、price_sol
+- `SymbolInfo` 加法字段：`mint, venue, curve_progress, virtual_*_reserves, graduated, migrated`（不改冻结名）
+- dataSource：`mock | paper | pumpfun_paper`
+- `PumpFunPaperProvider`：paper 槽位；无私钥、无 sniper
+

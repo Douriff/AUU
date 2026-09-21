@@ -10,8 +10,8 @@
 
 **目标**
 - 本地 `docker compose up` / `pnpm dev` + `uvicorn` 可跑通一屏：自选列表 + K 线 + 深度摘要 + 信号/成交叠加。
-- `MarketDataProvider` 可切换：`mock`（默认）| `ccxt_public`（后续）| `dexscreener`（后续）。
 - Overlay 消费冻结合同：`StrategyDecision.signal`、`Fill`；告警条消费 `RiskOut.tags`。
+- `MarketDataProvider` 可切换：`mock`（默认）| `pumpfun_paper`（曲线仿真槽位）。**不是** CEX `ccxt` 主路径。
 
 **非目标（v0）**
 - 真实下单、密钥、FreqUI/HB Dashboard fork。
@@ -135,7 +135,7 @@ RiskEvent   { strategyId?: string, symbol?: string, t: number, risk: RiskOut }
 
 | 流 | 行为 |
 |----|------|
-| symbols | 固定 3–5 个伪模因对，如 `MOCK/USDC`、`PEPEMOCK/SOL` |
+| symbols | 固定 5 个 **pump mock mint**（`PmpPEPE1111…` 等），报价 SOL；带 curve_progress / 毕业状态 |
 | candles | 确定性 RNG（seed=symbol+interval）；1s 推进一根或 update 最后一根 |
 | book | 对称深度 10 档，spread 随 seed 抖动 |
 | trades | 泊松到达，价格贴 mid |
@@ -158,8 +158,8 @@ RiskEvent   { strategyId?: string, symbol?: string, t: number, risk: RiskOut }
 6. `.env.example` + README 本地启动三步
 
 **P1（同仓可随后）**
-- DepthPanel / TradesTape
-- `ccxt_public` provider 骨架（只 public，无 key）
+- DepthPanel / TradesTape / CurvePanel
+- `PumpFunPaperProvider` 槽位（mock 曲线；live 只读未接）
 - Settings 页切换 `DATA_PROVIDER`
 
 **P2**

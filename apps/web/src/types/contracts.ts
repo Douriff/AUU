@@ -5,6 +5,13 @@ export interface SymbolInfo {
   base: string;
   quote: string;
   kind?: string;
+  mint?: string;
+  venue?: string;
+  curve_progress?: number;
+  virtual_sol_reserves?: number;
+  virtual_token_reserves?: number;
+  graduated?: boolean;
+  migrated?: boolean;
 }
 
 export interface Candle {
@@ -79,8 +86,6 @@ export interface TradingStateEvent {
   ts?: number;
 }
 
-export type DataSource = "mock" | "paper";
-
 export interface BookLevel {
   price: number;
   size: number;
@@ -113,6 +118,22 @@ export interface EnvelopeErr {
 }
 
 export type Envelope<T> = EnvelopeOk<T> | EnvelopeErr;
+
+export interface CurveSnapshot {
+  symbol: string;
+  mint?: string;
+  base?: string;
+  venue?: string;
+  quote?: string;
+  virtual_sol_reserves?: number;
+  virtual_token_reserves?: number;
+  real_sol_reserves?: number;
+  curve_progress?: number;
+  graduated?: boolean;
+  migrated?: boolean;
+  price_sol?: number;
+  graduation_sol?: number;
+}
 
 /** Additive paper-path types — frozen Fill / RiskOut / SignalOut names unchanged. */
 

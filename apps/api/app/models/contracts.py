@@ -10,7 +10,15 @@ class SymbolInfo(BaseModel):
     symbol: str
     base: str
     quote: str
-    kind: str = "meme_mock"
+    kind: str = "pumpfun_bonding"
+    # additive pump.fun fields — frozen symbol/base/quote names unchanged
+    mint: Optional[str] = None
+    venue: str = "pump.fun"
+    curve_progress: Optional[float] = None
+    virtual_sol_reserves: Optional[float] = None
+    virtual_token_reserves: Optional[float] = None
+    graduated: bool = False
+    migrated: bool = False
 
 
 class Candle(BaseModel):

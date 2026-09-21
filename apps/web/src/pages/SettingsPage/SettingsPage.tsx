@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { useDataSource } from "@/hooks/useDataSource";
-import type { DataSource } from "@/types/contracts";
+import { DATA_SOURCES, VENUE } from "@/venue";
+import type { DataSource } from "@/venue";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
   const [mode, setMode] = useState<string>("…");
   const [status, setStatus] = useState<string>("…");
   const [tradingState, setTradingState] = useState<string>("…");
+  const [venue, setVenue] = useState<string>(VENUE);
   const [err, setErr] = useState<string>("");
   const { dataSource, setDataSource } = useDataSource();
 
@@ -19,6 +21,7 @@ export function SettingsPage() {
         setMode(h.mode);
         setStatus(h.status);
         setTradingState(h.trading_state ?? "active");
+        if (h.venue) setVenue(h.venue);
       })
       .catch((e: Error) => setErr(e.message));
   }, []);
@@ -27,30 +30,36 @@ export function SettingsPage() {
     <div className="shell-page">
       <h1>设置 / Settings</h1>
       <p className="muted">
-        纸面默认；无实盘密钥。行情仍用 Mock；下单路径可切 <code>mock | paper</code>。
+        主场 <code>venue={venue}</code>（Solana bonding curve）。纸面 / mock 优先；无钱包私钥、无自动买币
+        sniper。
       </p>
 
       <section className="settings-section">
         <h2>Order path · dataSource</h2>
         <div className="data-source-toggle" role="group" aria-label="dataSource">
-          {(["mock", "paper"] as DataSource[]).map((opt) => (
+          {DATA_SOURCES.map((opt) => (
             <button
               key={opt}
               type="button"
               className={dataSource === opt ? "active" : ""}
-              onClick={() => setDataSource(opt)}
+              onClick={() => setDataSource(opt as DataSource)}
             >
               {opt}
             </button>
           ))}
         </div>
         <p className="muted">
-          当前 <code>dataSource={dataSource}</code>。paper 时 Overlay 订 fill；告警条听
-          reject/risk；拒单不画成交点。Mock 信号叠加始终保留。
+          当前 <code>dataSource={dataSource}</code>。
+          <code>paper</code> / <code>pumpfun_paper</code> 时 Overlay 只订 PaperBroker Fill；
+          <code>pumpfun_paper</code> 走 mock 曲线仿真（virtual SOL/token reserves、progress、毕业/迁移）。拒单不画成交点。
         </p>
       </section>
 
       <dl className="settings-dl">
+        <dt>venue</dt>
+        <dd>
+          <code>{venue}</code>
+        </dd>
         <dt>DATA_PROVIDER</dt>
         <dd>
           <code>{provider}</code>

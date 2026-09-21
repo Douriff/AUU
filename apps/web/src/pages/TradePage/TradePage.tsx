@@ -10,6 +10,7 @@ import type {
   RiskOut,
   SymbolInfo,
 } from "@/types/contracts";
+import { DATA_SOURCES, DEFAULT_SYMBOL, truncateMint } from "@/venue";
 
 type TapeKind = "fill" | "reject" | "risk" | "signal" | "trading_state";
 
@@ -28,8 +29,8 @@ function fmt(n: number, digits = 6): string {
 export function TradePage() {
   const { dataSource, setDataSource } = useDataSource();
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
-  const [symbol, setSymbol] = useState("MOCK/USDC");
-  const [notional, setNotional] = useState("500");
+  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  const [notional, setNotional] = useState("0.1");
   const [side, setSide] = useState<OrderSide>("buy");
   const [wideSpread, setWideSpread] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -119,7 +120,7 @@ export function TradePage() {
       },
       book: snap ? { bids: snap.bids, asks: snap.asks } : undefined,
       tick: { mid: px },
-      meta: {},
+      meta: { venue: "pump.fun", mint: symbol },
     };
   }
 
@@ -205,8 +206,9 @@ export function TradePage() {
     <div className="shell-page trade-page">
       <h1>交易 / Trade</h1>
       <p className="muted">
-        仅纸面 PaperBroker。提交走 <code>pre-order</code> → <code>paper/orders</code>；拒单不画
-        Fill。行情叠加请在 Settings 切 <code>dataSource=paper</code>。
+        仅纸面 PaperBroker · venue=<code>pump.fun</code>。提交走 <code>pre-order</code> →{" "}
+        <code>paper/orders</code>；拒单不画 Fill。无私钥、无 sniper。行情叠加请切{" "}
+        <code>paper</code> / <code>pumpfun_paper</code>。
       </p>
 
       <div className="trade-toolbar">
@@ -215,7 +217,7 @@ export function TradePage() {
           {mid != null ? ` · mid ${fmt(mid)}` : ""}
         </div>
         <div className="data-source-toggle" role="group" aria-label="dataSource">
-          {(["mock", "paper"] as const).map((opt) => (
+          {DATA_SOURCES.map((opt) => (
             <button
               key={opt}
               type="button"
@@ -237,19 +239,21 @@ export function TradePage() {
           <label>
             Symbol
             <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-              {(symbols.length ? symbols : [{ symbol: "MOCK/USDC" } as SymbolInfo]).map((s) => (
-                <option key={s.symbol} value={s.symbol}>
-                  {s.symbol}
-                </option>
-              ))}
+              {(symbols.length ? symbols : [{ symbol: DEFAULT_SYMBOL, base: "PEPE", quote: "SOL" } as SymbolInfo]).map(
+                (s) => (
+                  <option key={s.symbol} value={s.symbol}>
+                    {s.base}/{s.quote} · {truncateMint(s.mint ?? s.symbol)}
+                  </option>
+                )
+              )}
             </select>
           </label>
           <label>
-            Notional (USD)
+            Notional (SOL)
             <input
               type="number"
-              min={1}
-              step={10}
+              min={0.001}
+              step={0.01}
               value={notional}
               onChange={(e) => setNotional(e.target.value)}
             />

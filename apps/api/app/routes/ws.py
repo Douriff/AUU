@@ -28,6 +28,7 @@ async def ws_endpoint(websocket: WebSocket):
             "version": 1,
             "providers": providers,
             "orderMode": "paper",
+            "venue": getattr(provider, "venue", "pump.fun"),
             "eventTypes": ["signal", "risk", "fill", "reject", "trading_state"],
         }
     )

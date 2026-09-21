@@ -20,7 +20,7 @@ async def decide_and_fill(
     *,
     symbol: str,
     side: Literal["buy", "sell"] = "buy",
-    notional: float = 500.0,
+    notional: float = 0.1,
     max_slippage_bps: float = 150.0,
     strategy_id: str = "pipeline-v0",
     signal: Optional[SignalOut] = None,

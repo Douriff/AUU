@@ -1,6 +1,6 @@
-# AUU · 模因币量化可视化行情终端（P0 脚手架）
+# AUU · pump.fun 纸面量化终端（P0）
 
-纸面 / Mock 专用。无真实 API Key、无实盘下单。图表使用 [lightweight-charts](https://github.com/TradingView/lightweight-charts)（Apache-2.0）；**不**复制 Freqtrade / FreqUI（GPL）代码。
+**Venue = `pump.fun`（Solana bonding curve）**，不是通用 CEX / Binance 现货。纸面 / Mock 优先。无真实 API Key、无钱包私钥、无自动买币 sniper。图表使用 [lightweight-charts](https://github.com/TradingView/lightweight-charts)（Apache-2.0）；**不**复制 Freqtrade / FreqUI（GPL）代码。
 
 ## 架构
 
@@ -8,18 +8,23 @@
 flowchart TB
   Browser["浏览器 :5173 / :8080"]
   Web["apps/web<br/>React 18 + Vite + TS + LWC"]
-  API["apps/api<br/>FastAPI + Mock Provider + WS"]
+  API["apps/api<br/>FastAPI + Mock/PumpFunPaper + WS"]
   Browser --> Web
   Web -->|"REST /api/v1/*"| API
   Web -->|"WS /api/v1/ws"| API
-  API --> Mock["MarketDataProvider=mock<br/>确定性蜡烛 + demo 策略信号"]
+  API --> Mock["MarketDataProvider<br/>mock | pumpfun_paper"]
+  Mock --> Curve["bonding curve sim<br/>virtual SOL/token reserves"]
+  API --> Paper["RiskGate + PaperBroker"]
 ```
 
 | 组件 | 职责 |
 |------|------|
-| MarketPage `/` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar |
-| `/strategy` `/trade` `/backtest` `/alerts` `/settings` | P0 路由壳；Settings 展示 `DATA_PROVIDER=mock` |
-| Mock provider | 固定 5 个伪模因对；seed=symbol+interval 可复现 |
+| MarketPage `/` | pump mint 自选、K 线、曲线进度、synth 深度、tape、信号/成交叠加 |
+| `/trade` | 纸面单：pre-order → paper/orders；dataSource `mock \| paper \| pumpfun_paper` |
+| Settings | `venue=pump.fun`、dataSource 占位 `pumpfun_paper` |
+| Mock / PumpFunPaperProvider | pump 风格 mock mint；曲线仿真；**不**接 live |
+
+交易对 identity 是 **mock mint**（如 `PmpPEPE1111…`），报价 **SOL**，不是 `BTCUSDT` 现货对。
 
 ## 快速启动
 
@@ -41,75 +46,63 @@ docker compose up --build
 cd /workspace/AUU/apps/api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export DATA_PROVIDER=mock
+export DATA_PROVIDER=mock   # 或 pumpfun_paper（仍是 mock 曲线仿真）
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 终端 2 — Web
 cd /workspace/AUU/apps/web
-npm install          # 或 pnpm install
+npm install
 npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 ```
 
-可选：复制根目录 `.env.example` → `.env`（勿填真实密钥）。
+可选：复制根目录 `.env.example` → `.env`（**勿填**真实密钥 / 钱包）。
 
-## Mock vs Real
+## Mock vs pumpfun_paper vs Real
 
-| | Mock（默认） | Real（未实现 / 禁止本轮） |
-|--|-------------|---------------------------|
-| 行情 | 确定性 RNG 蜡烛 / book / trades | 后续 `ccxt_public` / DexScreener 官方 API |
-| 信号 | `demo-momentum-v0` 周期 long/short | 真实 StrategyDecision 流 |
-| 成交 | 纸面 Fill（deny 时不画） | PaperBroker 同源回放 |
-| 密钥 | 无 | **禁止**写入仓库 |
+| | mock（默认） | paper / pumpfun_paper | Real（禁止本轮） |
+|--|-------------|----------------------|------------------|
+| 行情 | 确定性 RNG 蜡烛 + **曲线仿真** | 同左；overlay 只画 PaperBroker Fill | live pump.fun / RPC **未接** |
+| 符号 | mock mint `Pmp…` / SOL | 同左 | — |
+| 成交 | demo Fill 或纸面 Fill | RiskGate → PaperBroker | **禁止** 真下单 / sniper |
+| 密钥 | 无 | 无 | **禁止** 写入仓库 |
 
-切换：环境变量 `DATA_PROVIDER=mock`（P0 仅 mock；其它值回退 mock）。
+`DATA_PROVIDER=mock|pumpfun_paper`；其它值回退 mock。`PumpFunPaperProvider` 是 `MarketDataProvider` 槽位空壳 + 曲线仿真，**不**实现 live。
 
 ## 合同摘要
 
 - REST 包络 `{ ok, data|error }` + 头 `X-Api-Version: 1`
-- WS 首帧 `{ type:"hello", version:1, providers:["mock"] }`，再 `subscribe` channels：`candles|book|trades|signals|fills|risk`
-- 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}`
-- 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）
+- WS 首帧 `{ type:"hello", version:1, venue:"pump.fun", providers:[…] }`
+- 冻结字段：`Candle` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}`
+- 加法：`SymbolInfo.{mint,venue,curve_progress,virtual_*_reserves,graduated,migrated}`
+- `GET /api/v1/curve?symbol=` 曲线快照
 
-详见 `docs/contracts.md`。
+详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`。
 
 ## 试一笔纸面单
 
-纸面 / Mock only。无交易所密钥。拒单 **不会** 伪造 Fill。
+纸面 / Mock only。venue=pump.fun。拒单 **不会** 伪造 Fill。
 
-1. 按上方启动 API（`:8000`）+ Web（`:5173`）。
-2. 打开 [Settings](http://localhost:5173/settings) 把 `dataSource` 切到 **paper**（行情图只叠加 PaperBroker Fill；mock 信号仍保留）。
-3. 打开 [Trade](http://localhost:5173/trade)：
-   - 输入 notional（默认 `500`），点 **Buy** 或 **Sell**。
-   - 前端先 `POST /api/v1/risk/pre-order`，`allow=true` 后再 `POST /api/v1/paper/orders`。
-   - HTTP 结果区显示 Fill 或 Reject；右侧 WS tape 收 `signal|risk|fill|reject|trading_state`。
-   - 勾选 **Wide spread (deny)** 可走 `SPREAD_TOO_WIDE` 拒单（随后该 symbol 约 30s cooldown）。
-4. 回到行情页 `/`：paper 模式下成交点来自 Fill；reject 不画点。
-
-可选一枪（服务端用 mock mid/book 组 `StrategyContext`，发同样的 WS 事件）：
+1. 启动 API（`:8000`）+ Web（`:5173`）。
+2. Settings：`dataSource` 切 **paper** 或 **pumpfun_paper**。
+3. Trade：默认 mint `PmpPEPE1111…`，notional `0.1` SOL → **Buy** / **Sell**。
+   - `POST /api/v1/risk/pre-order` → allow 后再 `POST /api/v1/paper/orders`
+   - **Wide spread (deny)** → `SPREAD_TOO_WIDE`（随后约 30s cooldown）
+4. 行情页看曲线 progress / virt reserves；paper 路径成交点来自 Fill。
 
 ```bash
+# 默认符号为 pump mock mint
+curl -sS http://localhost:8000/api/v1/curve?symbol=PmpPEPE11111111111111111111111111111111111
+
 curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
   -H 'Content-Type: application/json' \
-  -d '{"symbol":"MOCK/USDC","side":"buy","notional":500}'
+  -d '{"symbol":"PmpPEPE11111111111111111111111111111111111","side":"buy","notional":0.1}'
 
-# deny 样例
 curl -sS http://localhost:8000/api/v1/pipeline/decide-and-fill \
   -H 'Content-Type: application/json' \
-  -d '{"symbol":"MOCK/USDC","side":"buy","notional":500,"spread_bps":200}'
+  -d '{"symbol":"PmpPEPE11111111111111111111111111111111111","side":"buy","notional":0.1,"spread_bps":200}'
 ```
 
-两步拆开（与 Trade 页相同）：
-
-```bash
-# 1) pre-order — 可用扁平字段；或先 GET /api/v1/book?symbol=MOCK/USDC 组 ctx
-curl -sS http://localhost:8000/api/v1/risk/pre-order \
-  -H 'Content-Type: application/json' \
-  -d '{"symbol":"MOCK/USDC","signal":{"side":"long"},"size":{"target_notional":500}}'
-
-# 2) paper/orders — 需 risk.allow=true 的 RiskOut + ctx + intent
-```
-
-`GET /api/v1/health` 应返回 `mode=paper`、`dataSourceOptions=["mock","paper"]`。
+`GET /api/v1/health` 应含 `venue=pump.fun`、`dataSourceOptions=["mock","paper","pumpfun_paper"]`。
 
 ## 端口
 

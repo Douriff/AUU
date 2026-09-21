@@ -8,15 +8,16 @@ from pydantic import BaseModel
 
 from app.models.contracts import AccountCtx, SignalOut, SizeIn, StrategyContext
 from app.pipeline import decide_and_fill
+from app.providers.pump_mints import DEFAULT_SYMBOL
 from app.routes.envelope import err, ok
 
 router = APIRouter(prefix="/api/v1", tags=["pipeline"])
 
 
 class DecideAndFillBody(BaseModel):
-    symbol: str = "MOCK/USDC"
+    symbol: str = DEFAULT_SYMBOL
     side: Literal["buy", "sell"] = "buy"
-    notional: float = 500.0
+    notional: float = 0.1  # SOL (pump.fun quote)
     max_slippage_bps: float = 150.0
     strategyId: str = "pipeline-v0"
     # optional overrides — frozen SignalOut / SizeIn / StrategyContext unchanged
