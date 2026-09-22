@@ -107,7 +107,7 @@ interface TraderSnapshot {
 | Tag | 启发式（示例阈值，可配置） |
 |-----|---------------------------|
 | `sniper` | 买入 slot − create slot ≤ 2 **或** `progress_bps_at_fill < 300` |
-| `curve_mid` | 买入 `progress_bps ∈ [800, 7500]`（观察桶；纸面 Go 窗是 `[1200, 6500]`） |
+| `curve_mid` | 买入 `progress_bps ∈ [800, 7500]`（观察桶；纸面 Go 窗是 `[1500, 6000]`） |
 | `graduation_chase` | 买入 `progress_bps ≥ 8500` 或临近 `complete` |
 | `quick_flip` | `median_hold_sec < 180` 且 `flip_ratio_15m` 高 |
 | `bag_holder` | `median_hold_sec > 3600` 或未平仓 > 持仓天数阈值 |
@@ -216,7 +216,7 @@ exclude_tags: [sniper]             # 默认不把 sniper 写入因子库
 | `Settings` | `copy_trade_enabled=false`；第三方 API keys 仅 env |
 | 禁止 | 依赖 `frontend-api*.pump.fun`；刮 Photon/BullX；实盘 mirror |
 
-**验收：** 用户贴 3 个钱包 → 出 profile tags → 出一条 `FactorProposal`（如建议 `progress_bps_min=1200`）→ paper 策略参数可 overlay → Journal 有记录 → **零**链上签名。
+**验收：** 用户贴 3 个钱包 → 出 profile tags → 出一条 `FactorProposal`（如建议 `progress_bps_min=1500`）→ paper 策略参数可 overlay → Journal 有记录 → **零**链上签名。
 
 ---
 

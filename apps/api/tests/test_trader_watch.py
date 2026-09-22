@@ -138,7 +138,7 @@ class DistillMappingTests(unittest.TestCase):
         bag, _ = self._result("bag", "w-bag", "WatchBagHolder1111111111111111111111111111", "b")
         self.assertIsNone(bag.reject_reason)
         self.assertGreater(bag.suggested_params["max_hold_sec"], self.params["max_hold_sec"])
-        # Go-window SL 0.07 is already inside the bag clamp (≤ 0.08). Do not loosen it.
+        # Go-window SL 0.05 is already inside the bag clamp (≤ 0.08). Do not loosen it.
         self.assertLessEqual(bag.suggested_params["stop_loss_pct"], self.params["stop_loss_pct"])
         self.assertLessEqual(bag.suggested_params["stop_loss_pct"], 0.08)
         self.assertGreaterEqual(bag.suggested_params["stop_loss_pct"], 0.04)
@@ -373,8 +373,8 @@ class WatchApiTests(unittest.TestCase):
         data = applied.json()["data"]
         self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["params"]["auto_paper_orders"])
-        self.assertGreaterEqual(data["params"]["progress_bps_min"], 1200)
-        self.assertLessEqual(data["params"]["progress_bps_max"], 6500)
+        self.assertGreaterEqual(data["params"]["progress_bps_min"], 1500)
+        self.assertLessEqual(data["params"]["progress_bps_max"], 6000)
         self.assertLess(data["params"]["progress_bps_max"], prev_max)
         self.assertFalse(data["copy_trade_enabled"])
         self.assertTrue(data["liveDisabled"])

@@ -49,26 +49,29 @@ def _hot_tape() -> TapeWindow:
 class ParamsDefaultsTests(unittest.TestCase):
     def test_frozen_v1(self):
         p = PumpPaperParams()
-        # Paper round 4 Go window. Hard reject remains gross impact > 80.
-        self.assertEqual(p.progress_bps_min, 1200)
-        self.assertEqual(p.progress_bps_max, 6500)
+        # Paper round 8b Go window. Hard reject remains gross impact > 80.
+        self.assertEqual(p.progress_bps_min, 1500)
+        self.assertEqual(p.progress_bps_max, 6000)
         self.assertEqual(p.max_impact_bps, 75.0)
         self.assertLess(p.max_impact_bps, 80.0)
         self.assertAlmostEqual(p.notional_pct_equity, 0.005)
         self.assertFalse(p.auto_paper_orders)
-        self.assertAlmostEqual(p.take_profit_pct, 0.10)
-        self.assertAlmostEqual(p.stop_loss_pct, 0.07)
+        self.assertAlmostEqual(p.take_profit_pct, 0.06)
+        self.assertAlmostEqual(p.stop_loss_pct, 0.05)
         self.assertGreater(p.take_profit_pct, p.stop_loss_pct)
-        self.assertEqual(p.max_hold_sec, 300)
+        self.assertEqual(p.max_hold_sec, 120)
         self.assertLess(p.max_hold_sec, 900)
         self.assertEqual(p.max_day_loss_pct, 0.05)
         self.assertEqual(p.max_open_mints, 3)
         self.assertEqual(p.max_notional_sol, 0.12)
         self.assertEqual(p.min_trade_count_1m, 10)
         self.assertAlmostEqual(p.min_buy_sell_ratio_1m, 2.5)
-        # Round 6: weakening-tape exit fires sooner than the old 30s / 2.0x constants.
-        self.assertAlmostEqual(p.sell_pressure_sec, 12.0)
-        self.assertAlmostEqual(p.sell_pressure_ratio, 1.5)
+        # Round 8b: weakening-tape exit fires at 5s / 1.0x (round 6 was 12s / 1.5x).
+        self.assertAlmostEqual(p.sell_pressure_sec, 5.0)
+        self.assertAlmostEqual(p.sell_pressure_ratio, 1.0)
+        from app.live.gate import LOCKED_MAX_NOTIONAL_SOL
+
+        self.assertEqual(LOCKED_MAX_NOTIONAL_SOL, 1.0)
         from app.traders.distill import DISTILL_PARAM_KEYS
 
         self.assertNotIn("min_trade_count_1m", DISTILL_PARAM_KEYS)
@@ -129,7 +132,7 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.reason, "progress_band")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=1199),
+            snapshot=_snap(progress_bps=1499),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
@@ -138,7 +141,7 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.reason, "progress_band")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=1200),
+            snapshot=_snap(progress_bps=1500),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
@@ -147,7 +150,7 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.side, "long")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=6500),
+            snapshot=_snap(progress_bps=6000),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
@@ -156,7 +159,7 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(sig.side, "long")
 
         sig = evaluate(
-            snapshot=_snap(progress_bps=6501),
+            snapshot=_snap(progress_bps=6001),
             tape=_hot_tape(),
             params=self.params,
             now_ms=self.now,
@@ -414,9 +417,9 @@ class EvaluateTests(unittest.TestCase):
         )
 
     def test_sell_pressure_exits_early_on_weak_tape(self):
-        """Default 1.5x sell/buy held 12s flats. Just-under ratio or duration stays in."""
+        """Default 1.0x sell/buy held 5s flats. Just-under ratio or duration stays in."""
         pos = self._flat_pos()
-        weak = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.5, trade_count_1m=4)
+        weak = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.0, trade_count_1m=4)
         common = dict(
             snapshot=_snap(),
             params=self.params,
@@ -424,15 +427,15 @@ class EvaluateTests(unittest.TestCase):
             impact_entry_bps=40.0,
             position=pos,
         )
-        early = evaluate(tape=weak, sell_pressure_ms=11_999, **common)
+        early = evaluate(tape=weak, sell_pressure_ms=4_999, **common)
         self.assertEqual(early.reason, "hold")
-        fired = evaluate(tape=weak, sell_pressure_ms=12_000, **common)
+        fired = evaluate(tape=weak, sell_pressure_ms=5_000, **common)
         self.assertEqual(fired.side, "flat")
         self.assertEqual(fired.reason, "sell_pressure")
         self.assertIn("SELL_PRESSURE", fired.tags)
-        # Hold time is far under max_hold_sec; this is not a time stop.
+        # Hold time is under max_hold_sec; this is not a time stop.
         self.assertLess(5.0, self.params.max_hold_sec)
-        shy = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.499, trade_count_1m=4)
+        shy = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=0.999, trade_count_1m=4)
         still = evaluate(tape=shy, sell_pressure_ms=60_000, **common)
         self.assertEqual(still.reason, "hold")
         # Entry momentum defaults stay 10 / 2.5 and still admit a hot tape.
@@ -452,8 +455,8 @@ class EvaluateTests(unittest.TestCase):
         legacy = PumpPaperParams(sell_pressure_sec=30.0, sell_pressure_ratio=2.0)
         self.assertEqual(legacy.min_trade_count_1m, 10)
         self.assertAlmostEqual(legacy.min_buy_sell_ratio_1m, 2.5)
-        self.assertAlmostEqual(legacy.take_profit_pct, 0.10)
-        self.assertEqual(legacy.max_hold_sec, 300)
+        self.assertAlmostEqual(legacy.take_profit_pct, 0.06)
+        self.assertEqual(legacy.max_hold_sec, 120)
         self.assertFalse(legacy.auto_paper_orders)
         pos = self._flat_pos()
         mild = TapeWindow(buy_notional_1m=1.0, sell_notional_1m=1.5, trade_count_1m=4)
@@ -566,7 +569,7 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
             await engine.tick()
 
     async def test_default_sell_pressure_exits_before_max_hold(self):
-        """Engine clock uses sell_pressure_sec=12, not the old 30s constant."""
+        """Engine clock uses sell_pressure_sec=5, not the round-6 12s default."""
         from unittest.mock import patch
 
         from app.live.gate import live_enabled
@@ -578,21 +581,21 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(send_wired())
         reset_paper_ledger()
         engine = PumpPaperEngine(
-            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=300)
+            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=120)
         )
-        self.assertAlmostEqual(engine.params.sell_pressure_sec, 12.0)
-        self.assertAlmostEqual(engine.params.sell_pressure_ratio, 1.5)
+        self.assertAlmostEqual(engine.params.sell_pressure_sec, 5.0)
+        self.assertAlmostEqual(engine.params.sell_pressure_ratio, 1.0)
         await self._open_neutral(engine)
         provider = get_provider()
         start = int(time.time() * 1000) + 1_000
         with patch.object(provider, "_advance_locked", return_value=[]):
-            await self._tick_notionals(engine, start, buy=1.0, sell=1.5)
+            await self._tick_notionals(engine, start, buy=1.0, sell=1.0)
             self.assertIn("PUMPDEMO/SOL", engine.positions)
             self.assertEqual(engine.last_signal("PUMPDEMO/SOL").reason, "hold")  # type: ignore[union-attr]
-            await self._tick_notionals(engine, start + 11_999, buy=1.0, sell=1.5)
+            await self._tick_notionals(engine, start + 4_999, buy=1.0, sell=1.0)
             self.assertIn("PUMPDEMO/SOL", engine.positions)
             self.assertEqual(engine.last_signal("PUMPDEMO/SOL").reason, "hold")  # type: ignore[union-attr]
-            await self._tick_notionals(engine, start + 12_000, buy=1.0, sell=1.5)
+            await self._tick_notionals(engine, start + 5_000, buy=1.0, sell=1.0)
         self.assertNotIn("PUMPDEMO/SOL", engine.positions)
         sig = engine.last_signal("PUMPDEMO/SOL")
         self.assertEqual(sig.reason, "sell_pressure")  # type: ignore[union-attr]
@@ -799,10 +802,10 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         self._seed_buy_tape(symbol)
         engine = PumpPaperEngine(
-            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=300)
+            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=120)
         )
-        self.assertAlmostEqual(engine.params.sell_pressure_sec, 12.0)
-        self.assertAlmostEqual(engine.params.sell_pressure_ratio, 1.5)
+        self.assertAlmostEqual(engine.params.sell_pressure_sec, 5.0)
+        self.assertAlmostEqual(engine.params.sell_pressure_ratio, 1.0)
         self.assertEqual(engine.params.min_trade_count_1m, 10)
         self.assertAlmostEqual(engine.params.min_buy_sell_ratio_1m, 2.5)
         await engine.tick()
@@ -842,13 +845,16 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         start = marked + 1_000
         with patch.object(provider, "_advance_locked", return_value=[]):
-            await self._tick_notionals(engine, start, buy=1.0, sell=1.5, symbol=symbol)
+            await self._tick_notionals(engine, start, buy=1.0, sell=1.0, symbol=symbol)
             self.assertIn(symbol, engine.positions)
             self.assertEqual(engine.last_signal(symbol).reason, "hold")  # type: ignore[union-attr]
             seeded = aggregate_tape(provider.get_recent_trades(symbol), start)
             self.assertGreater(seeded.sell_notional_1m, 0)
-            self.assertGreaterEqual(seeded.sell_notional_1m, 1.5 * seeded.buy_notional_1m)
-            await self._tick_notionals(engine, start + 12_000, buy=1.0, sell=1.5, symbol=symbol)
+            self.assertGreaterEqual(
+                seeded.sell_notional_1m,
+                engine.params.sell_pressure_ratio * seeded.buy_notional_1m,
+            )
+            await self._tick_notionals(engine, start + 5_000, buy=1.0, sell=1.0, symbol=symbol)
 
         self.assertNotIn(symbol, engine.positions)
         sig = engine.last_signal(symbol)
@@ -949,18 +955,18 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertFalse(data["params"]["auto_paper_orders"])
         self.assertFalse(data["auto_paper_orders"])
         self.assertFalse(data["strategy_autopaper"])
-        self.assertEqual(data["params"]["progress_bps_min"], 1200)
-        self.assertEqual(data["params"]["progress_bps_max"], 6500)
+        self.assertEqual(data["params"]["progress_bps_min"], 1500)
+        self.assertEqual(data["params"]["progress_bps_max"], 6000)
         self.assertEqual(data["params"]["max_impact_bps"], 75)
         self.assertAlmostEqual(data["params"]["notional_pct_equity"], 0.005)
-        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.10)
-        self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.07)
-        self.assertEqual(data["params"]["max_hold_sec"], 300)
+        self.assertAlmostEqual(data["params"]["take_profit_pct"], 0.06)
+        self.assertAlmostEqual(data["params"]["stop_loss_pct"], 0.05)
+        self.assertEqual(data["params"]["max_hold_sec"], 120)
         self.assertEqual(data["params"]["max_notional_sol"], 0.12)
         self.assertEqual(data["params"]["min_trade_count_1m"], 10)
         self.assertAlmostEqual(data["params"]["min_buy_sell_ratio_1m"], 2.5)
-        self.assertAlmostEqual(data["params"]["sell_pressure_sec"], 12.0)
-        self.assertAlmostEqual(data["params"]["sell_pressure_ratio"], 1.5)
+        self.assertAlmostEqual(data["params"]["sell_pressure_sec"], 5.0)
+        self.assertAlmostEqual(data["params"]["sell_pressure_ratio"], 1.0)
         self.assertNotIn("min_buy_sell_notional_ratio", data["params"])
         tuned = self.client.put(
             "/api/v1/strategy/pump-paper-v1",
@@ -986,8 +992,8 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertLessEqual(raised.json()["data"]["params"]["max_impact_bps"], 80.0)
         self.client.put("/api/v1/strategy/pump-paper-v1", json={"max_impact_bps": 75})
         kept = self.client.get("/api/v1/strategy/pump-paper-v1").json()["data"]["params"]
-        self.assertAlmostEqual(kept["sell_pressure_sec"], 12.0)
-        self.assertAlmostEqual(kept["sell_pressure_ratio"], 1.5)
+        self.assertAlmostEqual(kept["sell_pressure_sec"], 5.0)
+        self.assertAlmostEqual(kept["sell_pressure_ratio"], 1.0)
         self.assertIn(data["trading_state"], ("active", "reducing", "halted"))
         live = self.client.get("/api/v1/live/status")
         self.assertEqual(live.status_code, 200)
@@ -1005,9 +1011,9 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertAlmostEqual(body["params"]["sell_pressure_ratio"], 2.0)
         self.assertEqual(body["params"]["min_trade_count_1m"], 10)
         self.assertAlmostEqual(body["params"]["min_buy_sell_ratio_1m"], 2.5)
-        self.assertAlmostEqual(body["params"]["take_profit_pct"], 0.10)
-        self.assertAlmostEqual(body["params"]["stop_loss_pct"], 0.07)
-        self.assertEqual(body["params"]["max_hold_sec"], 300)
+        self.assertAlmostEqual(body["params"]["take_profit_pct"], 0.06)
+        self.assertAlmostEqual(body["params"]["stop_loss_pct"], 0.05)
+        self.assertEqual(body["params"]["max_hold_sec"], 120)
         self.assertEqual(body["params"]["max_impact_bps"], 75)
         self.assertFalse(body["auto_paper_orders"])
         partial = self.client.patch(
@@ -1022,12 +1028,12 @@ class ApiStrategyTests(unittest.TestCase):
         self.assertFalse(partial.json()["data"]["auto_paper_orders"])
         restored = self.client.patch(
             "/api/v1/strategy/pump-paper-v1",
-            json={"sell_pressure_sec": 12, "sell_pressure_ratio": 1.5},
+            json={"sell_pressure_sec": 5, "sell_pressure_ratio": 1.0},
         )
         self.assertEqual(restored.status_code, 200)
         restored_params = restored.json()["data"]["params"]
-        self.assertAlmostEqual(restored_params["sell_pressure_sec"], 12.0)
-        self.assertAlmostEqual(restored_params["sell_pressure_ratio"], 1.5)
+        self.assertAlmostEqual(restored_params["sell_pressure_sec"], 5.0)
+        self.assertAlmostEqual(restored_params["sell_pressure_ratio"], 1.0)
         bad = self.client.patch(
             "/api/v1/strategy/pump-paper-v1",
             json={"sell_pressure_ratio": -0.1},
@@ -1039,8 +1045,8 @@ class ApiStrategyTests(unittest.TestCase):
         )
         self.assertEqual(bad_sec.status_code, 422)
         final = self.client.get("/api/v1/strategy/pump-paper-v1").json()["data"]
-        self.assertAlmostEqual(final["params"]["sell_pressure_sec"], 12.0)
-        self.assertAlmostEqual(final["params"]["sell_pressure_ratio"], 1.5)
+        self.assertAlmostEqual(final["params"]["sell_pressure_sec"], 5.0)
+        self.assertAlmostEqual(final["params"]["sell_pressure_ratio"], 1.0)
         self.assertFalse(final["auto_paper_orders"])
         live = self.client.get("/api/v1/live/status")
         self.assertFalse(live.json()["data"].get("liveEnabled", False))

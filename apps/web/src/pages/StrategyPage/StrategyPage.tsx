@@ -28,13 +28,13 @@ export function StrategyPage() {
     <div className="shell-page">
       <h1>策略 / Strategy</h1>
         <p className="muted">
-          <code>pump-paper-v1</code> 纸面策略。默认 <code>progress_bps [1200,6500]</code>、
-          <code>max_impact_bps 75</code>（含费硬顶 80）、名义 0.5% 权益且单笔 ≤ 0.12 SOL；<code>auto_paper_orders</code> /{" "}
-          <code>strategy_autopaper</code> 默认关。行情/交易页可看纸面成功概率（平仓后）。
+          <code>pump-paper-v1</code> 纸面策略。默认 <code>progress_bps [1500,6000]</code>、
+          止盈 6% / 止损 5% / 持仓 120s、<code>max_impact_bps 75</code>（含费硬顶 80）、名义 0.5% 权益且单笔 ≤ 0.12 SOL；
+          <code>auto_paper_orders</code> / <code>strategy_autopaper</code> 默认关。行情/交易页可看纸面成功概率（平仓后）。
           发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。动能默认{" "}
           <code>trade_count_1m ≥ 10</code> 且买名义 ≥ 2.5× 卖名义（不足仍是 <code>momentum</code>）。
-          卖压出场默认卖名义 ≥ 1.5× 买名义并持续 12s（<code>sell_pressure</code>）。
-          无钱包、无 sniper。
+          卖压出场默认卖名义 ≥ 1.0× 买名义并持续 5s（<code>sell_pressure</code>）。
+          无钱包、无 sniper。实盘默认关。
         </p>
       <p className="muted">
         trading_state=<code>{tradingState}</code>

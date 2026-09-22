@@ -56,15 +56,16 @@ TAPE_WINDOW_MS = 60_000
 class PumpPaperParams(BaseModel):
     """Configurable table from docs/strategies/pump-paper-v1.md §7."""
 
-    # Paper round 4 Go window (2026-09-21). Process defaults, not a runtime patch.
-    progress_bps_min: int = 1200
-    progress_bps_max: int = 6500
+    # Paper round 8b Go window (2026-09-22). Process defaults, not a runtime patch.
+    # liveEnabled stays false. auto_paper_orders stays false.
+    progress_bps_min: int = 1500
+    progress_bps_max: int = 6000
     # Buffer under HARD_MAX_ENTRY_IMPACT_BPS (80). Cannot be raised past 80.
     max_impact_bps: float = ENTRY_IMPACT_BUFFER_BPS
-    # Go-window exits: TP 10% above SL 7%, hold 300s. liveEnabled stays false.
-    take_profit_pct: float = 0.10
-    stop_loss_pct: float = 0.07
-    max_hold_sec: int = 300
+    # Go-window exits: TP 6% above SL 5%, hold 120s.
+    take_profit_pct: float = 0.06
+    stop_loss_pct: float = 0.05
+    max_hold_sec: int = 120
     cooldown_sec: int = 120
     max_day_loss_pct: float = 0.05
     max_open_mints: int = 3
@@ -78,9 +79,10 @@ class PumpPaperParams(BaseModel):
     min_buy_sell_ratio_1m: float = Field(default=2.5, ge=0)
     # Weakening-tape exit. Independent of the entry momentum gate above.
     # Direction matches the old hardcoded check: sell notional >= ratio * buy notional,
-    # held for sell_pressure_sec. Round 6 defaults: 12s and 1.5 (were 30s and 2.0).
-    sell_pressure_sec: float = Field(default=12.0, ge=0)
-    sell_pressure_ratio: float = Field(default=1.5, ge=0)
+    # held for sell_pressure_sec. Round 8b defaults: 5s and 1.0
+    # (round 6 was 12s and 1.5; the original constants were 30s and 2.0).
+    sell_pressure_sec: float = Field(default=5.0, ge=0)
+    sell_pressure_ratio: float = Field(default=1.0, ge=0)
 
 
 @dataclass

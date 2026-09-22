@@ -36,7 +36,7 @@
 **全部满足才发 `SignalOut.side=long`：**
 
 1. `not complete` 且 `not migrated`
-2. `1200 <= progress_bps <= 6500`（过早噪音大，过晚拥挤）
+2. `1500 <= progress_bps <= 6000`（过早噪音大，过晚拥挤）
 3. `buy_notional_1m >= min_buy_sell_ratio_1m * sell_notional_1m` 且 `trade_count_1m >= min_trade_count_1m`（默认 **2.5** 与 **10**；不足则 `reason=momentum`）。字段是已有 60s tape：`buy_notional_1m` / `sell_notional_1m` / `trade_count_1m`。
 4. 入场含费冲击 `estimated_impact_gross_bps` **≤ `max_impact_bps`**（默认 **75**，80 硬顶下的缓冲）。**> 80** 一律拒单（`GROSS_IMPACT_HARD`），即使把参数抬到 80 以上。等于 80 且参数允许时可以过。
 5. 无标签：`HONEYPOT` / `TAX_HIGH` / `SPREAD_TOO_WIDE`（若有外部打标）
@@ -54,12 +54,12 @@
 
 | 条件 | 动作 |
 |------|------|
-| 浮盈 `>= take_profit_pct`（默认 **10%**） | 全平 |
-| 浮亏 `<= -stop_loss_pct`（默认 **7%**） | 全平 |
+| 浮盈 `>= take_profit_pct`（默认 **6%**） | 全平 |
+| 浮亏 `<= -stop_loss_pct`（默认 **5%**） | 全平 |
 | `progress_bps >= 9000` 或 `complete` | 全平（毕业拥挤） |
-| `sell_notional_1m >= sell_pressure_ratio * buy_notional_1m` 持续 `sell_pressure_sec`（默认 **1.5×** 与 **12s**） | 全平 |
+| `sell_notional_1m >= sell_pressure_ratio * buy_notional_1m` 持续 `sell_pressure_sec`（默认 **1.0×** 与 **5s**） | 全平 |
 | `estimated_impact_bps` 对平仓侧 `> 250` | 分两笔减仓（纸面） |
-| 持仓超过 `max_hold_sec`（默认 **300**） | 全平 |
+| 持仓超过 `max_hold_sec`（默认 **120**） | 全平 |
 
 ### 4.1 脱离监控列表的持仓（orphan）
 
@@ -75,7 +75,7 @@
 
 Paper round 4 在这组进程默认上得到 `verdict=go`：`n_closed=30`，expectancy ≈ +0.00123，扣费入场冲击中位 ≈ 12.4 bps，含费最大 ≈ 75.7 bps，出场 TP 16 / MAX_HOLD 12 / STOP_LOSS 1。
 
-纸面默认写在 `PumpPaperParams`（进程启动即用）：
+当时写入 `PumpPaperParams` 的进程默认如下。现行默认是 round 8b（§4.5），不是这张表。
 
 | 参数 | 值 | 作用 |
 |------|----|------|
@@ -110,7 +110,7 @@ sell_notional_1m >= sell_pressure_ratio * max(buy_notional_1m, 1e-18)
 | `sell_pressure_sec` | **12** | 30 |
 | `sell_pressure_ratio` | **1.5** | 2.0 |
 
-`PUT` 与 `PATCH /api/v1/strategy/pump-paper-v1` 可改这两键，也可以设回 **30 / 2.0**。蒸馏 allowlist 不含它们，`apply-distill` 不会改卖压出场。入场仍只读 `min_trade_count_1m` 与 `min_buy_sell_ratio_1m`。
+`PUT` 与 `PATCH /api/v1/strategy/pump-paper-v1` 可改这两键，也可以设回 **30 / 2.0**。蒸馏 allowlist 不含它们，`apply-distill` 不会改卖压出场。入场仍只读 `min_trade_count_1m` 与 `min_buy_sell_ratio_1m`。round 8b 把进程默认从这张表的 **12 / 1.5** 改成 **5 / 1.0**（§4.5）。
 
 ### 4.4 持仓不被发现淘汰清掉 tape（paper round 7，2026-09-22）
 
@@ -121,6 +121,28 @@ Round 7 纸面 **0** 笔 `sell_pressure`、**22/30** 是 `MAX_HOLD`。卖压参�
 - 优先整段丢掉**无仓**的发现 mint（曲线和 tape 都删，行为与以前相同）。
 - 名额全是持仓时，最老的一笔只清 `discovered`（让出发现名额），**保留**曲线和成交缓冲。之后 `tick()` / `evaluate()` 仍读到非空 tape，卖压可以触发。
 - 不改 Go 门，不放宽入场动能默认 **10 / 2.5**，不把 `auto_paper_orders` 或 `liveEnabled` 默认打开。
+
+### 4.5 纸面 Go 窗默认（AUU round 8b，2026-09-22）
+
+Round 8b 在这组进程默认上得到纸面 go：`n=31`，期望 E≈**+0.00181**，胜率 **100%**，出场全部 **TAKE_PROFIT**，`MAX_HOLD` **0**，扣费中位冲击 ≈ **12.4 bps**，含费最大 ≈ **75 bps**。样本含 PR #19 的持仓 tape 保留（发现淘汰不丢未平仓 mint 的曲线和成交缓冲）。
+
+现行默认写在 `PumpPaperParams`（进程启动即用）：
+
+| 参数 | 值 | 作用 |
+|------|----|------|
+| `progress_bps_min` | **1500** | 再收窄入场窗，避开过早噪音 |
+| `progress_bps_max` | **6000** | 避开近毕业拥挤 |
+| `max_hold_sec` | **120** | 短持仓；本样本出场全是止盈 |
+| `take_profit_pct` | **0.06** | 止盈仍高于止损 5% |
+| `stop_loss_pct` | **0.05** | 亏损先砍 |
+| `sell_pressure_sec` | **5** | 弱 tape 更快离场 |
+| `sell_pressure_ratio` | **1.0** | 卖名义 ≥ 买名义即计时 |
+| `min_trade_count_1m` | **10** | 入场动能，仍是 `momentum` |
+| `min_buy_sell_ratio_1m` | **2.5** | 买名义 ≥ 2.5× 卖名义 |
+| `max_notional_sol` | **0.12** | 压低曲线冲击 |
+| `max_impact_bps` | **75** | 入场缓冲；硬顶仍是 **80**（含费 **> 80** 拒单） |
+
+成交仍只来自 PaperBroker。`max_day_loss_pct=0.05`、`max_open_mints=3`、`notional_pct_equity=0.005`、`auto_paper_orders=false`。`liveEnabled` 仍为 **false**。实盘名义硬顶仍是 **1.0 SOL**。Go 门槛不放宽：`sample_ok` ≥ 30、扣费中位 < 60、含费 **> 80** 才算硬顶失败（等于 80 仍过）。不改 PR #19 的 tape 保留。
 
 ---
 
@@ -151,12 +173,12 @@ Monitor tape/curve
 ## 7. 参数表（可配置）
 
 ```yaml
-progress_bps_min: 1200
-progress_bps_max: 6500
+progress_bps_min: 1500
+progress_bps_max: 6000
 max_impact_bps: 75          # entry buffer; hard reject when gross impact > 80
-take_profit_pct: 0.10
-stop_loss_pct: 0.07
-max_hold_sec: 300
+take_profit_pct: 0.06
+stop_loss_pct: 0.05
+max_hold_sec: 120
 cooldown_sec: 120
 max_day_loss_pct: 0.05
 max_open_mints: 3
@@ -164,8 +186,8 @@ notional_pct_equity: 0.005
 max_notional_sol: 0.12
 min_trade_count_1m: 10           # entry momentum; was hardcoded 8
 min_buy_sell_ratio_1m: 2.5       # buy_notional_1m >= ratio * sell_notional_1m; was hardcoded 2.0
-sell_pressure_sec: 12            # weakening-tape exit dwell; was hardcoded 30
-sell_pressure_ratio: 1.5         # sell_notional_1m >= ratio * buy_notional_1m; was hardcoded 2.0
+sell_pressure_sec: 5             # weakening-tape exit dwell; round 6 was 12; was hardcoded 30
+sell_pressure_ratio: 1.0         # sell_notional_1m >= ratio * buy_notional_1m; round 6 was 1.5; was hardcoded 2.0
 auto_paper_orders: false
 strategy_autopaper: false   # alias of auto_paper_orders; default off
 ```
@@ -183,7 +205,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] 持仓 mint 离开 `list_symbols` 后，超过 `max_hold_sec` 仍纸面平仓（orphan exit；`liveEnabled` 仍 false）
 - [x] 持仓 mint 被发现列表淘汰时不丢 tape；卖压仍能在 `max_hold_sec` 之前触发（`liveEnabled` 仍 false）
 
-版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。纸面 Go 窗：`progress_bps [1200,6500]`，`take_profit_pct 0.10`，`stop_loss_pct 0.07`，`max_hold_sec 300`，`max_notional_sol 0.12`，`notional_pct_equity 0.005`。入场动能默认 `trade_count_1m ≥ 10` 且买名义 ≥ **2.5×** 卖名义（仍是 `momentum`）。卖压出场默认卖名义 ≥ **1.5×** 买名义并持续 **12s**（`sell_pressure`；原先写死 2.0× / 30s）。`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。实盘名义硬顶 1.0 SOL 不变。
+版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。纸面 Go 窗（round 8b）：`progress_bps [1500,6000]`，`take_profit_pct 0.06`，`stop_loss_pct 0.05`，`max_hold_sec 120`，`max_notional_sol 0.12`，`notional_pct_equity 0.005`。入场动能默认 `trade_count_1m ≥ 10` 且买名义 ≥ **2.5×** 卖名义（仍是 `momentum`）。卖压出场默认卖名义 ≥ **1.0×** 买名义并持续 **5s**（`sell_pressure`；round 6 为 1.5× / 12s，原先写死 2.0× / 30s）。`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。实盘名义硬顶 1.0 SOL 不变。PR #19 tape 保留不改。
 
 ---
 
