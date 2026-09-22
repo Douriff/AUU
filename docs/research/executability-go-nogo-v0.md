@@ -75,7 +75,7 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 | G2 | 期望 | `expectancy ≥ 0`（报价币 / 笔） | 均值为负 | `mean(pnl)`；容差见 §2.1 |
 | G3 | 入场冲击 | 入场 `impact_net_bps` **中位 < 60**（扣协议费） | 扣费中位 ≥ 60，或任一 **含费** 样本 **> 80**（硬顶） | 开仓 Fill 上的曲线/公式冲击；费地板见 §2.4 |
 | G4 | 拒单结构 | `progress` / `impact` / `risk` **三项均已报告**（DecisionLog） | 缺字段 | `docs/adapters/decision-log-v0.md` |
-| G5 | 影子滑点 | 中位 `shadow_slippage_bps ≤ X`，`X = 40` | 中位 > 40，或无报价样本 | DecisionLog replay（next_trade\|next_open）或成交当时曲线报价；见 `docs/research/shadow-fill-v0.md` |
+| G5 | 影子滑点 | 中位 `shadow_slippage_bps ≤ X`，`X = 40`，且 `n ≥ min_n`（`n_closed ≥ 30` 时 `min_n = 30`） | 中位 > 40；或 `n < min_n`（覆盖不足，原因不是 P50） | 每笔已平仓一条：DecisionLog `next_trade\|next_open` 优先，缺 replay 才用 journal `entry_shadow_slippage_bps`（fill_quote）。P90 只报告。见 `docs/research/shadow-fill-v0.md` |
 | G6 | 实盘开关 | **永不**由本栈置 true | 任何 `liveEnabled=true` 都是违规 | 恒 `false`；见 §5 |
 
 **总 verdict** = G1∧G2∧G3∧G4∧G5。G6 **不**并入 `verdict`：即使纸面 go，`liveEnabled` 仍 false。
@@ -95,10 +95,17 @@ shadow_fill_px = 下一笔曲线 tape 价（优先）或下一根 1m open
 impact_error_bps = shadow_slippage_bps − estimated_impact_bps
 ```
 
-- `X = 40` bps（中位硬门）。缺 replay 时退回成交当时 `tick.mid`（`fill_quote`）。
-- 缺有效样本 < `min(n_trades, 30)` 且 < 30 → G5 no-go（证据不足）。
+- `X = 40` bps（中位硬门，看 **P50**）。**P90 只报告，不参与** Go / `ok` / `nogo_reason`。不把门槛改成 P90，也不放宽 40。
+- 聚合按 **已平仓逐笔**，一笔一条，不把同一笔加两次：
+  - 该笔 DecisionLog 有 `shadow_source=next_trade|next_open` 时用这一条（`next_trade` 优于同刻 `next_open`）。
+  - 没有 replay 时，才用 journal 平仓上的 `entry_shadow_slippage_bps`（成交当时 `tick.mid`，`fill_quote`，弱证据）。
+  - journal **不覆盖** 已有 replay。DecisionLog 的 `fill_quote` 不是第二条样本。
+- 覆盖门槛不放宽。`n_closed ≥ 30` 时 `min_n = 30`（`n_closed = 60` 时这也是平仓数的一半；不随 `n_closed` 再抬）。`0 < n_closed < 30` 时本旗标只要 ≥1 条（总 verdict 仍因 G1 no-go）。`n_closed = 0` 时 `coverage_ok=false`。
+- `n < min_n` → G5 `ok=false`、`coverage_ok=false`，灯为灰。即使 P50 ≤ 40，`nogo_reason` 也写 `shadow coverage {n}/{min_n}`（例：`shadow coverage 10/30`），**不**写成 P50 失败。
+- P50 > 40 且覆盖已够 → `nogo_reason` 仍是 `影子滑点 P50 … bps`。
 - **不是** MEV；**不是** `estimated_impact_bps`（冲击是曲线行走，影子滑点是决策价 vs 下一笔/下一根可成交价）。
 - 公式与落地见 `docs/research/shadow-fill-v0.md`；开源借鉴清单（勿嵌 GPL/LGPL）见 `docs/research/auu-shadow-fill-impact-refs.md`。
+- `liveEnabled` 与 `auto_paper_orders` 默认仍为 **false**。
 
 ### 2.3 拒单分桶
 
@@ -182,13 +189,15 @@ protocol_fee_bps_curve=62.5, protocol_fee_bps_amm=10
 hard_max_impact_bps=80                  # 仍约束含费 max
 impact_cap_go_bps=60                    # 约束扣费中位
 reject_rate: { progress, impact, risk }   # { count, rate }
-shadow_slippage: { p50_bps, p90_bps, median_bps, x_bps=40, n, ok }
+shadow_slippage: { p50_bps, p90_bps, median_bps, x_bps=40, n, min_n, coverage_ok, ok }
 impact_error: { p50_bps, p90_bps, n }
 liveEnabled: false
 live_limits: { max_notional_sol, max_day_loss_pct, max_open_mints }
 gates: { sample_ok, expectancy, median_entry_impact, reject_rate, shadow_slippage, live }
 theory_ref: docs/research/executability-go-nogo-v0.md
 ```
+
+`gates.shadow_slippage` 带同样的 `n` / `min_n` / `coverage_ok`。`ok` 只在覆盖够 **并且** P50 ≤ 40 时为 true。P90 在响应里，不决定 `ok`。覆盖不够时 `nogo_reason` 为 `shadow coverage {n}/{min_n}`。
 
 `gates.live.ok` 恒 false，原因：`liveEnabled remains false until user secondary confirm + LiveLimits`。
 
@@ -228,6 +237,7 @@ theory_ref: docs/research/executability-go-nogo-v0.md
 - [x] 理论：冲击 / 延迟 / MEV / 毕业 写明纸面缺口
 - [x] 门：30 笔、期望≥0、**扣费**中位冲击&lt;60（含费硬顶 80）、三桶拒单率、影子滑点≤40bps、`liveEnabled=false`
 - [x] 2026-09-22：G3 用 `impact_net_bps`（曲线费地板 62.5 = `DEFAULT_IMPACT_FEE_BPS/2`；AMM 10 = 默认 spread/2）
+- [x] 2026-09-22：G5 按笔合并 DecisionLog `next_trade|next_open` 与 journal `entry_shadow_slippage_bps`（replay 优先，不重复计数）。覆盖不足时 `nogo_reason` 为 `shadow coverage n/min_n`，不把已过门的 P50 写成失败。P50≤40 与 `min_n=30`（`n_closed≥30`）不放宽。P90 不参与。`liveEnabled` / `auto_paper_orders` 默认仍 false。
 - [x] 2026-09-21：G3 按已平仓逐笔计 n；journal 写入 gross/fee/net；短 DecisionLog 不覆盖 journal
 - [x] `GET /api/v1/stats/executability` 无密钥、无链上 send
 - [x] 聚合器单测 + fixtures
