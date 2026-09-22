@@ -1,4 +1,4 @@
-"""GET/PUT /api/v1/strategy/pump-paper-v1 — paper strategy params + monitor."""
+"""GET/PUT/PATCH /api/v1/strategy/pump-paper-v1 — paper strategy params + monitor."""
 from __future__ import annotations
 
 import time
@@ -36,6 +36,8 @@ class PumpPaperParamsPatch(BaseModel):
     max_notional_sol: Optional[float] = None
     min_trade_count_1m: Optional[int] = Field(default=None, ge=0)
     min_buy_sell_ratio_1m: Optional[float] = Field(default=None, ge=0)
+    sell_pressure_sec: Optional[float] = Field(default=None, ge=0)
+    sell_pressure_ratio: Optional[float] = Field(default=None, ge=0)
 
 
 def _state_payload() -> dict[str, Any]:
@@ -72,6 +74,7 @@ def get_pump_paper():
 
 
 @router.put("/pump-paper-v1")
+@router.patch("/pump-paper-v1")
 @router.post("/pump-paper-v1")
 def put_pump_paper(body: PumpPaperParamsPatch):
     engine = get_engine()

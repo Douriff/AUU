@@ -111,6 +111,8 @@ export interface PumpPaperParams {
   max_notional_sol: number;
   min_trade_count_1m: number;
   min_buy_sell_ratio_1m: number;
+  sell_pressure_sec: number;
+  sell_pressure_ratio: number;
 }
 
 export interface PumpPaperPosition {

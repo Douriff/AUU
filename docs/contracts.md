@@ -51,7 +51,7 @@ REST：
 - `GET /api/v1/live/status` — live adapter (default `liveEnabled=false`; 403 `LIVE_DISABLED` on `/live/orders` unless keypair mounted + confirm + enabled + `LiveLimits`). Health: `keypairMounted` bool + `pubkey` only; never a secret.
 - `GET /api/v1/live/ledger` — `source=live` only; paper stats win-rate never mixes these fills
 - `GET /api/v1/book?symbol=` — synth 深度快照（供 UI 组 ctx）
-- `GET/PUT /api/v1/strategy/pump-paper-v1` — `auto_paper_orders` / `strategy_autopaper`（默认 false，无需重启）。纸面进程默认（paper round 4 Go 窗）：`progress_bps [1200,6500]`、`take_profit_pct=0.10`、`stop_loss_pct=0.07`、`max_hold_sec=300`、`max_impact_bps=75`（含费 >80 硬拒）、`max_notional_sol=0.12`。入场动能默认 `min_trade_count_1m=10`、`min_buy_sell_ratio_1m=2.5`（仍 `reason=momentum`；不改 Go 门）。`liveEnabled` 默认 false；实盘名义硬顶 1.0 SOL。
+- `GET/PUT /api/v1/strategy/pump-paper-v1` — `auto_paper_orders` / `strategy_autopaper`（默认 false，无需重启）。纸面进程默认（paper round 4 Go 窗）：`progress_bps [1200,6500]`、`take_profit_pct=0.10`、`stop_loss_pct=0.07`、`max_hold_sec=300`、`max_impact_bps=75`（含费 >80 硬拒）、`max_notional_sol=0.12`。入场动能默认 `min_trade_count_1m=10`、`min_buy_sell_ratio_1m=2.5`（仍 `reason=momentum`；不改 Go 门）。卖压出场默认 `sell_pressure_sec=12`、`sell_pressure_ratio=1.5`（`sell_notional_1m >= ratio * buy_notional_1m` 持续该秒数才 `reason=sell_pressure`；原先写死 30s / 2.0）。`PUT` 与 `PATCH` 都接受 `PumpPaperParamsPatch`。`liveEnabled` 默认 false；实盘名义硬顶 1.0 SOL。
 - `GET /api/v1/strategy/pump-paper-v1/stats` — PaperTradeJournal 自算胜率 / 期望 / 回撤（不依赖 QuantStats）；`?mc=1` 才跑 trades-MC（默认关）
 - `POST /api/v1/strategy/pump-paper-v1/stats/reset` — 清 session journal
 - `GET /api/v1/stats/paper-performance` — 同上别名
