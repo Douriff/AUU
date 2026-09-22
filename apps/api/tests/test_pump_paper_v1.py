@@ -551,10 +551,17 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
         pos.entry_price = float(snap.price_sol)
         return pos
 
-    async def _tick_notionals(self, engine: PumpPaperEngine, now_ms: int, buy: float, sell: float) -> None:
+    async def _tick_notionals(
+        self,
+        engine: PumpPaperEngine,
+        now_ms: int,
+        buy: float,
+        sell: float,
+        symbol: str = "PUMPDEMO/SOL",
+    ) -> None:
         from unittest.mock import patch
 
-        self._seed_notionals(now_ms, buy, sell)
+        self._seed_notionals(now_ms, buy, sell, symbol=symbol)
         with patch("app.strategies.pump_paper_v1.time.time", return_value=now_ms / 1000.0):
             await engine.tick()
 
@@ -721,6 +728,196 @@ class EngineAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("MAX_HOLD", closed[0].tags)
         self.assertFalse(live_enabled())
         self.assertFalse(send_wired())
+
+    async def test_held_mint_keeps_tape_after_discovery_eviction(self):
+        """Open paper position, drop the mint from the discovery list, tape stays.
+
+        Round 7: eviction called ``_drop_locked`` and wiped ``_trades``. The
+        orphan snapshot then saw buy=0 and sell=0, so sell_pressure never
+        started and the hold rode out to MAX_HOLD. Unheld mints still drop.
+        """
+        from unittest.mock import patch
+
+        from app.live.gate import live_enabled
+        from app.live.send import send_wired
+        from app.paper.ledger import get_paper_ledger, reset_paper_ledger
+        from app.providers import get_provider
+
+        self.assertFalse(live_enabled())
+        self.assertFalse(send_wired())
+        self.assertFalse(PumpPaperParams().auto_paper_orders)
+        reset_paper_ledger()
+
+        provider = get_provider()
+        unheld = provider.register_watch_mint(
+            "EvictMint1111111111111111111111111111111",
+            base="EVICT",
+            progress_bps=4200,
+            max_discovered=1,
+        )
+        self.assertIsNotNone(unheld)
+        assert unheld is not None
+        unheld_symbol = unheld.symbol
+        now = int(time.time() * 1000)
+        with provider._lock:  # type: ignore[attr-defined]
+            provider._trades[unheld_symbol] = [  # type: ignore[attr-defined]
+                {
+                    "symbol": unheld_symbol,
+                    "ts": now - 1_000,
+                    "side": "sell",
+                    "price": 1e-5,
+                    "qty": 1.0,
+                    "sol_amount": 0.4,
+                    "phase": "curve",
+                }
+            ]
+        stayed = provider.register_watch_mint(
+            "StayMint11111111111111111111111111111111",
+            base="STAY",
+            progress_bps=100,
+            max_discovered=1,
+        )
+        self.assertIsNotNone(stayed)
+        assert stayed is not None
+        self.assertIsNone(provider.get_pumpfun_snapshot(unheld_symbol))
+        self.assertEqual(provider.get_recent_trades(unheld_symbol), [])
+        self.assertTrue(provider.watch_flags(stayed.symbol).get("discovered"))
+
+        held = provider.register_watch_mint(
+            "HeldMint11111111111111111111111111111111",
+            base="HELD",
+            progress_bps=4200,
+            source="pumpportal",
+            max_discovered=1,
+        )
+        self.assertIsNotNone(held)
+        assert held is not None
+        symbol = held.symbol
+        self.assertNotEqual(symbol, stayed.symbol)
+        self.assertIsNone(provider.get_pumpfun_snapshot(stayed.symbol))
+        self.assertTrue(provider.watch_flags(symbol).get("discovered"))
+
+        self._seed_buy_tape(symbol)
+        engine = PumpPaperEngine(
+            PumpPaperParams(auto_paper_orders=True, max_notional_sol=0.1, max_hold_sec=300)
+        )
+        self.assertAlmostEqual(engine.params.sell_pressure_sec, 12.0)
+        self.assertAlmostEqual(engine.params.sell_pressure_ratio, 1.5)
+        self.assertEqual(engine.params.min_trade_count_1m, 10)
+        self.assertAlmostEqual(engine.params.min_buy_sell_ratio_1m, 2.5)
+        await engine.tick()
+        self.assertIn(symbol, engine.positions)
+        pos = engine.positions[symbol]
+        pos.entry_price = float(engine._last_snap[symbol].price_sol)
+        self.assertGreater(pos.qty, 0)
+
+        marked = int(time.time() * 1000)
+        self._seed_notionals(marked, buy=1.0, sell=0.4, symbol=symbol)
+        with provider._lock:  # type: ignore[attr-defined]
+            before = list(provider._trades[symbol])  # type: ignore[attr-defined]
+        before_tape = aggregate_tape(before, marked)
+        self.assertGreater(before_tape.buy_notional_1m, 0)
+        self.assertGreater(before_tape.sell_notional_1m, 0)
+
+        newbie = provider.register_watch_mint(
+            "NewMint111111111111111111111111111111111",
+            base="NEWM",
+            progress_bps=100,
+            max_discovered=1,
+        )
+        self.assertIsNotNone(newbie)
+        assert newbie is not None
+        self.assertFalse(provider.watch_flags(symbol).get("discovered"))
+        self.assertTrue(provider.watch_flags(newbie.symbol).get("discovered"))
+        self.assertIn(symbol, {s.symbol for s in provider.list_symbols()})
+        with provider._lock:  # type: ignore[attr-defined]
+            after = list(provider._trades[symbol])  # type: ignore[attr-defined]
+        self.assertEqual(after, before)
+        kept = aggregate_tape(after, marked)
+        self.assertGreater(kept.buy_notional_1m, 0)
+        self.assertGreater(kept.sell_notional_1m, 0)
+        self.assertAlmostEqual(kept.buy_notional_1m, before_tape.buy_notional_1m)
+        self.assertAlmostEqual(kept.sell_notional_1m, before_tape.sell_notional_1m)
+        self.assertIsNotNone(provider.get_pumpfun_snapshot(symbol))
+
+        start = marked + 1_000
+        with patch.object(provider, "_advance_locked", return_value=[]):
+            await self._tick_notionals(engine, start, buy=1.0, sell=1.5, symbol=symbol)
+            self.assertIn(symbol, engine.positions)
+            self.assertEqual(engine.last_signal(symbol).reason, "hold")  # type: ignore[union-attr]
+            seeded = aggregate_tape(provider.get_recent_trades(symbol), start)
+            self.assertGreater(seeded.sell_notional_1m, 0)
+            self.assertGreaterEqual(seeded.sell_notional_1m, 1.5 * seeded.buy_notional_1m)
+            await self._tick_notionals(engine, start + 12_000, buy=1.0, sell=1.5, symbol=symbol)
+
+        self.assertNotIn(symbol, engine.positions)
+        sig = engine.last_signal(symbol)
+        self.assertEqual(sig.reason, "sell_pressure")  # type: ignore[union-attr]
+        self.assertIn("SELL_PRESSURE", sig.tags)  # type: ignore[union-attr]
+        closed = [t for t in get_paper_ledger().closed if t.symbol == symbol]
+        self.assertEqual(len(closed), 1)
+        self.assertIn("SELL_PRESSURE", closed[0].tags)
+        self.assertLess(closed[0].exit_ts - closed[0].entry_ts, engine.params.max_hold_sec * 1000)
+        fresh = PumpPaperParams()
+        self.assertFalse(fresh.auto_paper_orders)
+        self.assertAlmostEqual(fresh.min_buy_sell_ratio_1m, 2.5)
+        self.assertEqual(fresh.min_trade_count_1m, 10)
+        self.assertFalse(live_enabled())
+        self.assertFalse(send_wired())
+
+    async def test_live_open_lot_keeps_tape_after_discovery_eviction(self):
+        """A live open lot is enough to keep the trade buffer off the eviction list."""
+        from app.live.ledger import get_live_ledger, reset_live_ledger
+        from app.models.contracts import Fill
+        from app.providers import get_provider
+
+        reset_live_ledger()
+        provider = get_provider()
+        held = provider.register_watch_mint(
+            "LiveHeldMint1111111111111111111111111111",
+            base="LIVEH",
+            progress_bps=4200,
+            max_discovered=1,
+        )
+        self.assertIsNotNone(held)
+        assert held is not None
+        symbol = held.symbol
+        now = int(time.time() * 1000)
+        get_live_ledger().record_fill(
+            symbol,
+            Fill(ts=now, price=1e-5, qty=10.0, fee=0.0),
+            mint=held.mint,
+        )
+        with provider._lock:  # type: ignore[attr-defined]
+            provider._trades[symbol] = [  # type: ignore[attr-defined]
+                {
+                    "symbol": symbol,
+                    "ts": now - 500,
+                    "side": "sell",
+                    "price": 1e-5,
+                    "qty": 1.0,
+                    "sol_amount": 0.7,
+                    "phase": "curve",
+                }
+            ]
+            before = list(provider._trades[symbol])  # type: ignore[attr-defined]
+        newbie = provider.register_watch_mint(
+            "LiveNextMint1111111111111111111111111111",
+            base="LNEXT",
+            progress_bps=100,
+            max_discovered=1,
+        )
+        self.assertIsNotNone(newbie)
+        assert newbie is not None
+        self.assertFalse(provider.watch_flags(symbol).get("discovered"))
+        self.assertTrue(provider.watch_flags(newbie.symbol).get("discovered"))
+        with provider._lock:  # type: ignore[attr-defined]
+            after = list(provider._trades[symbol])  # type: ignore[attr-defined]
+        self.assertEqual(after, before)
+        tape = aggregate_tape(after, now)
+        self.assertGreater(tape.sell_notional_1m, 0)
+        self.assertIsNotNone(provider.get_pumpfun_snapshot(symbol))
+        reset_live_ledger()
 
 
 class ApiStrategyTests(unittest.TestCase):

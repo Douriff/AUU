@@ -304,3 +304,11 @@ sell_notional_1m >= sell_pressure_ratio * max(buy_notional_1m, 1e-18)
 | `sell_pressure_ratio` | **1.5** | 2.0 |
 
 `PUT` 与 `PATCH /api/v1/strategy/pump-paper-v1` 可改这两键，也可设回 30 / 2.0。蒸馏不写这两键。
+
+---
+
+## 10. 持仓 tape 不被发现淘汰清掉（paper round 7）
+
+Round 7 在已接通的卖压规则下仍是 **0** 笔 `sell_pressure`、**22/30** `MAX_HOLD`。原因不在阈值：发现列表满时淘汰会 `_drop_locked`，把持仓 mint 的成交缓冲一起删掉。orphan 快照随后看到 `buy_notional_1m=0` 且 `sell_notional_1m=0`，`sell >= ratio * buy` 不起步。
+
+假设成立：淘汰对持仓过于激进。纸面修复（最小）：无仓的发现 mint 仍整段丢弃；有纸面或实盘未平仓的 symbol/mint 不丢曲线和 `_trades`。名额都被持仓占满时，只把最老的一笔移出发现列表（`discovered=false`），tape 继续给 `tick()` / `evaluate()`。Go 门、入场动能默认 **10 / 2.5**、含费硬顶 **80** / 缓冲 **75** 都不改。`auto_paper_orders` 与 `liveEnabled` 默认仍是 **false**。
