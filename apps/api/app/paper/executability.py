@@ -336,13 +336,108 @@ def _entry_impacts(
     return out
 
 
-def _shadows_from_log(log_rows: Sequence[Mapping[str, Any]]) -> list[float]:
-    out: list[float] = []
+_REPLAY_SHADOW_SOURCES = frozenset({"next_trade", "next_open"})
+
+
+def _shadow_min_n(n_closed: int) -> int:
+    """G5 sample floor. Unchanged: do not loosen, and do not use P90.
+
+    Once ``n_closed >= 30``, require 30 shadow samples (at ``n_closed=60``
+    that floor is also half the closes). Below 30 closes, one shadow satisfies
+    this flag; the closed-sample gate still blocks go. Empty sessions report
+    the same 30 floor and stay uncovered.
+    """
+    if n_closed >= MIN_CLOSED_TRADES:
+        return MIN_CLOSED_TRADES
+    if n_closed > 0:
+        return 1
+    return MIN_CLOSED_TRADES
+
+
+def _replay_shadow_bps(row: Mapping[str, Any]) -> Optional[tuple[int, str, float]]:
+    """Entry DecisionLog replay shadow: ``(ts, source, bps)`` or None.
+
+    Only ``next_trade`` / ``next_open`` count. ``fill_quote`` is the weak
+    journal path, not a second DecisionLog sample.
+    """
+    if str(row.get("outcome") or "") not in {"fill", "partial"}:
+        return None
+    if not _is_entry_fill(row):
+        return None
+    src = str(row.get("shadow_source") or "").strip().lower()
+    if src not in _REPLAY_SHADOW_SOURCES:
+        return None
+    v = _f(row, "shadow_slippage_bps")
+    if v is None:
+        return None
+    ts = int(row.get("ts") or row.get("entry_ts") or 0)
+    return ts, src, v
+
+
+def _index_replay_shadows(
+    log_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, list[tuple[int, float]]]:
+    """One replay shadow per ``(symbol, ts)``. ``next_trade`` beats ``next_open``."""
+    best: dict[tuple[str, int], tuple[int, float]] = {}
     for row in log_rows:
-        if str(row.get("outcome") or "") not in {"fill", "partial"}:
+        parsed = _replay_shadow_bps(row)
+        if parsed is None:
             continue
-        v = _f(row, "shadow_slippage_bps")
-        if v is not None:
+        ts, src, v = parsed
+        sym = str(row.get("symbol") or "")
+        pri = 0 if src == "next_trade" else 1
+        key = (sym, ts)
+        prev = best.get(key)
+        if prev is None or pri < prev[0]:
+            best[key] = (pri, v)
+    by: dict[str, list[tuple[int, float]]] = {}
+    for (sym, ts), (_pri, v) in best.items():
+        by.setdefault(sym, []).append((ts, v))
+    return by
+
+
+def _take_closest_shadow(
+    bucket: dict[str, list[tuple[int, float]]],
+    symbol: str,
+    entry_ts: int,
+) -> Optional[float]:
+    cands = bucket.get(symbol) or []
+    if not cands:
+        return None
+    best_i = min(range(len(cands)), key=lambda i: abs(cands[i][0] - int(entry_ts)))
+    return cands.pop(best_i)[1]
+
+
+def _journal_shadow_bps(row: Mapping[str, Any]) -> Optional[float]:
+    """Fill-quote shadow stored on the closed round-trip. Weak fallback."""
+    return _f(row, "entry_shadow_slippage_bps", "shadow_slippage_bps")
+
+
+def _merged_shadows(
+    log_rows: Sequence[Mapping[str, Any]],
+    trade_rows: Sequence[Mapping[str, Any]],
+) -> list[float]:
+    """One shadow bps per closed trade.
+
+    DecisionLog ``next_trade|next_open`` wins when it matches that trade.
+    Journal ``entry_shadow_slippage_bps`` fills trades with no replay.
+    A trade is never counted twice, and journal never replaces a replay.
+    """
+    if trade_rows:
+        replay = _index_replay_shadows(log_rows)
+        out: list[float] = []
+        for row in trade_rows:
+            ts = int(row.get("entry_ts") or row.get("ts") or 0)
+            sym = str(row.get("symbol") or "")
+            v = _take_closest_shadow(replay, sym, ts)
+            if v is None:
+                v = _journal_shadow_bps(row)
+            if v is not None:
+                out.append(v)
+        return out
+    out: list[float] = []
+    for cands in _index_replay_shadows(log_rows).values():
+        for _ts, v in cands:
             out.append(v)
     return out
 
@@ -399,7 +494,13 @@ def _nogo_reason(
         if hard_fail:
             return f"入场冲击含费 {max_gross:.1f} bps 超硬顶 80"
         return f"入场冲击扣费中位 {median_net:.1f} bps（门槛 <60）"
-    if shadow_p50 is None or not gates["shadow_slippage"]["ok"]:
+    shadow_gate = gates["shadow_slippage"]
+    if not shadow_gate.get("ok", False):
+        # A short sample is coverage, even when the median itself is ≤ 40.
+        if not shadow_gate.get("coverage_ok", False):
+            got = int(shadow_gate.get("n") or 0)
+            need = int(shadow_gate.get("min_n") or MIN_CLOSED_TRADES)
+            return f"shadow coverage {got}/{need}"
         if shadow_p50 is None:
             return "证据不足：缺少影子滑点样本"
         return f"影子滑点 P50 {shadow_p50:.1f} bps"
@@ -512,18 +613,14 @@ def aggregate_executability(
         float(median_fee) if median_fee is not None else float(CURVE_IMPACT_FEE_FLOOR_BPS)
     )
 
-    shadows = _shadows_from_log(log_rows)
-    if not shadows:
-        for t in trade_rows:
-            v = _f(t, "entry_shadow_slippage_bps", "shadow_slippage_bps")
-            if v is not None:
-                shadows.append(v)
+    shadows = _merged_shadows(log_rows, trade_rows)
     shadow_p50 = _median(shadows)
-    shadow_p90 = _pctile(shadows, 90)
+    shadow_p90 = _pctile(shadows, 90)  # reported only; P90 does not decide G5
     shadow_n = len(shadows)
-    shadow_coverage_ok = shadow_n >= MIN_CLOSED_TRADES if n >= MIN_CLOSED_TRADES else bool(shadows) and n > 0
-    if n == 0:
-        shadow_coverage_ok = False
+    shadow_min_n = _shadow_min_n(n)
+    shadow_coverage_ok = n > 0 and shadow_n >= shadow_min_n
+    # Threshold stays P50 ≤ 40. Coverage is required for ok, and is reported
+    # separately so a short sample is not described as a P50 breach.
     shadow_ok = (
         shadow_p50 is not None
         and shadow_coverage_ok
@@ -600,6 +697,8 @@ def aggregate_executability(
             median_bps=shadow_p50,
             x_bps=SHADOW_SLIPPAGE_X_BPS,
             n=shadow_n,
+            min_n=shadow_min_n,
+            coverage_ok=bool(shadow_coverage_ok),
         ),
         "live": _gate(
             False,
@@ -656,6 +755,8 @@ def aggregate_executability(
             "median_bps": shadow_p50,
             "x_bps": SHADOW_SLIPPAGE_X_BPS,
             "n": shadow_n,
+            "min_n": shadow_min_n,
+            "coverage_ok": bool(shadow_coverage_ok),
             "ok": bool(shadow_ok),
         },
         "impact_error": {

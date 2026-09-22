@@ -150,6 +150,9 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertLess(data["gates"]["median_entry_impact"]["median_net_bps"], IMPACT_MEDIAN_MAX_BPS)
         self.assertLessEqual(data["max_entry_impact_bps"], IMPACT_HARD_MAX_BPS)
         self.assertTrue(data["shadow_slippage"]["ok"])
+        self.assertTrue(data["shadow_slippage"]["coverage_ok"])
+        self.assertEqual(data["shadow_slippage"]["n"], MIN_CLOSED_TRADES)
+        self.assertEqual(data["shadow_slippage"]["min_n"], MIN_CLOSED_TRADES)
         self.assertLessEqual(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
         self.assertIn("impact_error", data)
         self.assertFalse(data["liveEnabled"])
@@ -206,8 +209,16 @@ class FixtureAggregatorTests(unittest.TestCase):
             _expand_trades(recipe), eval_counts=recipe["eval_counts"]
         )
         self.assertEqual(data["verdict"], "no-go")
-        self.assertFalse(data["gates"]["shadow_slippage"]["ok"])
+        gate = data["gates"]["shadow_slippage"]
+        self.assertFalse(gate["ok"])
+        self.assertTrue(gate["coverage_ok"])
+        self.assertEqual(gate["n"], MIN_CLOSED_TRADES)
+        self.assertEqual(gate["min_n"], MIN_CLOSED_TRADES)
         self.assertGreater(data["shadow_slippage"]["median_bps"], SHADOW_SLIPPAGE_X_BPS)
+        self.assertIn("P50", data["nogo_reason"])
+        self.assertNotIn("shadow coverage", data["nogo_reason"])
+        self.assertEqual(data["lamp"], "red")
+        self.assertFalse(data["liveEnabled"])
 
     def test_net_of_fee_gross_76_goes(self):
         """Gross ~76 with curve fee 62.5 → net ~13.5 clears the <60 median."""
@@ -332,6 +343,93 @@ class FixtureAggregatorTests(unittest.TestCase):
         self.assertEqual(MIN_CLOSED_TRADES, 30)
         self.assertEqual(IMPACT_MEDIAN_MAX_BPS, 60.0)
         self.assertEqual(IMPACT_HARD_MAX_BPS, 80.0)
+
+
+def _replay(trade: dict, bps: float, source: str = "next_trade") -> dict:
+    return {
+        "ts": trade["entry_ts"],
+        "symbol": trade["symbol"],
+        "outcome": "fill",
+        "signal_side": "buy",
+        "shadow_source": source,
+        "shadow_slippage_bps": bps,
+    }
+
+
+class ShadowCoverageMergeTests(unittest.TestCase):
+    """G5 coverage uses one shadow per close. P50 stays ≤40; P90 does not gate."""
+
+    def _trades(self, n: int, shadow: float = 15.0) -> tuple[list[dict], dict]:
+        recipe = _load("go_30.json")
+        recipe = dict(recipe)
+        recipe["n"] = n
+        recipe["entry_shadow_slippage_bps"] = shadow
+        return _expand_trades(recipe), recipe["eval_counts"]
+
+    def test_coverage_fail_message_does_not_cite_p50(self):
+        """n_closed=60, P50≤40, but only 10 trades have a shadow → coverage, not P50."""
+        trades, evals = self._trades(60, shadow=10.0)
+        for row in trades[10:]:
+            row["entry_shadow_slippage_bps"] = None
+        # Same 10 closes also have a replay. Must not become n=20.
+        log = [_replay(row, 22.3, "next_trade") for row in trades[:10]]
+        data = aggregate_executability(trades, decision_log=log, eval_counts=evals)
+        gate = data["gates"]["shadow_slippage"]
+        self.assertEqual(data["n_closed"], 60)
+        self.assertEqual(gate["n"], 10)
+        self.assertEqual(data["shadow_slippage"]["n"], 10)
+        self.assertEqual(gate["min_n"], 30)
+        self.assertEqual(data["shadow_slippage"]["min_n"], 30)
+        self.assertFalse(gate["coverage_ok"])
+        self.assertFalse(data["shadow_slippage"]["coverage_ok"])
+        self.assertAlmostEqual(gate["p50_bps"], 22.3)
+        self.assertLessEqual(gate["p50_bps"], SHADOW_SLIPPAGE_X_BPS)
+        self.assertFalse(gate["ok"])
+        self.assertEqual(data["nogo_reason"], "shadow coverage 10/30")
+        self.assertNotIn("P50", data["nogo_reason"])
+        self.assertEqual(data["verdict"], "no-go")
+        self.assertEqual(data["lamp"], "gray")
+        self.assertFalse(data["liveEnabled"])
+        self.assertFalse(LIVE_ENABLED)
+
+    def test_journal_fill_quote_fills_replay_gap_and_passes(self):
+        """Ten next_trade|next_open rows plus journal fill-quote on the rest reach n=60."""
+        trades, evals = self._trades(60, shadow=20.0)
+        for row in trades[-8:]:
+            row["entry_shadow_slippage_bps"] = 90.0
+        log = [_replay(row, 22.3, "next_trade") for row in trades[:5]]
+        log += [_replay(row, 18.0, "next_open") for row in trades[5:10]]
+        data = aggregate_executability(trades, decision_log=log, eval_counts=evals)
+        gate = data["gates"]["shadow_slippage"]
+        self.assertEqual(gate["n"], 60)
+        self.assertEqual(gate["min_n"], MIN_CLOSED_TRADES)
+        self.assertTrue(gate["coverage_ok"])
+        self.assertLessEqual(gate["p50_bps"], SHADOW_SLIPPAGE_X_BPS)
+        self.assertGreater(gate["p90_bps"], SHADOW_SLIPPAGE_X_BPS)
+        self.assertTrue(gate["ok"])
+        self.assertEqual(data["verdict"], "go")
+        self.assertEqual(data["lamp"], "green")
+        self.assertNotIn("shadow coverage", data["nogo_reason"])
+        self.assertFalse(data["liveEnabled"])
+        self.assertFalse(PumpPaperParams().auto_paper_orders)
+
+    def test_replay_and_journal_are_not_double_counted(self):
+        """DecisionLog wins for a trade; journal and a same-ts next_open do not add rows."""
+        trades, evals = self._trades(30, shadow=10.0)
+        log: list[dict] = []
+        for row in trades:
+            log.append(_replay(row, 25.0, "next_trade"))
+            log.append(_replay(row, 5.0, "next_open"))
+            log.append(_replay(row, 99.0, "fill_quote"))
+        data = aggregate_executability(trades, decision_log=log, eval_counts=evals)
+        gate = data["gates"]["shadow_slippage"]
+        self.assertEqual(data["n_closed"], 30)
+        self.assertEqual(gate["n"], 30)
+        self.assertAlmostEqual(gate["p50_bps"], 25.0)
+        self.assertTrue(gate["coverage_ok"])
+        self.assertTrue(gate["ok"])
+        self.assertEqual(data["verdict"], "go")
+        self.assertFalse(data["liveEnabled"])
 
 
 class AnnotateFillTests(unittest.TestCase):

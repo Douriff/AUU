@@ -594,10 +594,14 @@ export interface ExecutabilityReport {
   n_entry_evals?: number;
   shadow_slippage: {
     p50_bps?: number | null;
+    /** Reported only. G5 does not use P90. */
     p90_bps?: number | null;
     median_bps: number | null;
     x_bps: number;
     n: number;
+    /** 30 once n_closed >= 30. Coverage, not the 40 bps median. */
+    min_n?: number;
+    coverage_ok?: boolean;
     ok: boolean;
   };
   impact_error?: {
