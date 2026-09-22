@@ -54,7 +54,7 @@ Bonding-curve swap 可被夹（先买后卖）。纸面 Fill：
 
 ### 1.4 毕业风险
 
-- 入场窗（纸面默认，paper round 4）：`1200 ≤ progress_bps ≤ 6500`；毕业/迁移（`complete`/`migrated`）禁止新开。指标与参数见 §7。
+- 入场窗（纸面默认，AUU round 8b）：`1500 ≤ progress_bps ≤ 6000`；毕业/迁移（`complete`/`migrated`）禁止新开。指标与参数见 §11。round 4 的 `[1200, 6500]` 见 §7。
 - 持仓在 `progress_bps ≥ 9000` 或 complete 时强制平仓（拥挤）
 - 毕业后 venue 变为 PumpSwap AMM，**曲线纸面成交不能**当作 AMM 可执行
 
@@ -312,3 +312,35 @@ sell_notional_1m >= sell_pressure_ratio * max(buy_notional_1m, 1e-18)
 Round 7 在已接通的卖压规则下仍是 **0** 笔 `sell_pressure`、**22/30** `MAX_HOLD`。原因不在阈值：发现列表满时淘汰会 `_drop_locked`，把持仓 mint 的成交缓冲一起删掉。orphan 快照随后看到 `buy_notional_1m=0` 且 `sell_notional_1m=0`，`sell >= ratio * buy` 不起步。
 
 假设成立：淘汰对持仓过于激进。纸面修复（最小）：无仓的发现 mint 仍整段丢弃；有纸面或实盘未平仓的 symbol/mint 不丢曲线和 `_trades`。名额都被持仓占满时，只把最老的一笔移出发现列表（`discovered=false`），tape 继续给 `tick()` / `evaluate()`。Go 门、入场动能默认 **10 / 2.5**、含费硬顶 **80** / 缓冲 **75** 都不改。`auto_paper_orders` 与 `liveEnabled` 默认仍是 **false**。
+
+---
+
+## 11. Paper round 8b Go 窗（2026-09-22）
+
+AUU round 8b 在下列 `PumpPaperParams` **进程默认**下得到纸面 go。这是启动默认，不是运行时 PUT。`liveEnabled` 仍为 **false**。`auto_paper_orders` 默认仍 **false**。实盘 `max_notional_sol` 硬顶仍是 **1.0 SOL**。含费硬拒仍是 **> 80**（等于 80 仍过；默认缓冲仍是 **75**）。Go 门不放宽：样本 ≥ 30、期望 ≥ 0、扣费中位 < 60、含费硬顶 80。PR #19 的持仓 tape 保留不改：发现淘汰不清未平仓 mint 的曲线和 `_trades`。
+
+| 指标 | round 8b |
+|------|----------|
+| `n` | **31** |
+| expectancy E | **≈ +0.00181** |
+| win rate | **100%** |
+| exits | **全部 TAKE_PROFIT** |
+| MAX_HOLD (MH) | **0** |
+| median net impact | **≈ 12.4 bps** |
+| max gross impact | **≈ 75** |
+
+| 参数 | 纸面默认 |
+|------|----------|
+| `take_profit_pct` | **0.06** |
+| `stop_loss_pct` | **0.05** |
+| `max_hold_sec` | **120** |
+| `progress_bps_min` | **1500** |
+| `progress_bps_max` | **6000** |
+| `sell_pressure_sec` | **5** |
+| `sell_pressure_ratio` | **1.0** |
+| `min_trade_count_1m` | **10** |
+| `min_buy_sell_ratio_1m` | **2.5** |
+| `max_impact_bps` | **75**（硬拒仍是含费 > 80） |
+| `max_notional_sol` | **0.12** |
+
+§7 的 round 4 窗和 §9 的 12s / 1.5× 卖压是当时的进程默认，现行值以上表为准。
