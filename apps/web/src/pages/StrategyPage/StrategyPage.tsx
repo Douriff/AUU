@@ -17,6 +17,8 @@ const FIELDS: { key: keyof PumpPaperParams; label: string; step?: string }[] = [
   { key: "max_notional_sol", label: "max_notional_sol", step: "0.01" },
   { key: "min_trade_count_1m", label: "min_trade_count_1m" },
   { key: "min_buy_sell_ratio_1m", label: "min_buy_sell_ratio_1m", step: "0.1" },
+  { key: "sell_pressure_sec", label: "sell_pressure_sec", step: "1" },
+  { key: "sell_pressure_ratio", label: "sell_pressure_ratio", step: "0.1" },
 ];
 
 export function StrategyPage() {
@@ -31,6 +33,7 @@ export function StrategyPage() {
           <code>strategy_autopaper</code> 默认关。行情/交易页可看纸面成功概率（平仓后）。
           发现（<code>new_token</code>）只入自选，仍过 progress / 动能 / 冲击门。动能默认{" "}
           <code>trade_count_1m ≥ 10</code> 且买名义 ≥ 2.5× 卖名义（不足仍是 <code>momentum</code>）。
+          卖压出场默认卖名义 ≥ 1.5× 买名义并持续 12s（<code>sell_pressure</code>）。
           无钱包、无 sniper。
         </p>
       <p className="muted">

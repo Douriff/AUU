@@ -282,4 +282,25 @@ buy_notional_1m < min_buy_sell_ratio_1m * sell_notional_1m
 | `min_trade_count_1m` | **10** | 8 |
 | `min_buy_sell_ratio_1m` | **2.5** | 2.0 |
 
-`PUT /api/v1/strategy/pump-paper-v1` 可改这两键。出场卖压仍是另一条 2× 规则，不读这两个参数。
+`PUT /api/v1/strategy/pump-paper-v1` 可改这两键。出场卖压是另一条规则，不读这两个参数（见 §9）。
+
+---
+
+## 9. 弱 tape 出场（paper round 6）
+
+Round 6 在 TP **0.08** / SL **0.06** / hold **210** 下，`n=31` 时期望 E≈**+0.000034**，到 `n=35` 翻负。冲击仍过门。检查点出场构成 **TP 6 / MAX_HOLD 24 / STOP_LOSS 1**。主问题仍是 **MAX_HOLD 主导**。本轮不改 G1–G6，不改入场动能默认 **10 / 2.5**，不改止盈/止损/持仓进程默认（仍 **0.10 / 0.07 / 300**），不放宽含费硬顶 80 / 缓冲 75，不把 `liveEnabled` 或 `auto_paper_orders` 默认打开。
+
+只把已有卖压出场参数化并提前默认。方向与旧实现相同：卖名义相对买名义，不是入场的买/卖比。
+
+```text
+sell_notional_1m >= sell_pressure_ratio * max(buy_notional_1m, 1e-18)
+  and sustained for sell_pressure_sec
+  → reason = sell_pressure
+```
+
+| 参数 | 默认 | 原先写死 |
+|------|------|----------|
+| `sell_pressure_sec` | **12** | 30 |
+| `sell_pressure_ratio` | **1.5** | 2.0 |
+
+`PUT` 与 `PATCH /api/v1/strategy/pump-paper-v1` 可改这两键，也可设回 30 / 2.0。蒸馏不写这两键。

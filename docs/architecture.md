@@ -43,7 +43,7 @@ flowchart LR
 - **下单**：始终 `PaperBroker` + `RiskGate`。`dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。有 `ctx.pump` 时 `estimated_impact_bps` 走 bonding-curve（buy/`buy_tokens_out` vs sell/`sell_sol_out`），否则 CEX 平方根。
 - **Live adapter（dark）**：`liveEnabled` 默认 false；LOCAL-ONLY `secrets/live-keypair.json`（gitignored）+ 二次确认 + 独立 `LiveLimits`（1 / 0.045 / 10）才离开 `LIVE_DISABLED`。Health：`keypairMounted` bool + `pubkey`，永不返回 secret。见 `docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/viz/live-ui-gates-v0.md`。本轮不发链上 tx。
 - **Trade UI**：`pre-order` → `paper/orders`；可选 `POST /api/v1/pipeline/decide-and-fill`。
-- **策略**：`pump-paper-v1` 评估 watchlist + 1m tape；`strategy_autopaper` / `auto_paper_orders` 默认关；打开后走同一条 `RiskGate → PaperBroker`。
+- **策略**：`pump-paper-v1` 评估 watchlist + 1m tape；`strategy_autopaper` / `auto_paper_orders` 默认关；打开后走同一条 `RiskGate → PaperBroker`。入场动能默认 10 / 2.5。卖压出场默认卖名义 ≥ **1.5×** 买名义并持续 **12s**（`sell_pressure_sec` / `sell_pressure_ratio`）。
 - **观察蒸馏**：`TraderWatchlist` → mock 或 `HeliusTraderReader`/`rpc`（parsed Pump ix + `ctx.pump` progress/phase；默认 mock，live HTTP 关）`TraderSnapshot` → `HabitEngine` → `DistillResult`。数据源合同：`docs/research/trader-learning-datasources.md`。`apply-distill` 须确认后才 overlay 纸面参数。`copy_trade_enabled=false`；无钱包镜像。Journal 胜率只吃自有纸面。禁止刮 Pump 前端 / Photon / BullX / GMGN。
 - **纸面统计**：`GET /api/v1/stats/paper-performance` 由已平仓 Fill 算胜率 / 期望 / 回撤 / 蒙特卡洛。见 `docs/viz/paper-stats-v1.md`。
 - **可执行性证据**：`GET /api/v1/stats/executability` 聚合 journal 冲击 / 影子滑点 / 策略拒单分桶。`liveEnabled` 保持 false。见 `docs/research/executability-go-nogo-v0.md`。

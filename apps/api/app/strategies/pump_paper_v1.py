@@ -47,7 +47,6 @@ EXIT_IMPACT_BPS = 250.0
 HARD_MAX_ENTRY_IMPACT_BPS = 80.0
 # Operating buffer under the hard ceiling. Default max_impact_bps.
 ENTRY_IMPACT_BUFFER_BPS = 75.0
-SELL_PRESSURE_SEC = 30.0
 REJECT_STREAK_MAX = 5
 REJECT_COOLDOWN_SEC = 600
 MIN_NOTIONAL_SOL = 0.02
@@ -77,6 +76,11 @@ class PumpPaperParams(BaseModel):
     # Reject reason stays "momentum". Defaults replace the old 8 / 2.0 constants.
     min_trade_count_1m: int = Field(default=10, ge=0)
     min_buy_sell_ratio_1m: float = Field(default=2.5, ge=0)
+    # Weakening-tape exit. Independent of the entry momentum gate above.
+    # Direction matches the old hardcoded check: sell notional >= ratio * buy notional,
+    # held for sell_pressure_sec. Round 6 defaults: 12s and 1.5 (were 30s and 2.0).
+    sell_pressure_sec: float = Field(default=12.0, ge=0)
+    sell_pressure_ratio: float = Field(default=1.5, ge=0)
 
 
 @dataclass
@@ -144,6 +148,16 @@ def curve_impact_bps(snap: PumpfunPaperSnapshot, notional: float, side: str) -> 
     return liq.estimated_impact_bps(abs(notional), side=side, pump=snap.to_pump_ctx())
 
 
+def tape_is_sell_pressured(tape: TapeWindow, ratio: float) -> bool:
+    """True when 1m sell notional is at least ``ratio`` times 1m buy notional.
+
+    Direction is sell-heavy (the old ``sell >= 2.0 * buy`` check). A zero buy
+    print still counts: the buy side is floored so a pure sell tape qualifies.
+    Entry momentum uses the opposite inequality and does not read this ratio.
+    """
+    return tape.sell_notional_1m >= float(ratio) * max(tape.buy_notional_1m, 1e-18)
+
+
 def entry_impact_limit_bps(params: PumpPaperParams) -> float:
     """Entry cap: operating buffer, never above the gross hard max of 80."""
     return min(float(params.max_impact_bps), HARD_MAX_ENTRY_IMPACT_BPS)
@@ -207,9 +221,8 @@ def evaluate(
                 reason="graduation",
                 tags=["CURVE_NEAR_GRADUATION"],
             )
-        if (
-            tape.sell_notional_1m >= 2.0 * max(tape.buy_notional_1m, 1e-18)
-            and sell_pressure_ms >= int(SELL_PRESSURE_SEC * 1000)
+        if tape_is_sell_pressured(tape, params.sell_pressure_ratio) and sell_pressure_ms >= int(
+            float(params.sell_pressure_sec) * 1000
         ):
             return SignalOut(side="flat", strength=0.8, reason="sell_pressure", tags=["SELL_PRESSURE"])
         if impact_exit_bps > EXIT_IMPACT_BPS:
@@ -906,7 +919,7 @@ class PumpPaperEngine:
             if snap is None:
                 continue
             tape = self._tape_for(provider, symbol, now_ms)
-            if tape.sell_notional_1m >= 2.0 * max(tape.buy_notional_1m, 1e-18):
+            if tape_is_sell_pressured(tape, self.params.sell_pressure_ratio):
                 self._sell_pressure_since.setdefault(symbol, now_ms)
             else:
                 self._sell_pressure_since.pop(symbol, None)
