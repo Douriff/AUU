@@ -69,6 +69,8 @@
 
 本路径只走 PaperBroker。**不**发链上交易；`liveEnabled` 保持默认 **false**。
 
+发现列表满时，有纸面或实盘未平仓的 mint **不**走 `_drop_locked`（见 §4.4）。曲线和 1m tape 留在 provider 上，卖压仍读得到名义。只有快照真的没了，才用本节的 orphan 标记。
+
 ### 4.2 纸面 Go 窗默认（paper round 4，2026-09-21）
 
 Paper round 4 在这组进程默认上得到 `verdict=go`：`n_closed=30`，expectancy ≈ +0.00123，扣费入场冲击中位 ≈ 12.4 bps，含费最大 ≈ 75.7 bps，出场 TP 16 / MAX_HOLD 12 / STOP_LOSS 1。
@@ -109,6 +111,16 @@ sell_notional_1m >= sell_pressure_ratio * max(buy_notional_1m, 1e-18)
 | `sell_pressure_ratio` | **1.5** | 2.0 |
 
 `PUT` 与 `PATCH /api/v1/strategy/pump-paper-v1` 可改这两键，也可以设回 **30 / 2.0**。蒸馏 allowlist 不含它们，`apply-distill` 不会改卖压出场。入场仍只读 `min_trade_count_1m` 与 `min_buy_sell_ratio_1m`。
+
+### 4.4 持仓不被发现淘汰清掉 tape（paper round 7，2026-09-22）
+
+Round 7 纸面 **0** 笔 `sell_pressure`、**22/30** 是 `MAX_HOLD`。卖压参数和 `evaluate()` 已接通，但发现列表满时 `register_watch_mint` 对最老的 `discovered` mint 调用 `_drop_locked`，连 `_trades` 一起丢掉。持仓接着走 orphan 快照，`get_recent_trades` 为空，`buy_notional_1m` 与 `sell_notional_1m` 都是 0，`sell >= ratio * buy` 永不成立，计时不起步。
+
+淘汰改为认仓（纸面 journal、实盘 journal、进程内策略持仓，按 symbol 或 mint）：
+
+- 优先整段丢掉**无仓**的发现 mint（曲线和 tape 都删，行为与以前相同）。
+- 名额全是持仓时，最老的一笔只清 `discovered`（让出发现名额），**保留**曲线和成交缓冲。之后 `tick()` / `evaluate()` 仍读到非空 tape，卖压可以触发。
+- 不改 Go 门，不放宽入场动能默认 **10 / 2.5**，不把 `auto_paper_orders` 或 `liveEnabled` 默认打开。
 
 ---
 
@@ -169,6 +181,7 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - [x] `new_token` 入自选但不绕过入场门；发现模块无下单
 - [x] 纸面成功概率：`GET /api/v1/stats/paper-performance`（平仓样本；蒙特卡洛标明 simulation）
 - [x] 持仓 mint 离开 `list_symbols` 后，超过 `max_hold_sec` 仍纸面平仓（orphan exit；`liveEnabled` 仍 false）
+- [x] 持仓 mint 被发现列表淘汰时不丢 tape；卖压仍能在 `max_hold_sec` 之前触发（`liveEnabled` 仍 false）
 
 版本：v1。只加参数不改事件名。 硬顶仍是含费冲击 **80**（入场默认缓冲 `max_impact_bps=75`）。纸面 Go 窗：`progress_bps [1200,6500]`，`take_profit_pct 0.10`，`stop_loss_pct 0.07`，`max_hold_sec 300`，`max_notional_sol 0.12`，`notional_pct_equity 0.005`。入场动能默认 `trade_count_1m ≥ 10` 且买名义 ≥ **2.5×** 卖名义（仍是 `momentum`）。卖压出场默认卖名义 ≥ **1.5×** 买名义并持续 **12s**（`sell_pressure`；原先写死 2.0× / 30s）。`strategy_autopaper`/`auto_paper_orders` default false。`liveEnabled` 默认 false。实盘名义硬顶 1.0 SOL 不变。
 

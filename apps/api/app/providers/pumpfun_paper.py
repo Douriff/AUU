@@ -276,6 +276,48 @@ class PumpfunPaperProvider(MarketDataProvider):
                 "creator": c.creator,
             }
 
+    def _has_open_position(self, symbol: str, mint: str) -> bool:
+        """True when paper or live still holds ``symbol`` or ``mint``.
+
+        Discovery eviction used to ``_drop_locked`` the oldest discovered mint,
+        which also deleted ``_trades``. A held mint then fell through to the
+        orphan snapshot with ``buy_notional_1m == sell_notional_1m == 0``, so
+        ``sell >= ratio * buy`` never started the sell-pressure timer.
+
+        Sources: paper journal lots, live journal lots, and the process-wide
+        strategy engine. A local engine in tests still records the paper lot.
+        """
+        sym = (symbol or "").strip()
+        mid = (mint or "").strip()
+        if not sym and not mid:
+            return False
+
+        def _hit(row_symbol: str, row_mint: str | None, qty: float) -> bool:
+            if abs(float(qty)) <= 1e-12:
+                return False
+            if sym and row_symbol == sym:
+                return True
+            return bool(mid and row_mint and row_mint == mid)
+
+        from app.paper.ledger import get_paper_ledger
+
+        for row_symbol, lots in get_paper_ledger().lots.items():
+            for lot in lots:
+                if _hit(row_symbol, getattr(lot, "mint", None), lot.qty):
+                    return True
+        from app.live.ledger import get_live_ledger
+
+        for row_symbol, lots in get_live_ledger().lots.items():
+            for lot in lots:
+                if _hit(row_symbol, getattr(lot, "mint", None), lot.qty):
+                    return True
+        from app.strategies.pump_paper_v1 import get_engine
+
+        for pos in get_engine().positions.values():
+            if _hit(pos.symbol, pos.mint, pos.qty):
+                return True
+        return False
+
     def register_watch_mint(
         self,
         mint: str,
@@ -296,9 +338,19 @@ class PumpfunPaperProvider(MarketDataProvider):
             if existing:
                 return self._curves.get(existing)
             discovered = [c for c in self._curves.values() if c.discovered]
-            while len(discovered) >= max(1, int(max_discovered)):
-                oldest = discovered[0]
-                self._drop_locked(oldest.symbol, oldest.mint)
+            cap = max(1, int(max_discovered))
+            while len(discovered) >= cap:
+                victim = next(
+                    (c for c in discovered if not self._has_open_position(c.symbol, c.mint)),
+                    None,
+                )
+                if victim is not None:
+                    self._drop_locked(victim.symbol, victim.mint)
+                else:
+                    # Cap is full of open positions. Free the oldest discovery
+                    # slot but keep the curve and trade buffer so tick() still
+                    # sees a live tape (sell_pressure can fire).
+                    discovered[0].discovered = False
                 discovered = [c for c in self._curves.values() if c.discovered]
             ticker = (base or f"M{mint[-4:]}").replace("/SOL", "").upper()[:16]
             spec = WatchSpec(
