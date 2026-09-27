@@ -11,6 +11,7 @@ from app.bus import get_hub
 from app.live.gate import evaluate
 from app.paper.ledger import build_performance, reset_paper_journal
 from app.paper.decision_log import get_decision_log, reset_decision_log
+from app.paper.postmortem import ScenarioProgressForbidden, build_postmortem
 from app.risk import get_risk_gate
 from app.routes.envelope import err, ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -146,6 +147,41 @@ def get_pump_paper_stats(
         mc=enabled,
         mc_method=mc_method,
     )
+    return ok(data)
+
+
+@router.get("/pump-paper-v1/postmortem")
+def get_pump_paper_postmortem(
+    window: str = Query("session", description="session | last_n | int"),
+    n: int = Query(30, ge=1, le=5_000),
+    from_ts: Optional[int] = Query(None, alias="from"),
+    to_ts: Optional[int] = Query(None, alias="to"),
+    rolling: int = Query(10, ge=1, le=500),
+    scenario: str = Query("off", description="off | momentum_delta"),
+    min_trade_count_1m: Optional[int] = Query(None, ge=0),
+    min_buy_sell_ratio_1m: Optional[float] = Query(None, ge=0),
+    progress_bps_min: Optional[int] = Query(None),
+    progress_bps_max: Optional[int] = Query(None),
+    setup_seed_tags: Optional[str] = Query(None, description="display-only; never HabitProfile"),
+):
+    """Paper postmortem + nested ExecReport. Read-only; never mutates params / live."""
+    seeds = [s.strip() for s in str(setup_seed_tags).split(",") if s.strip()] if setup_seed_tags else None
+    try:
+        data = build_postmortem(
+            window=window,
+            n=n,
+            from_ts=from_ts,
+            to_ts=to_ts,
+            rolling=rolling,
+            scenario_tag=scenario,
+            min_trade_count_1m=min_trade_count_1m,
+            min_buy_sell_ratio_1m=min_buy_sell_ratio_1m,
+            progress_bps_min=progress_bps_min,
+            progress_bps_max=progress_bps_max,
+            setup_seed_tags=seeds,
+        )
+    except ScenarioProgressForbidden as e:
+        return err(e.code, str(e), 400, extra={"forbidden_touched": e.touched})
     return ok(data)
 
 

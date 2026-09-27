@@ -15,3 +15,4 @@ P0 开源调研：
 - 不嵌 GPL/AGPL、vectorbt、QC 密钥；无真仓 / sniper
 - 观察对照：胜率旁「对照」折叠，见 `docs/viz/trader-watch-ui-v0.md` §5；`trader_ref` **不**并入胜率分母
 - 可执行性：PaperStats 下「可执行性证据」；`GET /api/v1/stats/executability` 聚合 Journal + **DecisionLog**；桶为 `progress|impact|risk`；影子 replay 见 `docs/research/shadow-fill-v0.md`（望舒清单 `docs/research/auu-shadow-fill-impact-refs.md`，不嵌 GPL/LGPL）；`liveEnabled` 仍关。见 `docs/viz/executability-panel-v0.md`、`docs/adapters/decision-log-v0.md`
+- 平仓推演：PaperStats 下「平仓后推演」；`GET /api/v1/strategy/pump-paper-v1/postmortem`（别名 `/api/v1/stats/postmortem`）内嵌 `ExecReport` + 规则 findings；`GET /api/v1/stats/exec-report`；Scenario 默认 off，禁 progress。见 `docs/viz/postmortem-panel-v0.md`、`docs/adapters/paper-postmortem-v0.md`

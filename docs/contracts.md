@@ -56,6 +56,9 @@ REST：
 - `POST /api/v1/strategy/pump-paper-v1/stats/reset` — 清 session journal
 - `GET /api/v1/stats/paper-performance` — 同上别名
 - `GET /api/v1/stats/executability` — 纸面成交 vs 曲线报价的可执行性证据（`verdict=go|no-go`）；`liveEnabled` 恒 false。合同：`docs/research/executability-go-nogo-v0.md` · `docs/adapters/decision-log-v0.md` · `docs/viz/executability-panel-v0.md`
+- `GET /api/v1/strategy/pump-paper-v1/postmortem` — 纸面平仓推演（内嵌 `ExecReport` + 规则 findings）；只读，不改 params / `liveEnabled`。`scenario=momentum_delta` 仅允许动能两键；触 `progress_*` → `400 SCENARIO_PROGRESS_FORBIDDEN`。合同：`docs/adapters/paper-postmortem-v0.md` · `docs/viz/postmortem-panel-v0.md`
+- `GET /api/v1/stats/postmortem` — 同上别名
+- `GET /api/v1/stats/exec-report` — 仅 `ExecReport`（`live_hint` 恒 null）
 - `GET /api/v1/strategy/pump-paper-v1/decision-log?from=&to=` — `DecisionLog` 行（`reject_bucket=progress|impact|risk|none`）
 
 ## 可执行性（additive · 纸面证据，非实盘）
