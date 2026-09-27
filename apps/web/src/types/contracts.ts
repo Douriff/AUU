@@ -622,6 +622,108 @@ export interface ExecutabilityReport {
   empty: boolean;
 }
 
+export type PostmortemExitReason =
+  | "take_profit"
+  | "stop_loss"
+  | "max_hold"
+  | "sell_pressure"
+  | "graduation"
+  | "orphan"
+  | "other";
+
+export interface PostmortemExitBucket {
+  reason: PostmortemExitReason | string;
+  count: number;
+  pct: number;
+  expectancy: number | null;
+  median_pnl: number | null;
+  median_hold_sec: number | null;
+}
+
+export interface PostmortemImpactBucket {
+  q: "Q1" | "Q2" | "Q3" | "Q4" | string;
+  count: number;
+  expectancy: number | null;
+  median_impact_bps: number | null;
+  dominant_exit: string | null;
+}
+
+export interface PostmortemFinding {
+  id: string;
+  severity: "info" | "warn" | string;
+  title: string;
+  detail: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ExecReport {
+  asof_ts: number;
+  go_window_label: string;
+  params_fingerprint: string;
+  gates: {
+    n_closed: number;
+    sample_ok: boolean;
+    expectancy: number | null;
+    expectancy_ok: boolean;
+    median_entry_impact_net_bps: number | null;
+    median_entry_impact_ok: boolean;
+    shadow_p50_bps: number | null;
+    shadow_coverage: { n: number; need: number } | null;
+    shadow_ok: boolean;
+    reject_buckets: { progress: number; impact: number; risk: number };
+    reject_ok: boolean;
+    overall_go: boolean;
+  };
+  live_language_allowed: boolean;
+  live_hint: null;
+  metrics: {
+    win_rate: number | null;
+    shadow_p90_bps: number | null;
+    impact_error_p50_bps: number | null;
+  };
+}
+
+export interface ScenarioState {
+  tag: "off" | "momentum_delta" | string;
+  enabled: boolean;
+  delta: {
+    min_trade_count_1m: number | null;
+    min_buy_sell_ratio_1m: number | null;
+  };
+  forbidden_touched: string[];
+  debug?: {
+    scenario?: {
+      tag: string;
+      parent_fingerprint: string;
+      delta: Record<string, unknown>;
+      started_ts: number | null;
+    };
+  };
+}
+
+export interface PostmortemReport {
+  asof_ts: number;
+  window: { from_ts: number; to_ts: number; n_closed: number; label?: string | number };
+  params_fingerprint: string;
+  go_window_label: string;
+  exec: ExecReport;
+  summary: {
+    n_closed: number;
+    expectancy: number | null;
+    win_rate: number | null;
+    sample_ok: boolean;
+  };
+  by_exit_reason: PostmortemExitBucket[];
+  by_impact_quartile: PostmortemImpactBucket[];
+  rolling_expectancy: { i: number; expectancy: number }[];
+  findings: PostmortemFinding[];
+  scenario: ScenarioState;
+  notes: string[];
+  liveEnabled?: boolean;
+  liveDisabled?: boolean;
+  debug?: Record<string, unknown>;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

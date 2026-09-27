@@ -389,6 +389,40 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .exec-live-checks li[data-on="1"]::before { content: "☑ "; color: var(--green); }
 .exec-note { margin: 0.2rem 0 0; }
 .exec-rejects { margin: 0.2rem 0 0; color: var(--muted); font-family: ui-monospace, monospace; }
+.postmortem-panel {
+  margin-top: 0.45rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.postmortem-panel header {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+}
+.postmortem-panel h3 { margin: 0; font-size: 0.75rem; font-weight: 600; }
+.pm-summary dl { display: flex; flex-wrap: wrap; gap: 0.65rem 1.2rem; margin: 0.3rem 0 0.15rem; }
+.pm-summary dl div { display: flex; gap: 0.35rem; align-items: baseline; }
+.pm-summary dt { color: var(--muted); font-size: 0.72rem; }
+.pm-summary dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.pm-summary dd.ok { color: var(--green); }
+.pm-summary dd.warn { color: var(--warn); }
+.pm-exit-bars { display: grid; gap: 0.2rem; margin: 0.3rem 0 0.15rem; max-width: 24rem; }
+.pm-exit-bars label {
+  display: grid; grid-template-columns: 2.6rem 1fr auto; gap: 0.4rem;
+  align-items: center; font-size: 0.7rem; color: var(--muted);
+}
+.pm-exit-bars i { height: 6px; background: var(--accent); border-radius: 3px; display: block; }
+.pm-exit-bars em { font-style: normal; font-family: ui-monospace, monospace; }
+.pm-impact { margin-top: 0.25rem; }
+.pm-impact-table {
+  width: auto; min-width: 18rem; max-width: 100%;
+  border-collapse: collapse; margin-top: 0.2rem;
+  font-family: ui-monospace, monospace; font-size: 0.68rem;
+}
+.pm-impact-table th, .pm-impact-table td { text-align: left; padding: 0.12rem 0.35rem; }
+.pm-findings { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.pm-findings li { font-size: 0.72rem; line-height: 1.35; padding: 0.2rem 0.35rem; border-left: 2px solid var(--border); }
+.pm-findings li[data-severity="warn"] { border-left-color: var(--warn); }
+.pm-findings li[data-severity="info"] { border-left-color: var(--accent); }
+.pm-findings strong { font-weight: 600; }
 .trade-page .paper-stats {
   border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
 }

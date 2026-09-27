@@ -1,0 +1,22 @@
+[
+  {
+    "id": "tp-0",
+    "strategy_id": "pump-paper-v1",
+    "symbol": "TP/SOL",
+    "mint": null,
+    "entry_ts": 1000,
+    "exit_ts": 30000,
+    "entry_price": 1.0,
+    "exit_price": 1.06,
+    "qty": 1.0,
+    "pnl": 0.06,
+    "pnl_pct": 0.06,
+    "fees": 0.0,
+    "tags": ["TAKE_PROFIT", "pump-paper-v1"],
+    "source": "signal",
+    "side": "long",
+    "entry_estimated_impact_bps": 18.0,
+    "entry_estimated_impact_net_bps": 18.0,
+    "entry_shadow_slippage_bps": 8.0
+  }
+]

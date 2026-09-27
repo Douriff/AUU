@@ -9,6 +9,8 @@ import type {
   PaperOrderResult,
   PaperPerformance,
   ExecutabilityReport,
+  PostmortemReport,
+  ExecReport,
   PipelineResult,
   PumpfunPaperSnapshot,
   PumpPaperParams,
@@ -209,6 +211,30 @@ export class HttpWsProvider {
   getExecutability(window = "session"): Promise<ExecutabilityReport> {
     const q = new URLSearchParams({ window: String(window) });
     return getJson(`/api/v1/stats/executability?${q}`);
+  }
+
+  getPostmortem(opts?: {
+    window?: string;
+    n?: number;
+    from?: number;
+    to?: number;
+    rolling?: number;
+    scenario?: string;
+  }): Promise<PostmortemReport> {
+    const q = new URLSearchParams({
+      window: String(opts?.window ?? "session"),
+      n: String(opts?.n ?? 30),
+      rolling: String(opts?.rolling ?? 10),
+      scenario: String(opts?.scenario ?? "off"),
+    });
+    if (opts?.from != null) q.set("from", String(opts.from));
+    if (opts?.to != null) q.set("to", String(opts.to));
+    return getJson(`/api/v1/strategy/pump-paper-v1/postmortem?${q}`);
+  }
+
+  getExecReport(window = "session"): Promise<ExecReport> {
+    const q = new URLSearchParams({ window: String(window) });
+    return getJson(`/api/v1/stats/exec-report?${q}`);
   }
 
   getDecisionLog(fromTs?: number, toTs?: number) {
