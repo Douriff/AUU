@@ -724,6 +724,46 @@ export interface PostmortemReport {
   debug?: Record<string, unknown>;
 }
 
+export interface ShadowExitCompare {
+  reason: string;
+  main_count: number;
+  shadow_count: number;
+  main_pct: number;
+  shadow_pct: number;
+}
+
+export interface ShadowCompareColumn {
+  id: string;
+  label: string;
+  n: number;
+  win_rate: number | null;
+  expectancy: number | null;
+  median_net_bps: number | null;
+  sample_ok: boolean;
+  by_exit_reason: PostmortemExitBucket[];
+  habit_tag?: string | null;
+  watch_id?: string | null;
+  source?: string;
+  setup_seed_tags?: string[];
+  params?: Partial<PumpPaperParams>;
+  exit_vs_main?: ShadowExitCompare[];
+}
+
+export interface ShadowCompareReport {
+  enabled: boolean;
+  liveEnabled: false;
+  note: string;
+  notes: string[];
+  max_sets: number;
+  sample_min_n: number;
+  go_window_label: string;
+  strategyId: string;
+  progress_locked: { progress_bps_min: number; progress_bps_max: number };
+  main: ShadowCompareColumn;
+  sets: ShadowCompareColumn[];
+  asof_ts: number;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

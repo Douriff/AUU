@@ -1005,6 +1005,22 @@ class PumpPaperEngine:
                         await self._force_orphan_flat(symbol, snap, held, now_ms)
                     except Exception:
                         log.exception("pump-paper-v1 orphan exit failed for %s", symbol)
+            # Virtual HabitTag shadow sets. No paper order; main journal untouched.
+            try:
+                from app.paper.shadow_compare import observe_candidate
+
+                observe_candidate(
+                    symbol=symbol,
+                    snapshot=snap,
+                    tape=tape,
+                    now_ms=now_ms,
+                    notional_sol=float(sized),
+                    impact_entry_bps=float(impact_in),
+                    sell_pressure_ms=int(pressure_ms),
+                    main_params=self.params,
+                )
+            except Exception:
+                log.exception("shadow compare observe failed for %s", symbol)
 
     async def run_loop(self) -> None:
         self._running = True

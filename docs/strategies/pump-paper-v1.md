@@ -224,3 +224,13 @@ strategy_autopaper: false   # alias of auto_paper_orders; default off
 - `bag`：放宽 `max_hold_sec`，收紧 `stop_loss_pct`（不取消日亏熔断）
 - `feature_weights.impact` 更厌恶冲击时仍受 `max_impact_bps=80` 硬顶
 - Journal / 成功概率仍只吃自有纸面；`CompareReport` 为 `reference_only`
+
+---
+
+## 10. 影子参数对照（纸面，默认关）
+
+与主 Go 窗同一条发现/tape。影子集合只改动能阈值、止盈/止损、持仓；`progress_*` 配置 → `400 SHADOW_PROGRESS_FORBIDDEN`。最多 3 组。默认 **关**。
+
+- `GET /api/v1/strategy/pump-paper-v1/shadow-compare` 只读：每组 n、胜率、期望、中位 net bps、出场对比主窗、`sample_ok`（n≥30）。`note`：shadow results never enable live。
+- `PUT` 同一路径配置 `enabled` / `sets`，或 `derive_from_habits`（读 HabitTags，不写 HabitProfile）。`setup_seed_tags` 只是标签。
+- 虚拟成交进影子 journal，不进 PaperTradeJournal / DecisionLog / Go 门。不下额外纸面单。不改 round 8b 默认。`liveEnabled` 仍为 false。
