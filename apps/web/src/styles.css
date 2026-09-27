@@ -423,6 +423,25 @@ code { background: #21262d; padding: 0.1em 0.35em; border-radius: 4px; }
 .pm-findings li[data-severity="warn"] { border-left-color: var(--warn); }
 .pm-findings li[data-severity="info"] { border-left-color: var(--accent); }
 .pm-findings strong { font-weight: 600; }
+.shadow-compare-panel {
+  margin-top: 0.45rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.shadow-compare-panel header {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+}
+.shadow-compare-panel h3 { margin: 0; font-size: 0.75rem; font-weight: 600; }
+.shadow-note { margin: 0.25rem 0 0; }
+.shadow-compare-table {
+  width: auto; min-width: 16rem; max-width: 100%;
+  border-collapse: collapse; margin-top: 0.25rem;
+  font-family: ui-monospace, monospace; font-size: 0.68rem;
+}
+.shadow-compare-table th, .shadow-compare-table td {
+  text-align: left; padding: 0.12rem 0.4rem; vertical-align: top;
+}
+.shadow-compare-table tbody th { color: var(--muted); font-weight: 500; }
 .trade-page .paper-stats {
   border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem;
 }

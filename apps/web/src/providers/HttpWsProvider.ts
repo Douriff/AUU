@@ -10,6 +10,7 @@ import type {
   PaperPerformance,
   ExecutabilityReport,
   PostmortemReport,
+  ShadowCompareReport,
   ExecReport,
   PipelineResult,
   PumpfunPaperSnapshot,
@@ -230,6 +231,10 @@ export class HttpWsProvider {
     if (opts?.from != null) q.set("from", String(opts.from));
     if (opts?.to != null) q.set("to", String(opts.to));
     return getJson(`/api/v1/strategy/pump-paper-v1/postmortem?${q}`);
+  }
+
+  getShadowCompare(): Promise<ShadowCompareReport> {
+    return getJson("/api/v1/strategy/pump-paper-v1/shadow-compare");
   }
 
   getExecReport(window = "session"): Promise<ExecReport> {

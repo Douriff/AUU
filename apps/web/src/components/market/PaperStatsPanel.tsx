@@ -6,6 +6,7 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { habitLabel } from "@/components/watch/HabitTagChips";
 import { ExecutabilityPanel } from "@/components/market/ExecutabilityPanel";
 import { PostmortemPanel } from "@/components/market/PostmortemPanel";
+import { ShadowComparePanel } from "@/components/market/ShadowComparePanel";
 import type { CompareReport, EquityPoint } from "@/types/contracts";
 
 const STATS_KEY = "auu:show_paper_stats";
@@ -276,6 +277,7 @@ export function PaperStatsPanel({ compact }: Props) {
       ) : null}
       <ExecutabilityPanel report={exec} err={execErr} compact={compact} />
       <PostmortemPanel compact={compact} />
+      <ShadowComparePanel compact={compact} />
     </section>
   );
 }

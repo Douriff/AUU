@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from app.bus import get_hub
@@ -12,6 +12,12 @@ from app.live.gate import evaluate
 from app.paper.ledger import build_performance, reset_paper_journal
 from app.paper.decision_log import get_decision_log, reset_decision_log
 from app.paper.postmortem import ScenarioProgressForbidden, build_postmortem
+from app.paper.shadow_compare import (
+    ShadowConfigError,
+    ShadowProgressForbidden,
+    apply_shadow_config,
+    build_shadow_compare,
+)
 from app.risk import get_risk_gate
 from app.routes.envelope import err, ok
 from app.strategies.pump_paper_v1 import STRATEGY_ID, get_engine
@@ -182,6 +188,30 @@ def get_pump_paper_postmortem(
         )
     except ScenarioProgressForbidden as e:
         return err(e.code, str(e), 400, extra={"forbidden_touched": e.touched})
+    return ok(data)
+
+
+@router.get("/pump-paper-v1/shadow-compare")
+def get_shadow_compare():
+    """Read-only shadow vs main comparison. Never enables live or mutates Go stats."""
+    return ok(build_shadow_compare())
+
+
+@router.put("/pump-paper-v1/shadow-compare")
+async def put_shadow_compare(request: Request):
+    """Paper-only shadow set config. progress_* → 400 SHADOW_PROGRESS_FORBIDDEN."""
+    try:
+        body = await request.json()
+    except Exception:
+        return err("SHADOW_PARAM_INVALID", "body must be an object", 400)
+    if not isinstance(body, dict):
+        return err("SHADOW_PARAM_INVALID", "body must be an object", 400)
+    try:
+        data = apply_shadow_config(body)
+    except ShadowProgressForbidden as e:
+        return err(e.code, str(e), 400, extra={"forbidden_touched": e.touched})
+    except ShadowConfigError as e:
+        return err(e.code, str(e), 400)
     return ok(data)
 
 
