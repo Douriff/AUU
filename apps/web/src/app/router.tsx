@@ -8,6 +8,7 @@ import { ReviewPage } from "@/pages/ReviewPage/ReviewPage";
 import { StrategyPage } from "@/pages/StrategyPage/StrategyPage";
 import { TradePage } from "@/pages/TradePage/TradePage";
 import { TradingPage } from "@/pages/TradingPage/TradingPage";
+import { MajorsPage } from "@/pages/MajorsPage/MajorsPage";
 import { BacktestPage } from "@/pages/BacktestPage/BacktestPage";
 import { AlertsPage } from "@/pages/AlertsPage/AlertsPage";
 import { WatchPage } from "@/pages/WatchPage/WatchPage";
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "strategy", element: <StrategyPage /> },
       { path: "trade", element: <TradingPage /> },
       { path: "trade/:mint", element: <TradingPage /> },
+      { path: "majors", element: <MajorsPage /> },
       { path: "positions", element: <TradePage /> },
       { path: "backtest", element: <BacktestPage /> },
       { path: "watch", element: <WatchPage /> },

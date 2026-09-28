@@ -106,11 +106,10 @@ def limits_snapshot(symbol: str = "") -> dict[str, Any]:
     }
 
 
-def resolve_symbol(symbol: str = "", mint: str = "") -> Optional[str]:
+def _local_symbol(symbol: str = "", mint: str = "") -> Optional[str]:
     from app.providers import get_provider
 
-    provider = get_provider()
-    infos = provider.list_symbols()
+    infos = get_provider().list_symbols()
     raw = (symbol or "").strip()
     mint_s = (mint or "").strip()
     if mint_s:
@@ -126,14 +125,53 @@ def resolve_symbol(symbol: str = "", mint: str = "") -> Optional[str]:
     return None
 
 
+def _looks_like_mint(value: str) -> bool:
+    text = (value or "").strip()
+    return "/" not in text and len(text) >= 32
+
+
+def resolve_symbol(symbol: str = "", mint: str = "") -> Optional[str]:
+    local = _local_symbol(symbol, mint)
+    if local:
+        return local
+    from app.marketdata.pump_search import coin_by_symbol
+
+    raw = (symbol or "").strip()
+    if raw and coin_by_symbol(raw):
+        return raw
+    candidate = (mint or "").strip()
+    if not candidate and _looks_like_mint(symbol):
+        candidate = symbol.strip()
+    if not candidate:
+        return None
+    from app.marketdata.pump_search import get_coin
+
+    coin = get_coin(candidate)
+    if not coin:
+        return None
+    return str(coin.get("trade_symbol") or "") or None
+
+
+def _uses_estimate(symbol: str) -> bool:
+    from app.marketdata.pump_search import coin_by_symbol
+
+    coin = coin_by_symbol(symbol)
+    return bool(coin) and not coin.get("has_curve")
+
+
 def _snapshot(symbol: str):
     from app.providers import get_provider
 
     provider = get_provider()
     snap = provider.get_pumpfun_snapshot(symbol) if hasattr(provider, "get_pumpfun_snapshot") else None
-    if snap is None:
+    if snap is not None:
+        return snap
+    from app.marketdata.pump_search import snapshot_for_symbol
+
+    external = snapshot_for_symbol(symbol)
+    if external is None:
         raise ManualTradeError("UNKNOWN_SYMBOL")
-    return snap
+    return external
 
 
 def _spread_bps(snap: Any) -> float:
@@ -167,11 +205,14 @@ def notional_for_qty(mid: float, qty: float, side: str) -> float:
 def _build_ctx(symbol: str, snap: Any, pos_qty: float) -> StrategyContext:
     now_ms = int(time.time() * 1000)
     gate = get_risk_gate()
-    return StrategyContext(
-        symbol=symbol,
-        ts=now_ms,
-        account=AccountCtx(equity=_equity(), day_pnl=float(gate.day_pnl)),
-        liquidity=LiquidityCtx(
+    # Graduated external quotes have no curve reserves. A deep ADV keeps the
+    # existing gate from inventing a second impact number; the ticket shows
+    # the AMM estimate instead.
+    if _uses_estimate(symbol):
+        liquidity = LiquidityCtx(spread_bps=20.0, adv_usd=1_000_000_000_000.0)
+        pump = None
+    else:
+        liquidity = LiquidityCtx(
             spread_bps=_spread_bps(snap),
             adv_usd=ADV_USD,
             virtual_sol_reserves=snap.virtual_sol_reserves,
@@ -179,10 +220,16 @@ def _build_ctx(symbol: str, snap: Any, pos_qty: float) -> StrategyContext:
             real_sol_reserves=snap.real_sol_reserves,
             real_token_reserves=snap.real_token_reserves,
             creator_fee_bps=int(getattr(snap, "creator_fee_bps", 0) or 0),
-        ),
+        )
+        pump = snap.to_pump_ctx()
+    return StrategyContext(
+        symbol=symbol,
+        ts=now_ms,
+        account=AccountCtx(equity=_equity(), day_pnl=float(gate.day_pnl)),
+        liquidity=liquidity,
         position=float(pos_qty),
         tick=TickCtx(mid=max(float(snap.price_sol), 1e-18)),
-        pump=snap.to_pump_ctx(),
+        pump=pump,
         meta={"mint": snap.mint, "source": "manual"},
     )
 
@@ -194,9 +241,13 @@ def _impact_effective(snap: Any, notional: float, side: str) -> tuple[float, flo
     return raw, raw * 1.5 if near else raw
 
 
-def _fee_fields(snap: Any, notional: float) -> dict[str, float]:
-    creator = int(getattr(snap, "creator_fee_bps", 0) or 0)
-    proto = int(DEFAULT_PROTOCOL_FEE_BPS)
+def _fee_fields(snap: Any, notional: float, *, estimate: bool = False) -> dict[str, float]:
+    if estimate:
+        proto = 25
+        creator = 0
+    else:
+        creator = int(getattr(snap, "creator_fee_bps", 0) or 0)
+        proto = int(DEFAULT_PROTOCOL_FEE_BPS)
     fee_bps = float(proto + creator + BROKER_FEE_BPS)
     return {
         "protocol_fee_bps": float(proto),
@@ -273,9 +324,18 @@ def preview_manual(
         blocked = _block_for(resolved, side_n, notional)
     mid = max(float(snap.price_sol), 1e-18)
     use_n = notional if notional > 0 else 0.1
-    raw, effective = _impact_effective(snap, use_n, side_n)
+    from app.marketdata.pump_search import estimate_impact_bps
+
+    estimate = estimate_impact_bps(resolved, use_n)
+    if estimate is None:
+        raw, effective = _impact_effective(snap, use_n, side_n)
+        impact_kind = "curve"
+    else:
+        raw, effective = estimate, estimate
+        impact_kind = "estimate"
+    impact_word = "估算冲击" if impact_kind == "estimate" else "冲击"
     if blocked is None and side_n == "buy" and effective > 150.0:
-        blocked = ("SLIPPAGE_CAP", f"冲击 {effective:.0f} bps，超过 150")
+        blocked = ("SLIPPAGE_CAP", f"{impact_word} {effective:.0f} bps，超过 150")
     px, slip = _expected_px(mid, use_n, side_n)
     body = {
         **envelope_flags(),
@@ -287,6 +347,8 @@ def preview_manual(
         "price_sol": mid,
         "impact_bps": effective,
         "curve_impact_bps": raw,
+        "impact_kind": impact_kind,
+        "impact_label": "估算" if impact_kind == "estimate" else "曲线",
         "slippage_bps": slip,
         "expected_price": px,
         "expected_qty": (use_n / px) if notional > 0 else 0.0,
@@ -295,7 +357,7 @@ def preview_manual(
         "block_message": blocked[1] if blocked else "",
         "limits": limits_snapshot(resolved),
     }
-    body.update(_fee_fields(snap, use_n if notional > 0 else 0.0))
+    body.update(_fee_fields(snap, use_n if notional > 0 else 0.0, estimate=impact_kind == "estimate"))
     return body
 
 
@@ -363,6 +425,25 @@ async def submit_manual(
     blocked = _block_for(resolved, side_n, notional)
     if blocked is not None:
         raise ManualTradeError(blocked[0], blocked[1])
+
+    from app.marketdata.pump_search import estimate_impact_bps
+
+    estimate = estimate_impact_bps(resolved, notional)
+    if side_n == "buy" and estimate is not None and estimate > 150.0:
+        view = position_view(symbol=resolved)
+        view.update(
+            {
+                "submitted": [],
+                "reject": {
+                    "tags": ["SLIPPAGE_CAP"],
+                    "notes": f"估算冲击 {estimate:.0f} bps，超过 150",
+                },
+                "side": side_n,
+                "notional_sol": abs(notional),
+                "impact_kind": "estimate",
+            }
+        )
+        return view
 
     pos = position_qty(resolved)
     ctx = _build_ctx(resolved, snap, pos)
