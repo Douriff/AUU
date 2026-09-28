@@ -1147,6 +1147,72 @@ export interface AuthMe {
   mode: string;
 }
 
+export interface WalletRisk {
+  max_notional_sol: number;
+  max_day_loss_pct: number;
+  max_open_positions: number;
+}
+
+export interface WalletConsent {
+  version: string;
+  ts: number;
+}
+
+export interface WalletStatus {
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  mode: string;
+  wallet_mode: "off" | "devnet" | "mainnet" | string;
+  network: string | null;
+  global_halt: boolean;
+  tx_allowed: boolean;
+  bound: boolean;
+  pubkey: string | null;
+  wallet_enabled: boolean;
+  consent: WalletConsent | null;
+  risk: WalletRisk;
+  hard_limits: WalletRisk;
+  risk_version: string;
+  risk_text: string;
+  custodial: boolean;
+}
+
+export interface WalletChallenge {
+  nonce: string;
+  exp: number;
+  message: string;
+  network: string;
+  liveEnabled: boolean;
+}
+
+export interface WalletPrepared {
+  prepare_id: string;
+  network: string;
+  kind: string;
+  amount_sol: number;
+  tx_base64: string;
+  liveEnabled: boolean;
+  custodial: boolean;
+  note: string;
+}
+
+export interface WalletLedgerItem {
+  id: string;
+  pubkey: string;
+  network: string;
+  signature: string;
+  status: string;
+  amount_sol: number;
+  kind: string;
+  ts: number;
+}
+
+export interface WalletLedger {
+  liveEnabled: boolean;
+  network: string;
+  items: WalletLedgerItem[];
+}
+
 export interface Leaderboard {
   mode: string;
   liveEnabled: boolean;

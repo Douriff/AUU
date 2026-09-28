@@ -13,6 +13,7 @@ import { DATA_SOURCES, VENUE } from "@/venue";
 import type { DataSource } from "@/venue";
 import type { LiveStatus } from "@/types/contracts";
 import { AccountSection } from "@/pages/SettingsPage/AccountSection";
+import { WalletSection } from "@/pages/SettingsPage/WalletSection";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
@@ -115,7 +116,7 @@ export function SettingsPage() {
     <div className="shell-page">
       <h1>设置 / Settings</h1>
       <p className="muted">
-        纸面默认；无实盘密钥、无钱包。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
+        纸面默认；实盘适配器默认关闭。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
         ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
         {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
         {" "}
@@ -123,6 +124,7 @@ export function SettingsPage() {
       </p>
 
       <AccountSection />
+      <WalletSection />
 
       <section className="settings-section">
         <h2>Market · DATA_PROVIDER</h2>
