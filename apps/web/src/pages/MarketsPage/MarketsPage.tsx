@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PriceCell } from "@/components/markets/PriceCell";
 import { Sparkline } from "@/components/markets/Sparkline";
 import { useMarkets } from "@/hooks/useMarkets";
@@ -86,22 +87,27 @@ const MarketRow = memo(function MarketRow({
   rank,
   starred,
   onToggle,
+  onOpen,
 }: {
   row: MarketItem;
   rank: number;
   starred: boolean;
   onToggle: (symbol: string) => void;
+  onOpen: (row: MarketItem) => void;
 }) {
   const progress = row.progress_pct;
   return (
-    <tr>
+    <tr className="mk-row" onClick={() => onOpen(row)}>
       <td className="mk-star">
         <button
           type="button"
           className={starred ? "is-on" : ""}
           aria-pressed={starred}
           aria-label={starred ? `取消观察 ${row.base}` : `加入观察池 ${row.base}`}
-          onClick={() => onToggle(row.symbol)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle(row.symbol);
+          }}
         >
           {starred ? "★" : "☆"}
         </button>
@@ -159,6 +165,7 @@ function HeaderButton({
 }
 
 export function MarketsPage() {
+  const navigate = useNavigate();
   const { list, err } = useMarkets(2500);
   const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
@@ -274,6 +281,7 @@ export function MarketsPage() {
                   rank={i + 1}
                   starred={starSet.has(row.symbol)}
                   onToggle={toggleStar}
+                  onOpen={(item) => navigate(`/trade/${encodeURIComponent(item.mint || item.symbol)}`)}
                 />
               ))}
             </tbody>

@@ -921,6 +921,66 @@ export interface MarketList {
   empty: boolean;
 }
 
+export interface TradeLimits {
+  max_notional_sol: number;
+  max_open_positions: number;
+  max_day_loss_pct: number;
+  open_positions: number;
+  held: boolean;
+  day_loss_tripped: boolean;
+  day_pnl: number;
+}
+
+export interface TradePreview {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  source: string;
+  symbol: string;
+  mint: string;
+  base: string;
+  side: "buy" | "sell";
+  notional_sol: number;
+  price_sol: number;
+  impact_bps: number;
+  fee_bps: number;
+  fee_sol: number;
+  expected_price: number;
+  expected_qty: number;
+  blocked: boolean;
+  block_code: string | null;
+  block_message: string;
+  limits: TradeLimits;
+}
+
+export interface TradeFillRow {
+  ts: number;
+  side: "buy" | "sell";
+  price: number;
+  qty: number;
+  fee: number;
+  source: string;
+}
+
+export interface TradePosition {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  symbol: string;
+  mint: string;
+  base: string;
+  qty: number;
+  entry_price: number | null;
+  mark: number;
+  notional_sol: number;
+  upnl: number;
+  fills: TradeFillRow[];
+  limits: TradeLimits;
+  submitted?: unknown[];
+  reject?: { tags?: string[]; notes?: string } | null;
+  side?: string;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

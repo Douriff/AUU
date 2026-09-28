@@ -952,6 +952,11 @@ def _main_rows() -> list[dict[str, Any]]:
     for trade in get_paper_journal().closed:
         if (trade.source or "") == "live":
             continue
+        if (trade.source or "") == "manual":
+            continue
+        blob = " ".join(str(t).lower() for t in (trade.tags or []))
+        if "source=manual" in blob or "source:manual" in blob:
+            continue
         if trade.strategy_id != STRATEGY_ID and STRATEGY_ID not in (trade.tags or []):
             continue
         dumped = trade.as_dict()

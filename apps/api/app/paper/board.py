@@ -127,8 +127,14 @@ def build_board() -> dict[str, Any]:
             }
         )
 
+    from app.paper.ledger import excluded_from_autopaper_stats
+
     journal = get_paper_journal()
-    trades = [t for t in journal.closed if (t.source or "") != "live"]
+    trades = [
+        t
+        for t in journal.closed
+        if (t.source or "") != "live" and not excluded_from_autopaper_stats(t)
+    ]
     equity: list[dict[str, Any]] = []
     cum = 0.0
     if trades:
