@@ -12,6 +12,7 @@ import type {
   ConsoleFeed,
   MajorsBoard,
   MajorsCompare,
+  MajorsTickerBoard,
   MarketList,
   UniversePage,
   SearchCoinDetail,
@@ -252,6 +253,23 @@ export class HttpWsProvider {
 
   getMajors(): Promise<MajorsBoard> {
     return getJson("/api/v1/majors");
+  }
+
+  getMajorsTickers(q: {
+    venue: string;
+    limit?: number;
+    q?: string;
+    sort?: string;
+    dir?: string;
+    bucket?: string;
+  }): Promise<MajorsTickerBoard> {
+    const params = new URLSearchParams({ venue: q.venue });
+    if (q.limit) params.set("limit", String(q.limit));
+    if (q.q) params.set("q", q.q);
+    if (q.sort) params.set("sort", q.sort);
+    if (q.dir) params.set("dir", q.dir);
+    if (q.bucket) params.set("bucket", q.bucket);
+    return getJson(`/api/v1/majors/tickers?${params}`);
   }
 
   getMajorsCompare(base: string, onchainUsd?: number | null): Promise<MajorsCompare> {

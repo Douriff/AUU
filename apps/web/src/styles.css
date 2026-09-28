@@ -1431,5 +1431,13 @@ code.hl { color: var(--accent); }
 .majors-page .up { color: #3ee08f; }
 .majors-page .down { color: #ff5d5d; }
 .mj-off { color: #ffb020; font-size: 0.85rem; }
+.mj-dense { padding: 0.55rem 0.7rem 1rem; }
+.mj-dense h1 { font-size: 1.05rem; margin: 0; }
+.mj-dense .mj-top p { margin: 0.2rem 0 0; color: #8d8d96; font-size: 0.75rem; }
+.mj-tools { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin-bottom: 0.45rem; }
+.mj-dense .mj-table { min-width: 860px; }
+.mj-dense .mj-table th, .mj-dense .mj-table td { padding: 0.28rem 0.45rem; font-size: 0.75rem; }
+.mj-dense .mj-table th button { background: transparent; border: 0; color: inherit; font: inherit; padding: 0; }
+.mj-rank { color: #8d8d96; font-family: ui-monospace, monospace; }
 .mj-err { color: #ffb020; }
 .majors-page .num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

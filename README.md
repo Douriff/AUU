@@ -23,7 +23,7 @@ flowchart TB
 | BoardPage `/` | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
 | MarketsPage `/markets` | 市场：pump.fun 全站表（`GET /api/v1/universe`，热门 / 新币 / 即将毕业 / 已毕业 / 涨跌榜 / 观察池）。与发现模式无关。本地模拟币只在 `AUU_UNIVERSE_MOCK=1` 时出现。点行进入 `/trade/:mint` |
 | TradingPage `/trade` | 交易：全站搜索（`GET /api/v1/search`，pump.fun，失败则 DexScreener）、任意 mint 报价、纸面买卖票。单笔 1 SOL、10 仓、日亏 4.5%。`liveEnabled` 恒 false |
-| MajorsPage `/majors` | 大盘：Binance / OKX / Bybit / Coinbase 公开行情（无密钥、无下单）。单所不可用时其余继续 |
+| MajorsPage `/majors` | 大盘：各所成交额前 100 的 USDT/USD（`GET /api/v1/majors/tickers`），涨跌筛选，跨所买卖价差。无密钥、无下单。单所不可用时其余继续。所址可用 `BINANCE_REST_URL` / `OKX_REST_URL` / `BYBIT_REST_URL` / `COINBASE_MARKET_URL` |
 | MarketPage `/market` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar / CurvePanel |
 | `/positions` | 旧纸面单面板：pre-order → paper/orders；可选 one-shot `decide-and-fill`；dataSource `mock \| paper \| pumpfun_paper` |
 | Settings | `DATA_PROVIDER=mock\|pumpfun_paper` + `dataSource=mock\|paper\|pumpfun_paper`；venue=Pump.fun |

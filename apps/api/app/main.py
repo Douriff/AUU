@@ -152,6 +152,7 @@ def root():
                 "search": "GET /api/v1/search?q=",
                 "searchCoin": "GET /api/v1/search/coin?mint=",
                 "majors": "GET /api/v1/majors",
+                "majorsTickers": "GET /api/v1/majors/tickers?venue=",
                 "majorsCompare": "GET /api/v1/majors/compare?base=",
                 "events": "GET /api/v1/events",
                 "tradePreview": "GET /api/v1/trade/preview",
