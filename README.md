@@ -141,7 +141,7 @@ curl -sS http://localhost:8000/api/v1/strategy/pump-paper-v1 \
 
 设置页可以连接 Phantom 或 Solflare，用 `signMessage` 绑定公钥。服务端只存公钥，用 ed25519 验签，不保存私钥，不托管资金，不代签名，不自动下单。`liveEnabled` 仍默认 false。钱包流水单独存放，不进入纸面 journal，也不计入 Go/No-Go 或影子对照。
 
-`AUU_WALLET_MODE` 默认 `off`。设为 `devnet` 后，已绑定并勾选风险提示的用户可以签一笔金额为 0 的 devnet memo。主网下单不在这一步开放。管理员可以一键关闭所有人的钱包模式。部署时不要把任何私钥放上服务器，也不要把带密钥的 RPC URL 打进前端。
+`AUU_WALLET_MODE` 默认 `off`。设为 `devnet` 后，已绑定并勾选风险提示的用户可以签一笔金额为 0 的 devnet memo。设为 `mainnet` 后，交易页才出现真钱买入/卖出：服务端只组未签名交易，用户在自己的钱包里签名，服务端核对签名和交易内容后再用 `SOLANA_RPC_URL_MAINNET` 广播。管理员可以一键关闭所有人的钱包模式。部署时不要把任何私钥放上服务器，也不要把带密钥的 RPC URL 打进前端。
 
 说明、环境变量和风险提示全文见 `docs/adapters/wallet-noncustodial-v0.md`。
 

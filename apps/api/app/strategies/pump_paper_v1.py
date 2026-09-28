@@ -1044,6 +1044,16 @@ class PumpPaperEngine:
 _engine: Optional[PumpPaperEngine] = None
 
 
+def current_params() -> tuple[PumpPaperParams, float]:
+    """Read-only snapshot of the running table, or the round8b defaults.
+
+    Does not create the engine, does not start autopaper, and does not submit orders.
+    """
+    if _engine is None:
+        return PumpPaperParams(), 10_000.0
+    return _engine.params.model_copy(), float(_engine.equity)
+
+
 def get_engine() -> PumpPaperEngine:
     global _engine
     if _engine is None:

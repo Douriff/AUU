@@ -1,12 +1,14 @@
 """Non-custodial wallet HTTP. Stores pubkeys and signatures only."""
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Query, Request
 
 from app.auth.accounts import auth_enabled
 from app.routes.auth import session_user
 from app.routes.envelope import err, ok
-from app.wallet import service
+from app.wallet import orders, service
 
 router = APIRouter(prefix="/api/v1/wallet", tags=["wallet"])
 
@@ -22,10 +24,19 @@ _MESSAGES = {
     "WALLET_HALT": "管理员已关闭所有人的钱包模式",
     "WALLET_OFF": "钱包模式总开关关闭",
     "WALLET_DEVNET_ONLY": "当前只允许 devnet",
+    "WALLET_MAINNET_ONLY": "真钱单只在主网总开关打开时可用",
+    "SLIPPAGE": "滑点不能超过 150 bps",
+    "TAMPER": "交易内容和服务器组出的不一致",
+    "NO_POSITION": "没有可卖出的钱包仓位",
+    "BAD_PRICE": "缺少有效参考价",
+    "BAD_MINT": "mint 格式不正确",
+    "BAD_TX": "交易格式不正确",
+    "WALLET_ROUTE": "组单失败，请稍后再试",
+    "DAY_LOSS": "日亏已到上限，买入已停止",
     "NOT_BOUND": "请先绑定钱包公钥",
     "RISK_CONSENT": "开启钱包模式前需要勾选风险提示",
     "WALLET_MODE_OFF": "请先开启钱包模式并确认风险提示",
-    "WALLET_RPC": "devnet RPC 暂时不可用",
+    "WALLET_RPC": "RPC 暂时不可用",
     "PREPARE": "待签名交易已过期，请重新生成",
     "AUTH_OFF": "绑定钱包需要开启账户（AUU_AUTH=on）并登录",
     "BAD_BODY": "请求格式不正确",
@@ -170,6 +181,58 @@ async def wallet_record(request: Request):
         return raw
     try:
         body = service.record_signed(str(user["id"]), _text(raw, "prepare_id"), _text(raw, "signature"))
+    except ValueError as exc:
+        return _fail(exc)
+    return ok(body)
+
+
+@router.get("/signal")
+def wallet_signal(
+    request: Request,
+    mint: str = Query(""),
+    price_sol: Optional[float] = Query(None),
+):
+    from app.auth.accounts import auth_enabled
+
+    user = session_user(request) if auth_enabled() else None
+    user_id = str(user["id"]) if user else None
+    return ok(orders.recommendation(user_id, mint.strip(), price_sol))
+
+
+@router.post("/order/prepare")
+async def wallet_order_prepare(request: Request):
+    user, error = _actor(request)
+    if error is not None:
+        return error
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    side = _text(raw, "side")
+    try:
+        body = orders.prepare_order(
+            str(user["id"]),
+            mint=_text(raw, "mint"),
+            side=side,
+            notional_sol=raw.get("notional_sol"),
+            sell_pct=raw.get("sell_pct"),
+            price_sol=raw.get("price_sol"),
+            slippage_bps=raw.get("slippage_bps"),
+        )
+    except ValueError as exc:
+        return _fail(exc)
+    return ok(body)
+
+
+@router.post("/order/submit")
+async def wallet_order_submit(request: Request):
+    user, error = _actor(request)
+    if error is not None:
+        return error
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        body = orders.submit_order(str(user["id"]), _text(raw, "prepare_id"), _text(raw, "signed_tx"))
     except ValueError as exc:
         return _fail(exc)
     return ok(body)

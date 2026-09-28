@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PriceCell } from "@/components/markets/PriceCell";
+import { WalletSignalCard } from "@/components/wallet/WalletSignalCard";
 import { Sparkline } from "@/components/markets/Sparkline";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { UniverseMover, UniverseRow } from "@/types/contracts";
@@ -316,6 +317,8 @@ export function MarketsPage() {
           />
         </label>
       </header>
+
+      <WalletSignalCard mint={rows[0]?.mint} priceSol={rows[0]?.price_sol} symbol={rows[0]?.symbol} compact />
 
       <div className="mk-tabs" role="tablist" aria-label="市场筛选">
         {TABS.map((item) => (

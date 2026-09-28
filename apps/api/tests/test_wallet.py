@@ -40,13 +40,18 @@ def _sign_b58(secret: SigningKey, message: bytes) -> str:
 
 class WalletSourceTests(unittest.TestCase):
     def test_wallet_package_never_signs_or_imports_live(self):
-        banned = ("SigningKey", "sendTransaction", "from app.live", "import app.live", "Keypair")
+        banned = ("SigningKey", "from app.live", "import app.live", "Keypair")
         hits: list[str] = []
         for path in WALLET_PY.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             for word in banned:
                 if word in text:
                     hits.append(f"{path.name}:{word}")
+            if "sendTransaction" in text and path.name != "orders.py":
+                hits.append(f"{path.name}:sendTransaction")
+        orders = WALLET_PY / "orders.py"
+        if orders.exists() and orders.read_text(encoding="utf-8").count("sendTransaction") != 1:
+            hits.append("orders.py:sendTransaction")
         self.assertEqual(hits, [])
 
     def test_hard_caps_match_live_limits_and_stay_paper(self):

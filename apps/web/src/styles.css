@@ -1516,3 +1516,27 @@ code.hl { color: var(--accent); }
 }
 .wallet-table .sig { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .settings-section .warn { color: #ff8b8b; }
+.wallet-signal {
+  margin: 0.8rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #101114;
+}
+.wallet-signal h2 { font-size: 0.95rem; margin: 0.2rem 0 0.55rem; }
+.wallet-signal dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.55rem; margin: 0; }
+.wallet-signal dt { color: #8d8d96; font-size: 0.75rem; }
+.wallet-signal dd { margin: 0.15rem 0 0; font-variant-numeric: tabular-nums; }
+.wallet-signal.is-compact dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wallet-real {
+  border: 1px solid rgba(255, 93, 93, 0.55);
+  color: #ffb4b4;
+  background: rgba(255, 93, 93, 0.08);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  margin: 0 0 0.7rem;
+}
+.wallet-signal .warn { color: #ff8b8b; }
+@media (max-width: 720px) {
+  .wallet-signal dl, .wallet-signal.is-compact dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
