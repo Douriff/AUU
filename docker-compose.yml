@@ -15,6 +15,9 @@ services:
       AUU_LIVE_ENABLED: "false"
       AUU_LIVE_DISABLED: "true"
       AUU_LIVE_ARMED: "false"
+      # Deployed compose turns accounts on. A local process with AUU_AUTH unset stays single-user.
+      AUU_AUTH: "on"
+      AUU_ALLOW_SIGNUP: "on"
     restart: unless-stopped
 
   web:

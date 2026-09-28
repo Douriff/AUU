@@ -8,8 +8,11 @@ import type {
   NewTokenEvent,
   PaperOrderResult,
   PaperPerformance,
+  AuthMe,
+  AuthUser,
   BoardSnapshot,
   ConsoleFeed,
+  Leaderboard,
   MajorsBoard,
   MajorsCompare,
   MajorsTickerBoard,
@@ -33,6 +36,7 @@ import type {
   SignalOut,
   SymbolInfo,
   TradeTick,
+  UserBook,
   TraderWatchList,
   TraderWatchlistItem,
   HabitProfile,
@@ -87,7 +91,7 @@ function wsUrl(): string {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`);
+  const res = await fetch(`${apiBase()}${path}`, { credentials: "include" });
   const body = (await res.json()) as Envelope<T>;
   if (!body.ok) {
     throw new Error(body.error?.message ?? "request failed");
@@ -98,6 +102,7 @@ async function getJson<T>(path: string): Promise<T> {
 async function sendJson<T>(path: string, body: unknown, method: "POST" | "PUT"): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     method,
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -117,7 +122,7 @@ async function putJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function delJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, { method: "DELETE" });
+  const res = await fetch(`${apiBase()}${path}`, { method: "DELETE", credentials: "include" });
   const env = (await res.json()) as Envelope<T>;
   if (!env.ok) {
     throw new Error(env.error?.message ?? "request failed");
@@ -299,6 +304,46 @@ export class HttpWsProvider {
     if (q.symbol) params.set("symbol", q.symbol);
     if (q.mint) params.set("mint", q.mint);
     return getJson(`/api/v1/trade/position?${params}`);
+  }
+
+  getMe(): Promise<AuthMe> {
+    return getJson("/api/v1/auth/me");
+  }
+
+  registerAccount(body: {
+    name: string;
+    password: string;
+    password_confirm: string;
+    display_name?: string;
+    invite?: string;
+    start_sol?: number;
+  }): Promise<AuthMe> {
+    return postJson("/api/v1/auth/register", body);
+  }
+
+  login(body: { name: string; password: string }): Promise<AuthMe> {
+    return postJson("/api/v1/auth/login", body);
+  }
+
+  logout(): Promise<{ ok: boolean }> {
+    return postJson("/api/v1/auth/logout", {});
+  }
+
+  changePassword(body: { current_password: string; new_password: string; new_password_confirm: string }): Promise<{ ok: boolean }> {
+    return postJson("/api/v1/auth/password", body);
+  }
+
+  getLeaderboard(sort: "pnl" | "return" = "pnl"): Promise<Leaderboard> {
+    return getJson(`/api/v1/leaderboard?sort=${sort}`);
+  }
+
+  getAccounts(): Promise<{ items: AuthUser[] }> {
+    return getJson("/api/v1/auth/users");
+  }
+
+  getTradeBook(userId?: string): Promise<UserBook> {
+    const q = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+    return getJson(`/api/v1/trade/book${q}`);
   }
 
   postTradeOrder(body: {

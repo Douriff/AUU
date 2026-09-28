@@ -1121,6 +1121,60 @@ export interface TradePosition {
   side?: string;
 }
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  display_name?: string;
+  is_admin: boolean;
+  start_sol: number;
+  created_ts?: number;
+  pnl: number;
+  return_pct: number;
+  equity: number;
+  n_closed: number;
+  open_positions: number;
+  day_pnl: number;
+  liveEnabled: boolean;
+}
+
+export interface AuthMe {
+  auth_enabled: boolean;
+  signup_allowed: boolean;
+  invite_required: boolean;
+  user: AuthUser | null;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  mode: string;
+}
+
+export interface Leaderboard {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  auth_enabled: boolean;
+  sort: string;
+  note: string;
+  items: AuthUser[];
+}
+
+export interface UserBook {
+  mode: string;
+  liveEnabled: boolean;
+  user: { id: string; name: string; is_admin: boolean } | null;
+  items: {
+    symbol: string;
+    mint: string;
+    qty: number;
+    entry_price: number;
+    mark: number;
+    notional_sol: number;
+    upnl: number;
+    ts: number;
+  }[];
+  n_closed: number;
+  limits: TradeLimits;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

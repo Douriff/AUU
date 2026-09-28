@@ -285,6 +285,7 @@ class PaperTradeJournal:
         *,
         reason: str = "",
         mint: Optional[str] = None,
+        announce: bool = True,
     ) -> list[RoundTrip]:
         qty = float(fill.qty)
         px = float(fill.price)
@@ -395,6 +396,8 @@ class PaperTradeJournal:
         if not opened:
             self.lots.pop(symbol, None)
         self._maybe_persist()
+        if not announce:
+            return new_closed
         try:
             from app.paper.events import note_journal_fill
 

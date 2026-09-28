@@ -100,6 +100,8 @@ async def run_paper_order(
     *,
     auto_post_fill: bool = True,
     close_reason: str = "",
+    ledger: Optional[Any] = None,
+    touch_gate: bool = True,
 ) -> dict[str, Any]:
     """Submit to PaperBroker. Never fabricates a Fill when denied / empty."""
     blocked, why = live_execution_blocked()
@@ -139,43 +141,44 @@ async def run_paper_order(
         reject = broker.last_reject
         tags = reject.tags if reject else ["SLIPPAGE_CAP"]
         notes = reject.notes if reject else "no fill"
-        get_risk_gate().on_reject(ctx, tags)
-        mint = ctx.meta.get("mint") if ctx.meta else None
-        append_decision(
-            make_row(
-                ts=ctx.ts,
-                strategy_id=intent.client_tag or "paper",
-                symbol=ctx.symbol,
-                mint=str(mint) if mint else None,
-                stage="paper_submit",
-                outcome="reject",
-                signal_side=intent.side,
-                signal_reason=close_reason or (tags[0] if tags else "reject"),
-                risk_allow=False,
-                risk_tags=tags,
-                risk_notes=notes,
-                notional_sol=abs(float(intent.qty_or_notional)),
-                pump=ctx.pump,
-                liquidity=ctx.liquidity,
+        if touch_gate:
+            get_risk_gate().on_reject(ctx, tags)
+            mint = ctx.meta.get("mint") if ctx.meta else None
+            append_decision(
+                make_row(
+                    ts=ctx.ts,
+                    strategy_id=intent.client_tag or "paper",
+                    symbol=ctx.symbol,
+                    mint=str(mint) if mint else None,
+                    stage="paper_submit",
+                    outcome="reject",
+                    signal_side=intent.side,
+                    signal_reason=close_reason or (tags[0] if tags else "reject"),
+                    risk_allow=False,
+                    risk_tags=tags,
+                    risk_notes=notes,
+                    notional_sol=abs(float(intent.qty_or_notional)),
+                    pump=ctx.pump,
+                    liquidity=ctx.liquidity,
+                )
             )
-        )
-        await hub.publish(
-            {
-                "type": "reject",
-                "payload": {
-                    "ts": ctx.ts,
-                    "symbol": ctx.symbol,
-                    "tags": tags,
-                    "notes": notes,
-                },
-            }
-        )
+            await hub.publish(
+                {
+                    "type": "reject",
+                    "payload": {
+                        "ts": ctx.ts,
+                        "symbol": ctx.symbol,
+                        "tags": tags,
+                        "notes": notes,
+                    },
+                }
+            )
         return {"fills": [], "reject": {"tags": tags, "notes": notes}}
 
     gate = get_risk_gate()
     fill_payloads: list[dict[str, Any]] = []
     trading_state: Optional[str] = None
-    ledger = get_paper_ledger()
+    book = ledger if ledger is not None else get_paper_ledger()
     mint = None
     if ctx.meta:
         mint = ctx.meta.get("mint")
@@ -183,9 +186,16 @@ async def run_paper_order(
         dumped = f.model_dump()
         dumped["symbol"] = ctx.symbol
         fill_payloads.append(dumped)
-        ledger.record_fill(ctx.symbol, f, reason=close_reason, mint=str(mint) if mint else None)
-        await hub.publish({"type": "fill", "payload": dumped})
-        if auto_post_fill:
+        book.record_fill(
+            ctx.symbol,
+            f,
+            reason=close_reason,
+            mint=str(mint) if mint else None,
+            announce=ledger is None,
+        )
+        if touch_gate:
+            await hub.publish({"type": "fill", "payload": dumped})
+        if auto_post_fill and touch_gate:
             result = gate.post_fill(ctx, f)
             trading_state = result["trading_state"]
             if result.get("state_changed"):
@@ -204,40 +214,41 @@ async def run_paper_order(
     data: dict[str, Any] = {"fills": [f.model_dump() for f in fills]}
     if trading_state:
         data["trading_state"] = trading_state
-    first = fills[0]
-    mint = ctx.meta.get("mint") if ctx.meta else None
-    impact = first.estimated_impact_bps
-    decision_px = float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None
-    shadow = shadow_fields_for_fill(
-        first, ctx.symbol, impact, decision_px=decision_px, side=intent.side
-    )
-    append_decision(
-        make_row(
-            ts=first.ts,
-            strategy_id=intent.client_tag or "paper",
-            symbol=ctx.symbol,
-            mint=str(mint) if mint else None,
-            stage="paper_submit",
-            outcome="fill" if len(fills) == 1 else "partial",
-            signal_side=intent.side,
-            signal_reason=close_reason or "fill",
-            risk_allow=True,
-            risk_tags=list(risk.tags or []),
-            risk_notes=risk.notes,
-            notional_sol=abs(float(intent.qty_or_notional)),
-            impact_bps_est=impact,
-            impact_bps_cap=float(intent.max_slippage_bps),
-            estimated_impact_bps=shadow.get("estimated_impact_bps"),
-            pump=ctx.pump,
-            liquidity=ctx.liquidity,
-            decision_px=shadow.get("decision_px"),
-            arrival_px=shadow.get("arrival_px"),
-            fill_px=shadow.get("fill_px"),
-            paper_fill_px=shadow.get("paper_fill_px"),
-            shadow_fill_px=shadow.get("shadow_fill_px"),
-            shadow_slippage_bps=shadow.get("shadow_slippage_bps"),
-            impact_error_bps=shadow.get("impact_error_bps"),
-            shadow_source=shadow.get("shadow_source"),
+    if touch_gate:
+        first = fills[0]
+        mint = ctx.meta.get("mint") if ctx.meta else None
+        impact = first.estimated_impact_bps
+        decision_px = float(ctx.tick.mid) if ctx.tick and ctx.tick.mid else None
+        shadow = shadow_fields_for_fill(
+            first, ctx.symbol, impact, decision_px=decision_px, side=intent.side
         )
-    )
+        append_decision(
+            make_row(
+                ts=first.ts,
+                strategy_id=intent.client_tag or "paper",
+                symbol=ctx.symbol,
+                mint=str(mint) if mint else None,
+                stage="paper_submit",
+                outcome="fill" if len(fills) == 1 else "partial",
+                signal_side=intent.side,
+                signal_reason=close_reason or "fill",
+                risk_allow=True,
+                risk_tags=list(risk.tags or []),
+                risk_notes=risk.notes,
+                notional_sol=abs(float(intent.qty_or_notional)),
+                impact_bps_est=impact,
+                impact_bps_cap=float(intent.max_slippage_bps),
+                estimated_impact_bps=shadow.get("estimated_impact_bps"),
+                pump=ctx.pump,
+                liquidity=ctx.liquidity,
+                decision_px=shadow.get("decision_px"),
+                arrival_px=shadow.get("arrival_px"),
+                fill_px=shadow.get("fill_px"),
+                paper_fill_px=shadow.get("paper_fill_px"),
+                shadow_fill_px=shadow.get("shadow_fill_px"),
+                shadow_slippage_bps=shadow.get("shadow_slippage_bps"),
+                impact_error_bps=shadow.get("impact_error_bps"),
+                shadow_source=shadow.get("shadow_source"),
+            )
+        )
     return data

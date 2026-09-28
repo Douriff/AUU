@@ -6,8 +6,11 @@ import { MarketsPage } from "@/pages/MarketsPage/MarketsPage";
 import { MarketPage } from "@/pages/MarketPage/MarketPage";
 import { ReviewPage } from "@/pages/ReviewPage/ReviewPage";
 import { StrategyPage } from "@/pages/StrategyPage/StrategyPage";
-import { TradePage } from "@/pages/TradePage/TradePage";
+import { PositionsPage } from "@/pages/PositionsPage/PositionsPage";
 import { TradingPage } from "@/pages/TradingPage/TradingPage";
+import { LeaderboardPage } from "@/pages/LeaderboardPage/LeaderboardPage";
+import { LoginPage } from "@/pages/LoginPage/LoginPage";
+import { RegisterPage } from "@/pages/LoginPage/RegisterPage";
 import { MajorsPage } from "@/pages/MajorsPage/MajorsPage";
 import { BacktestPage } from "@/pages/BacktestPage/BacktestPage";
 import { AlertsPage } from "@/pages/AlertsPage/AlertsPage";
@@ -29,7 +32,10 @@ export const router = createBrowserRouter([
       { path: "trade", element: <TradingPage /> },
       { path: "trade/:mint", element: <TradingPage /> },
       { path: "majors", element: <MajorsPage /> },
-      { path: "positions", element: <TradePage /> },
+      { path: "positions", element: <PositionsPage /> },
+      { path: "leaderboard", element: <LeaderboardPage /> },
+      { path: "login", element: <LoginPage /> },
+      { path: "register", element: <RegisterPage /> },
       { path: "backtest", element: <BacktestPage /> },
       { path: "watch", element: <WatchPage /> },
       { path: "watch/:watchId", element: <WatchPage /> },

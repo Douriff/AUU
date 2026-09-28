@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { CandleChart } from "@/components/chart/CandleChart";
 import { PriceCell } from "@/components/markets/PriceCell";
 import { useMarkets } from "@/hooks/useMarkets";
@@ -459,7 +459,17 @@ export function TradingPage() {
               </dl>
               <p className="td-limits">单笔 ≤ 1 SOL · 同时持仓 ≤ 10 · 日亏 4.5% 停止买入</p>
               {blockCopy && <p className="td-block">{blockCopy}</p>}
-              {notice && <p className="td-notice">{notice}</p>}
+              {notice && (
+                <p className="td-notice">
+                  {notice}
+                  {notice.includes("请先登录") && (
+                    <>
+                      {" "}
+                      <Link to="/login">去登录</Link>
+                    </>
+                  )}
+                </p>
+              )}
               <button className={`td-submit ${side}`} type="submit" disabled={busy || (side === "buy" ? buyBlocked : sellBlocked)}>
                 {busy ? "提交中…" : side === "buy" ? "纸面买入" : "纸面卖出"}
               </button>
