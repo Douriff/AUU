@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
+import { BoardPage } from "@/pages/BoardPage/BoardPage";
 import { MarketPage } from "@/pages/MarketPage/MarketPage";
 import { StrategyPage } from "@/pages/StrategyPage/StrategyPage";
 import { TradePage } from "@/pages/TradePage/TradePage";
@@ -14,7 +15,8 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <MarketPage /> },
+      { index: true, element: <BoardPage /> },
+      { path: "market", element: <MarketPage /> },
       { path: "strategy", element: <StrategyPage /> },
       { path: "trade", element: <TradePage /> },
       { path: "backtest", element: <BacktestPage /> },

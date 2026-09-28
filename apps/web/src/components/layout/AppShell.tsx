@@ -5,7 +5,8 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 
 const links = [
-  { to: "/", label: "行情", end: true },
+  { to: "/", label: "盘面", end: true },
+  { to: "/market", label: "行情" },
   { to: "/strategy", label: "策略" },
   { to: "/watch", label: "观察" },
   { to: "/trade", label: "交易" },

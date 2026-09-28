@@ -19,7 +19,8 @@ flowchart TB
 
 | 组件 | 职责 |
 |------|------|
-| MarketPage `/` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar / CurvePanel |
+| BoardPage `/` | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
+| MarketPage `/market` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar / CurvePanel |
 | `/trade` | 纸面单：pre-order → paper/orders；可选 one-shot `decide-and-fill`；dataSource `mock \| paper \| pumpfun_paper` |
 | Settings | `DATA_PROVIDER=mock\|pumpfun_paper` + `dataSource=mock\|paper\|pumpfun_paper`；venue=Pump.fun |
 | Mock provider | 固定 5 个伪模因对；seed=symbol+interval 可复现 |

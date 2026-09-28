@@ -8,6 +8,7 @@ import type {
   NewTokenEvent,
   PaperOrderResult,
   PaperPerformance,
+  BoardSnapshot,
   ExecutabilityReport,
   PostmortemReport,
   ShadowCompareReport,
@@ -201,6 +202,10 @@ export class HttpWsProvider {
 
   getStrategy(): Promise<PumpPaperState> {
     return getJson("/api/v1/strategy/pump-paper-v1");
+  }
+
+  getBoard(): Promise<BoardSnapshot> {
+    return getJson("/api/v1/board");
   }
 
   getPaperPerformance(window = "session", opts?: { mc?: boolean }): Promise<PaperPerformance> {
