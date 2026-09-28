@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.data_paths import data_dir, guarded_path
 from app.models.contracts import TraderWatchlistItem
 
 # Mock-first seed wallets (paper observe). Not real keys.
@@ -52,18 +53,20 @@ class WatchUpsert(BaseModel):
 def _data_dir() -> Path:
     raw = (os.getenv("TRADER_WATCH_STORE") or "").strip()
     if raw:
-        p = Path(raw)
+        p = Path(raw).expanduser()
         if p.suffix:
             return p.parent
         return p
-    return Path(__file__).resolve().parents[2] / "data"
+    return data_dir()
 
 
 def watchlist_path() -> Path:
     raw = (os.getenv("TRADER_WATCH_STORE") or "").strip()
     if raw and Path(raw).suffix:
-        return Path(raw)
-    return _data_dir() / "trader_watchlist.json"
+        path = Path(raw).expanduser()
+    else:
+        path = _data_dir() / "trader_watchlist.json"
+    return guarded_path(path)
 
 
 def _now_ms() -> int:
@@ -151,7 +154,7 @@ def _env_seed_items(now_ms: int) -> list[TraderWatchlistItem]:
 
 
 def _dump() -> None:
-    path = watchlist_path()
+    path = guarded_path(watchlist_path())
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "copy_trade_enabled": False,
@@ -305,7 +308,7 @@ def reset_watch_store(*, seed: bool = True) -> None:
     with _LOCK:
         _ITEMS = {}
         _LOADED = False
-        path = watchlist_path()
+        path = guarded_path(watchlist_path())
         if path.is_file():
             try:
                 path.unlink()

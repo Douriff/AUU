@@ -39,7 +39,10 @@ from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
 
-load_dotenv()
+# Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
+# cannot change strategy behavior for the suite.
+if os.getenv("AUU_SKIP_DOTENV", "").strip().lower() not in {"1", "true", "on", "yes"}:
+    load_dotenv()
 
 
 @asynccontextmanager

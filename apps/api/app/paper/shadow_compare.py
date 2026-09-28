@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from app.data_paths import data_dir, guarded_path
 from app.models.contracts import HabitProfile, PumpfunPaperSnapshot, TraderSnapshot
 from app.paper.postmortem import by_exit_reason
 from app.providers.pumpfun_curve_math import (
@@ -142,8 +143,10 @@ _PERSIST_LOCK = threading.Lock()
 def _store_path() -> Path:
     raw = (os.getenv("SHADOW_COMPARE_STORE") or "").strip()
     if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[2] / "data" / "shadow_compare.json"
+        path = Path(raw).expanduser()
+    else:
+        path = data_dir() / "shadow_compare.json"
+    return guarded_path(path)
 
 
 def _counters(closed: list[dict[str, Any]], *, enabled: bool, n_sets: int) -> dict[str, Any]:
@@ -176,6 +179,7 @@ def _counters(closed: list[dict[str, Any]], *, enabled: bool, n_sets: int) -> di
 def _delete_store() -> None:
     path = _store_path()
     for candidate in (path, path.with_suffix(path.suffix + ".tmp")):
+        guarded_path(candidate)
         try:
             candidate.unlink()
         except FileNotFoundError:
@@ -194,7 +198,7 @@ def _persist_shadow() -> None:
             "closed": list(_closed),
             "counters": _counters(_closed, enabled=_config.enabled, n_sets=len(_config.sets)),
         }
-    path = _store_path()
+    path = guarded_path(_store_path())
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
