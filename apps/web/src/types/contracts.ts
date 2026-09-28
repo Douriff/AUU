@@ -764,6 +764,123 @@ export interface ShadowCompareReport {
   asof_ts: number;
 }
 
+export interface BoardTickerItem {
+  symbol: string;
+  base: string;
+  mint: string;
+  price: number | null;
+  change_pct: number | null;
+  phase?: string | null;
+}
+
+export interface BoardEquityPoint {
+  t: number;
+  pnl: number;
+}
+
+export interface BoardTapeRow {
+  exit_ts: number;
+  symbol: string;
+  mint: string;
+  exit_reason: string;
+  exit_label: string;
+  net_bps: number;
+  pnl: number;
+}
+
+export interface BoardStats {
+  win_rate: number | null;
+  expectancy: number | null;
+  wins?: number;
+  n_closed: number;
+  sample_ok: boolean;
+  verdict: "go" | "no-go" | string;
+  lamp: "gray" | "green" | "red" | string;
+  nogo_reason: string;
+  go_window_label: string;
+}
+
+export interface BoardPosition {
+  symbol: string;
+  mint: string;
+  qty: number;
+  entry_price: number;
+  entry_ts: number;
+  mark: number | null;
+  upnl: number | null;
+  upnl_pct: number | null;
+  source: string;
+}
+
+export interface BoardShadowColumn {
+  id: string;
+  label: string;
+  n: number;
+  win_rate: number | null;
+  expectancy: number | null;
+  sample_ok: boolean;
+  habit_tag?: string | null;
+}
+
+export interface BoardShadow {
+  enabled: boolean;
+  liveEnabled: boolean;
+  note: string;
+  go_window_label: string;
+  main: BoardShadowColumn;
+  sets: BoardShadowColumn[];
+  asof_ts: number;
+}
+
+export interface BoardSnapshot {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  asof_ts: number;
+  strategyId: string;
+  ticker: BoardTickerItem[];
+  session_pnl: number;
+  equity_0: number;
+  equity: BoardEquityPoint[];
+  tape: BoardTapeRow[];
+  stats: BoardStats;
+  positions: BoardPosition[];
+  shadow: BoardShadow;
+  empty: boolean;
+}
+
+export interface MarketItem {
+  symbol: string;
+  base: string;
+  mint: string;
+  price_sol: number | null;
+  price_usd: number | null;
+  change_pct: number | null;
+  volume_sol: number;
+  market_cap_sol: number | null;
+  progress_bps: number | null;
+  progress_pct: number | null;
+  phase?: string | null;
+  discovered: boolean;
+  tags: string[];
+  spark: number[];
+}
+
+export interface MarketList {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  provider: string;
+  quote: string;
+  usd_available: boolean;
+  discovery: string;
+  discovery_active?: string;
+  discovery_reason?: string;
+  asof_ts: number;
+  items: MarketItem[];
+  empty: boolean;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;

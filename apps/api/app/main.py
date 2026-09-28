@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import book, candles, curve, fills, health, live, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, watch, ws
+from app.routes import board, book, candles, curve, fills, health, live, markets, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, watch, ws
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
@@ -64,6 +64,8 @@ async def api_version_header(request: Request, call_next):
 
 
 app.include_router(health.router)
+app.include_router(board.router)
+app.include_router(markets.router)
 app.include_router(symbols.router)
 app.include_router(candles.router)
 app.include_router(signals.router)
@@ -109,6 +111,8 @@ def root():
                 "strategyPostmortem": "GET /api/v1/strategy/pump-paper-v1/postmortem",
                 "watchTraders": "GET/PUT/DELETE /api/v1/watch/traders",
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
+                "board": "GET /api/v1/board",
+                "markets": "GET /api/v1/markets",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",
