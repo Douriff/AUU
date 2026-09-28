@@ -1060,6 +1060,140 @@ code.hl { color: var(--accent); }
 .mk-empty { margin: 0.9rem 0.2rem; color: #9a9aa3; }
 .review-page .postmortem-panel { max-width: 880px; }
 
+.console-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem 1.1rem;
+  background: #070809;
+  color: #f4f4f5;
+}
+.console-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.15rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background: #0c0d10;
+}
+.console-stat { display: flex; flex-direction: column; gap: 0.15rem; min-width: 5.5rem; }
+.console-stat span {
+  color: #8d8d96;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+.console-stat strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.98rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.console-page .up { color: #3ee08f; }
+.console-page .down { color: #ff5d5d; }
+.console-page .flat { color: #d5d5dc; }
+.console-go, .console-badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #d5d5dc;
+}
+.console-go { margin-left: auto; font-weight: 700; }
+.console-go.lamp-green { color: #3ee08f; border-color: rgba(62, 224, 143, 0.55); }
+.console-go.lamp-red { color: #ff5d5d; border-color: rgba(255, 93, 93, 0.55); }
+.console-go.lamp-gray { color: #c6c6ce; }
+.console-badge.live-off { color: #ff5d5d; border-color: rgba(255, 93, 93, 0.45); }
+.console-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: #0b0c0f;
+  overflow: hidden;
+}
+.console-card-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.console-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+}
+.console-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #3ee08f;
+  box-shadow: 0 0 0 3px rgba(62, 224, 143, 0.15);
+}
+.console-live.is-paused { background: #8d8d96; box-shadow: none; }
+.console-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.console-chips button, .console-pause {
+  background: transparent;
+  color: #b7b7c0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.75rem;
+}
+.console-chips button.is-on {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f7f8;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.console-pause { margin-left: auto; }
+.console-err { margin: 0.4rem 0.9rem 0; color: #ff5d5d; font-size: 0.8rem; }
+.console-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.35rem 0.4rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.console-empty { margin: 1rem 0.7rem; color: #8d8d96; }
+.console-row {
+  display: grid;
+  grid-template-columns: 5.6rem auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+}
+.console-row:hover { background: rgba(255, 255, 255, 0.03); }
+.console-row time { color: #7d7d88; font-variant-numeric: tabular-nums; }
+.console-pill {
+  justify-self: start;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #d0d0d6;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+.console-row.type-entry .console-pill { color: #3ee08f; border-color: rgba(62, 224, 143, 0.35); }
+.console-row.type-exit .console-pill { color: #d6d6de; }
+.console-row.type-reject .console-pill { color: #ffb020; border-color: rgba(255, 176, 32, 0.4); }
+.console-row.type-shadow .console-pill { color: #9aa7ff; border-color: rgba(154, 167, 255, 0.4); }
+.console-row.type-discovery .console-pill { color: #7ec8ff; border-color: rgba(126, 200, 255, 0.35); }
+.console-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-pnl { font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
+
 @media (max-width: 800px) {
   .app-shell, .app-shell.is-collapsed { flex-direction: column; }
   .sidebar, .app-shell.is-collapsed .sidebar {

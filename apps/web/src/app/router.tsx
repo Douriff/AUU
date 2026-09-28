@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { BoardPage } from "@/pages/BoardPage/BoardPage";
+import { ConsolePage } from "@/pages/ConsolePage/ConsolePage";
 import { MarketsPage } from "@/pages/MarketsPage/MarketsPage";
 import { MarketPage } from "@/pages/MarketPage/MarketPage";
 import { ReviewPage } from "@/pages/ReviewPage/ReviewPage";
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <BoardPage /> },
+      { path: "console", element: <ConsolePage /> },
       { path: "markets", element: <MarketsPage /> },
       { path: "market", element: <MarketPage /> },
       { path: "review", element: <ReviewPage /> },

@@ -849,6 +849,46 @@ export interface BoardSnapshot {
   empty: boolean;
 }
 
+export type ConsoleEventType = "discovery" | "entry" | "exit" | "reject" | "shadow" | "system";
+
+export interface ConsoleEvent {
+  id: string;
+  cursor: number;
+  ts: number;
+  type: ConsoleEventType | string;
+  pill: string;
+  message: string;
+  pnl: number | null;
+  net_bps: number | null;
+  symbol: string;
+  mint: string;
+}
+
+export interface ConsoleStats {
+  open_positions: number;
+  closed_today: number;
+  pnl_today: number;
+  avg_net_bps: number | null;
+  day_start_ts: number;
+  verdict: string;
+  lamp: string;
+  nogo_reason: string;
+  go_window_label: string;
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+}
+
+export interface ConsoleFeed {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  events: ConsoleEvent[];
+  cursor: string;
+  types: string[];
+  stats: ConsoleStats;
+}
+
 export interface MarketItem {
   symbol: string;
   base: string;

@@ -1,9 +1,12 @@
 """Shadow parameter comparison — virtual, paper-only, isolated from Go stats."""
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +15,7 @@ from app.models.contracts import PumpfunPaperSnapshot, TraderWatchlistItem
 from app.paper.decision_log import get_decision_log, reset_decision_log
 from app.paper.executability import build_executability
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
+from app.paper.events import build_events, reset_events
 from app.paper.shadow_compare import (
     ShadowProgressForbidden,
     apply_shadow_config,
@@ -19,6 +23,7 @@ from app.paper.shadow_compare import (
     delta_from_habit,
     observe_candidate,
     progress_keys,
+    reload_shadow_from_disk,
     reset_shadow_compare,
     shadow_closed,
     shadow_decisions,
@@ -249,6 +254,84 @@ class ShadowEvalTests(unittest.TestCase):
         self.assertIn("progress_bps_min", ctx.exception.touched)
         self.assertFalse(build_shadow_compare()["enabled"])
         self.assertEqual(progress_keys({"progress_bps_max": 9000}), ["progress_bps_max"])
+
+    def test_config_and_counters_survive_restart(self):
+        fd, name = tempfile.mkstemp(prefix="auu-shadow-", suffix=".json")
+        os.close(fd)
+        path = Path(name)
+        os.environ["SHADOW_COMPARE_STORE"] = str(path)
+        try:
+            reset_shadow_compare()
+            reset_events()
+            apply_shadow_config(
+                {
+                    "enabled": True,
+                    "sets": [
+                        {
+                            "id": "loose",
+                            "label": "loose",
+                            "min_trade_count_1m": 8,
+                            "take_profit_pct": 0.06,
+                            "max_hold_sec": 120,
+                        }
+                    ],
+                }
+            )
+            snap = _snap()
+            params = PumpPaperParams()
+            observe_candidate(
+                symbol=snap.symbol,
+                snapshot=snap,
+                tape=_hot(),
+                now_ms=NOW,
+                notional_sol=0.12,
+                impact_entry_bps=20.0,
+                main_params=params,
+            )
+            observe_candidate(
+                symbol=snap.symbol,
+                snapshot=_raise_price(snap, 1.25),
+                tape=_hot(),
+                now_ms=NOW + 5_000,
+                notional_sol=0.12,
+                impact_entry_bps=20.0,
+                main_params=params,
+            )
+            self.assertEqual(build_shadow_compare()["sets"][0]["n"], 1)
+            stored = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(stored["enabled"])
+            self.assertEqual(stored["sets"][0]["id"], "loose")
+            self.assertEqual(stored["counters"]["n_closed"], 1)
+            self.assertEqual(stored["counters"]["wins"], 1)
+            self.assertGreater(stored["counters"]["pnl_sum"], 0)
+
+            feed = build_events(limit=100)
+            shadow_rows = [row for row in feed["events"] if row["type"] == "shadow"]
+            self.assertTrue(any("影子" in row["message"] and "虚拟开仓" in row["message"] for row in shadow_rows))
+            closed_rows = [row for row in shadow_rows if row.get("pnl") is not None]
+            self.assertEqual(len(closed_rows), 1)
+            self.assertGreater(closed_rows[0]["pnl"], 0)
+            self.assertFalse(feed["liveEnabled"])
+
+            reload_shadow_from_disk()
+            report = build_shadow_compare()
+            self.assertTrue(report["enabled"])
+            self.assertFalse(report["liveEnabled"])
+            self.assertEqual(report["sets"][0]["id"], "loose")
+            self.assertEqual(report["sets"][0]["n"], 1)
+            self.assertEqual(report["sets"][0]["params"]["max_hold_sec"], 120)
+            self.assertEqual(get_engine().params.model_dump(), params.model_dump())
+
+            reset_shadow_compare()
+            self.assertFalse(path.exists())
+            reload_shadow_from_disk()
+            wiped = build_shadow_compare()
+            self.assertFalse(wiped["enabled"])
+            self.assertEqual(wiped["sets"], [])
+        finally:
+            os.environ.pop("SHADOW_COMPARE_STORE", None)
+            reset_shadow_compare()
+            reset_events()
 
 
 class HabitDeriveTests(unittest.TestCase):

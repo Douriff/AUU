@@ -9,6 +9,7 @@ import type {
   PaperOrderResult,
   PaperPerformance,
   BoardSnapshot,
+  ConsoleFeed,
   MarketList,
   ExecutabilityReport,
   PostmortemReport,
@@ -211,6 +212,14 @@ export class HttpWsProvider {
 
   getMarkets(): Promise<MarketList> {
     return getJson("/api/v1/markets");
+  }
+
+  getEvents(since?: string, limit = 300): Promise<ConsoleFeed> {
+    const q = new URLSearchParams();
+    if (since) q.set("since", since);
+    if (limit) q.set("limit", String(limit));
+    const suffix = q.toString();
+    return getJson(`/api/v1/events${suffix ? `?${suffix}` : ""}`);
   }
 
   getPaperPerformance(window = "session", opts?: { mc?: boolean }): Promise<PaperPerformance> {
