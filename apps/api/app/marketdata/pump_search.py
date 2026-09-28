@@ -141,24 +141,32 @@ def _from_pump_coin(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
     rs = _int(raw.get("real_sol_reserves"))
     rt = _int(raw.get("real_token_reserves"))
     supply = _int(raw.get("total_supply") or raw.get("token_total_supply"))
+    base_dec = _int(raw.get("base_decimals")) or TOKEN_DECIMALS
     complete = bool(raw.get("complete") or raw.get("raydium_pool") or raw.get("pump_swap_pool"))
-    px = price_sol(vs, vt) if vs > 0 and vt > 0 else _num(raw.get("price_sol"))
-    usd_mcap = _num(raw.get("usd_market_cap"))
+    inverted = bool(raw.get("inverted"))
+    usd_mcap = _num(raw.get("usd_market_cap") or raw.get("market_cap_usd"))
     raw_mcap = _num(raw.get("market_cap"))
-    mcap_sol = None
-    if vs > 0 and vt > 0 and supply > 0:
-        mcap_sol = market_cap_lamports(vs, vt, supply) / 1_000_000_000
-    elif raw_mcap is not None and (usd_mcap is None or usd_mcap > raw_mcap * 2):
-        mcap_sol = raw_mcap
-    price_usd = None
-    ui_supply = supply / (10**TOKEN_DECIMALS) if supply else 0.0
-    if usd_mcap and ui_supply > 0:
-        price_usd = usd_mcap / ui_supply
-    progress = None if complete or vs <= 0 else progress_bps(rt) / 100.0
+    # `market_cap` is SOL when it is far below `usd_market_cap`.
+    mcap_sol = raw_mcap if raw_mcap is not None and (usd_mcap is None or usd_mcap > raw_mcap * 2) else None
+    ui_supply = supply / (10**base_dec) if supply else 0.0
+    on_curve = vs > 0 and vt > 0 and not complete and not inverted
+    # vs/vt is lamports per raw token. Human SOL per token scales by 10^(decimals-9).
+    human_scale = 10 ** (base_dec - 9)
+    if on_curve:
+        px = price_sol(vs, vt) * human_scale
+        if mcap_sol is None and supply > 0:
+            mcap_sol = market_cap_lamports(vs, vt, supply) / 1_000_000_000
+    elif mcap_sol is not None and ui_supply > 0:
+        # Graduated and inverted coins keep frozen virtual reserves. Spot is mcap / supply.
+        px = mcap_sol / ui_supply
+    elif vs > 0 and vt > 0:
+        px = price_sol(vs, vt) * human_scale
+    else:
+        px = _num(raw.get("price_sol"))
+    price_usd = usd_mcap / ui_supply if usd_mcap and ui_supply > 0 else None
+    progress = None if complete or vs <= 0 or inverted else progress_bps(rt) / 100.0
     dex = "pumpswap" if raw.get("pump_swap_pool") else "raydium" if raw.get("raydium_pool") else "pumpfun"
-    graduated = complete or vs <= 0
-    if vs > 0 and vt > 0 and not complete:
-        graduated = False
+    graduated = not on_curve
     return {
         "mint": mint,
         "name": str(raw.get("name") or raw.get("symbol") or mint[:6]),
@@ -304,6 +312,20 @@ def _dex_search(q: str, limit: int) -> list[dict[str, Any]]:
     return out
 
 
+def _overlay_dex(items: list[dict[str, Any]], q: str, limit: int) -> list[dict[str, Any]]:
+    """Fill 24h change, volume, and liquidity from DexScreener. Prices stay on pump.fun."""
+    try:
+        extra_rows = _dex_search(q, max(limit, 25))
+    except UpstreamError:
+        return items
+    by_mint = {row["mint"]: row for row in extra_rows}
+    merged: list[dict[str, Any]] = []
+    for coin in items:
+        extra = by_mint.get(coin["mint"])
+        merged.append(_merge(coin, extra) if extra else coin)
+    return merged
+
+
 def _try_pump_coin(mint: str) -> Optional[dict[str, Any]]:
     try:
         payload = get_json(f"{pump_frontend_base()}/coins/{quote(mint)}")
@@ -392,6 +414,8 @@ def search_coins(q: str, limit: int = 20) -> dict[str, Any]:
             if coin:
                 items = [coin]
                 error = None
+        if items:
+            items = _overlay_dex(items, text, limit_n)
         if not items:
             try:
                 items = _dex_search(text, limit_n)

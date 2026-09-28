@@ -129,6 +129,8 @@ class UniverseApiTests(unittest.TestCase):
 
     def test_pump_search_returns_curve_fields(self):
         def fake(url, timeout=None):
+            if "dex/search" in url:
+                raise UpstreamError("unavailable", "timeout")
             self.assertIn("coins/search", url)
             return [_curve_coin()]
 
@@ -149,6 +151,42 @@ class UniverseApiTests(unittest.TestCase):
         self.assertFalse(item["graduated"])
         self.assertEqual(item["venue"], "曲线")
         self.assertGreater(item["progress_pct"], 0)
+        # Human SOL per token, not the raw lamports/raw-token ratio.
+        self.assertLess(item["price_sol"], 1e-6)
+
+    def test_graduated_price_uses_market_cap_not_frozen_reserves(self):
+        frozen_vs = 115_005_359_057
+        frozen_vt = 279_900_000_000_000
+
+        def fake(url, timeout=None):
+            if "dex/search" in url:
+                raise UpstreamError("unavailable", "timeout")
+            return [
+                {
+                    "mint": EXT_MINT,
+                    "name": "United",
+                    "symbol": "USDF",
+                    "complete": True,
+                    "inverted": True,
+                    "pump_swap_pool": "pool",
+                    "virtual_sol_reserves": frozen_vs,
+                    "virtual_token_reserves": frozen_vt,
+                    "total_supply": 1_000_000_000_000_000,
+                    "base_decimals": 6,
+                    "market_cap": 7_663_291.8,
+                    "usd_market_cap": 905_801_092.0,
+                }
+            ]
+
+        with patch("app.marketdata.pump_search.get_json", side_effect=fake):
+            r = self.client.get("/api/v1/search", params={"q": "usdf"})
+        item = r.json()["data"]["items"][0]
+        self.assertTrue(item["graduated"])
+        self.assertEqual(item["venue"], "PumpSwap")
+        self.assertAlmostEqual(item["price_sol"], 7_663_291.8 / 1_000_000_000, places=6)
+        self.assertAlmostEqual(item["price_usd"], 905_801_092.0 / 1_000_000_000, places=4)
+        self.assertNotAlmostEqual(item["price_sol"], frozen_vs / frozen_vt, places=4)
+        self.assertAlmostEqual(item["market_cap_sol"], 7_663_291.8, places=1)
 
     def test_fallback_filters_solana_pump_and_raydium(self):
         def fake(url, timeout=None):
