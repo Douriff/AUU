@@ -17,6 +17,7 @@ from typing import Any, Optional
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
+from app.data_paths import data_dir, guarded_path
 from app.wallet.codec import b58decode, b58encode, build_memo_message, unsigned_transaction
 
 HARD_MAX_NOTIONAL_SOL = 1.0
@@ -71,9 +72,8 @@ def prepare_ttl() -> int:
 
 def _store_path() -> Path:
     raw = (os.getenv("AUU_WALLET_STORE") or "").strip()
-    if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[2] / "data" / "wallets.json"
+    path = Path(raw).expanduser() if raw else data_dir() / "wallets.json"
+    return guarded_path(path)
 
 
 def _challenge_ttl() -> int:
@@ -108,7 +108,7 @@ def _load() -> dict[str, Any]:
 
 
 def _save() -> None:
-    path = _store_path()
+    path = guarded_path(_store_path())
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(_load())
     tmp = path.with_suffix(path.suffix + ".tmp")

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from app.data_paths import data_dir, guarded_path
 from app.models.contracts import Fill
 from app.providers.pumpfun_curve_math import split_impact_gross_fee_net
 
@@ -586,11 +587,14 @@ _PERSIST_LOCK = threading.Lock()
 def _journal_path() -> Path:
     raw = (os.getenv("PAPER_JOURNAL_STORE") or "").strip()
     if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[2] / "data" / "paper_journal.json"
+        path = Path(raw).expanduser()
+    else:
+        path = data_dir() / "paper_journal.json"
+    return guarded_path(path)
 
 
 def _write_journal(path: Path, journal: PaperTradeJournal) -> None:
+    path = guarded_path(path)
     payload = {
         "equity_0": journal.equity_0,
         "fills": list(journal.fills),
@@ -715,6 +719,7 @@ def reset_paper_ledger(*, wipe_store: bool = True) -> None:
     path = _journal_path()
     if wipe_store:
         for p in (path, path.with_suffix(path.suffix + ".tmp")):
+            guarded_path(p)
             try:
                 p.unlink()
             except FileNotFoundError:

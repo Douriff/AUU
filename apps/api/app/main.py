@@ -39,7 +39,15 @@ from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
 
-load_dotenv()
+# Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
+# cannot change strategy behavior for the suite. AUU_DOTENV_PATH selects
+# a single file; the default search stays the process working directory.
+if os.getenv("AUU_SKIP_DOTENV", "").strip().lower() not in {"1", "true", "on", "yes"}:
+    dotenv_path = (os.getenv("AUU_DOTENV_PATH") or "").strip()
+    if dotenv_path:
+        load_dotenv(dotenv_path)
+    else:
+        load_dotenv()
 
 
 @asynccontextmanager

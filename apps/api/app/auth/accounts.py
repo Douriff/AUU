@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import bcrypt
 
+from app.data_paths import data_dir, guarded_path
 from app.paper.books import user_day_pnl
 from app.paper.ledger import PaperTradeJournal, _load_journal
 
@@ -56,16 +57,14 @@ def start_sol_default() -> float:
 
 def _store_path() -> Path:
     raw = (os.getenv("AUU_USER_STORE") or "").strip()
-    if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[2] / "data" / "users.json"
+    path = Path(raw).expanduser() if raw else data_dir() / "users.json"
+    return guarded_path(path)
 
 
 def _journal_dir() -> Path:
     raw = (os.getenv("AUU_USER_JOURNAL_DIR") or "").strip()
-    if raw:
-        return Path(raw)
-    return _store_path().parent / "user_journals"
+    path = Path(raw).expanduser() if raw else _store_path().parent / "user_journals"
+    return guarded_path(path)
 
 
 def _session_secret() -> bytes:
@@ -88,7 +87,7 @@ def _load() -> list[dict[str, Any]]:
 
 
 def _save() -> None:
-    path = _store_path()
+    path = guarded_path(_store_path())
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"users": _load()}
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -271,7 +270,7 @@ def journal_for(user: dict[str, Any]) -> PaperTradeJournal:
     cached = _BOOKS.get(user_id)
     if cached is not None:
         return cached
-    path = _journal_dir() / f"{user_id}.json"
+    path = guarded_path(_journal_dir() / f"{user_id}.json")
     loaded = _load_journal(path)
     book = loaded if loaded is not None else PaperTradeJournal(equity_0=float(user.get("start_sol") or start_sol_default()))
     book.equity_0 = float(user.get("start_sol") or book.equity_0)

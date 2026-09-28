@@ -17,6 +17,7 @@ from app.models.contracts import (
     HabitProfile,
     TraderSnapshot,
 )
+from app.data_paths import data_dir, guarded_path
 from app.traders.habits import habit_profile
 from app.traders.snapshot import get_snapshot
 from app.traders.store import get_watch
@@ -57,9 +58,8 @@ class DistillReject(ValueError):
 
 def overlay_path() -> Path:
     raw = (os.getenv("TRADER_DISTILL_OVERLAY") or "").strip()
-    if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[2] / "data" / "pump_paper_params_overlay.json"
+    path = Path(raw).expanduser() if raw else data_dir() / "pump_paper_params_overlay.json"
+    return guarded_path(path)
 
 
 def _current_params() -> dict[str, Any]:
@@ -208,7 +208,7 @@ def sanitize_patch(
 
 
 def persist_overlay(payload: dict[str, Any]) -> Path:
-    path = overlay_path()
+    path = guarded_path(overlay_path())
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
