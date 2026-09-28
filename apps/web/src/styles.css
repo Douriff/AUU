@@ -1441,3 +1441,45 @@ code.hl { color: var(--accent); }
 .mj-rank { color: #8d8d96; font-family: ui-monospace, monospace; }
 .mj-err { color: #ffb020; }
 .majors-page .num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.auth-chip { background: transparent; color: #f4f4f5; text-decoration: none; }
+.auth-page, .lb-page { height: 100%; overflow: auto; padding: 1.1rem 1.2rem 2rem; background: #070809; }
+.auth-card {
+  max-width: 420px;
+  margin: 8vh auto 0;
+  padding: 1.1rem 1.15rem 1.2rem;
+  background: #0c0d10;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+.auth-card h1, .lb-head h1 { display: inline; font-size: 1.15rem; margin: 0 0.55rem 0 0; }
+.auth-card header, .lb-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.auth-tabs, .lb-sort { display: flex; gap: 0.35rem; margin: 0.8rem 0; align-items: center; }
+.auth-tabs button, .lb-sort button {
+  background: transparent;
+  color: #c8c8d0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+}
+.auth-tabs button.is-on, .lb-sort button.is-on { color: #f4f4f5; border-color: #f4f4f5; }
+.auth-card form { display: flex; flex-direction: column; gap: 0.65rem; }
+.auth-card label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: #9a9aa3; }
+.auth-card input, .lb-sort select {
+  background: #070809;
+  color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+}
+.lb-scroll { overflow: auto; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; background: #0c0d10; }
+.lb-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.lb-table th, .lb-table td { padding: 0.38rem 0.55rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.04); font-size: 0.78rem; }
+.lb-table th { color: #8d8d96; font-weight: 550; }
+.lb-table .num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lb-table .up { color: #3ee08f; }
+.lb-table .down { color: #ff5d5d; }
+.lb-table em { color: #8d8d96; font-style: normal; font-size: 0.72rem; }
+.lb-empty { color: #8d8d96; padding: 1rem 0.55rem; }
+.lb-page a { color: #8eb6ff; }

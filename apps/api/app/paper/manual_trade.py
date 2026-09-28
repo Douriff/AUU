@@ -18,8 +18,9 @@ from app.models.contracts import (
     StrategyContext,
     TickCtx,
 )
+from app.paper.books import current_book, user_day_pnl, using_user_book
 from app.paper.broker import get_paper_broker
-from app.paper.ledger import _ids_from_tag, get_paper_journal
+from app.paper.ledger import _ids_from_tag
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.providers.pumpfun_curve_math import DEFAULT_PROTOCOL_FEE_BPS
 from app.risk import get_risk_gate
@@ -65,6 +66,10 @@ def _equity() -> float:
 
 
 def day_loss_tripped() -> bool:
+    if using_user_book():
+        book = current_book()
+        base = max(float(book.equity_0 or EQUITY_DEFAULT), 1e-9)
+        return user_day_pnl(book) / base <= -MAX_DAY_LOSS_PCT
     gate = get_risk_gate()
     if str(gate.trading_state) == "halted":
         return True
@@ -73,10 +78,12 @@ def day_loss_tripped() -> bool:
 
 def open_symbols() -> set[str]:
     symbols: set[str] = set()
-    journal = get_paper_journal()
+    journal = current_book()
     for symbol, lots in journal.lots.items():
         if any(abs(float(lot.qty)) > 1e-12 for lot in lots):
             symbols.add(symbol)
+    if using_user_book():
+        return symbols
     try:
         from app.strategies.pump_paper_v1 import get_engine
 
@@ -89,7 +96,7 @@ def open_symbols() -> set[str]:
 
 
 def position_qty(symbol: str) -> float:
-    lots = get_paper_journal().lots.get(symbol) or []
+    lots = current_book().lots.get(symbol) or []
     return sum(float(lot.qty) for lot in lots)
 
 
@@ -102,7 +109,7 @@ def limits_snapshot(symbol: str = "") -> dict[str, Any]:
         "open_positions": len(held),
         "held": bool(symbol) and symbol in held,
         "day_loss_tripped": day_loss_tripped(),
-        "day_pnl": float(get_risk_gate().day_pnl),
+        "day_pnl": user_day_pnl(current_book()) if using_user_book() else float(get_risk_gate().day_pnl),
     }
 
 
@@ -366,7 +373,7 @@ def position_view(*, symbol: str = "", mint: str = "") -> dict[str, Any]:
     if resolved is None:
         raise ManualTradeError("UNKNOWN_SYMBOL")
     snap = _snapshot(resolved)
-    journal = get_paper_journal()
+    journal = current_book()
     lots = [lot for lot in (journal.lots.get(resolved) or []) if abs(float(lot.qty)) > 1e-12]
     qty = sum(float(lot.qty) for lot in lots)
     notion = sum(abs(float(lot.qty)) * float(lot.price) for lot in lots)
@@ -403,6 +410,41 @@ def position_view(*, symbol: str = "", mint: str = "") -> dict[str, Any]:
         "upnl": upnl,
         "fills": recent[-20:],
         "limits": limits_snapshot(resolved),
+    }
+
+
+def book_view() -> dict[str, Any]:
+    """Open lots on the active book. Marks use the local snapshot when one exists."""
+    journal = current_book()
+    items: list[dict[str, Any]] = []
+    for symbol, lots in journal.lots.items():
+        for lot in lots:
+            qty = float(lot.qty)
+            if abs(qty) <= 1e-12:
+                continue
+            mark = float(lot.price)
+            try:
+                mark = float(_snapshot(symbol).price_sol)
+            except Exception:
+                pass
+            items.append(
+                {
+                    "symbol": symbol,
+                    "mint": getattr(lot, "mint", None) or "",
+                    "qty": qty,
+                    "entry_price": float(lot.price),
+                    "mark": mark,
+                    "notional_sol": abs(qty) * mark,
+                    "upnl": (mark - float(lot.price)) * qty,
+                    "ts": int(lot.ts),
+                }
+            )
+    items.sort(key=lambda row: int(row["ts"]), reverse=True)
+    return {
+        **envelope_flags(),
+        "items": items,
+        "n_closed": len(journal.closed),
+        "limits": limits_snapshot(),
     }
 
 
@@ -454,7 +496,11 @@ async def submit_manual(
         tags=["source=manual"],
     )
     size = SizeIn(target_notional=abs(notional), max_slippage_bps=150.0)
-    risk = await run_pre_order(ctx, signal, size, strategy_id="manual-paper")
+    user_book = using_user_book()
+    if user_book:
+        risk = RiskOut(allow=True, clipped_size=abs(notional), tags=["source=manual"], notes="user paper")
+    else:
+        risk = await run_pre_order(ctx, signal, size, strategy_id="manual-paper")
     reducing = side_n == "sell" and pos > 1e-12
     if not risk.allow and reducing:
         risk = RiskOut(
@@ -489,6 +535,8 @@ async def submit_manual(
         risk,
         auto_post_fill=True,
         close_reason="manual_close" if side_n == "sell" else "manual",
+        ledger=current_book() if user_book else None,
+        touch_gate=not user_book,
     )
     view = position_view(symbol=resolved)
     view.update(

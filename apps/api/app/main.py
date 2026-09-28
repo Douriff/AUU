@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import (
+    auth,
     board,
     book,
     candles,
@@ -100,6 +101,7 @@ app.include_router(universe.router)
 app.include_router(events.router)
 app.include_router(search.router)
 app.include_router(majors.router)
+app.include_router(auth.router)
 app.include_router(trade_ticket.router)
 app.include_router(symbols.router)
 app.include_router(candles.router)
@@ -158,6 +160,9 @@ def root():
                 "tradePreview": "GET /api/v1/trade/preview",
                 "tradePosition": "GET /api/v1/trade/position",
                 "tradeOrders": "POST /api/v1/trade/orders",
+                "tradeBook": "GET /api/v1/trade/book",
+                "auth": "POST /api/v1/auth/register|login|logout",
+                "leaderboard": "GET /api/v1/leaderboard",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",

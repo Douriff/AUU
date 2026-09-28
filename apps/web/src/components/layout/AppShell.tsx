@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { useEffect, useState, type ReactNode } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -11,6 +11,7 @@ const primary = [
   { to: "/trade", label: "交易", icon: "swap" },
   { to: "/majors", label: "大盘", icon: "globe" },
   { to: "/positions", label: "持仓", icon: "bag" },
+  { to: "/leaderboard", label: "排行榜", icon: "rank" },
   { to: "/strategy", label: "策略/影子", icon: "sliders" },
   { to: "/review", label: "复盘", icon: "loop" },
   { to: "/settings", label: "设置", icon: "gear" },
@@ -105,6 +106,14 @@ function Icon({ name }: { name: string }) {
         <path d="M12 15h5" />
       </>
     ),
+    rank: (
+      <>
+        <path d="M7 20V10" />
+        <path d="M12 20V4" />
+        <path d="M17 20v-6" />
+        <path d="M5 20h14" />
+      </>
+    ),
   };
   return <svg {...common}>{paths[name]}</svg>;
 }
@@ -114,6 +123,19 @@ export function AppShell() {
   const [provider, setProvider] = useState("…");
   const [liveOff, setLiveOff] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const [who, setWho] = useState("");
+  const [authOn, setAuthOn] = useState(false);
+  const navigate = useNavigate();
+
+  const refreshWho = () => {
+    marketProvider
+      .getMe()
+      .then((me) => {
+        setAuthOn(me.auth_enabled);
+        setWho(me.user?.name ?? "");
+      })
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     marketProvider
@@ -123,6 +145,7 @@ export function AppShell() {
         setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
       })
       .catch(() => undefined);
+    refreshWho();
   }, []);
 
   return (
@@ -182,6 +205,25 @@ export function AppShell() {
           <div className="mode-badge live-off" title="liveEnabled=false · LIVE_DISABLED">
             {liveOff ? "LIVE OFF" : "LIVE CHECKLIST"}
           </div>
+          {authOn && who && (
+            <button
+              type="button"
+              className="mode-badge auth-chip"
+              onClick={() => {
+                void marketProvider.logout().finally(() => {
+                  setWho("");
+                  navigate("/login");
+                });
+              }}
+            >
+              {who} · 退出
+            </button>
+          )}
+          {authOn && !who && (
+            <NavLink to="/login" className="mode-badge auth-chip">
+              登录
+            </NavLink>
+          )}
         </header>
         <main className="main">
           <Outlet />
