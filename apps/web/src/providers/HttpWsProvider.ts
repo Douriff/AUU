@@ -13,6 +13,7 @@ import type {
   MajorsBoard,
   MajorsCompare,
   MarketList,
+  UniversePage,
   SearchCoinDetail,
   SearchResult,
   TradePosition,
@@ -218,6 +219,25 @@ export class HttpWsProvider {
 
   getMarkets(): Promise<MarketList> {
     return getJson("/api/v1/markets");
+  }
+
+  getUniverse(q: {
+    tab: string;
+    offset?: number;
+    limit?: number;
+    q?: string;
+    sort?: string;
+    dir?: string;
+    mints?: string;
+  }): Promise<UniversePage> {
+    const params = new URLSearchParams({ tab: q.tab });
+    if (q.offset) params.set("offset", String(q.offset));
+    if (q.limit) params.set("limit", String(q.limit));
+    if (q.q) params.set("q", q.q);
+    if (q.sort) params.set("sort", q.sort);
+    if (q.dir) params.set("dir", q.dir);
+    if (q.mints) params.set("mints", q.mints);
+    return getJson(`/api/v1/universe?${params}`);
   }
 
   searchCoins(q: string, limit = 20): Promise<SearchResult> {
