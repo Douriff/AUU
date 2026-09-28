@@ -31,6 +31,7 @@ from app.routes import (
     symbols,
     trade_ticket,
     universe,
+    wallet,
     watch,
     ws,
 )
@@ -117,6 +118,7 @@ app.include_router(pumpfun.router)
 app.include_router(strategy.router)
 app.include_router(stats.router)
 app.include_router(watch.router)
+app.include_router(wallet.router)
 app.include_router(ws.router)
 
 
@@ -163,6 +165,7 @@ def root():
                 "tradeBook": "GET /api/v1/trade/book",
                 "auth": "POST /api/v1/auth/register|login|logout|password",
                 "leaderboard": "GET /api/v1/leaderboard",
+                "wallet": "GET /api/v1/wallet/status (pubkey only; devnet memo is unsigned)",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",

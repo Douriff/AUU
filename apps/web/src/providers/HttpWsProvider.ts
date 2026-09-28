@@ -37,6 +37,10 @@ import type {
   SymbolInfo,
   TradeTick,
   UserBook,
+  WalletChallenge,
+  WalletLedger,
+  WalletPrepared,
+  WalletStatus,
   TraderWatchList,
   TraderWatchlistItem,
   HabitProfile,
@@ -331,6 +335,46 @@ export class HttpWsProvider {
 
   changePassword(body: { current_password: string; new_password: string; new_password_confirm: string }): Promise<{ ok: boolean }> {
     return postJson("/api/v1/auth/password", body);
+  }
+
+  getWalletStatus(): Promise<WalletStatus> {
+    return getJson("/api/v1/wallet/status");
+  }
+
+  walletChallenge(pubkey: string): Promise<WalletChallenge> {
+    return postJson("/api/v1/wallet/challenge", { pubkey });
+  }
+
+  walletBind(body: { pubkey: string; nonce: string; signature: string }): Promise<WalletStatus> {
+    return postJson("/api/v1/wallet/bind", body);
+  }
+
+  walletUnbind(): Promise<WalletStatus> {
+    return postJson("/api/v1/wallet/unbind", {});
+  }
+
+  putWalletRisk(body: { max_notional_sol: number; max_day_loss_pct: number; max_open_positions: number }): Promise<WalletStatus> {
+    return putJson("/api/v1/wallet/risk", body);
+  }
+
+  setWalletMode(body: { enabled: boolean; accept_risk: boolean }): Promise<WalletStatus> {
+    return postJson("/api/v1/wallet/mode", body);
+  }
+
+  prepareWalletMemo(): Promise<WalletPrepared> {
+    return postJson("/api/v1/wallet/devnet/prepare", {});
+  }
+
+  recordWalletTx(body: { prepare_id: string; signature: string }): Promise<{ liveEnabled: boolean; item: WalletLedger["items"][number] }> {
+    return postJson("/api/v1/wallet/devnet/record", body);
+  }
+
+  getWalletLedger(): Promise<WalletLedger> {
+    return getJson("/api/v1/wallet/ledger");
+  }
+
+  haltWallets(halt: boolean): Promise<{ global_halt: boolean; liveEnabled: boolean; mode: string }> {
+    return postJson("/api/v1/wallet/admin/halt", { halt });
   }
 
   getLeaderboard(sort: "pnl" | "return" = "pnl"): Promise<Leaderboard> {

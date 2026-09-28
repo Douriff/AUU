@@ -29,7 +29,7 @@ flowchart TB
 | LeaderboardPage `/leaderboard` | 排行榜：用户纸面已实现盈亏 / 收益率。系统纸面引擎不计入。无充值、无提现、无实盘 |
 | LoginPage `/login` | 登录。`AUU_AUTH=off`（本地默认）不要求登录。部署（Compose）默认 `AUU_AUTH=on` |
 | RegisterPage `/register` | 公开注册：用户名、密码、确认密码，可选显示名。`AUU_INVITE_CODE` 不设置则开放注册；`AUU_ALLOW_SIGNUP=false` 关闭注册。密码只存 bcrypt 哈希 |
-| Settings | 修改密码；`DATA_PROVIDER=mock\|pumpfun_paper` + `dataSource=mock\|paper\|pumpfun_paper`；venue=Pump.fun |
+| Settings | 修改密码；非托管钱包（公钥绑定、devnet memo，默认关）；`DATA_PROVIDER=mock\|pumpfun_paper` + `dataSource=mock\|paper\|pumpfun_paper`；venue=Pump.fun |
 | Mock provider | 固定 5 个伪模因对；seed=symbol+interval 可复现 |
 | pumpfun_paper | 本地 bonding-curve 模拟（venue=Pump.fun，paper-only）；watch-mints env 播种，无钱包密钥 |
 
@@ -87,7 +87,7 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 - 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
 - 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 
-详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`、`docs/viz/live-ui-gates-v0.md`、`docs/adapters/pumpfun-live-local-signer-v0.md`。
+详见 `docs/contracts.md`、`docs/pumpfun-venue-v0.md`、`docs/pumpfun-integration-v0.md`、`docs/strategies/pump-paper-v1.md`、`docs/viz/paper-stats-v1.md`、`docs/viz/live-ui-gates-v0.md`、`docs/adapters/pumpfun-live-local-signer-v0.md`、`docs/adapters/wallet-noncustodial-v0.md`。
 
 ## 自动纸面单 + 成功概率
 
@@ -136,6 +136,14 @@ curl -sS http://localhost:8000/api/v1/strategy/pump-paper-v1 \
 ```
 
 行情页与交易页有「成功概率 · 纸面模拟」面板。这是纸面历史重抽样，**不是**收益承诺。
+
+## 非托管钱包
+
+设置页可以连接 Phantom 或 Solflare，用 `signMessage` 绑定公钥。服务端只存公钥，用 ed25519 验签，不保存私钥，不托管资金，不代签名，不自动下单。`liveEnabled` 仍默认 false。钱包流水单独存放，不进入纸面 journal，也不计入 Go/No-Go 或影子对照。
+
+`AUU_WALLET_MODE` 默认 `off`。设为 `devnet` 后，已绑定并勾选风险提示的用户可以签一笔金额为 0 的 devnet memo。主网下单不在这一步开放。管理员可以一键关闭所有人的钱包模式。部署时不要把任何私钥放上服务器，也不要把带密钥的 RPC URL 打进前端。
+
+说明、环境变量和风险提示全文见 `docs/adapters/wallet-noncustodial-v0.md`。
 
 ## 试一笔纸面单
 

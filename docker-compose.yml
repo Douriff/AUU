@@ -18,6 +18,8 @@ services:
       # Deployed compose turns accounts on. A local process with AUU_AUTH unset stays single-user.
       AUU_AUTH: "on"
       AUU_ALLOW_SIGNUP: "on"
+      # Non-custodial wallet stays off. Do not mount a signing key for this path.
+      AUU_WALLET_MODE: "off"
     restart: unless-stopped
 
   web:

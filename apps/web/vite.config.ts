@@ -4,8 +4,17 @@ import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    global: "globalThis",
+  },
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      buffer: "buffer/",
+    },
+  },
+  optimizeDeps: {
+    include: ["buffer"],
   },
   server: {
     port: 5173,
