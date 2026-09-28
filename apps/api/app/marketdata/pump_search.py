@@ -44,6 +44,10 @@ def pump_frontend_base() -> str:
     return os.getenv("PUMPFUN_FRONTEND_API", "https://frontend-api-v3.pump.fun").rstrip("/")
 
 
+def pump_swap_base() -> str:
+    return os.getenv("PUMPFUN_SWAP_API", "https://swap-api.pump.fun").rstrip("/")
+
+
 def dexscreener_base() -> str:
     return os.getenv("DEXSCREENER_API", "https://api.dexscreener.com").rstrip("/")
 
@@ -134,7 +138,14 @@ def _venue_label(dex: str, graduated: bool) -> str:
 
 def _from_pump_coin(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
     mint = str(raw.get("mint") or raw.get("address") or "").strip()
-    if not mint:
+    if not mint or mint.lower().startswith("0x"):
+        return None
+    chain = str(raw.get("chain_id") or "").lower()
+    if chain and not chain.startswith("solana"):
+        return None
+    program = str(raw.get("program") or "").lower()
+    # search-unrestricted also returns other launchpads. Tests omit `program`.
+    if program and not program.startswith("pump"):
         return None
     vs = _int(raw.get("virtual_sol_reserves"))
     vt = _int(raw.get("virtual_token_reserves"))
@@ -151,13 +162,11 @@ def _from_pump_coin(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
     ui_supply = supply / (10**base_dec) if supply else 0.0
     on_curve = vs > 0 and vt > 0 and not complete and not inverted
     # vs/vt is lamports per raw token. Human SOL per token scales by 10^(decimals-9).
+    # Live `market_cap` is already SOL and stays right after graduation, when reserves freeze.
     human_scale = 10 ** (base_dec - 9)
-    if on_curve:
-        px = price_sol(vs, vt) * human_scale
-        if mcap_sol is None and supply > 0:
-            mcap_sol = market_cap_lamports(vs, vt, supply) / 1_000_000_000
-    elif mcap_sol is not None and ui_supply > 0:
-        # Graduated and inverted coins keep frozen virtual reserves. Spot is mcap / supply.
+    if mcap_sol is None and on_curve and supply > 0:
+        mcap_sol = market_cap_lamports(vs, vt, supply) / 1_000_000_000
+    if mcap_sol is not None and ui_supply > 0:
         px = mcap_sol / ui_supply
     elif vs > 0 and vt > 0:
         px = price_sol(vs, vt) * human_scale
@@ -203,7 +212,18 @@ def _from_dex_pair(pair: dict[str, Any]) -> Optional[dict[str, Any]]:
     mint = str(base.get("address") or "").strip()
     if not mint:
         return None
-    px_sol = _num(pair.get("priceNative"))
+    quote_tok = pair.get("quoteToken") if isinstance(pair.get("quoteToken"), dict) else {}
+    quote_sym = str(quote_tok.get("symbol") or "").upper()
+    quote_addr = str(quote_tok.get("address") or "")
+    # Missing quote (older payloads and tests) is treated as SOL. USDC/USDT native is not SOL.
+    sol_quote = (
+        not quote_sym
+        and not quote_addr
+        or quote_sym in {"SOL", "WSOL"}
+        or quote_addr.startswith("So111")
+        or quote_addr == "11111111111111111111111111111111"
+    )
+    px_sol = _num(pair.get("priceNative")) if sol_quote else None
     px_usd = _num(pair.get("priceUsd"))
     change = pair.get("priceChange") if isinstance(pair.get("priceChange"), dict) else {}
     volume = pair.get("volume") if isinstance(pair.get("volume"), dict) else {}
@@ -269,9 +289,12 @@ def _as_list(payload: Any) -> list[dict[str, Any]]:
 def _pump_search(q: str, limit: int) -> list[dict[str, Any]]:
     base = pump_frontend_base()
     term = quote(q)
+    # Other chains sort above pump.fun clones. Pull a page, then keep Solana pump rows.
+    fetch_n = 50
     urls = [
-        f"{base}/coins/search?offset=0&limit={limit}&sort=market_cap&includeNsfw=false&order=DESC&searchTerm={term}",
-        f"{base}/coins?offset=0&limit={limit}&sort=market_cap&order=DESC&includeNsfw=false&searchTerm={term}",
+        f"{base}/coins/search-unrestricted?offset=0&limit={fetch_n}&sort=market_cap&includeNsfw=false&order=DESC&searchTerm={term}",
+        f"{base}/coins/search?offset=0&limit={fetch_n}&sort=market_cap&includeNsfw=false&order=DESC&searchTerm={term}",
+        f"{base}/coins?offset=0&limit={fetch_n}&sort=market_cap&order=DESC&includeNsfw=false&searchTerm={term}",
     ]
     last: Optional[UpstreamError] = None
     for url in urls:
@@ -299,7 +322,12 @@ def _dex_search(q: str, limit: int) -> list[dict[str, Any]]:
         coin = _from_dex_pair(raw)
         if coin:
             ranked.append(coin)
-    ranked.sort(key=lambda row: float(row.get("liquidity_usd") or 0.0), reverse=True)
+    ranked.sort(
+        key=lambda row: (
+            0 if row.get("price_sol") else 1,
+            -float(row.get("liquidity_usd") or 0.0),
+        )
+    )
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for row in ranked:
@@ -327,18 +355,28 @@ def _overlay_dex(items: list[dict[str, Any]], q: str, limit: int) -> list[dict[s
 
 
 def _try_pump_coin(mint: str) -> Optional[dict[str, Any]]:
-    try:
-        payload = get_json(f"{pump_frontend_base()}/coins/{quote(mint)}")
-    except UpstreamError:
-        return None
-    rows = _as_list(payload)
-    if not rows and isinstance(payload, dict):
-        rows = [payload]
-    for raw in rows:
-        coin = _from_pump_coin(raw)
-        if coin and coin["mint"] == mint:
-            return coin
-    return _from_pump_coin(rows[0]) if rows else None
+    base = pump_frontend_base()
+    urls = [
+        f"{base}/coins/{quote(mint)}",
+        f"{base}/coins/search-unrestricted?offset=0&limit=5&sort=market_cap&includeNsfw=false&order=DESC&searchTerm={quote(mint)}",
+    ]
+    for url in urls:
+        try:
+            payload = get_json(url)
+        except UpstreamError:
+            continue
+        rows = _as_list(payload)
+        if not rows and isinstance(payload, dict):
+            rows = [payload]
+        for raw in rows:
+            coin = _from_pump_coin(raw)
+            if coin and coin["mint"] == mint:
+                return coin
+        if rows and "/coins/" in url and "search" not in url:
+            coin = _from_pump_coin(rows[0])
+            if coin:
+                return coin
+    return None
 
 
 def _try_dex_token(mint: str) -> Optional[dict[str, Any]]:
@@ -354,7 +392,12 @@ def _try_dex_token(mint: str) -> Optional[dict[str, Any]]:
         coins = [c for raw in _as_list(payload) if (c := _from_dex_pair(raw))]
         coins = [c for c in coins if c["mint"] == mint] or coins
         if coins:
-            coins.sort(key=lambda row: float(row.get("liquidity_usd") or 0.0), reverse=True)
+            coins.sort(
+                key=lambda row: (
+                    0 if row.get("price_sol") else 1,
+                    -float(row.get("liquidity_usd") or 0.0),
+                )
+            )
             return coins[0]
     return None
 
@@ -535,13 +578,19 @@ def _parse_candles(payload: Any, symbol: str) -> list[dict[str, Any]]:
 
 def candles_for(mint: str, price: Optional[float], symbol: str) -> tuple[list[dict[str, Any]], bool]:
     def load() -> list[dict[str, Any]]:
-        try:
-            payload = get_json(
-                f"{pump_frontend_base()}/candles/{quote(mint)}?offset=0&limit=240&timeframe=1"
-            )
-        except UpstreamError:
-            return []
-        return _parse_candles(payload, symbol)
+        urls = [
+            f"{pump_swap_base()}/v1/coins/{quote(mint)}/candles?interval=1m&limit=240&currency=SOL",
+            f"{pump_frontend_base()}/candles/{quote(mint)}?offset=0&limit=240&timeframe=1",
+        ]
+        for url in urls:
+            try:
+                payload = get_json(url)
+            except UpstreamError:
+                continue
+            rows = _parse_candles(payload, symbol)
+            if rows:
+                return rows
+        return []
 
     try:
         rows = _cached(f"candles:{mint}", CANDLE_TTL, load)
