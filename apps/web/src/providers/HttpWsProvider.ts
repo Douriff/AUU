@@ -11,6 +11,8 @@ import type {
   BoardSnapshot,
   ConsoleFeed,
   MarketList,
+  TradePosition,
+  TradePreview,
   ExecutabilityReport,
   PostmortemReport,
   ShadowCompareReport,
@@ -212,6 +214,39 @@ export class HttpWsProvider {
 
   getMarkets(): Promise<MarketList> {
     return getJson("/api/v1/markets");
+  }
+
+  getTradePreview(q: {
+    symbol?: string;
+    mint?: string;
+    side: "buy" | "sell";
+    notional_sol?: number;
+    sell_pct?: number;
+  }): Promise<TradePreview> {
+    const params = new URLSearchParams();
+    if (q.symbol) params.set("symbol", q.symbol);
+    if (q.mint) params.set("mint", q.mint);
+    params.set("side", q.side);
+    if (q.notional_sol != null) params.set("notional_sol", String(q.notional_sol));
+    if (q.sell_pct != null) params.set("sell_pct", String(q.sell_pct));
+    return getJson(`/api/v1/trade/preview?${params}`);
+  }
+
+  getTradePosition(q: { symbol?: string; mint?: string }): Promise<TradePosition> {
+    const params = new URLSearchParams();
+    if (q.symbol) params.set("symbol", q.symbol);
+    if (q.mint) params.set("mint", q.mint);
+    return getJson(`/api/v1/trade/position?${params}`);
+  }
+
+  postTradeOrder(body: {
+    symbol?: string;
+    mint?: string;
+    side: "buy" | "sell";
+    notional_sol?: number;
+    sell_pct?: number;
+  }): Promise<TradePosition> {
+    return postJson("/api/v1/trade/orders", body);
   }
 
   getEvents(since?: string, limit = 300): Promise<ConsoleFeed> {

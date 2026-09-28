@@ -98,6 +98,11 @@ def _push(
             del _events[: len(_events) - RING_CAP]
 
 
+def _explicit_manual(*blobs: str) -> bool:
+    text = " ".join(blobs).lower()
+    return "source=manual" in text or "source:manual" in text
+
+
 def _base(symbol: str) -> str:
     raw = symbol or ""
     return raw.split("/")[0] if "/" in raw else raw
@@ -209,16 +214,24 @@ def note_journal_fill(
     """Entry for a new paper lot, exit for each closed round-trip. Live fills never arrive here."""
     ts = int(getattr(fill, "ts", 0) or 0)
     mint_s = str(mint or getattr(opened, "mint", "") or "")
+    # Prefer the lot/trade tag. Backfill passes a dummy fill with an empty tag.
+    fill_tag = str(getattr(fill, "tag", "") or "")
     if opened is not None and abs(float(getattr(opened, "qty", 0) or 0)) > 1e-12:
         lot_ts = int(getattr(opened, "ts", ts) or ts)
         lot_px = float(getattr(opened, "price", 0) or 0)
         lot_qty = float(getattr(opened, "qty", 0) or 0)
+        lot_tag = str(getattr(opened, "tag", "") or "")
+        manual = _explicit_manual(lot_tag, fill_tag)
         _push(
             id=f"entry:{symbol}:{lot_ts}:{lot_px:.8f}",
             ts=lot_ts,
             type="entry",
-            pill="开仓",
-            message=f"{_base(symbol)} 纸面开仓 {_qty(lot_qty)} @ {_px(lot_px)} SOL",
+            pill="手动" if manual else "开仓",
+            message=(
+                f"{_base(symbol)} 手动开仓 {_qty(lot_qty)} @ {_px(lot_px)} SOL"
+                if manual
+                else f"{_base(symbol)} 纸面开仓 {_qty(lot_qty)} @ {_px(lot_px)} SOL"
+            ),
             symbol=symbol,
             mint=str(getattr(opened, "mint", "") or mint_s),
         )
@@ -229,16 +242,23 @@ def note_journal_fill(
             mapped = exit_reason_of({"tags": dumped.get("tags") or [], "reason": reason, "exit_reason": reason})
             if mapped and mapped != "other":
                 why = mapped
-        pill = _EXIT_PILL.get(why, "平仓")
+        trade_tags = " ".join(str(t) for t in (getattr(trade, "tags", None) or dumped.get("tags") or []))
+        manual = _explicit_manual(trade_tags)
+        pill = "手动" if manual else _EXIT_PILL.get(why, "平仓")
         net_bps = float(getattr(trade, "pnl_pct", 0) or 0) * 10_000.0
         pnl = float(getattr(trade, "pnl", 0) or 0)
         sign = "+" if net_bps > 0 else ""
+        message = (
+            f"{_base(symbol)} 手动平仓 净 {sign}{net_bps:.0f} bps"
+            if manual
+            else f"{_base(symbol)} {pill} 净 {sign}{net_bps:.0f} bps"
+        )
         _push(
             id=f"exit:{getattr(trade, 'id', '')}",
             ts=int(getattr(trade, "exit_ts", ts) or ts),
             type="exit",
             pill=pill,
-            message=f"{_base(symbol)} {pill} 净 {sign}{net_bps:.0f} bps",
+            message=message,
             pnl=pnl,
             net_bps=net_bps,
             symbol=str(getattr(trade, "symbol", symbol) or symbol),

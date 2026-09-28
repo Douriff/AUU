@@ -237,6 +237,19 @@ def _ids_from_tag(tag: str) -> tuple[str, str]:
     return "manual-paper", "manual"
 
 
+def excluded_from_autopaper_stats(trade: Any) -> bool:
+    """Ticket orders tagged source=manual stay out of Go/No-Go and the board tape.
+
+    Other paper fills (pipeline-v0, the older paper panel) keep their existing
+    stats treatment. summarize() does not use this filter.
+    """
+    tags = getattr(trade, "tags", None)
+    if tags is None and isinstance(trade, Mapping):
+        tags = trade.get("tags") or []
+    blob = " ".join(str(t).lower() for t in (tags or []))
+    return "source=manual" in blob or "source:manual" in blob
+
+
 def _tags_for(reason: str, tag: str) -> list[str]:
     out: list[str] = []
     mapped = _REASON_TAGS.get((reason or "").lower())

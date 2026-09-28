@@ -26,6 +26,7 @@ from app.routes import (
     stats,
     strategy,
     symbols,
+    trade_ticket,
     watch,
     ws,
 )
@@ -93,6 +94,7 @@ app.include_router(health.router)
 app.include_router(board.router)
 app.include_router(markets.router)
 app.include_router(events.router)
+app.include_router(trade_ticket.router)
 app.include_router(symbols.router)
 app.include_router(candles.router)
 app.include_router(signals.router)
@@ -141,6 +143,9 @@ def root():
                 "board": "GET /api/v1/board",
                 "markets": "GET /api/v1/markets",
                 "events": "GET /api/v1/events",
+                "tradePreview": "GET /api/v1/trade/preview",
+                "tradePosition": "GET /api/v1/trade/position",
+                "tradeOrders": "POST /api/v1/trade/orders",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",

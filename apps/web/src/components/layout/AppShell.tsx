@@ -8,7 +8,8 @@ const primary = [
   { to: "/console", label: "控制台", icon: "term" },
   { to: "/", label: "总览", title: "盘面", end: true, icon: "grid" },
   { to: "/markets", label: "市场", icon: "bars" },
-  { to: "/trade", label: "持仓", icon: "bag" },
+  { to: "/trade", label: "交易", icon: "swap" },
+  { to: "/positions", label: "持仓", icon: "bag" },
   { to: "/strategy", label: "策略/影子", icon: "sliders" },
   { to: "/review", label: "复盘", icon: "loop" },
   { to: "/settings", label: "设置", icon: "gear" },
@@ -78,6 +79,14 @@ function Icon({ name }: { name: string }) {
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
+      </>
+    ),
+    swap: (
+      <>
+        <path d="M7 7h11" />
+        <path d="M15 4l3 3-3 3" />
+        <path d="M17 17H6" />
+        <path d="M9 14l-3 3 3 3" />
       </>
     ),
     term: (
