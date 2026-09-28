@@ -9,6 +9,7 @@ import type {
   PaperOrderResult,
   PaperPerformance,
   BoardSnapshot,
+  MarketList,
   ExecutabilityReport,
   PostmortemReport,
   ShadowCompareReport,
@@ -206,6 +207,10 @@ export class HttpWsProvider {
 
   getBoard(): Promise<BoardSnapshot> {
     return getJson("/api/v1/board");
+  }
+
+  getMarkets(): Promise<MarketList> {
+    return getJson("/api/v1/markets");
   }
 
   getPaperPerformance(window = "session", opts?: { mc?: boolean }): Promise<PaperPerformance> {

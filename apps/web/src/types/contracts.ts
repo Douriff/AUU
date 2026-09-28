@@ -849,6 +849,38 @@ export interface BoardSnapshot {
   empty: boolean;
 }
 
+export interface MarketItem {
+  symbol: string;
+  base: string;
+  mint: string;
+  price_sol: number | null;
+  price_usd: number | null;
+  change_pct: number | null;
+  volume_sol: number;
+  market_cap_sol: number | null;
+  progress_bps: number | null;
+  progress_pct: number | null;
+  phase?: string | null;
+  discovered: boolean;
+  tags: string[];
+  spark: number[];
+}
+
+export interface MarketList {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  provider: string;
+  quote: string;
+  usd_available: boolean;
+  discovery: string;
+  discovery_active?: string;
+  discovery_reason?: string;
+  asof_ts: number;
+  items: MarketItem[];
+  empty: boolean;
+}
+
 export interface PaperOrderResult {
   fills: Fill[];
   reject?: RejectOut;
