@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CandleChart } from "@/components/chart/CandleChart";
+import { WalletSignalCard } from "@/components/wallet/WalletSignalCard";
 import { PriceCell } from "@/components/markets/PriceCell";
 import { useMarkets } from "@/hooks/useMarkets";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -387,6 +388,8 @@ export function TradingPage() {
               </ul>
             </section>
           )}
+
+          <WalletSignalCard mint={desk.mint} priceSol={desk.priceSol} sellPct={sellPct} />
 
           <div className="td-grid">
             <div className="td-chart">

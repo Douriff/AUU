@@ -1207,6 +1207,49 @@ export interface WalletLedgerItem {
   ts: number;
 }
 
+export interface WalletSignal {
+  strategy_id: string;
+  mint: string | null;
+  side: string;
+  reason: string;
+  entry_price: number | null;
+  take_profit: number | null;
+  stop_loss: number | null;
+  take_profit_pct: number;
+  stop_loss_pct: number;
+  suggested_sol: number;
+  strategy_sol: number;
+  slippage_bps: number;
+  order_allowed: boolean;
+  real_money: boolean;
+  liveEnabled: boolean;
+  custodial: boolean;
+  wallet_mode: string;
+  block: string | null;
+  day_loss_pct: number;
+  day_loss_tripped: boolean;
+  open_positions: number;
+  position: { mint: string; qty: number; entry_price: number; mark: number; upnl_sol: number } | null;
+  note: string;
+}
+
+export interface WalletPreparedOrder {
+  prepare_id: string;
+  expires_at: number;
+  network: string;
+  tx_base64: string;
+  mint: string;
+  side: string;
+  amount_sol: number;
+  price_sol: number;
+  qty: number;
+  slippage_bps: number;
+  real_money: boolean;
+  liveEnabled: boolean;
+  custodial: boolean;
+  note: string;
+}
+
 export interface WalletLedger {
   liveEnabled: boolean;
   network: string;

@@ -57,6 +57,18 @@ def devnet_rpc_url() -> str:
     return raw or "https://api.devnet.solana.com"
 
 
+def mainnet_rpc_url() -> str:
+    raw = os.getenv("SOLANA_RPC_URL_MAINNET", "https://api.mainnet-beta.solana.com").strip()
+    return raw or "https://api.mainnet-beta.solana.com"
+
+
+def prepare_ttl() -> int:
+    try:
+        return int(os.getenv("AUU_WALLET_PREPARE_TTL", "90"))
+    except ValueError:
+        return 90
+
+
 def _store_path() -> Path:
     raw = (os.getenv("AUU_WALLET_STORE") or "").strip()
     if raw:
@@ -314,6 +326,7 @@ def status_for(user_id: Optional[str]) -> dict[str, Any]:
         "risk_version": RISK_VERSION,
         "risk_text": RISK_TEXT,
         "custodial": False,
+        "order_allowed": False,
     }
     if not user_id:
         return body
@@ -325,16 +338,17 @@ def status_for(user_id: Optional[str]) -> dict[str, Any]:
     body["consent"] = row.get("consent")
     body["risk"] = dict(row.get("risk") or _default_risk())
     body["tx_allowed"] = _tx_block_reason(user_id) is None
+    body["order_allowed"] = order_block_reason(user_id) is None
     return body
 
 
-def rpc(method: str, params: list[Any]) -> Any:
+def rpc(method: str, params: list[Any], url: Optional[str] = None) -> Any:
     import json as _json
     from urllib.request import Request, urlopen
 
     payload = _json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode("utf-8")
     req = Request(
-        devnet_rpc_url(),
+        url or devnet_rpc_url(),
         data=payload,
         headers={"Content-Type": "application/json", "User-Agent": "AUU-wallet/0.1"},
         method="POST",
@@ -369,7 +383,7 @@ def prepare_memo(user_id: str) -> dict[str, Any]:
         "user_id": user_id,
         "pubkey": pubkey,
         "message": message,
-        "exp": int(time.time()) + 90,
+        "exp": int(time.time()) + prepare_ttl(),
         "amount_sol": 0.0,
         "kind": "memo",
     }
@@ -385,9 +399,10 @@ def prepare_memo(user_id: str) -> dict[str, Any]:
     }
 
 
-def _signature_status(signature: str) -> str:
+def _signature_status(signature: str, network: str = "devnet") -> str:
     try:
-        parsed = rpc("getSignatureStatuses", [[signature], {"searchTransactionHistory": True}])
+        args = ("getSignatureStatuses", [[signature], {"searchTransactionHistory": True}])
+        parsed = rpc(*args, mainnet_rpc_url()) if network == "mainnet" else rpc(*args)
         value = (parsed.get("result") or {}).get("value") or [None]
         row = value[0] if value else None
     except Exception:
@@ -405,6 +420,8 @@ def _signature_status(signature: str) -> str:
 def record_signed(user_id: str, prepare_id: str, signature_b58: str) -> dict[str, Any]:
     prepared = _PREPARED.get(prepare_id or "")
     if prepared is None or int(prepared["exp"]) < int(time.time()) or prepared["user_id"] != user_id:
+        raise ValueError("PREPARE")
+    if prepared.get("kind") not in (None, "memo"):
         raise ValueError("PREPARE")
     try:
         signature = b58decode(signature_b58 or "")
@@ -443,7 +460,7 @@ def ledger_for(user_id: str, limit: int = 50) -> dict[str, Any]:
     for row in rows:
         if row.get("status") in {"confirmed", "finalized", "failed"}:
             continue
-        nxt = _signature_status(str(row.get("signature") or ""))
+        nxt = _signature_status(str(row.get("signature") or ""), str(row.get("network") or "devnet"))
         if nxt != row.get("status"):
             row["status"] = nxt
             changed = True
@@ -458,7 +475,7 @@ def ledger_for(user_id: str, limit: int = 50) -> dict[str, Any]:
 
 
 def _public_entry(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    body = {
         "id": row.get("id"),
         "pubkey": row.get("pubkey"),
         "network": row.get("network"),
@@ -468,3 +485,137 @@ def _public_entry(row: dict[str, Any]) -> dict[str, Any]:
         "kind": row.get("kind") or "memo",
         "ts": int(row.get("ts") or 0),
     }
+    if row.get("side"):
+        body["side"] = row.get("side")
+        body["mint"] = row.get("mint")
+        body["pnl_sol"] = float(row.get("pnl_sol") or 0.0)
+    return body
+
+
+def order_block_reason(user_id: str) -> Optional[str]:
+    if _load().get("global_halt"):
+        return "WALLET_HALT"
+    mode = env_mode()
+    if mode == "off":
+        return "WALLET_OFF"
+    if mode != "mainnet":
+        return "WALLET_MAINNET_ONLY"
+    row = _user_row(user_id)
+    if not row.get("pubkey"):
+        return "NOT_BOUND"
+    if not row.get("wallet_enabled") or not isinstance(row.get("consent"), dict):
+        return "WALLET_MODE_OFF"
+    return None
+
+
+def _day_start_ms() -> int:
+    import calendar
+
+    now = time.gmtime()
+    midnight = calendar.timegm((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, 0))
+    return int(midnight) * 1000
+
+
+def _position_map(user_id: Optional[str]) -> dict[str, Any]:
+    if not user_id:
+        return {}
+    row = _load()["users"].get(user_id)
+    if not isinstance(row, dict) or not isinstance(row.get("positions"), dict):
+        return {}
+    return row["positions"]
+
+
+def book_stats(user_id: Optional[str]) -> dict[str, Any]:
+    risk = _default_risk()
+    if user_id:
+        row = _load()["users"].get(user_id)
+        if isinstance(row, dict) and isinstance(row.get("risk"), dict):
+            risk = dict(row["risk"])
+    start = _day_start_ms()
+    pnl = 0.0
+    bought = 0.0
+    if user_id:
+        for row in _load()["ledger"]:
+            if row.get("user_id") != user_id or int(row.get("ts") or 0) < start:
+                continue
+            if row.get("status") == "failed":
+                continue
+            pnl += float(row.get("pnl_sol") or 0.0)
+            if row.get("side") == "buy":
+                bought += float(row.get("amount_sol") or 0.0)
+    positions = _position_map(user_id)
+    open_mints = [mint for mint, pos in positions.items() if isinstance(pos, dict) and float(pos.get("qty") or 0) > 1e-12]
+    loss_pct = (abs(pnl) / bought) if pnl < 0 and bought > 0 else 0.0
+    cap = float(risk.get("max_day_loss_pct") or HARD_MAX_DAY_LOSS_PCT)
+    return {
+        "risk": risk,
+        "day_pnl_sol": pnl,
+        "day_bought_sol": bought,
+        "day_loss_pct": loss_pct,
+        "day_loss_tripped": loss_pct + 1e-12 >= cap,
+        "open_positions": len(open_mints),
+        "open_mints": open_mints,
+        "positions": positions,
+    }
+
+
+def commit_fill(
+    user_id: str,
+    *,
+    mint: str,
+    side: str,
+    amount_sol: float,
+    price: float,
+    qty: float,
+    signature: str,
+    status: str,
+) -> dict[str, Any]:
+    row = _user_row(user_id)
+    positions = row.get("positions")
+    if not isinstance(positions, dict):
+        positions = {}
+        row["positions"] = positions
+    pos = positions.get(mint) if isinstance(positions.get(mint), dict) else None
+    pnl = 0.0
+    if side == "buy":
+        old_qty = float(pos.get("qty") or 0.0) if pos else 0.0
+        old_cost = float(pos.get("cost_sol") or 0.0) if pos else 0.0
+        new_qty = old_qty + float(qty)
+        new_cost = old_cost + float(amount_sol)
+        entry = (new_cost / new_qty) if new_qty > 1e-18 else float(price)
+        positions[mint] = {"qty": new_qty, "cost_sol": new_cost, "entry_price": entry}
+    else:
+        if pos is None or float(pos.get("qty") or 0.0) <= 1e-12:
+            raise ValueError("NO_POSITION")
+        entry = float(pos.get("entry_price") or 0.0)
+        sell_qty = min(float(qty), float(pos.get("qty") or 0.0))
+        cost = entry * sell_qty
+        proceeds = float(price) * sell_qty
+        pnl = proceeds - cost
+        left = float(pos.get("qty") or 0.0) - sell_qty
+        if left <= 1e-12:
+            positions.pop(mint, None)
+        else:
+            pos["qty"] = left
+            pos["cost_sol"] = max(0.0, float(pos.get("cost_sol") or 0.0) - cost)
+        amount_sol = proceeds
+    entry_row = {
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "pubkey": str(row.get("pubkey") or ""),
+        "network": "mainnet",
+        "signature": signature,
+        "status": status,
+        "amount_sol": float(amount_sol),
+        "kind": "order",
+        "side": side,
+        "mint": mint,
+        "price_sol": float(price),
+        "qty": float(qty),
+        "pnl_sol": float(pnl),
+        "ts": int(time.time() * 1000),
+    }
+    _load()["ledger"].append(entry_row)
+    with _LOCK:
+        _save()
+    return entry_row

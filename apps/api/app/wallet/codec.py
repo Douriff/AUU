@@ -70,3 +70,42 @@ def build_memo_message(fee_payer: bytes, blockhash: bytes, memo: str) -> bytes:
 def unsigned_transaction(message: bytes) -> bytes:
     """One empty signature slot plus the message. The wallet fills the signature."""
     return _compact(1) + (b"\x00" * 64) + message
+
+
+def read_compact(buf: bytes, index: int) -> tuple[int, int]:
+    if index >= len(buf):
+        raise ValueError("BAD_TX")
+    first = buf[index]
+    if first < 0x80:
+        return first, index + 1
+    if index + 1 >= len(buf):
+        raise ValueError("BAD_TX")
+    return (first & 0x7F) | (buf[index + 1] << 7), index + 2
+
+
+def split_transaction(raw: bytes) -> tuple[list[bytes], bytes]:
+    """Signatures plus the exact message bytes. Works for legacy and v0."""
+    count, index = read_compact(raw, 0)
+    if count < 1 or count > 8:
+        raise ValueError("BAD_TX")
+    signatures: list[bytes] = []
+    for _ in range(count):
+        chunk = raw[index : index + 64]
+        if len(chunk) != 64:
+            raise ValueError("BAD_TX")
+        signatures.append(chunk)
+        index += 64
+    if index >= len(raw):
+        raise ValueError("BAD_TX")
+    return signatures, raw[index:]
+
+
+def fee_payer(message: bytes) -> bytes:
+    """First account. Versioned messages start with the high bit set."""
+    if not message:
+        raise ValueError("BAD_TX")
+    index = 4 if message[0] & 0x80 else 3
+    count, index = read_compact(message, index)
+    if count < 1 or index + 32 > len(message):
+        raise ValueError("BAD_TX")
+    return message[index : index + 32]

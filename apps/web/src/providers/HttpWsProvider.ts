@@ -40,6 +40,8 @@ import type {
   WalletChallenge,
   WalletLedger,
   WalletPrepared,
+  WalletPreparedOrder,
+  WalletSignal,
   WalletStatus,
   TraderWatchList,
   TraderWatchlistItem,
@@ -375,6 +377,29 @@ export class HttpWsProvider {
 
   haltWallets(halt: boolean): Promise<{ global_halt: boolean; liveEnabled: boolean; mode: string }> {
     return postJson("/api/v1/wallet/admin/halt", { halt });
+  }
+
+  getWalletSignal(q: { mint?: string; price_sol?: number | null }): Promise<WalletSignal> {
+    const params = new URLSearchParams();
+    if (q.mint) params.set("mint", q.mint);
+    if (q.price_sol != null && Number.isFinite(q.price_sol)) params.set("price_sol", String(q.price_sol));
+    const suffix = params.toString();
+    return getJson(`/api/v1/wallet/signal${suffix ? `?${suffix}` : ""}`);
+  }
+
+  prepareWalletOrder(body: {
+    mint: string;
+    side: "buy" | "sell";
+    notional_sol?: number;
+    sell_pct?: number;
+    price_sol: number;
+    slippage_bps?: number;
+  }): Promise<WalletPreparedOrder> {
+    return postJson("/api/v1/wallet/order/prepare", body);
+  }
+
+  submitWalletOrder(body: { prepare_id: string; signed_tx: string }): Promise<{ liveEnabled: boolean; real_money: boolean; item: WalletLedger["items"][number] }> {
+    return postJson("/api/v1/wallet/order/submit", body);
   }
 
   getLeaderboard(sort: "pnl" | "return" = "pnl"): Promise<Leaderboard> {

@@ -165,7 +165,7 @@ def root():
                 "tradeBook": "GET /api/v1/trade/book",
                 "auth": "POST /api/v1/auth/register|login|logout|password",
                 "leaderboard": "GET /api/v1/leaderboard",
-                "wallet": "GET /api/v1/wallet/status (pubkey only; devnet memo is unsigned)",
+                "wallet": "GET /api/v1/wallet/status (pubkey only; mainnet orders stay unsigned until the user signs)",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",
