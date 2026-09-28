@@ -1051,6 +1051,32 @@ export interface MajorsBoard {
   rows: { base: string; quotes: Record<string, MajorsQuote>; spread_bps: number | null }[];
 }
 
+export interface MajorsTicker {
+  base: string;
+  symbol: string;
+  last: number | null;
+  change_24h: number | null;
+  volume_24h: number | null;
+  bid: number | null;
+  ask: number | null;
+  bid_venue?: string;
+  ask_venue?: string;
+  spread_bps?: number | null;
+  venues?: string[];
+}
+
+export interface MajorsTickerBoard {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  venue: string;
+  status: string;
+  status_label: string;
+  venues: { id: string; label: string; status: string; status_label: string }[];
+  total: number;
+  items: MajorsTicker[];
+}
+
 export interface MajorsCompare {
   liveEnabled: boolean;
   listed: boolean;
