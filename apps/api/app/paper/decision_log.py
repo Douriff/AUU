@@ -429,7 +429,15 @@ def reset_decision_log() -> None:
 
 
 def append_decision(row: DecisionLogRow, *, debounce: bool = False) -> Optional[DecisionLogRow]:
-    return get_decision_log().append(row, debounce=debounce)
+    stored = get_decision_log().append(row, debounce=debounce)
+    if stored is not None:
+        try:
+            from app.paper.events import note_decision
+
+            note_decision(stored)
+        except Exception:
+            pass
+    return stored
 
 
 def as_dicts(rows: Iterable[DecisionLogRow]) -> list[dict[str, Any]]:

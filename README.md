@@ -19,6 +19,7 @@ flowchart TB
 
 | 组件 | 职责 |
 |------|------|
+| ConsolePage `/console` | 控制台：持仓 / 今日平仓 / 今日净盈亏 / Go-No-Go，纸面事件流（`GET /api/v1/events?since=`，只读） |
 | BoardPage `/` | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
 | MarketsPage `/markets` | 市场：监控代币表、涨跌、成交额、市值、曲线进度、火花线（`GET /api/v1/markets`，只读） |
 | MarketPage `/market` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar / CurvePanel |

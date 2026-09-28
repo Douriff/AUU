@@ -5,6 +5,7 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 
 const primary = [
+  { to: "/console", label: "控制台", icon: "term" },
   { to: "/", label: "总览", title: "盘面", end: true, icon: "grid" },
   { to: "/markets", label: "市场", icon: "bars" },
   { to: "/trade", label: "持仓", icon: "bag" },
@@ -77,6 +78,13 @@ function Icon({ name }: { name: string }) {
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
+      </>
+    ),
+    term: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 9l3 3-3 3" />
+        <path d="M12 15h5" />
       </>
     ),
   };

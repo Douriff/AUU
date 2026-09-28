@@ -106,6 +106,12 @@ def put_pump_paper(body: PumpPaperParamsPatch):
                 },
             }
         )
+        try:
+            from app.paper.events import note_autopaper
+
+            note_autopaper(auto)
+        except Exception:
+            pass
     return ok(_state_payload())
 
 

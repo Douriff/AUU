@@ -9,9 +9,12 @@ progress_* is rejected (SHADOW_PROGRESS_FORBIDDEN). Default: comparison off.
 """
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 from app.models.contracts import HabitProfile, PumpfunPaperSnapshot, TraderSnapshot
@@ -132,11 +135,136 @@ _last_open_ms: dict[tuple[str, str], int] = {}
 _skip_key: dict[tuple[str, str], tuple] = {}
 _closed: list[dict[str, Any]] = []
 _decisions: list[dict[str, Any]] = []
+_loaded = False
+_PERSIST_LOCK = threading.Lock()
+
+
+def _store_path() -> Path:
+    raw = (os.getenv("SHADOW_COMPARE_STORE") or "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[2] / "data" / "shadow_compare.json"
+
+
+def _counters(closed: list[dict[str, Any]], *, enabled: bool, n_sets: int) -> dict[str, Any]:
+    by_set: dict[str, dict[str, Any]] = {}
+    wins = 0
+    pnl_sum = 0.0
+    for row in closed:
+        sid = str(row.get("set_id") or "")
+        try:
+            pnl = float(row.get("pnl") or 0.0)
+        except (TypeError, ValueError):
+            pnl = 0.0
+        bucket = by_set.setdefault(sid, {"n": 0, "wins": 0, "pnl_sum": 0.0})
+        bucket["n"] += 1
+        bucket["pnl_sum"] += pnl
+        pnl_sum += pnl
+        if pnl > 0:
+            wins += 1
+            bucket["wins"] += 1
+    return {
+        "enabled": bool(enabled),
+        "n_sets": int(n_sets),
+        "n_closed": len(closed),
+        "wins": wins,
+        "pnl_sum": pnl_sum,
+        "by_set": by_set,
+    }
+
+
+def _delete_store() -> None:
+    path = _store_path()
+    for candidate in (path, path.with_suffix(path.suffix + ".tmp")):
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def _persist_shadow() -> None:
+    """Write config + closed rows (counters are derived from those rows)."""
+    with _LOCK:
+        payload = {
+            "v": 1,
+            "enabled": bool(_config.enabled),
+            "sets": [spec.as_public() for spec in _config.sets],
+            "closed": list(_closed),
+            "counters": _counters(_closed, enabled=_config.enabled, n_sets=len(_config.sets)),
+        }
+    path = _store_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        text = json.dumps(payload)
+        with _PERSIST_LOCK:
+            tmp.write_text(text, encoding="utf-8")
+            tmp.replace(path)
+    except OSError:
+        return
+
+
+def _restore_locked(data: Mapping[str, Any]) -> None:
+    global _config
+    specs: list[ShadowSetSpec] = []
+    raw_sets = data.get("sets") or []
+    if isinstance(raw_sets, list):
+        for i, raw in enumerate(raw_sets):
+            if not isinstance(raw, Mapping):
+                continue
+            flat = dict(raw)
+            params = flat.pop("params", None)
+            if isinstance(params, Mapping):
+                for key, value in params.items():
+                    flat.setdefault(key, value)
+            try:
+                specs.append(_spec_from_mapping(flat, i))
+            except (ShadowConfigError, ShadowProgressForbidden):
+                continue
+    closed: list[dict[str, Any]] = []
+    raw_closed = data.get("closed") or []
+    if isinstance(raw_closed, list):
+        for row in raw_closed:
+            if isinstance(row, dict) and row.get("set_id"):
+                closed.append(dict(row))
+    if len(closed) > JOURNAL_CAP:
+        closed = closed[-JOURNAL_CAP:]
+    _config = _Config(enabled=bool(data.get("enabled")), sets=specs)
+    _closed[:] = closed
+
+
+def _ensure_loaded() -> None:
+    global _loaded
+    with _LOCK:
+        if _loaded:
+            return
+        path = _store_path()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            _loaded = True
+            return
+        except OSError:
+            _loaded = True
+            return
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            _loaded = True
+            return
+        if isinstance(raw, dict):
+            _restore_locked(raw)
+        _loaded = True
 
 
 def reset_shadow_compare() -> None:
-    """Drop config, virtual positions, and the shadow journal. Paper journal untouched."""
-    global _config
+    """Drop config, virtual positions, and the shadow journal. Paper journal untouched.
+
+    Also deletes the on-disk store so a later load cannot resurrect test state.
+    """
+    global _config, _loaded
     with _LOCK:
         _config = _Config()
         _opens.clear()
@@ -144,9 +272,26 @@ def reset_shadow_compare() -> None:
         _skip_key.clear()
         _closed.clear()
         _decisions.clear()
+        _loaded = True
+    _delete_store()
+
+
+def reload_shadow_from_disk() -> None:
+    """Drop memory and read the store again. Used to simulate an API restart."""
+    global _config, _loaded
+    with _LOCK:
+        _config = _Config()
+        _opens.clear()
+        _last_open_ms.clear()
+        _skip_key.clear()
+        _closed.clear()
+        _decisions.clear()
+        _loaded = False
+    _ensure_loaded()
 
 
 def shadow_enabled() -> bool:
+    _ensure_loaded()
     with _LOCK:
         return bool(_config.enabled)
 
@@ -396,6 +541,7 @@ def _sets_changed(prev: list[ShadowSetSpec], nxt: list[ShadowSetSpec]) -> bool:
 
 def apply_shadow_config(body: Mapping[str, Any], *, main: Optional[PumpPaperParams] = None) -> dict[str, Any]:
     """Replace shadow config. Never writes strategy params or HabitProfile."""
+    _ensure_loaded()
     if not isinstance(body, Mapping):
         raise ShadowConfigError("SHADOW_PARAM_INVALID", "body must be an object")
     _require_no_progress(body)
@@ -458,6 +604,7 @@ def apply_shadow_config(body: Mapping[str, Any], *, main: Optional[PumpPaperPara
             _skip_key.clear()
             _closed.clear()
             _decisions.clear()
+    _persist_shadow()
     return build_shadow_compare()
 
 
@@ -531,6 +678,13 @@ def _record_decision(row: dict[str, Any], *, debounce: bool) -> None:
     _decisions.append(row)
     if len(_decisions) > JOURNAL_CAP:
         del _decisions[: len(_decisions) - JOURNAL_CAP + 200]
+    if row.get("action") != "exit":
+        try:
+            from app.paper.events import note_shadow_decision
+
+            note_shadow_decision(row)
+        except Exception:
+            pass
 
 
 def observe_candidate(
@@ -545,6 +699,7 @@ def observe_candidate(
     main_params: Optional[PumpPaperParams] = None,
 ) -> None:
     """Virtual decision for each enabled shadow set. No paper order, no main stats."""
+    _ensure_loaded()
     with _LOCK:
         if not _config.enabled or not _config.sets:
             return
@@ -738,14 +893,23 @@ def _close_virtual(
             },
             debounce=False,
         )
+    _persist_shadow()
+    try:
+        from app.paper.events import note_shadow_close
+
+        note_shadow_close(row)
+    except Exception:
+        pass
 
 
 def shadow_decisions() -> list[dict[str, Any]]:
+    _ensure_loaded()
     with _LOCK:
         return [dict(row) for row in _decisions]
 
 
 def shadow_closed(set_id: Optional[str] = None) -> list[dict[str, Any]]:
+    _ensure_loaded()
     with _LOCK:
         rows = list(_closed)
     if set_id is None:
@@ -820,6 +984,7 @@ def _exit_vs_main(shadow_rows: Sequence[Mapping[str, Any]], main_rows: Sequence[
 
 def build_shadow_compare() -> dict[str, Any]:
     """Read-only report. Does not mutate journals, params, or live gates."""
+    _ensure_loaded()
     with _LOCK:
         enabled = bool(_config.enabled)
         specs = list(_config.sets)

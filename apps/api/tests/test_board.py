@@ -7,6 +7,7 @@ import unittest
 from app.models.contracts import Fill
 from app.paper.broker import reset_paper_broker
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
+from app.paper.shadow_compare import reset_shadow_compare
 from app.providers import reset_provider
 from app.risk.gate import reset_risk_gate
 from app.strategies.pump_paper_v1 import reset_engine
@@ -23,6 +24,7 @@ class BoardApiTests(unittest.TestCase):
         reset_risk_gate()
         reset_paper_broker()
         reset_paper_ledger()
+        reset_shadow_compare()
         from fastapi.testclient import TestClient
         from app.main import app
 
@@ -43,6 +45,7 @@ class BoardApiTests(unittest.TestCase):
         reset_risk_gate()
         reset_paper_broker()
         reset_engine()
+        reset_shadow_compare()
 
     def test_empty_board_is_paper_and_read_only(self):
         before = self.client.get("/api/v1/strategy/pump-paper-v1")

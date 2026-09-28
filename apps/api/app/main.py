@@ -8,7 +8,27 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import board, book, candles, curve, fills, health, live, markets, paper, pipeline, pumpfun, risk, signals, stats, strategy, symbols, watch, ws
+from app.routes import (
+    board,
+    book,
+    candles,
+    curve,
+    events,
+    fills,
+    health,
+    live,
+    markets,
+    paper,
+    pipeline,
+    pumpfun,
+    risk,
+    signals,
+    stats,
+    strategy,
+    symbols,
+    watch,
+    ws,
+)
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
@@ -21,6 +41,12 @@ async def lifespan(app: FastAPI):
     import asyncio
 
     tasks: list[asyncio.Task] = []
+    try:
+        from app.paper.events import note_api_start
+
+        note_api_start()
+    except Exception:
+        pass
     if loop_enabled():
         tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
     if resolve_discovery_mode() != "off":
@@ -66,6 +92,7 @@ async def api_version_header(request: Request, call_next):
 app.include_router(health.router)
 app.include_router(board.router)
 app.include_router(markets.router)
+app.include_router(events.router)
 app.include_router(symbols.router)
 app.include_router(candles.router)
 app.include_router(signals.router)
@@ -113,6 +140,7 @@ def root():
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
                 "board": "GET /api/v1/board",
                 "markets": "GET /api/v1/markets",
+                "events": "GET /api/v1/events",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",
                 "postmortem": "GET /api/v1/stats/postmortem",

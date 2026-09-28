@@ -2,13 +2,23 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 
 class EventHub:
     def __init__(self) -> None:
         self._subs: list[asyncio.Queue[dict[str, Any]]] = []
         self._lock = asyncio.Lock()
+        self._sync: list[Callable[[dict[str, Any]], None]] = []
+        self._sync_ids: set[int] = set()
+
+    def add_sync_listener(self, fn: Callable[[dict[str, Any]], None]) -> None:
+        """In-process observer. Failures are swallowed by publish."""
+        ident = id(fn)
+        if ident in self._sync_ids:
+            return
+        self._sync_ids.add(ident)
+        self._sync.append(fn)
 
     async def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
         q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)
@@ -36,6 +46,11 @@ class EventHub:
                     q.put_nowait(event)
                 except asyncio.QueueFull:
                     pass
+        for fn in list(self._sync):
+            try:
+                fn(event)
+            except Exception:
+                pass
 
     def publish_sync(self, event: dict[str, Any]) -> None:
         """Fire-and-forget from sync route handlers."""

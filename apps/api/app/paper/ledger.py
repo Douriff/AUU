@@ -378,9 +378,23 @@ class PaperTradeJournal:
                     shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
                 )
             )
+        opened_lot = opened[-1] if opened and abs(remaining) > 1e-12 else None
         if not opened:
             self.lots.pop(symbol, None)
         self._maybe_persist()
+        try:
+            from app.paper.events import note_journal_fill
+
+            note_journal_fill(
+                symbol,
+                fill,
+                reason=reason,
+                mint=mint,
+                closed=new_closed,
+                opened=opened_lot,
+            )
+        except Exception:
+            pass
         return new_closed
 
     def _maybe_persist(self) -> None:
