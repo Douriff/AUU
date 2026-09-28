@@ -921,6 +921,52 @@ export interface MarketList {
   empty: boolean;
 }
 
+export interface UniverseRow {
+  mint: string;
+  name: string;
+  symbol: string;
+  image: string | null;
+  created_ts: number | null;
+  age_sec: number | null;
+  price_sol: number | null;
+  price_usd: number | null;
+  change_5m: number | null;
+  change_1h: number | null;
+  change_24h: number | null;
+  volume_24h_usd: number | null;
+  market_cap_sol: number | null;
+  market_cap_usd: number | null;
+  holders: number | null;
+  progress_pct: number | null;
+  graduated: boolean;
+  venue: string | null;
+  spark: number[];
+  mock: boolean;
+}
+
+export interface UniverseMover {
+  mint: string;
+  symbol: string;
+  price_usd: number | null;
+  change_24h: number | null;
+}
+
+export interface UniversePage {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  tab: string;
+  offset: number;
+  limit: number;
+  total: number;
+  quote: string;
+  mock_included: boolean;
+  error: string | null;
+  asof_ts: number;
+  movers: UniverseMover[];
+  items: UniverseRow[];
+}
+
 export interface TradeLimits {
   max_notional_sol: number;
   max_open_positions: number;

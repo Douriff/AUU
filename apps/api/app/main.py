@@ -29,6 +29,7 @@ from app.routes import (
     strategy,
     symbols,
     trade_ticket,
+    universe,
     watch,
     ws,
 )
@@ -95,6 +96,7 @@ async def api_version_header(request: Request, call_next):
 app.include_router(health.router)
 app.include_router(board.router)
 app.include_router(markets.router)
+app.include_router(universe.router)
 app.include_router(events.router)
 app.include_router(search.router)
 app.include_router(majors.router)
@@ -146,6 +148,7 @@ def root():
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
                 "board": "GET /api/v1/board",
                 "markets": "GET /api/v1/markets",
+                "universe": "GET /api/v1/universe?tab=",
                 "search": "GET /api/v1/search?q=",
                 "searchCoin": "GET /api/v1/search/coin?mint=",
                 "majors": "GET /api/v1/majors",

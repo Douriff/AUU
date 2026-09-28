@@ -21,7 +21,7 @@ flowchart TB
 |------|------|
 | ConsolePage `/console` | 控制台：持仓 / 今日平仓 / 今日净盈亏 / Go-No-Go，纸面事件流（`GET /api/v1/events?since=`，只读） |
 | BoardPage `/` | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
-| MarketsPage `/markets` | 市场：监控代币表、涨跌、成交额、市值、曲线进度、火花线（`GET /api/v1/markets`，只读）。点行进入 `/trade/:mint` |
+| MarketsPage `/markets` | 市场：pump.fun 全站表（`GET /api/v1/universe`，热门 / 新币 / 即将毕业 / 已毕业 / 涨跌榜 / 观察池）。与发现模式无关。本地模拟币只在 `AUU_UNIVERSE_MOCK=1` 时出现。点行进入 `/trade/:mint` |
 | TradingPage `/trade` | 交易：全站搜索（`GET /api/v1/search`，pump.fun，失败则 DexScreener）、任意 mint 报价、纸面买卖票。单笔 1 SOL、10 仓、日亏 4.5%。`liveEnabled` 恒 false |
 | MajorsPage `/majors` | 大盘：Binance / OKX / Bybit / Coinbase 公开行情（无密钥、无下单）。单所不可用时其余继续 |
 | MarketPage `/market` | 自选、K 线、深度、成交 tape、信号/成交叠加、RiskTagBar、CurveProgressBar / CurvePanel |
