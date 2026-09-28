@@ -1463,7 +1463,8 @@ code.hl { color: var(--accent); }
   padding: 0.25rem 0.7rem;
 }
 .auth-tabs button.is-on, .lb-sort button.is-on { color: #f4f4f5; border-color: #f4f4f5; }
-.auth-card form { display: flex; flex-direction: column; gap: 0.65rem; }
+.auth-card form, form.auth-card { display: flex; flex-direction: column; gap: 0.65rem; }
+.settings-password { margin: 0.4rem 0 0; max-width: 420px; }
 .auth-card label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: #9a9aa3; }
 .auth-card input, .lb-sort select {
   background: #070809;

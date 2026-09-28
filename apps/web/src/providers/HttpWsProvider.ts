@@ -310,7 +310,14 @@ export class HttpWsProvider {
     return getJson("/api/v1/auth/me");
   }
 
-  registerAccount(body: { name: string; password: string; invite?: string; start_sol?: number }): Promise<AuthMe> {
+  registerAccount(body: {
+    name: string;
+    password: string;
+    password_confirm: string;
+    display_name?: string;
+    invite?: string;
+    start_sol?: number;
+  }): Promise<AuthMe> {
     return postJson("/api/v1/auth/register", body);
   }
 
@@ -320,6 +327,10 @@ export class HttpWsProvider {
 
   logout(): Promise<{ ok: boolean }> {
     return postJson("/api/v1/auth/logout", {});
+  }
+
+  changePassword(body: { current_password: string; new_password: string; new_password_confirm: string }): Promise<{ ok: boolean }> {
+    return postJson("/api/v1/auth/password", body);
   }
 
   getLeaderboard(sort: "pnl" | "return" = "pnl"): Promise<Leaderboard> {

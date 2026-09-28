@@ -1124,6 +1124,7 @@ export interface TradePosition {
 export interface AuthUser {
   id: string;
   name: string;
+  display_name?: string;
   is_admin: boolean;
   start_sol: number;
   created_ts?: number;

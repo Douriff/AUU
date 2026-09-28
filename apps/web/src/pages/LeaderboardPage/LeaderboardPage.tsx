@@ -82,7 +82,8 @@ export function LeaderboardPage() {
               <tr key={row.id}>
                 <td className="num">{index + 1}</td>
                 <td>
-                  {row.name}
+                  {row.display_name || row.name}
+                  {row.display_name && row.display_name !== row.name ? <em> {row.name}</em> : null}
                   {row.is_admin ? <em> 管理员</em> : null}
                 </td>
                 <td className="num">{row.start_sol.toFixed(2)}</td>

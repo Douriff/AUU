@@ -133,7 +133,7 @@ export function AppShell() {
       .getMe()
       .then((me) => {
         setAuthOn(me.auth_enabled);
-        setWho(me.user?.name ?? "");
+        setWho(me.user?.display_name || me.user?.name || "");
       })
       .catch(() => undefined);
   };

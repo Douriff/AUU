@@ -18,9 +18,12 @@ from app.paper.books import user_day_pnl
 from app.paper.ledger import PaperTradeJournal, _load_journal
 
 _NAME = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff]{2,24}$")
+_DISPLAY = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff][A-Za-z0-9_ \u4e00-\u9fff]{0,23}$")
 _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
 _BOOKS: dict[str, PaperTradeJournal] = {}
+_ATTEMPTS: dict[str, list[float]] = {}
+_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite"}
 
 
 def reset_accounts() -> None:
@@ -28,6 +31,7 @@ def reset_accounts() -> None:
     with _LOCK:
         _USERS = None
         _BOOKS.clear()
+        _ATTEMPTS.clear()
 
 
 def auth_enabled() -> bool:
@@ -92,18 +96,72 @@ def _save() -> None:
     tmp.replace(path)
 
 
+def _rate_max() -> int:
+    try:
+        return max(1, int(os.getenv("AUU_AUTH_RATE_MAX", "20")))
+    except ValueError:
+        return 20
+
+
+def _rate_window() -> float:
+    try:
+        return max(1.0, float(os.getenv("AUU_AUTH_RATE_WINDOW", "600")))
+    except ValueError:
+        return 600.0
+
+
+def allow_attempt(bucket: str) -> bool:
+    """Sliding window for signup and login. The bucket must not contain a password."""
+    now = time.time()
+    window = _rate_window()
+    rows = [stamp for stamp in _ATTEMPTS.get(bucket, []) if now - stamp < window]
+    if len(rows) >= _rate_max():
+        _ATTEMPTS[bucket] = rows
+        return False
+    rows.append(now)
+    _ATTEMPTS[bucket] = rows
+    return True
+
+
 def _public(user: dict[str, Any]) -> dict[str, Any]:
+    name = str(user.get("name") or "")
+    shown = str(user.get("display_name") or "").strip() or name
     return {
         "id": user["id"],
-        "name": user["name"],
+        "name": name,
+        "display_name": shown,
         "is_admin": bool(user.get("is_admin")),
         "start_sol": float(user.get("start_sol") or start_sol_default()),
         "created_ts": int(user.get("created_ts") or 0),
     }
 
 
+def scrub_secrets(payload: Any) -> Any:
+    """Drop password material before a response leaves the process."""
+    if isinstance(payload, dict):
+        return {key: scrub_secrets(value) for key, value in payload.items() if key not in _HIDDEN}
+    if isinstance(payload, list):
+        return [scrub_secrets(item) for item in payload]
+    return payload
+
+
+def _password_ok(password: str) -> bool:
+    raw = password or ""
+    if len(raw) < 8:
+        return False
+    return len(raw.encode("utf-8")) <= 72
+
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def passwords_match(left: str, right: str) -> bool:
+    a = (left or "").encode("utf-8")
+    b = (right or "").encode("utf-8")
+    if len(a) != len(b):
+        return False
+    return hmac.compare_digest(a, b)
 
 
 def verify_password(password: str, hashed: str) -> bool:
@@ -113,7 +171,13 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def register(name: str, password: str, invite: str = "", start_sol: Optional[float] = None) -> dict[str, Any]:
+def register(
+    name: str,
+    password: str,
+    invite: str = "",
+    start_sol: Optional[float] = None,
+    display_name: str = "",
+) -> dict[str, Any]:
     if not auth_enabled():
         raise ValueError("AUTH_OFF")
     if not signup_allowed():
@@ -124,8 +188,11 @@ def register(name: str, password: str, invite: str = "", start_sol: Optional[flo
     text = (name or "").strip()
     if not _NAME.match(text):
         raise ValueError("BAD_NAME")
-    if len(password or "") < 8:
+    if not _password_ok(password):
         raise ValueError("BAD_PASSWORD")
+    shown = (display_name or "").strip()
+    if shown and not _DISPLAY.match(shown):
+        raise ValueError("BAD_DISPLAY")
     start = start_sol_default() if start_sol is None else float(start_sol)
     if not (1.0 <= start <= 100_000.0):
         raise ValueError("BAD_START")
@@ -137,6 +204,7 @@ def register(name: str, password: str, invite: str = "", start_sol: Optional[flo
     user = {
         "id": uuid.uuid4().hex,
         "name": text,
+        "display_name": shown,
         "password_hash": hash_password(password),
         "start_sol": start,
         "is_admin": is_admin,
@@ -154,6 +222,17 @@ def authenticate(name: str, password: str) -> Optional[dict[str, Any]]:
         if str(user.get("name") or "").lower() == text and verify_password(password, str(user.get("password_hash") or "")):
             return user
     return None
+
+
+def change_password(user_id: str, current: str, new: str) -> None:
+    user = user_by_id(user_id)
+    if user is None or not verify_password(current or "", str(user.get("password_hash") or "")):
+        raise ValueError("BAD_LOGIN")
+    if not _password_ok(new):
+        raise ValueError("BAD_PASSWORD")
+    user["password_hash"] = hash_password(new)
+    with _LOCK:
+        _save()
 
 
 def user_by_id(user_id: str) -> Optional[dict[str, Any]]:

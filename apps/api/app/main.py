@@ -161,7 +161,7 @@ def root():
                 "tradePosition": "GET /api/v1/trade/position",
                 "tradeOrders": "POST /api/v1/trade/orders",
                 "tradeBook": "GET /api/v1/trade/book",
-                "auth": "POST /api/v1/auth/register|login|logout",
+                "auth": "POST /api/v1/auth/register|login|logout|password",
                 "leaderboard": "GET /api/v1/leaderboard",
                 "paperPerformance": "GET /api/v1/stats/paper-performance",
                 "executability": "GET /api/v1/stats/executability",

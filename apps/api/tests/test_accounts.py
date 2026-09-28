@@ -30,6 +30,8 @@ class PaperAccountTests(unittest.TestCase):
                 "AUU_USER_STORE",
                 "AUU_USER_JOURNAL_DIR",
                 "AUU_PAPER_START_SOL",
+                "AUU_AUTH_RATE_MAX",
+                "AUU_AUTH_RATE_WINDOW",
                 "DATA_PROVIDER",
                 "PUMP_PAPER_LOOP",
                 "PUMPFUN_DISCOVERY",
@@ -71,6 +73,15 @@ class PaperAccountTests(unittest.TestCase):
         reset_paper_ledger()
         self.tmp.cleanup()
 
+    def _collect_keys(self, value, found: list[str]) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                found.append(str(key))
+                self._collect_keys(item, found)
+        elif isinstance(value, list):
+            for item in value:
+                self._collect_keys(item, found)
+
     def _strategy(self) -> dict:
         body = self.client.get("/api/v1/strategy/pump-paper-v1")
         self.assertEqual(body.status_code, 200)
@@ -89,7 +100,7 @@ class PaperAccountTests(unittest.TestCase):
         reset_accounts()
         closed = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "local", "password": "password1"},
+            json={"name": "local", "password": "password1", "password_confirm": "password1"},
         )
         self.assertEqual(closed.status_code, 400)
         self.assertEqual(closed.json()["error"]["code"], "AUTH_OFF")
@@ -113,14 +124,14 @@ class PaperAccountTests(unittest.TestCase):
         day = float(get_risk_gate().day_pnl)
         alice = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "alice", "password": "password1", "start_sol": 80},
+            json={"name": "alice", "password": "password1", "password_confirm": "password1", "start_sol": 80},
         )
         self.assertEqual(alice.status_code, 200, alice.text)
         self.assertTrue(alice.json()["data"]["user"]["is_admin"])
         self.assertFalse(alice.json()["data"]["liveEnabled"])
         bob = self.other.post(
             "/api/v1/auth/register",
-            json={"name": "bob", "password": "password2", "start_sol": 50},
+            json={"name": "bob", "password": "password2", "password_confirm": "password2", "start_sol": 50},
         )
         self.assertEqual(bob.status_code, 200, bob.text)
         self.assertFalse(bob.json()["data"]["user"]["is_admin"])
@@ -162,7 +173,15 @@ class PaperAccountTests(unittest.TestCase):
 
         users = self.client.get("/api/v1/auth/users")
         self.assertEqual(users.status_code, 200)
-        self.assertEqual({row["name"] for row in users.json()["data"]["items"]}, {"alice", "bob"})
+        admin_body = users.json()["data"]
+        self.assertEqual({row["name"] for row in admin_body["items"]}, {"alice", "bob"})
+        keys: list[str] = []
+        self._collect_keys(admin_body, keys)
+        self.assertTrue(all("password" not in key.lower() and not key.lower().endswith("hash") for key in keys))
+        self.assertTrue(all(row.get("created_ts") for row in admin_body["items"]))
+        self.assertIn("pnl", admin_body["items"][0])
+        self.assertNotIn("password1", users.text)
+        self.assertNotIn("password_hash", users.text)
         self.assertFalse(self.other.get("/api/v1/auth/users").status_code == 200)
         self.assertEqual(self.other.get("/api/v1/auth/users").status_code, 403)
         alice_id = alice.json()["data"]["user"]["id"]
@@ -200,10 +219,10 @@ class PaperAccountTests(unittest.TestCase):
         self.assertEqual(again.status_code, 401)
 
     def test_signup_invite_and_password_rules(self):
-        os.environ["AUU_ALLOW_SIGNUP"] = "off"
+        os.environ["AUU_ALLOW_SIGNUP"] = "false"
         closed = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "nina", "password": "password1"},
+            json={"name": "nina", "password": "password1", "password_confirm": "password1"},
         )
         self.assertEqual(closed.status_code, 400)
         self.assertEqual(closed.json()["error"]["code"], "SIGNUP_CLOSED")
@@ -211,25 +230,84 @@ class PaperAccountTests(unittest.TestCase):
         os.environ["AUU_INVITE_CODE"] = "letmein"
         bad = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "nina", "password": "password1", "invite": "nope"},
+            json={"name": "nina", "password": "password1", "password_confirm": "password1", "invite": "nope"},
         )
         self.assertEqual(bad.status_code, 400)
         self.assertEqual(bad.json()["error"]["code"], "INVITE")
         short = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "nina", "password": "short", "invite": "letmein"},
+            json={"name": "nina", "password": "short", "password_confirm": "short", "invite": "letmein"},
         )
         self.assertEqual(short.status_code, 400)
         self.assertEqual(short.json()["error"]["code"], "BAD_PASSWORD")
         ok = self.client.post(
             "/api/v1/auth/register",
-            json={"name": "nina", "password": "password1", "invite": "letmein"},
+            json={"name": "nina", "password": "password1", "password_confirm": "password1", "invite": "letmein"},
         )
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(ok.json()["data"]["user"]["name"], "nina")
         me = self.client.get("/api/v1/auth/me")
         self.assertEqual(me.json()["data"]["user"]["name"], "nina")
         self.assertFalse(me.json()["data"]["liveEnabled"])
+        self.assertTrue(me.json()["data"]["invite_required"])
+
+    def test_open_signup_display_name_password_change_and_rate_limit(self):
+        os.environ.pop("AUU_INVITE_CODE", None)
+        mismatch = self.client.post(
+            "/api/v1/auth/register",
+            json={"name": "nina", "password": "password1", "password_confirm": "password2", "display_name": "小宁"},
+        )
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertEqual(mismatch.json()["error"]["code"], "PASSWORD_MISMATCH")
+        self.assertNotIn("password1", mismatch.text)
+        created = self.client.post(
+            "/api/v1/auth/register",
+            json={"name": "nina", "password": "password1", "password_confirm": "password1", "display_name": "小宁"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        user = created.json()["data"]["user"]
+        self.assertEqual(user["name"], "nina")
+        self.assertEqual(user["display_name"], "小宁")
+        self.assertGreater(user["created_ts"], 0)
+        self.assertNotIn("password_hash", created.text)
+        self.assertNotIn("password1", created.text)
+        keys: list[str] = []
+        self._collect_keys(created.json(), keys)
+        self.assertFalse(any("password" in key.lower() for key in keys))
+        taken = self.client.post(
+            "/api/v1/auth/register",
+            json={"name": "Nina", "password": "password1", "password_confirm": "password1"},
+        )
+        self.assertEqual(taken.status_code, 400)
+        self.assertEqual(taken.json()["error"]["code"], "NAME_TAKEN")
+        wrong = self.client.post(
+            "/api/v1/auth/password",
+            json={"current_password": "nope-nope", "new_password": "password9", "new_password_confirm": "password9"},
+        )
+        self.assertEqual(wrong.status_code, 401)
+        changed = self.client.post(
+            "/api/v1/auth/password",
+            json={"current_password": "password1", "new_password": "password9", "new_password_confirm": "password9"},
+        )
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertFalse(changed.json()["data"]["liveEnabled"])
+        self.assertNotIn("password", "".join(changed.json()["data"].keys()))
+        self.client.post("/api/v1/auth/logout")
+        old = self.client.post("/api/v1/auth/login", json={"name": "nina", "password": "password1"})
+        self.assertEqual(old.status_code, 401)
+        fresh = self.client.post("/api/v1/auth/login", json={"name": "nina", "password": "password9"})
+        self.assertEqual(fresh.status_code, 200, fresh.text)
+        self.assertEqual(fresh.json()["data"]["user"]["display_name"], "小宁")
+        os.environ["AUU_AUTH_RATE_MAX"] = "2"
+        reset_accounts()
+        first = self.client.post("/api/v1/auth/login", json={"name": "ghost", "password": "password1"})
+        second = self.client.post("/api/v1/auth/login", json={"name": "ghost", "password": "password1"})
+        third = self.client.post("/api/v1/auth/login", json={"name": "ghost", "password": "password1"})
+        self.assertEqual(first.status_code, 401)
+        self.assertEqual(second.status_code, 401)
+        self.assertEqual(third.status_code, 429)
+        self.assertEqual(third.json()["error"]["code"], "RATE_LIMIT")
+        self.assertNotIn("password1", third.text)
 
 
 if __name__ == "__main__":

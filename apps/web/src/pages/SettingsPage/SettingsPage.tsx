@@ -12,6 +12,7 @@ import {
 import { DATA_SOURCES, VENUE } from "@/venue";
 import type { DataSource } from "@/venue";
 import type { LiveStatus } from "@/types/contracts";
+import { AccountSection } from "@/pages/SettingsPage/AccountSection";
 
 export function SettingsPage() {
   const [provider, setProvider] = useState<string>("…");
@@ -120,6 +121,8 @@ export function SettingsPage() {
         {" "}
         Live adapter is scaffolded but <strong>liveEnabled defaults off</strong> (no chain submit).
       </p>
+
+      <AccountSection />
 
       <section className="settings-section">
         <h2>Market · DATA_PROVIDER</h2>
