@@ -9,6 +9,7 @@ const primary = [
   { to: "/", label: "总览", title: "盘面", end: true, icon: "grid" },
   { to: "/markets", label: "市场", icon: "bars" },
   { to: "/trade", label: "交易", icon: "swap" },
+  { to: "/majors", label: "大盘", icon: "globe" },
   { to: "/positions", label: "持仓", icon: "bag" },
   { to: "/strategy", label: "策略/影子", icon: "sliders" },
   { to: "/review", label: "复盘", icon: "loop" },
@@ -79,6 +80,14 @@ function Icon({ name }: { name: string }) {
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
+      </>
+    ),
+    globe: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M4 12h16" />
+        <path d="M12 4c2.4 2.6 2.4 13.4 0 16" />
+        <path d="M12 4c-2.4 2.6-2.4 13.4 0 16" />
       </>
     ),
     swap: (

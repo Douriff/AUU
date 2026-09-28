@@ -17,12 +17,14 @@ from app.routes import (
     fills,
     health,
     live,
+    majors,
     markets,
     paper,
     pipeline,
     pumpfun,
     risk,
     signals,
+    search,
     stats,
     strategy,
     symbols,
@@ -94,6 +96,8 @@ app.include_router(health.router)
 app.include_router(board.router)
 app.include_router(markets.router)
 app.include_router(events.router)
+app.include_router(search.router)
+app.include_router(majors.router)
 app.include_router(trade_ticket.router)
 app.include_router(symbols.router)
 app.include_router(candles.router)
@@ -142,6 +146,10 @@ def root():
                 "applyDistill": "POST /api/v1/strategy/pump-paper-v1/apply-distill",
                 "board": "GET /api/v1/board",
                 "markets": "GET /api/v1/markets",
+                "search": "GET /api/v1/search?q=",
+                "searchCoin": "GET /api/v1/search/coin?mint=",
+                "majors": "GET /api/v1/majors",
+                "majorsCompare": "GET /api/v1/majors/compare?base=",
                 "events": "GET /api/v1/events",
                 "tradePreview": "GET /api/v1/trade/preview",
                 "tradePosition": "GET /api/v1/trade/position",

@@ -950,7 +950,75 @@ export interface TradePreview {
   blocked: boolean;
   block_code: string | null;
   block_message: string;
+  impact_kind?: string;
+  impact_label?: string;
   limits: TradeLimits;
+}
+
+export interface SearchCoin {
+  mint: string;
+  name: string;
+  symbol: string;
+  image: string | null;
+  price_sol: number | null;
+  price_usd: number | null;
+  market_cap_sol: number | null;
+  market_cap_usd: number | null;
+  change_24h: number | null;
+  volume_24h_usd: number | null;
+  progress_pct: number | null;
+  graduated: boolean;
+  venue: string;
+  source: string;
+  liquidity_usd: number | null;
+}
+
+export interface SearchResult {
+  mode: string;
+  liveEnabled: boolean;
+  q: string;
+  items: SearchCoin[];
+  error: string | null;
+}
+
+export interface SearchCoinDetail extends SearchCoin {
+  liveEnabled: boolean;
+  trade_symbol: string;
+  impact_kind: string;
+  candles: Candle[];
+  candles_estimated: boolean;
+}
+
+export interface MajorsQuote {
+  status: string;
+  last: number | null;
+  change_24h: number | null;
+  volume_24h: number | null;
+}
+
+export interface MajorsBoard {
+  mode: string;
+  liveEnabled: boolean;
+  liveDisabled: boolean;
+  bases: string[];
+  venues: { id: string; label: string; status: string; status_label: string }[];
+  rows: { base: string; quotes: Record<string, MajorsQuote>; spread_bps: number | null }[];
+}
+
+export interface MajorsCompare {
+  liveEnabled: boolean;
+  listed: boolean;
+  base: string;
+  onchain_usd: number | null;
+  venues: {
+    id: string;
+    label: string;
+    status: string;
+    status_label: string;
+    last: number | null;
+    change_24h: number | null;
+    vs_onchain: number | null;
+  }[];
 }
 
 export interface TradeFillRow {

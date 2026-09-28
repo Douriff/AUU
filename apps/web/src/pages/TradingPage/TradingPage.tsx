@@ -4,7 +4,7 @@ import { CandleChart } from "@/components/chart/CandleChart";
 import { PriceCell } from "@/components/markets/PriceCell";
 import { useMarkets } from "@/hooks/useMarkets";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { Candle, MarketItem, TradePosition, TradePreview } from "@/types/contracts";
+import type { Candle, MajorsCompare, SearchCoin, SearchCoinDetail, TradePosition, TradePreview } from "@/types/contracts";
 
 const BUY_AMOUNTS = [0.1, 0.25, 0.5, 1];
 const SELL_PCTS = [25, 50, 100];
@@ -50,6 +50,10 @@ export function TradingPage() {
   const mint = mintParam ? decodeURIComponent(mintParam) : "";
   const { list, err } = useMarkets(2500);
   const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<SearchCoin[]>([]);
+  const [searchNote, setSearchNote] = useState("");
+  const [external, setExternal] = useState<SearchCoinDetail | null>(null);
+  const [cex, setCex] = useState<MajorsCompare | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("0.1");
   const [sellPct, setSellPct] = useState(100);
@@ -60,37 +64,111 @@ export function TradingPage() {
   const [busy, setBusy] = useState(false);
 
   const items = list?.items ?? [];
-  const selected = useMemo(() => {
+  const pooled = useMemo(() => {
     if (!mint) return null;
     return items.find((row) => row.mint === mint || row.symbol === mint || row.base === mint) ?? null;
   }, [items, mint]);
 
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = q
-      ? items.filter(
-          (row) =>
-            row.base.toLowerCase().includes(q) ||
-            row.symbol.toLowerCase().includes(q) ||
-            row.mint.toLowerCase().includes(q)
-        )
-      : items;
-    return rows.slice(0, 14);
-  }, [items, query]);
+  const desk = useMemo(() => {
+    if (pooled) {
+      return {
+        base: pooled.base,
+        symbol: pooled.symbol,
+        mint: pooled.mint || pooled.symbol,
+        priceSol: pooled.price_sol,
+        priceUsd: null as number | null,
+        change: pooled.change_pct,
+        mcapSol: pooled.market_cap_sol,
+        progress: pooled.progress_pct,
+        venue: pooled.progress_pct == null ? "" : "曲线",
+        graduated: false,
+        image: null as string | null,
+        external: false,
+      };
+    }
+    if (external && (external.mint === mint || external.trade_symbol === mint)) {
+      return {
+        base: external.symbol,
+        symbol: external.trade_symbol,
+        mint: external.mint,
+        priceSol: external.price_sol,
+        priceUsd: external.price_usd,
+        change: external.change_24h,
+        mcapSol: external.market_cap_sol,
+        progress: external.progress_pct,
+        venue: external.venue,
+        graduated: external.graduated,
+        image: external.image,
+        external: true,
+      };
+    }
+    return null;
+  }, [pooled, external, mint]);
 
-  const symbol = selected?.symbol ?? "";
+  const symbol = desk?.symbol ?? "";
   const notional = Number(amount);
   const overCap = side === "buy" && Number.isFinite(notional) && notional > 1 + 1e-9;
 
   useEffect(() => {
     setPreview(null);
     setPosition(null);
-    setCandles([]);
     setNotice("");
+    setCex(null);
   }, [symbol]);
 
   useEffect(() => {
-    if (!symbol) return;
+    const q = query.trim();
+    if (q.length < 1) {
+      setHits([]);
+      setSearchNote("");
+      return;
+    }
+    let stop = false;
+    const timer = window.setTimeout(() => {
+      void marketProvider
+        .searchCoins(q)
+        .then((data) => {
+          if (stop) return;
+          setHits(data.items);
+          setSearchNote(data.error || "");
+        })
+        .catch((e) => {
+          if (!stop) setSearchNote(e instanceof Error ? e.message : "搜索暂时不可用");
+        });
+    }, 300);
+    return () => {
+      stop = true;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    if (!mint || pooled) {
+      setExternal(null);
+      return;
+    }
+    let stop = false;
+    const tick = async () => {
+      try {
+        const coin = await marketProvider.getSearchCoin(mint);
+        if (!stop) {
+          setExternal(coin);
+          if (coin.candles?.length) setCandles(coin.candles);
+        }
+      } catch (e) {
+        if (!stop) setSearchNote(e instanceof Error ? e.message : "找不到这个代币");
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 2500);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [mint, pooled]);
+
+  useEffect(() => {
+    if (!symbol || desk?.external) return;
     let stop = false;
     const tick = async () => {
       try {
@@ -106,14 +184,33 @@ export function TradingPage() {
       stop = true;
       window.clearInterval(id);
     };
-  }, [symbol]);
+  }, [symbol, desk?.external]);
+
+  useEffect(() => {
+    if (!desk?.base) return;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const next = await marketProvider.getMajorsCompare(desk.base, desk.priceUsd);
+        if (!stop) setCex(next.listed ? next : null);
+      } catch {
+        if (!stop) setCex(null);
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 4000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [desk?.base, desk?.priceUsd]);
 
   useEffect(() => {
     if (!symbol) return;
     let stop = false;
     const tick = async () => {
       try {
-        const pos = await marketProvider.getTradePosition({ symbol });
+        const pos = await marketProvider.getTradePosition({ mint: desk?.mint, symbol });
         if (!stop) setPosition(pos);
       } catch (e) {
         if (!stop) setNotice(e instanceof Error ? e.message : "仓位读取失败");
@@ -125,7 +222,7 @@ export function TradingPage() {
       stop = true;
       window.clearInterval(id);
     };
-  }, [symbol]);
+  }, [symbol, desk?.mint]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -134,8 +231,8 @@ export function TradingPage() {
       try {
         const next = await marketProvider.getTradePreview(
           side === "buy"
-            ? { symbol, side, notional_sol: Number.isFinite(notional) && notional > 0 ? notional : 0.1 }
-            : { symbol, side, sell_pct: sellPct }
+            ? { symbol, mint: desk?.mint, side, notional_sol: Number.isFinite(notional) && notional > 0 ? notional : 0.1 }
+            : { symbol, mint: desk?.mint, side, sell_pct: sellPct }
         );
         if (!stop) setPreview(next);
       } catch (e) {
@@ -148,7 +245,7 @@ export function TradingPage() {
       stop = true;
       window.clearInterval(id);
     };
-  }, [symbol, side, notional, sellPct]);
+  }, [symbol, desk?.mint, side, notional, sellPct]);
 
   const limits = preview?.limits ?? position?.limits;
   const qty = position?.qty ?? 0;
@@ -159,8 +256,9 @@ export function TradingPage() {
     side === "buy" && (overCap || atCap || dayLoss || !Number.isFinite(notional) || notional <= 0 || Boolean(preview?.blocked));
   const sellBlocked = side === "sell" && (qty <= 1e-12 || Boolean(preview?.blocked));
 
-  const openToken = (row: MarketItem) => {
+  const openToken = (row: { mint?: string; symbol: string }) => {
     navigate(`/trade/${encodeURIComponent(row.mint || row.symbol)}`);
+    setQuery("");
   };
 
   async function submit(nextSide: "buy" | "sell" = side, pct = sellPct) {
@@ -170,8 +268,8 @@ export function TradingPage() {
     try {
       const result = await marketProvider.postTradeOrder(
         nextSide === "buy"
-          ? { symbol, side: "buy", notional_sol: notional }
-          : { symbol, side: "sell", sell_pct: pct }
+          ? { symbol, mint: desk?.mint, side: "buy", notional_sol: notional }
+          : { symbol, mint: desk?.mint, side: "sell", sell_pct: pct }
       );
       setPosition(result);
       if (result.reject && (result.reject.notes || (result.reject.tags || []).length)) {
@@ -207,7 +305,7 @@ export function TradingPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索名称 / 符号 / mint"
+            placeholder="搜索全部 pump.fun：名称 / 符号 / mint"
             type="search"
           />
         </label>
@@ -215,18 +313,19 @@ export function TradingPage() {
 
       {!mint && (
         <section className="td-picker" aria-label="代币选择">
-          <p className="td-note">{err || "从市场列表选一个代币，进入纸面交易。"}</p>
+          <p className="td-note">{searchNote || err || "输入名称、符号或 mint，搜索全部 pump.fun 代币（含已毕业）。"}</p>
           <ul>
-            {matches.map((row) => (
-              <li key={row.symbol}>
+            {hits.map((row) => (
+              <li key={row.mint}>
                 <button type="button" onClick={() => openToken(row)}>
-                  <strong>{row.base}</strong>
-                  <em>{row.symbol}</em>
+                  {row.image ? <img src={row.image} alt="" /> : <i aria-hidden="true">{row.symbol.slice(0, 1)}</i>}
+                  <strong>{row.symbol}</strong>
+                  <em>{row.name}</em>
                   <span className="num">
                     <PriceCell price={row.price_sol} />
                   </span>
-                  <span className={`num ${tone(row.change_pct)}`}>{formatPct(row.change_pct)}</span>
-                  <span className="num">{row.progress_pct == null ? "—" : `${row.progress_pct.toFixed(1)}%`}</span>
+                  <span className={`num ${tone(row.change_24h)}`}>{formatPct(row.change_24h)}</span>
+                  <span className="num">{row.graduated ? row.venue : row.progress_pct == null ? "—" : `${row.progress_pct.toFixed(1)}%`}</span>
                 </button>
               </li>
             ))}
@@ -234,38 +333,60 @@ export function TradingPage() {
         </section>
       )}
 
-      {mint && !selected && (
-        <p className="td-note">{items.length ? "找不到这个代币" : err || "正在读取市场…"}</p>
-      )}
+      {mint && !desk && <p className="td-note">{searchNote || err || "正在读取这个代币…"}</p>}
 
-      {selected && (
+      {desk && (
         <>
           <section className="td-head" aria-label="报价">
-            <div>
-              <h2>{selected.base}</h2>
-              <p>{selected.symbol}</p>
+            <div className="td-ident">
+              {desk.image ? <img src={desk.image} alt="" /> : null}
+              <div>
+                <h2>{desk.base}</h2>
+                <p>{desk.symbol}</p>
+              </div>
             </div>
             <div>
               <span>价格</span>
               <strong className="num">
-                <PriceCell price={selected.price_sol} /> SOL
+                <PriceCell price={desk.priceSol} /> SOL
+                {desk.priceUsd != null ? <small> ${formatSol(desk.priceUsd, 4)}</small> : null}
               </strong>
             </div>
             <div>
-              <span>涨跌</span>
-              <strong className={`num ${tone(selected.change_pct)}`}>{formatPct(selected.change_pct)}</strong>
+              <span>{desk.external ? "24h 涨跌" : "涨跌"}</span>
+              <strong className={`num ${tone(desk.change)}`}>{formatPct(desk.change)}</strong>
             </div>
             <div>
               <span>市值</span>
-              <strong className="num">{formatSol(selected.market_cap_sol, 2)} SOL</strong>
+              <strong className="num">{formatSol(desk.mcapSol, 2)} SOL</strong>
             </div>
             <div>
-              <span>曲线进度</span>
+              <span>{desk.graduated ? "成交场所" : "曲线进度"}</span>
               <strong className="num">
-                {selected.progress_pct == null ? "—" : `${selected.progress_pct.toFixed(1)}%`}
+                {desk.graduated ? desk.venue : desk.progress == null ? "—" : `${desk.progress.toFixed(1)}%`}
               </strong>
             </div>
           </section>
+          {cex?.listed && (
+            <section className="td-cex" aria-label="交易所对照">
+              <h3>交易所对照</h3>
+              <ul>
+                {cex.venues.map((row) => (
+                  <li key={row.id}>
+                    <span>{row.label}</span>
+                    {row.status === "ok" && row.last != null ? (
+                      <b className="num">
+                        ${formatSol(row.last, 2)}
+                        <small className={tone(row.vs_onchain)}>{formatPct(row.vs_onchain)}</small>
+                      </b>
+                    ) : (
+                      <b className="muted">{row.status_label}</b>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <div className="td-grid">
             <div className="td-chart">
@@ -318,7 +439,7 @@ export function TradingPage() {
 
               <dl className="td-preview">
                 <div>
-                  <dt>曲线冲击</dt>
+                  <dt>{preview?.impact_label === "估算" ? "估算冲击" : "曲线冲击"}</dt>
                   <dd className="num">{preview ? `${preview.impact_bps.toFixed(1)} bps` : "—"}</dd>
                 </div>
                 <div>
@@ -406,12 +527,13 @@ export function TradingPage() {
         </>
       )}
 
-      {mint && query && matches.length > 0 && selected && (
+      {mint && query && hits.length > 0 && (
         <ul className="td-suggest">
-          {matches.slice(0, 6).map((row) => (
-            <li key={row.symbol}>
+          {hits.slice(0, 6).map((row) => (
+            <li key={row.mint}>
               <button type="button" onClick={() => openToken(row)}>
-                {row.base}
+                {row.symbol}
+                <em>{row.graduated ? row.venue : "曲线"}</em>
               </button>
             </li>
           ))}

@@ -20,6 +20,18 @@ function toLwcTime(ms: number): Time {
   return Math.floor(ms / 1000) as Time;
 }
 
+/** Meme prices sit far below the default 0.01 tick, which pins the series to the axis. */
+function priceFormatFor(prices: number[]) {
+  const abs = prices.map((n) => Math.abs(n)).filter((n) => Number.isFinite(n) && n > 0);
+  if (!abs.length) return { type: "price" as const, precision: 4, minMove: 0.0001 };
+  const hi = Math.max(...abs);
+  const lo = Math.min(...abs);
+  const span = hi - lo;
+  const unit = span > 0 ? span / 80 : hi / 1e4;
+  const precision = Math.min(12, Math.max(2, Math.ceil(-Math.log10(unit))));
+  return { type: "price" as const, precision, minMove: 10 ** -precision };
+}
+
 export function CandleChart({ candles, signals, fills }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -98,6 +110,8 @@ export function CandleChart({ candles, signals, fills }: Props) {
       value: c.v,
       color: c.c >= c.o ? "rgba(63,185,80,0.35)" : "rgba(248,81,73,0.35)",
     }));
+    const levels = data.flatMap((bar) => [bar.high, bar.low, bar.open, bar.close]);
+    series.applyOptions({ priceFormat: priceFormatFor(levels) });
     series.setData(data);
     vol.setData(vols);
 

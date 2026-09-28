@@ -10,7 +10,11 @@ import type {
   PaperPerformance,
   BoardSnapshot,
   ConsoleFeed,
+  MajorsBoard,
+  MajorsCompare,
   MarketList,
+  SearchCoinDetail,
+  SearchResult,
   TradePosition,
   TradePreview,
   ExecutabilityReport,
@@ -214,6 +218,26 @@ export class HttpWsProvider {
 
   getMarkets(): Promise<MarketList> {
     return getJson("/api/v1/markets");
+  }
+
+  searchCoins(q: string, limit = 20): Promise<SearchResult> {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return getJson(`/api/v1/search?${params}`);
+  }
+
+  getSearchCoin(mint: string): Promise<SearchCoinDetail> {
+    const params = new URLSearchParams({ mint });
+    return getJson(`/api/v1/search/coin?${params}`);
+  }
+
+  getMajors(): Promise<MajorsBoard> {
+    return getJson("/api/v1/majors");
+  }
+
+  getMajorsCompare(base: string, onchainUsd?: number | null): Promise<MajorsCompare> {
+    const params = new URLSearchParams({ base });
+    if (onchainUsd != null && Number.isFinite(onchainUsd)) params.set("onchain_usd", String(onchainUsd));
+    return getJson(`/api/v1/majors/compare?${params}`);
   }
 
   getTradePreview(q: {
