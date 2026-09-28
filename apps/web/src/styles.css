@@ -846,6 +846,18 @@ code.hl { color: var(--accent); }
 }
 .board-pill.ghost:hover { border-color: rgba(255, 255, 255, 0.5); }
 
+@media (max-width: 860px) {
+  .topbar { gap: 0.35rem 0.7rem; }
+  .topbar .sub { display: none; }
+  .topbar nav {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topbar-status { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+}
 @media (max-width: 960px) {
   .board-hero { grid-template-columns: 1fr; }
   .board-body { padding: 1rem 0.9rem 2rem; }

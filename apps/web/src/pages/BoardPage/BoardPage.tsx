@@ -21,10 +21,14 @@ function formatClock(ts: number): string {
 function formatPx(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const a = Math.abs(n);
+  if (a === 0) return "0";
   if (a >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  if (a >= 1) return n.toFixed(4);
-  if (a >= 0.0001) return n.toFixed(6);
-  return n.toExponential(2);
+  const digits = a >= 1 ? 4 : a >= 0.01 ? 4 : a >= 0.0001 ? 6 : a >= 0.000001 ? 8 : 0;
+  if (!digits) return n.toExponential(2);
+  return n
+    .toFixed(digits)
+    .replace(/(\.\d*?[1-9])0+$/, "$1")
+    .replace(/\.0+$/, "");
 }
 
 function formatPct(n: number | null | undefined): string {
