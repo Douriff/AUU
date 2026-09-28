@@ -1,15 +1,16 @@
 """Data-directory defaults and the test write guard.
 
-Production keeps using ``apps/api/data``. A unittest process calls
-``install_test_isolation()`` first: ``AUU_DATA_DIR`` points at a temporary
-directory, ``AUU_SKIP_DOTENV=1``, and any store path that resolves inside
-the repository data directory raises ``DataDirGuardError`` before the
-write or unlink.
+Production keeps using ``apps/api/data``. Isolation runs only for a
+unittest/pytest process entry, or when ``AUU_TEST=1`` is already set.
+It points ``AUU_DATA_DIR`` at a temporary directory, sets
+``AUU_SKIP_DOTENV=1``, and raises ``DataDirGuardError`` before a write or
+unlink inside the repository data directory.
 """
 from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -36,8 +37,45 @@ def repo_data_dir() -> Path:
     return _REPO_DATA
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "on", "yes"}
+
+
 def tests_active() -> bool:
-    return os.getenv("AUU_TEST", "").strip().lower() in {"1", "true", "on", "yes"}
+    return _truthy_env("AUU_TEST")
+
+
+def _module_invocation(tokens: list[str]) -> bool:
+    for index, token in enumerate(tokens[:-1]):
+        if token == "-m" and tokens[index + 1] in {"unittest", "pytest"}:
+            return True
+    return False
+
+
+def argv_requests_test_runner(argv: list[str]) -> bool:
+    """True when argv is a unittest or pytest process entry.
+
+    A library that merely imports ``unittest`` or ``unittest.mock`` does not
+    match. Stock CPython sets ``argv[0]`` to ``unittest/__main__.py``. Some
+    wrappers store the command in ``argv[0]`` as ``python3 -m unittest``.
+    """
+    if not argv:
+        return False
+    head = argv[0].replace("\\", "/")
+    if head.endswith("unittest/__main__.py") or head.endswith("pytest/__main__.py"):
+        return True
+    if head.endswith("/pytest") or head.endswith("/pytest.exe") or head in {"pytest", "pytest.exe"}:
+        return True
+    if _module_invocation(argv):
+        return True
+    return _module_invocation(head.split())
+
+
+def test_process_requested(argv: list[str] | None = None) -> bool:
+    """Explicit ``AUU_TEST=1``, or a unittest/pytest process entry."""
+    if tests_active():
+        return True
+    return argv_requests_test_runner(sys.argv if argv is None else argv)
 
 
 def data_dir() -> Path:
