@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { useEffect, useState, type ReactNode } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -126,6 +126,7 @@ export function AppShell() {
   const [who, setWho] = useState("");
   const [authOn, setAuthOn] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const refreshWho = () => {
     marketProvider
@@ -145,8 +146,11 @@ export function AppShell() {
         setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
       })
       .catch(() => undefined);
-    refreshWho();
   }, []);
+
+  useEffect(() => {
+    refreshWho();
+  }, [location.pathname]);
 
   return (
     <div className={`app-shell${collapsed ? " is-collapsed" : ""}`}>

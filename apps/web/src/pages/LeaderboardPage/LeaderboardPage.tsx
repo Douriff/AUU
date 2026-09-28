@@ -55,9 +55,9 @@ export function LeaderboardPage() {
           </button>
         </div>
       </header>
-      <p className="td-note">{board?.note || "用户纸面账户排名。系统纸面引擎不计入。"}</p>
+      <p className="td-note">{board?.note || (error ? "" : "读取排行榜…")}</p>
       {error && <p className="td-block">{error}</p>}
-      {!board?.auth_enabled && (
+      {board && !board.auth_enabled && (
         <p className="td-note">
           <Link to="/trade">去交易</Link>
         </p>
