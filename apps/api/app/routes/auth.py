@@ -1,6 +1,7 @@
 """Paper accounts: register, session cookie, leaderboard. No custody."""
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
@@ -26,6 +27,7 @@ from app.auth.accounts import (
 from app.paper.books import pop_book, push_book
 from app.routes.envelope import err, ok
 
+_LOG = logging.getLogger("auu.auth")
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
 COOKIE = "auu_session"
@@ -33,8 +35,8 @@ _MESSAGES = {
     "AUTH_OFF": "登录未开启",
     "SIGNUP_CLOSED": "注册已关闭",
     "INVITE": "邀请码不正确",
-    "BAD_NAME": "用户名需为 2–24 位字母、数字或中文",
-    "BAD_PASSWORD": "密码至少 8 位，且不超过 72 字节",
+    "BAD_NAME": "用户名需为 2–32 位，可用字母、数字、中文和 _ . @ -，须以字母、数字、中文或 _ 开头",
+    "BAD_PASSWORD": "密码至少 8 位，必须同时包含字母和数字，可以包含特殊字符（不超过 72 字节）",
     "BAD_DISPLAY": "显示名需为 1–24 位字母、数字、空格或中文",
     "PASSWORD_MISMATCH": "两次密码不一致",
     "BAD_START": "起始 SOL 需在 1 到 100000",
@@ -135,8 +137,9 @@ def _start_sol(raw: dict) -> Optional[float]:
         raise ValueError("BAD_START") from exc
 
 
-def _fail(exc: ValueError):
+def _fail(exc: ValueError, action: str = "auth"):
     code = str(exc)
+    _LOG.warning("%s rejected: %s", action, code)
     status = 401 if code == "BAD_LOGIN" else 400
     return err(code, _MESSAGES.get(code, "请求无效"), status)
 
@@ -165,6 +168,7 @@ async def auth_register(request: Request):
         return raw
     password = _text(raw, "password")
     if not passwords_match(password, _text(raw, "password_confirm")):
+        _LOG.warning("register rejected: PASSWORD_MISMATCH")
         return err("PASSWORD_MISMATCH", _MESSAGES["PASSWORD_MISMATCH"], 400)
     try:
         user = register(
@@ -175,7 +179,7 @@ async def auth_register(request: Request):
             _text(raw, "display_name"),
         )
     except ValueError as exc:
-        return _fail(exc)
+        return _fail(exc, "register")
     return _stamp(ok(scrub_secrets(_me_payload(user_by_id(user["id"])))), user["id"])
 
 
@@ -191,6 +195,7 @@ async def auth_login(request: Request):
         return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
     user = authenticate(name, _text(raw, "password"))
     if user is None:
+        _LOG.warning("login rejected: BAD_LOGIN")
         return err("BAD_LOGIN", _MESSAGES["BAD_LOGIN"], 401)
     return _stamp(ok(scrub_secrets(_me_payload(user))), user["id"])
 
@@ -213,7 +218,7 @@ async def auth_password(request: Request):
     try:
         change_password(str(actor["id"]), _text(raw, "current_password"), new)
     except ValueError as exc:
-        return _fail(exc)
+        return _fail(exc, "password change")
     return ok(scrub_secrets({"ok": True, "liveEnabled": False, "mode": "paper"}))
 
 
