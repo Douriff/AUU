@@ -26,6 +26,7 @@ _KEYS = (
     "AUU_SMTP_PORT",
     "AUU_SMTP_USER",
     "AUU_SMTP_PASS",
+    "AUU_SMTP_STARTTLS",
     "AUU_EMAIL_IP_MAX",
     "AUU_EMAIL_IP_WINDOW",
     "DATA_PROVIDER",
@@ -358,7 +359,7 @@ class WebParityTests(unittest.TestCase):
 class SmtpSenderTests(unittest.TestCase):
     def setUp(self):
         self._prev = {key: os.environ.get(key) for key in _KEYS}
-        for key in ("AUU_SMTP_HOST", "AUU_SMTP_PORT"):
+        for key in ("AUU_SMTP_HOST", "AUU_SMTP_PORT", "AUU_SMTP_STARTTLS"):
             os.environ.pop(key, None)
         os.environ["AUU_SMTP_USER"] = "sender@163.com"
         os.environ["AUU_SMTP_PASS"] = SMTP_PASS
@@ -395,6 +396,41 @@ class SmtpSenderTests(unittest.TestCase):
         client.starttls.assert_called_once()
         client.login.assert_called_once()
         ssl_cls.assert_not_called()
+
+    def test_gmail_presets_and_app_password_spaces(self):
+        os.environ["AUU_SMTP_HOST"] = "smtp.gmail.com"
+        os.environ["AUU_SMTP_USER"] = "someone@gmail.com"
+        os.environ["AUU_SMTP_PASS"] = " abcd efgh\tijkl mnop "
+        for port, starttls in (("465", False), ("587", True)):
+            os.environ["AUU_SMTP_PORT"] = port
+            cfg = email_codes.smtp_settings()
+            self.assertEqual((cfg["host"], cfg["port"], cfg["starttls"]), ("smtp.gmail.com", int(port), starttls))
+            self.assertEqual(cfg["password"], "abcdefghijklmnop")
+        os.environ["AUU_SMTP_PORT"] = "587"
+        with mock.patch.object(email_codes.smtplib, "SMTP") as plain, mock.patch.object(email_codes.smtplib, "SMTP_SSL") as ssl_cls:
+            email_codes._smtp_send("to@qq.com", "s", "b")
+        self.assertEqual(plain.call_args.args[:2], ("smtp.gmail.com", 587))
+        client = plain.return_value.__enter__.return_value
+        client.starttls.assert_called_once()
+        client.login.assert_called_once_with("someone@gmail.com", "abcdefghijklmnop")
+        self.assertIn("someone@gmail.com", client.send_message.call_args.args[0]["From"])
+        ssl_cls.assert_not_called()
+        os.environ["AUU_SMTP_PORT"] = "465"
+        with mock.patch.object(email_codes.smtplib, "SMTP_SSL") as ssl_cls, mock.patch.object(email_codes.smtplib, "SMTP") as plain:
+            email_codes._smtp_send("to@qq.com", "s", "b")
+        self.assertEqual(ssl_cls.call_args.args[:2], ("smtp.gmail.com", 465))
+        ssl_cls.return_value.__enter__.return_value.login.assert_called_once_with("someone@gmail.com", "abcdefghijklmnop")
+        plain.assert_not_called()
+
+    def test_starttls_flag_overrides_port(self):
+        os.environ["AUU_SMTP_PORT"] = "2525"
+        os.environ["AUU_SMTP_STARTTLS"] = "off"
+        self.assertFalse(email_codes.smtp_settings()["starttls"])
+        os.environ["AUU_SMTP_PORT"] = "465"
+        os.environ["AUU_SMTP_STARTTLS"] = "on"
+        self.assertTrue(email_codes.smtp_settings()["starttls"])
+        os.environ.pop("AUU_SMTP_STARTTLS")
+        self.assertFalse(email_codes.smtp_settings()["starttls"])
 
     def test_mask(self):
         self.assertEqual(email_codes.mask_email("alice@qq.com"), "a***@qq.com")
