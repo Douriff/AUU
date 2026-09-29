@@ -902,6 +902,23 @@ class DeferredFillTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lot.market_source, "real")
         self.assertEqual(lot.ts, now + 400)
 
+    async def test_reused_symbol_never_fills_on_another_mint(self):
+        provider, mint, engine = self._setup()
+        snap = provider.get_pumpfun_snapshot("DLAY/SOL")
+        now = 1_700_000_000_000
+        signal = SignalOut(side="long", strength=0.8, reason="pump_paper_v1_entry", tags=["ENTRY"])
+        await engine.maybe_execute("DLAY/SOL", snap, signal, now, 0.005)
+        # Evicted, then the ticker is taken by a different mint.
+        with provider._lock:
+            provider._drop_locked("DLAY/SOL", mint)
+        other = "OtherDelay111111111111111111111111111111"
+        provider.register_watch_mint(other, base="DLAY", reserves=INIT, source="logs")
+        provider.apply_observed_trade({"mint": other, "side": "buy", "ts": now + 400, "virtual_sol_reserves": INITIAL_VIRTUAL_SOL_RESERVES + 1, "virtual_token_reserves": INITIAL_VIRTUAL_TOKEN_RESERVES - 1})
+        await engine._drain_real_fill(provider, "DLAY/SOL", now + 500)
+        self.assertEqual(engine.positions, {})
+        self.assertNotIn("DLAY/SOL", engine._deferred)
+        self.assertIsNone(get_paper_journal().lots.get("DLAY/SOL"))
+
     async def test_entry_without_print_expires(self):
         provider, mint, engine = self._setup()
         snap = provider.get_pumpfun_snapshot("DLAY/SOL")

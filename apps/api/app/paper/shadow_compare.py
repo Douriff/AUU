@@ -740,6 +740,11 @@ def _drain_pending(spec: ShadowSetSpec, symbol: str, now_ms: int) -> bool:
     ready = int(pending["ts"]) + _latency_ms()
     finder = getattr(get_provider(), "first_trade_after", None)
     trade = finder(symbol, ready) if callable(finder) else None
+    if trade and trade.get("mint") and pending["mint"] and trade["mint"] != pending["mint"]:
+        # Symbol re-used by another mint after eviction: never fill across tokens.
+        with _LOCK:
+            _pending.pop(key, None)
+        return False
     snap = snapshot_from_trade(symbol, trade, pending["mint"]) if trade else None
     if snap is None:
         if pending["action"] == "enter" and now_ms - ready > _entry_ttl_ms():

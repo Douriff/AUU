@@ -821,6 +821,11 @@ class PumpPaperEngine:
 
         ready = int(pending["ts"]) + int(get_paper_broker().latency_ms)
         trade = finder(symbol, ready)
+        if trade and pending.get("mint") and trade.get("mint") and trade["mint"] != pending["mint"]:
+            # The symbol was evicted and re-used by another mint: never fill
+            # this decision on a different token's print.
+            self._deferred.pop(symbol, None)
+            return
         if not trade:
             is_entry = getattr(pending.get("signal"), "side", "") == "long"
             if is_entry and now_ms - ready > _entry_ttl_ms():
