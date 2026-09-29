@@ -49,9 +49,10 @@ class OpenLot:
     protocol_fee_bps: Optional[float] = None
     quote_price: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
+    market_source: Optional[str] = None
 
-    def as_dict(self) -> dict[str, Any]:
-        return {
+    def as_dict(self, *, persist: bool = False) -> dict[str, Any]:
+        row = {
             "symbol": self.symbol,
             "qty": self.qty,
             "price": self.price,
@@ -67,6 +68,10 @@ class OpenLot:
             "quote_price": self.quote_price,
             "shadow_slippage_bps": self.shadow_slippage_bps,
         }
+        stamped = _persist_market_source(self.market_source, persist=persist)
+        if stamped:
+            row["market_source"] = stamped
+        return row
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "OpenLot":
@@ -85,7 +90,26 @@ class OpenLot:
             protocol_fee_bps=_opt_float(d.get("protocol_fee_bps")),
             quote_price=_opt_float(d.get("quote_price")),
             shadow_slippage_bps=_opt_float(d.get("shadow_slippage_bps")),
+            market_source=_loaded_market_source(d),
         )
+
+
+def _loaded_market_source(d: Mapping[str, Any]) -> Optional[str]:
+    """Disk rows without the key are legacy synthetic. In-memory fills stay unset."""
+    if "market_source" not in d:
+        return "legacy_synthetic"
+    raw = d.get("market_source")
+    if raw in {None, ""}:
+        return None
+    return str(raw)
+
+
+def _persist_market_source(ms: Optional[str], *, persist: bool) -> Optional[str]:
+    if not ms:
+        return None
+    if persist and ms == "legacy_synthetic":
+        return None
+    return ms
 
 
 def _opt_float(v: Any) -> Optional[float]:
@@ -154,9 +178,10 @@ class RoundTrip:
     exit_estimated_impact_bps: Optional[float] = None
     exit_quote_price: Optional[float] = None
     exit_shadow_slippage_bps: Optional[float] = None
+    market_source: Optional[str] = None
 
-    def as_dict(self) -> dict[str, Any]:
-        return {
+    def as_dict(self, *, persist: bool = False) -> dict[str, Any]:
+        row = {
             "id": self.id,
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
@@ -182,6 +207,10 @@ class RoundTrip:
             "exit_quote_price": self.exit_quote_price,
             "exit_shadow_slippage_bps": self.exit_shadow_slippage_bps,
         }
+        stamped = _persist_market_source(self.market_source, persist=persist)
+        if stamped:
+            row["market_source"] = stamped
+        return row
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "RoundTrip":
@@ -213,6 +242,7 @@ class RoundTrip:
             exit_estimated_impact_bps=_opt_float(d.get("exit_estimated_impact_bps")),
             exit_quote_price=_opt_float(d.get("exit_quote_price")),
             exit_shadow_slippage_bps=_opt_float(d.get("exit_shadow_slippage_bps")),
+            market_source=_loaded_market_source(d),
         )
 
 
@@ -249,6 +279,33 @@ def excluded_from_autopaper_stats(trade: Any) -> bool:
         tags = trade.get("tags") or []
     blob = " ".join(str(t).lower() for t in (tags or []))
     return "source=manual" in blob or "source:manual" in blob
+
+
+def excluded_from_go(trade: Any) -> bool:
+    """Synthetic tapes and pre-real journals stay out of Go, shadow columns, and rank.
+
+    In-memory fills that never set ``market_source`` still count, so existing
+    paper paths keep their stats until a row is explicitly synthetic or loaded
+    from disk without a label (``legacy_synthetic``).
+    """
+    ms = getattr(trade, "market_source", None)
+    if ms is None and isinstance(trade, Mapping):
+        ms = trade.get("market_source")
+    return str(ms or "") in {"synthetic", "legacy_synthetic"}
+
+
+def _fill_market_source(fill: Fill) -> Optional[str]:
+    raw = getattr(fill, "market_source", None)
+    if raw in {None, ""}:
+        return None
+    return str(raw)
+
+
+def _trip_market_source(lot_ms: Optional[str], fill_ms: Optional[str]) -> Optional[str]:
+    for candidate in (lot_ms, fill_ms):
+        if candidate in {"synthetic", "legacy_synthetic"}:
+            return candidate
+    return fill_ms or lot_ms
 
 
 def _tags_for(reason: str, tag: str) -> list[str]:
@@ -335,6 +392,7 @@ class PaperTradeJournal:
             src_tag = tag or lot.tag
             sid, src = _ids_from_tag(src_tag or lot.strategy_id)
             entry_gross, entry_fee, entry_net = impact_triple_from_mapping(lot.as_dict())
+            trip_source = _trip_market_source(lot.market_source, _fill_market_source(fill))
             trade = RoundTrip(
                 id=str(uuid.uuid4()),
                 strategy_id=sid,
@@ -360,6 +418,7 @@ class PaperTradeJournal:
                 exit_estimated_impact_bps=getattr(fill, "estimated_impact_bps", None),
                 exit_quote_price=getattr(fill, "quote_price", None),
                 exit_shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
+                market_source=trip_source,
             )
             self.closed.append(trade)
             new_closed.append(trade)
@@ -372,6 +431,10 @@ class PaperTradeJournal:
                 lot.fees = max(0.0, lot.fees - fee_share)
                 i += 1
 
+        closed_long = any(t.side == "long" for t in new_closed)
+        if remaining < -1e-9 and closed_long:
+            # Oversized sell used to open a residual short that later counted as a win.
+            remaining = 0.0
         if abs(remaining) > 1e-12:
             leftover_fee = fee * (abs(remaining) / abs(qty)) if qty else 0.0
             gross, proto, net = impact_triple_from_fill(fill)
@@ -391,6 +454,7 @@ class PaperTradeJournal:
                     protocol_fee_bps=proto,
                     quote_price=getattr(fill, "quote_price", None),
                     shadow_slippage_bps=getattr(fill, "shadow_slippage_bps", None),
+                    market_source=_fill_market_source(fill),
                 )
             )
         opened_lot = opened[-1] if opened and abs(remaining) > 1e-12 else None
@@ -598,8 +662,8 @@ def _write_journal(path: Path, journal: PaperTradeJournal) -> None:
     payload = {
         "equity_0": journal.equity_0,
         "fills": list(journal.fills),
-        "lots": {sym: [lot.as_dict() for lot in lots] for sym, lots in journal.lots.items()},
-        "closed": [t.as_dict() for t in journal.closed],
+        "lots": {sym: [lot.as_dict(persist=True) for lot in lots] for sym, lots in journal.lots.items()},
+        "closed": [t.as_dict(persist=True) for t in journal.closed],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -757,8 +821,11 @@ def build_performance(
             window_label = "session"
     journal = get_paper_journal()
     trades = journal.closed_in_window(window=n_window, from_ts=from_ts, to_ts=to_ts)
+    legacy_n = sum(1 for t in trades if getattr(t, "market_source", None) == "legacy_synthetic")
+    synthetic_n = sum(1 for t in trades if getattr(t, "market_source", None) == "synthetic")
+    go_trades = [t for t in trades if not excluded_from_go(t)]
     data = summarize(
-        trades,
+        go_trades,
         n_paths=n_paths,
         seed=seed,
         window=window_label,
@@ -771,4 +838,7 @@ def build_performance(
     data["auto_paper_orders"] = engine.params.auto_paper_orders
     data["strategy_autopaper"] = engine.params.auto_paper_orders
     data["strategyId"] = "pump-paper-v1"
+    data["market_window"] = "real"
+    data["legacy_synthetic_n"] = legacy_n
+    data["synthetic_n"] = synthetic_n
     return data

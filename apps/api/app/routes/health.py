@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from app.discovery import discovery_health_fields
 from app.live.gate import evaluate
-from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider
+from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider, market_data_kind
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
 from app.strategies.pump_paper_v1 import get_engine
@@ -18,16 +18,20 @@ router = APIRouter(prefix="/api/v1", tags=["health"])
 def health():
     gate = get_risk_gate()
     provider = get_provider()
-    venue = "Pump.fun" if provider.name == "pumpfun_paper" else "mock"
+    pump_venue = provider.name in {"pumpfun_paper", "pumpfun_live_paper"}
+    venue = "Pump.fun" if pump_venue else "mock"
     live = evaluate()
     payload = live.as_dict()
+    kind = market_data_kind(provider.name)
     return ok(
         {
             "status": "up",
             "provider": provider.name,
             "mode": "paper",
             "venue": venue,
-            "quote": "SOL" if provider.name == "pumpfun_paper" else None,
+            "quote": "SOL" if pump_venue else None,
+            "marketData": kind,
+            "marketDataLabel": {"real": "真实链上", "synthetic": "合成行情", "mock": "模拟"}.get(kind, kind),
             "defaultSymbol": default_symbol(),
             "dataSourceOptions": ["mock", "paper", "pumpfun_paper"],
             "marketProviderOptions": list(AVAILABLE_PROVIDERS),

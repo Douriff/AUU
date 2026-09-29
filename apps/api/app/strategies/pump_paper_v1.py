@@ -31,6 +31,8 @@ from app.providers.pumpfun_curve_math import (
     INITIAL_VIRTUAL_SOL_RESERVES,
     INITIAL_VIRTUAL_TOKEN_RESERVES,
     TOKEN_TOTAL_SUPPLY,
+    price_sol,
+    progress_bps,
 )
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.paper.guard import live_execution_blocked
@@ -313,6 +315,8 @@ class PumpPaperEngine:
         # Last live curve per symbol. Used to mark orphan paper exits after the
         # mint drops out of the discovery/watch list.
         self._last_snap: dict[str, PumpfunPaperSnapshot] = {}
+        # Real-market decisions wait for the first print after broker latency.
+        self._deferred: dict[str, dict[str, Any]] = {}
         self._eval_total = 0
         self._eval_by_bucket: dict[str, int] = {}
         self._eval_by_reason: dict[str, int] = {}
@@ -565,6 +569,7 @@ class PumpPaperEngine:
         now_ms: int,
         notional: float,
         entry_impact_bps: Optional[float] = None,
+        immediate: bool = False,
     ) -> None:
         if not self.params.auto_paper_orders:
             if signal.side == "long" and signal.reason != "hold":
@@ -628,7 +633,36 @@ class PumpPaperEngine:
                 )
                 self.record_order_reject("REDUCE_ONLY", ["REDUCE_ONLY"])
                 return
-        meta: dict[str, Any] = {"mint": snap.mint, "phase": snap.phase}
+        actionable = (signal.side == "long" and pos is None and signal.reason != "hold") or (
+            signal.side == "flat" and pos is not None
+        )
+        if not snap.synthetic and not immediate:
+            if symbol not in self._deferred and actionable:
+                self._deferred[symbol] = {
+                    "signal": signal,
+                    "ts": now_ms,
+                    "notional": float(notional),
+                    "entry_impact_bps": entry_impact_bps,
+                    "mint": snap.mint,
+                }
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="defer",
+                    allow=True,
+                    reason=signal.reason,
+                    tags=signal.tags,
+                    notes="wait for real print",
+                )
+            return
+        meta: dict[str, Any] = {
+            "mint": snap.mint,
+            "phase": snap.phase,
+            "market_source": "synthetic" if snap.synthetic else "real",
+            "curve_fill": not snap.synthetic,
+        }
+        if immediate and not snap.synthetic:
+            meta["fill_ts"] = now_ms
         if pos is None and entry_impact_bps is not None and entry_impact_bps < 1e8:
             meta["entry_impact_bps"] = float(entry_impact_bps)
         ctx = self._build_ctx(symbol, snap, now_ms, extra_meta=meta)
@@ -667,30 +701,33 @@ class PumpPaperEngine:
             return
 
         if signal.side == "flat" and pos is not None:
-            close_notional = abs(pos.qty) * max(float(snap.price_sol), 1e-18)
-            if close_notional <= 0:
+            held = abs(float(pos.qty))
+            close_notional = held * max(float(snap.price_sol), 1e-18)
+            if close_notional <= 0 or held <= 0:
                 self.positions.pop(symbol, None)
                 return
             slices = 2 if "SPLIT_REDUCE" in signal.tags else 1
-            remaining = close_notional
+            remaining_qty = held
             filled_any = False
             last_tags: list[str] = []
             last_notes = ""
             for i in range(slices):
-                chunk = remaining if i == slices - 1 else close_notional / slices
+                chunk_qty = remaining_qty if i == slices - 1 else held / slices
+                chunk = chunk_qty * max(float(snap.price_sol), 1e-18)
+                slice_meta = {**meta, "flatten_qty": chunk_qty}
+                ctx = self._build_ctx(symbol, snap, now_ms, extra_meta=slice_meta)
                 data = await self._submit(
                     ctx, signal, "sell", chunk, f"paper:{STRATEGY_ID}:flat"
                 )
                 fills = [Fill(**{k: v for k, v in f.items() if k != "symbol"}) for f in data.get("fills") or []]
                 if fills:
                     self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
-                    remaining -= chunk
+                    remaining_qty -= chunk_qty
                     filled_any = True
                 else:
                     reject = data.get("reject") or {}
                     last_tags = reject.get("tags") or []
                     last_notes = reject.get("notes") or ""
-                ctx = self._build_ctx(symbol, snap, now_ms)
             self._note(
                 symbol,
                 now_ms,
@@ -702,6 +739,66 @@ class PumpPaperEngine:
             )
             if not filled_any:
                 self.record_order_reject(signal.reason, signal.tags or last_tags)
+
+    def _snapshot_from_trade(
+        self, symbol: str, trade: dict[str, Any], pending: dict[str, Any]
+    ) -> Optional[PumpfunPaperSnapshot]:
+        vs_raw = trade.get("virtual_sol_reserves")
+        vt_raw = trade.get("virtual_token_reserves")
+        if vs_raw is None or vt_raw is None:
+            return None
+        vs, vt = int(vs_raw), int(vt_raw)
+        if vs <= 0 or vt <= 0:
+            return None
+        rs = int(trade.get("real_sol_reserves") or 0)
+        rt = int(trade.get("real_token_reserves") or 0)
+        px = price_sol(vs, vt)
+        if px <= 0:
+            return None
+        return PumpfunPaperSnapshot(
+            mint=str(trade.get("mint") or pending.get("mint") or symbol),
+            symbol=symbol,
+            phase="curve",
+            progress_bps=progress_bps(rt) if rt else 0,
+            complete=rt <= 0,
+            migrated=False,
+            virtual_sol_reserves=str(vs),
+            virtual_token_reserves=str(vt),
+            real_sol_reserves=str(rs),
+            real_token_reserves=str(rt),
+            token_total_supply=str(TOKEN_TOTAL_SUPPLY),
+            price_sol=px,
+            updated_ts=int(trade.get("ts") or 0),
+            synthetic=False,
+        )
+
+    async def _drain_real_fill(self, provider: Any, symbol: str, now_ms: int) -> None:
+        pending = self._deferred.get(symbol)
+        if not pending:
+            return
+        finder = getattr(provider, "first_trade_after", None)
+        if not callable(finder):
+            return
+        from app.paper.broker import get_paper_broker
+
+        ready = int(pending["ts"]) + int(get_paper_broker().latency_ms)
+        trade = finder(symbol, ready)
+        if not trade:
+            return
+        snap = self._snapshot_from_trade(symbol, trade, pending)
+        if snap is None:
+            return
+        self._deferred.pop(symbol, None)
+        signal = pending["signal"]
+        await self.maybe_execute(
+            symbol,
+            snap,
+            signal,
+            int(trade.get("ts") or now_ms),
+            float(pending["notional"]),
+            entry_impact_bps=pending.get("entry_impact_bps"),
+            immediate=True,
+        )
 
     def _symbols_for_tick(self, provider: Any) -> list[str]:
         """Watch-list symbols union open paper positions.
@@ -799,7 +896,12 @@ class PumpPaperEngine:
             liquidity=LiquidityCtx(spread_bps=20.0, adv_usd=100_000.0),
             position=pos.qty,
             tick=TickCtx(mid=px),
-            meta={"mint": pos.mint, "orphan_exit": True},
+            meta={
+                "mint": pos.mint,
+                "orphan_exit": True,
+                "flatten_qty": abs(float(pos.qty)),
+                "market_source": "synthetic" if snap.synthetic else "real",
+            },
         )
         signal = SignalOut(
             side="flat",
@@ -917,6 +1019,10 @@ class PumpPaperEngine:
         now_ms = int(time.time() * 1000)
         cool = now_ms < self._reject_cool_until
         for symbol in self._symbols_for_tick(provider):
+            try:
+                await self._drain_real_fill(provider, symbol, now_ms)
+            except Exception:
+                log.exception("pump-paper-v1 deferred fill failed for %s", symbol)
             snap, orphan = self._mark_snapshot(provider, symbol, now_ms)
             if snap is None:
                 continue

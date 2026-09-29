@@ -188,6 +188,13 @@ def _delete_store() -> None:
             pass
 
 
+def _closed_for_disk(row: Mapping[str, Any]) -> dict[str, Any]:
+    item = dict(row)
+    if item.get("market_source") == "legacy_synthetic":
+        item.pop("market_source", None)
+    return item
+
+
 def _persist_shadow() -> None:
     """Write config + closed rows (counters are derived from those rows)."""
     with _LOCK:
@@ -195,7 +202,7 @@ def _persist_shadow() -> None:
             "v": 1,
             "enabled": bool(_config.enabled),
             "sets": [spec.as_public() for spec in _config.sets],
-            "closed": list(_closed),
+            "closed": [_closed_for_disk(row) for row in _closed],
             "counters": _counters(_closed, enabled=_config.enabled, n_sets=len(_config.sets)),
         }
     path = guarded_path(_store_path())
@@ -232,7 +239,10 @@ def _restore_locked(data: Mapping[str, Any]) -> None:
     if isinstance(raw_closed, list):
         for row in raw_closed:
             if isinstance(row, dict) and row.get("set_id"):
-                closed.append(dict(row))
+                item = dict(row)
+                if "market_source" not in item:
+                    item["market_source"] = "legacy_synthetic"
+                closed.append(item)
     if len(closed) > JOURNAL_CAP:
         closed = closed[-JOURNAL_CAP:]
     _config = _Config(enabled=bool(data.get("enabled")), sets=specs)
@@ -875,6 +885,7 @@ def _close_virtual(
         "habit_tag": spec.habit_tag,
         "setup_seed_tags": list(spec.setup_seed_tags),
         "entry_impact_net_bps": pos.entry_impact_net_bps,
+        "market_source": "synthetic" if snapshot.synthetic else "real",
     }
     with _LOCK:
         current = _opens.get((spec.id, pos.symbol))
@@ -904,6 +915,22 @@ def _close_virtual(
         note_shadow_close(row)
     except Exception:
         pass
+
+
+def shadow_open_for(symbol: str = "", mint: str = "") -> bool:
+    """True when a shadow set still holds ``symbol`` or ``mint``."""
+    sym = (symbol or "").strip()
+    mid = (mint or "").strip()
+    if not sym and not mid:
+        return False
+    _ensure_loaded()
+    with _LOCK:
+        for pos in _opens.values():
+            if sym and pos.symbol == sym:
+                return True
+            if mid and pos.mint == mid:
+                return True
+    return False
 
 
 def shadow_decisions() -> list[dict[str, Any]]:
@@ -949,11 +976,17 @@ def _column(rows: Sequence[Mapping[str, Any]], *, ident: str, label: str) -> dic
     }
 
 
+def _counts_in_compare(row: Mapping[str, Any]) -> bool:
+    return str(row.get("market_source") or "") not in {"synthetic", "legacy_synthetic"}
+
+
 def _main_rows() -> list[dict[str, Any]]:
-    from app.paper.ledger import get_paper_journal
+    from app.paper.ledger import excluded_from_go, get_paper_journal
 
     rows: list[dict[str, Any]] = []
     for trade in get_paper_journal().closed:
+        if excluded_from_go(trade):
+            continue
         if (trade.source or "") == "live":
             continue
         if (trade.source or "") == "manual":
@@ -998,11 +1031,11 @@ def build_shadow_compare() -> dict[str, Any]:
         enabled = bool(_config.enabled)
         specs = list(_config.sets)
         closed = list(_closed)
-    main_rows = _main_rows()
+    main_rows = [r for r in _main_rows() if _counts_in_compare(r)]
     main_col = _column(main_rows, ident="main", label="main")
     sets_out: list[dict[str, Any]] = []
     for spec in specs:
-        rows = [r for r in closed if r.get("set_id") == spec.id]
+        rows = [r for r in closed if r.get("set_id") == spec.id and _counts_in_compare(r)]
         col = _column(rows, ident=spec.id, label=spec.label or spec.id)
         col.update(spec.as_public())
         col["exit_vs_main"] = _exit_vs_main(rows, main_rows)

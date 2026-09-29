@@ -59,7 +59,7 @@ def _snap(**kwargs) -> PumpfunPaperSnapshot:
         price_sol=30_000_000_000 / 1_073_000_000_000_000,
         creator_fee_bps=0,
         updated_ts=1,
-        synthetic=True,
+        synthetic=False,
     )
     base.update(kwargs)
     return PumpfunPaperSnapshot(**base)

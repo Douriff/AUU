@@ -284,39 +284,13 @@ class PumpfunPaperProvider(MarketDataProvider):
         orphan snapshot with ``buy_notional_1m == sell_notional_1m == 0``, so
         ``sell >= ratio * buy`` never started the sell-pressure timer.
 
-        Sources: paper journal lots, live journal lots, and the process-wide
-        strategy engine. A local engine in tests still records the paper lot.
+        Sources: paper journal lots, live journal lots, the strategy engine,
+        and shadow virtual positions. A local engine in tests still records
+        the paper lot.
         """
-        sym = (symbol or "").strip()
-        mid = (mint or "").strip()
-        if not sym and not mid:
-            return False
+        from app.paper.open_guard import has_open_exposure
 
-        def _hit(row_symbol: str, row_mint: str | None, qty: float) -> bool:
-            if abs(float(qty)) <= 1e-12:
-                return False
-            if sym and row_symbol == sym:
-                return True
-            return bool(mid and row_mint and row_mint == mid)
-
-        from app.paper.ledger import get_paper_ledger
-
-        for row_symbol, lots in get_paper_ledger().lots.items():
-            for lot in lots:
-                if _hit(row_symbol, getattr(lot, "mint", None), lot.qty):
-                    return True
-        from app.live.ledger import get_live_ledger
-
-        for row_symbol, lots in get_live_ledger().lots.items():
-            for lot in lots:
-                if _hit(row_symbol, getattr(lot, "mint", None), lot.qty):
-                    return True
-        from app.strategies.pump_paper_v1 import get_engine
-
-        for pos in get_engine().positions.values():
-            if _hit(pos.symbol, pos.mint, pos.qty):
-                return True
-        return False
+        return has_open_exposure(symbol, mint)
 
     def register_watch_mint(
         self,

@@ -54,25 +54,48 @@ class PaperBroker:
                 return (bids[0].price + asks[0].price) / 2.0
         return 1.0
 
+    def _market_source(self, ctx: StrategyContext) -> str | None:
+        raw = (ctx.meta or {}).get("market_source")
+        if raw in {None, ""}:
+            return None
+        return str(raw)
+
+    def _fill_ts(self, ctx: StrategyContext, fill_ts: int) -> int:
+        raw = (ctx.meta or {}).get("fill_ts")
+        if raw is None:
+            return fill_ts
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return fill_ts
+
     def _fill_market(self, ctx: StrategyContext, intent: OrderIntent, fill_ts: int) -> list[Fill]:
         notional = abs(float(intent.qty_or_notional))
-        if notional <= 0:
+        meta = ctx.meta or {}
+        flatten = meta.get("flatten_qty")
+        held = abs(float(flatten)) if flatten is not None else 0.0
+        if notional <= 0 and held <= 0:
             self._reject(["MAX_NOTIONAL"], "zero notional")
             return []
+        fill_ts = self._fill_ts(ctx, fill_ts)
+        source = self._market_source(ctx)
 
-        if ctx.book and (ctx.book.bids or ctx.book.asks):
+        if meta.get("curve_fill") and ctx.pump is not None:
+            return self._fill_curve(ctx, intent, fill_ts, notional, held, source)
+
+        if ctx.book and (ctx.book.bids or ctx.book.asks) and not (intent.side == "sell" and held > 0):
             legs = self._walk_book(ctx.book, intent.side, notional)
             if not legs:
                 self._reject(["DEPTH_THIN"], "book empty for side")
                 return []
         else:
             mid = self._mid(ctx)
-            slip = self._slippage_bps(notional, ctx.liquidity.adv_usd)
+            slip = self._slippage_bps(notional or held * mid, ctx.liquidity.adv_usd)
             if slip > intent.max_slippage_bps:
                 self._reject(["SLIPPAGE_CAP"], f"slip={slip:.1f}>cap={intent.max_slippage_bps}")
                 return []
             px = mid * (1 + slip / 1e4) if intent.side == "buy" else mid * (1 - slip / 1e4)
-            qty = notional / px
+            qty = held if intent.side == "sell" and held > 0 else notional / px
             legs = [(px, qty, slip)]
 
         out: list[Fill] = []
@@ -87,9 +110,50 @@ class PaperBroker:
                     fee=fee,
                     slippage_bps=slip,
                     tag=intent.client_tag,
+                    market_source=source,
                 )
             )
         return out
+
+    def _fill_curve(
+        self,
+        ctx: StrategyContext,
+        intent: OrderIntent,
+        fill_ts: int,
+        notional: float,
+        held: float,
+        source: str | None,
+    ) -> list[Fill]:
+        from app.paper.real_fill import quote_curve_fill
+
+        pump = ctx.pump
+        assert pump is not None
+        quoted = quote_curve_fill(
+            side=intent.side,
+            notional_sol=notional,
+            virtual_sol_reserves=int(float(pump.virtual_sol_reserves)),
+            virtual_token_reserves=int(float(pump.virtual_token_reserves)),
+            real_token_reserves=int(float(pump.real_token_reserves)),
+            flatten_qty=held if intent.side == "sell" else None,
+            creator_fee_bps=int(pump.creator_fee_bps or 0),
+            mid=self._mid(ctx),
+        )
+        if quoted is None:
+            self._reject(["DEPTH_THIN"], "curve cannot fill")
+            return []
+        px, qty, fee, slip = quoted
+        signed = qty if intent.side == "buy" else -qty
+        return [
+            Fill(
+                ts=fill_ts,
+                price=px,
+                qty=signed,
+                fee=fee,
+                slippage_bps=slip,
+                tag=intent.client_tag,
+                market_source=source,
+            )
+        ]
 
     def _walk_book(
         self, book: BookCtx, side: str, notional: float

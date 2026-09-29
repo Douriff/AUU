@@ -22,6 +22,8 @@ export function SettingsPage() {
   const [tradingState, setTradingState] = useState<string>("…");
   const [venue, setVenue] = useState<string>("…");
   const [marketOpts, setMarketOpts] = useState<string[]>([]);
+  const [marketData, setMarketData] = useState<string>("");
+  const [marketDataLabel, setMarketDataLabel] = useState<string>("");
   const [discovery, setDiscovery] = useState<string>("…");
   const [discoveryActive, setDiscoveryActive] = useState<string>("…");
   const [discoveryReason, setDiscoveryReason] = useState<string>("");
@@ -49,7 +51,9 @@ export function SettingsPage() {
         setStatus(h.status);
         setTradingState(h.trading_state ?? "active");
         setVenue(h.venue ?? (h.provider === "pumpfun_paper" ? VENUE : "mock"));
-        setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper"]);
+        setMarketOpts(h.marketProviderOptions ?? ["mock", "pumpfun_paper", "pumpfun_live_paper"]);
+        setMarketData(h.marketData ?? "");
+        setMarketDataLabel(h.marketDataLabel ?? "");
         setDiscovery(h.discovery ?? "off");
         setDiscoveryActive(h.discoveryActive ?? h.discovery ?? "off");
         setDiscoveryReason(h.discoveryReason ?? "");
@@ -116,9 +120,11 @@ export function SettingsPage() {
     <div className="shell-page">
       <h1>设置 / Settings</h1>
       <p className="muted">
-        纸面默认；实盘适配器默认关闭。行情 <code>DATA_PROVIDER=mock | pumpfun_paper</code>
+        纸面默认；实盘适配器默认关闭。行情{" "}
+        <code>DATA_PROVIDER=mock | pumpfun_paper | pumpfun_live_paper</code>
         ；下单走 <code>PaperBroker</code>（<code>dataSource=mock | paper | pumpfun_paper</code>）。
-        {provider === "pumpfun_paper" ? ` venue=${VENUE}，仅纸面曲线模拟。` : null}
+        {provider === "pumpfun_paper" ? ` venue=${VENUE}，合成行情。` : null}
+        {provider === "pumpfun_live_paper" ? ` venue=${VENUE}，真实链上纸面。` : null}
         {" "}
         Live adapter is scaffolded but <strong>liveEnabled defaults off</strong> (no chain submit).
       </p>
@@ -139,13 +145,21 @@ export function SettingsPage() {
         </p>
         <p className="muted">
           当前 <code>DATA_PROVIDER={provider}</code>
+          {marketData ? (
+            <>
+              {" "}
+              · 行情源=<code>{marketData}</code>
+              {marketDataLabel ? `（${marketDataLabel}）` : null}
+            </>
+          ) : null}
           {venue ? (
             <>
               {" "}
               · venue=<code>{venue}</code>
             </>
           ) : null}
-          。<code>pumpfun_paper</code> 为本地 bonding-curve 模拟（watch-mints env），不连钱包。
+          。<code>pumpfun_paper</code> 为合成曲线（不进 Go）。<code>pumpfun_live_paper</code>{" "}
+          只用真实成交与储备，不发链上交易。
         </p>
       </section>
 

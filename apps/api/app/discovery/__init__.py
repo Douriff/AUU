@@ -214,6 +214,47 @@ def _pick(raw: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+_NON_PUMP_POOLS = ("raydium", "non_launchpad", "meteora", "launchlab", "moonshot")
+_PUMP_POOLS = {"pump", "pumpfun", "pump.fun"}
+
+
+def _flag_true(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    if isinstance(val, str):
+        return val.strip().lower() in {"1", "true", "yes", "complete", "graduated", "migrated"}
+    return False
+
+
+def discovery_accepts(raw: dict[str, Any], source: str) -> bool:
+    """Pump.fun creates that have not graduated. Demo mints stay off the real tape."""
+    if not isinstance(raw, dict):
+        return False
+    mint = str(_pick(raw, "mint", "token", "tokenMint", "ca") or "").strip()
+    if not mint or mint.startswith("DemoMint"):
+        return False
+    for key in ("complete", "graduated", "migrated", "is_complete"):
+        if _flag_true(raw.get(key)):
+            return False
+    blob = " ".join(
+        str(raw.get(key) or "")
+        for key in ("pool", "program", "programId", "launchpad")
+    ).lower()
+    if any(bad in blob for bad in _NON_PUMP_POOLS):
+        return False
+    program = str(raw.get("program") or raw.get("programId") or "").strip()
+    if program and program != PUMP_PROGRAM_ID and "pump" not in program.lower():
+        return False
+    if source == "logs":
+        return True
+    if source == "pumpportal":
+        pool = str(raw.get("pool") or "").strip().lower()
+        return (not pool) or pool in _PUMP_POOLS
+    return False
+
+
 def normalize_new_token(raw: dict[str, Any], source: str) -> Optional[NewTokenEvent]:
     """Map PumpPortal / logs create payloads onto the frozen new_token fields."""
     if source not in SOURCES:
@@ -319,6 +360,8 @@ class DiscoveryRuntime:
         self._seen.add(ev.mint)
         if len(self._seen) > 4_000:
             self._seen = set(list(self._seen)[-2_000:])
+        if not discovery_accepts(raw, source):
+            return None
 
         provider = get_provider()
         ticker = _ticker_from_raw(raw, ev.mint)

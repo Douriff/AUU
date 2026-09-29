@@ -121,6 +121,7 @@ function Icon({ name }: { name: string }) {
 export function AppShell() {
   const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
   const [provider, setProvider] = useState("…");
+  const [marketData, setMarketData] = useState("");
   const [liveOff, setLiveOff] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [who, setWho] = useState("");
@@ -143,6 +144,7 @@ export function AppShell() {
       .getHealth()
       .then((h) => {
         setProvider(h.provider);
+        setMarketData(h.marketData || "");
         setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
       })
       .catch(() => undefined);
@@ -198,6 +200,7 @@ export function AppShell() {
           </span>
           <span className="muted topbar-provider" title="DATA_PROVIDER">
             {provider}
+            {marketData ? ` · ${marketData}` : ""}
           </span>
           <AutoPaperToggle
             compact
