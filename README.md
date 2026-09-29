@@ -76,7 +76,7 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 | 密钥 | 无 | 无 | 无（只读 WS / logs） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored） |
 
 切换行情源：`DATA_PROVIDER=mock`、`DATA_PROVIDER=pumpfun_paper` 或 `DATA_PROVIDER=pumpfun_live_paper`。health 字段 `marketData` 为 `mock` / `synthetic` / `real`。  
-`pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS` 播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK，且 `synthetic=true` 的成交不进入 Go。`pumpfun_live_paper` 不载入演示 mint；`AUU_LIVE_PAPER_FEED=off` 可关掉只读行情任务。优先 PumpPortal `subscribeTokenTrade`，失败则 `logsSubscribe` 解码 TradeEvent。发现层只登记 pump 程序创建且未毕业的新币。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）。Portal HTTP 400/403 → health `discoveryReason=portal_auth_rejected`（见 `docs/adapters/pumpportal-discovery-v0.md`）。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交。始终 PaperBroker，`liveEnabled` 默认 false。
+`pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS` 播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK，且 `synthetic=true` 的成交不进入 Go。`pumpfun_live_paper` 不载入演示 mint，只接受经链上 bonding-curve 账户校验（owner=pump 程序、`complete=false`）的币；行情来自 PumpPortal `subscribeTokenTrade` 和/或 `logsSubscribe` 解码 TradeEvent（`LIVE_PAPER_FEED=auto|portal|logs|off`）。详见 `docs/adapters/pumpfun-live-paper-v0.md`；旧数据清理 `python -m app.paper.legacy_cleanup`（默认 dry-run，`--apply` 才写）。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）。Portal HTTP 400/403 → health `discoveryReason=portal_auth_rejected`（见 `docs/adapters/pumpportal-discovery-v0.md`）。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交。始终 PaperBroker，`liveEnabled` 默认 false。
 
 有 `ctx.pump` 时 `estimated_impact_bps` 走 bonding-curve（buy/`buy_tokens_out` vs sell/`sell_sol_out`），否则 CEX 平方根。
 
