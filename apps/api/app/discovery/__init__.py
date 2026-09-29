@@ -383,6 +383,12 @@ class DiscoveryRuntime:
                 creator=ev.creator,
                 max_discovered=self.max_discovered,
             )
+            note_slot = getattr(provider, "note_create_slot", None)
+            if callable(note_slot) and ev.slot is not None:
+                try:
+                    note_slot(ev.mint, ev.slot)  # evidence only (bundle / sniper windows)
+                except Exception:
+                    log.debug("note_create_slot failed", exc_info=True)
 
         from app.bus import get_hub
 
@@ -474,7 +480,7 @@ class DiscoveryRuntime:
                 raise PortalAuthRejected(status) from exc
             raise
 
-    def _forward_trade_logs(self, logs: list[Any], signature: Any) -> None:
+    def _forward_trade_logs(self, logs: list[Any], signature: Any, slot: Any = None) -> None:
         """Hand pump TradeEvent logs to a real-market provider (read-only market data).
 
         Only providers exposing ``observe_logs`` (``pumpfun_live_paper``) use
@@ -484,7 +490,10 @@ class DiscoveryRuntime:
         if not callable(observe):
             return
         try:
-            observe([str(x) for x in logs], signature=str(signature or "") or None)
+            kwargs: dict[str, Any] = {"signature": str(signature or "") or None}
+            if isinstance(slot, int):
+                kwargs["slot"] = slot
+            observe([str(x) for x in logs], **kwargs)
             self.trade_logs_forwarded += 1
         except Exception:
             log.debug("trade log forward failed", exc_info=True)
@@ -536,7 +545,7 @@ class DiscoveryRuntime:
                     await self.ingest(parsed_ev, "logs")
                 # After ingest, so the creator's first buy in the same tx
                 # lands on the freshly registered curve instead of being dropped.
-                self._forward_trade_logs(logs, value.get("signature"))
+                self._forward_trade_logs(logs, value.get("signature"), (result.get("context") or {}).get("slot"))
 
 
 def get_discovery() -> DiscoveryRuntime:

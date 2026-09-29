@@ -9,7 +9,9 @@ journal, what is needed to re-check the result offline:
   counts and SOL volume over 5/15/30/60 s, unique buyers, momentum, the
   creator's buy, market cap, discovery source);
 * the exit trigger (trigger mark vs fill price) and the price path;
-* a compact tape of the mint's real prints over [entry signal - 30 s, exit + 30 s].
+* a compact tape of the mint's real prints over [entry signal - 30 s, exit + 30 s];
+* ``entry_factors``: holder structure / token safety at the signal, looked up
+  off the execution path by ``app.paper.entry_factors``.
 
 It never changes a decision, an order or a parameter: the strategy calls the
 ``on_*`` hooks after it has already acted, every hook swallows its own errors,
@@ -42,7 +44,7 @@ from app.providers.pumpfun_curve_math import (
 
 log = logging.getLogger("auu.paper.evidence")
 
-EVIDENCE_VERSION = 1
+EVIDENCE_VERSION = 2  # v2: + entry_factors (holder structure / token safety)
 PRE_MS = 30_000
 POST_MS = 30_000
 FEATURE_WINDOWS_S = (5, 15, 30, 60)
@@ -311,6 +313,7 @@ class EvidenceRecorder:
         params: Mapping[str, Any],
         provider: Any,
     ) -> None:
+        t_hook = time.perf_counter_ns()
         with self._lock:
             ep = self._eps.get(symbol)
             if ep is not None and ep.mint != mint:
@@ -336,6 +339,12 @@ class EvidenceRecorder:
                 }
                 self._eps[symbol] = ep
                 self._collect(ep, trades, now_ms)
+                t_sub = time.perf_counter_ns()
+                _submit_entry_factors(provider, symbol=symbol, mint=mint, signal_ts=now_ms)
+                t_end = time.perf_counter_ns()
+                # On-path cost of this hook (features + factor enqueue), for the record.
+                ep.entry["evidence_hook_us"] = round((t_end - t_hook) / 1000.0, 1)
+                ep.entry["factor_submit_us"] = round((t_end - t_sub) / 1000.0, 1)
             elif side == "flat" and ep is not None and ep.phase == "open":
                 entry_px = _num(ep.entry.get("fill_price"))
                 trig = _num(getattr(snapshot, "price_sol", None))
@@ -533,6 +542,7 @@ class EvidenceRecorder:
             "params": ep.params,
             "entry": ep.entry,
             "features": ep.features,
+            "entry_factors": _entry_factor_result(ep.mint, int(ep.entry.get("signal_ts") or 0)),
             "exit": ex,
             "path": path,
             "result": {
@@ -574,6 +584,31 @@ def _curve_info(provider: Any, symbol: str) -> dict[str, Any]:
         except Exception:
             return {}
     return {}
+
+
+def _submit_entry_factors(provider: Any, *, symbol: str, mint: str, signal_ts: int) -> None:
+    """Enqueue the holder / safety lookup (non-blocking; see ``entry_factors``)."""
+    try:
+        from app.paper.entry_factors import get_entry_factor_service
+
+        svc = get_entry_factor_service()
+        if svc is not None:
+            svc.submit(provider, symbol=symbol, mint=mint, signal_ts=signal_ts)
+    except Exception:
+        log.exception("entry factor submit failed")
+
+
+def _entry_factor_result(mint: str, signal_ts: int) -> dict[str, Any]:
+    try:
+        from app.paper.entry_factors import get_entry_factor_service, pending_result
+
+        svc = get_entry_factor_service()
+        if svc is None:
+            return pending_result(signal_ts, "disabled")
+        return svc.result(mint, signal_ts)
+    except Exception as exc:
+        log.exception("entry factor result failed")
+        return {"status": f"error:{type(exc).__name__}", "signal_ts": signal_ts}
 
 
 def _trade_cap() -> int:
