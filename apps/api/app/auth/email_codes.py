@@ -7,6 +7,7 @@ Codes live in process memory as salted HMAC hashes and expire after 10 minutes.
 from __future__ import annotations
 
 import hmac
+import html
 import logging
 import os
 import re
@@ -17,7 +18,7 @@ import threading
 import time
 import unicodedata
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from hashlib import sha256
 from typing import Any, Callable, Optional
 
@@ -142,13 +143,23 @@ def reset_email_codes() -> None:
         _IP_SENDS.clear()
 
 
-def _smtp_send(to: str, subject: str, body: str) -> None:
+BRAND = "AUUTRADE"
+
+
+def _smtp_send(to: str, subject: str, body: str, html_body: Optional[str] = None) -> None:
+    """Send plain text, or multipart/alternative (text + HTML) when html_body is given."""
     cfg = smtp_settings()
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = formataddr(("AUU 纸面交易", cfg["user"]))
+    msg["From"] = formataddr((BRAND, cfg["user"]))
     msg["To"] = to
+    msg["Date"] = formatdate(localtime=True)
+    domain = cfg["user"].rpartition("@")[2] or None
+    msg["Message-ID"] = make_msgid(domain=domain)
+    msg["Auto-Submitted"] = "auto-generated"
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
     context = ssl.create_default_context()
     if not cfg["starttls"]:
         with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=15, context=context) as client:
@@ -168,20 +179,72 @@ def _digest(purpose: str, email: str, code: str, salt: str) -> str:
     return hmac.new(key, f"{purpose}:{email}:{salt}:{code}".encode("utf-8"), sha256).hexdigest()
 
 
-def _body(purpose: str, code: str) -> tuple[str, str]:
-    if purpose == "reset":
-        subject = "AUU 重置密码验证码"
-        action = "重置密码"
-    else:
-        subject = "AUU 注册验证码"
-        action = "注册账户"
-    body = (
-        f"你正在{action}，验证码：{code}\n\n"
-        "验证码 10 分钟内有效，最多可输错 5 次。\n"
-        "如果这不是你本人的操作，请忽略这封邮件。\n\n"
-        "AUU 只做纸面交易，不会向你索要私钥或转账。"
+_TEMPLATES = {
+    "signup": {
+        "subject": "AUUTRADE 注册验证码：{code}",
+        "action": "您正在注册 AUUTRADE 账号，本次验证码为：",
+        "ignore": "如果这不是您本人的操作，请忽略本邮件，您的邮箱不会被绑定。",
+    },
+    "reset": {
+        "subject": "AUUTRADE 重置密码验证码：{code}",
+        "action": "您正在重置 AUUTRADE 账号的登录密码，本次验证码为：",
+        "ignore": "如果这不是您本人的操作，请忽略本邮件，并建议尽快修改邮箱密码。",
+    },
+}
+
+
+def _ttl_minutes() -> int:
+    return max(1, int(CODE_TTL // 60))
+
+
+def render_email(purpose: str, code: str) -> tuple[str, str, str]:
+    """Return (subject, plain text, HTML) for a verification code email.
+
+    The HTML uses inline styles only: no external images, fonts, links or tracking pixels."""
+    tpl = _TEMPLATES["reset" if purpose == "reset" else "signup"]
+    subject = tpl["subject"].format(code=code)
+    validity = f"验证码 {_ttl_minutes()} 分钟内有效，请勿泄露给任何人。{BRAND} 工作人员不会以任何理由向您索要验证码。"
+    text = (
+        "您好，\n\n"
+        f"{tpl['action']}\n\n"
+        f"{code}\n\n"
+        f"{validity}\n"
+        f"{tpl['ignore']}\n\n"
+        f"—— {BRAND} 团队\n\n"
+        "此邮件由系统自动发送，请勿直接回复。\n"
     )
-    return subject, body
+    esc = html.escape
+    font = "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif"
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 12px;font-family:{font};">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+<tr><td style="background:#0f172a;padding:20px 32px;">
+<span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:4px;">{BRAND}</span>
+</td></tr>
+<tr><td style="padding:32px;color:#111827;font-size:15px;line-height:1.7;">
+<p style="margin:0 0 12px;">您好，</p>
+<p style="margin:0 0 20px;">{esc(tpl['action'])}</p>
+<div style="margin:0 0 24px;padding:18px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-align:center;">
+<span style="font-size:34px;font-weight:700;letter-spacing:10px;color:#0f172a;font-family:Consolas,'SFMono-Regular',Menlo,monospace;">{esc(code)}</span>
+</div>
+<p style="margin:0 0 12px;color:#374151;">{esc(validity)}</p>
+<p style="margin:0 0 24px;color:#374151;">{esc(tpl['ignore'])}</p>
+<p style="margin:0;color:#111827;">—— {BRAND} 团队</p>
+</td></tr>
+<tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.6;">
+此邮件由系统自动发送，请勿直接回复。<br>&copy; {BRAND}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+"""
+    return subject, text, html_body
 
 
 def send_code(purpose: str, email: str, ip: str, *, deliver: bool = True) -> None:
@@ -216,9 +279,12 @@ def send_code(purpose: str, email: str, ip: str, *, deliver: bool = True) -> Non
     if not deliver:
         _LOG.info("email code (%s) skipped for %s", purpose, mask_email(email))
         return
-    subject, body = _body(purpose, code)
+    subject, body, html_body = render_email(purpose, code)
     try:
-        (_SENDER or _smtp_send)(email, subject, body)
+        if _SENDER is not None:
+            _SENDER(email, subject, body)
+        else:
+            _smtp_send(email, subject, body, html_body)
     except Exception as exc:  # never include exc text: SMTP errors can echo addresses
         with _LOCK:
             _CODES.pop(key, None)

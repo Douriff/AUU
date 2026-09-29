@@ -50,7 +50,7 @@ class FakeSender:
     def last_code(self, to=None):
         for addr, _subject, body in reversed(self.sent):
             if to is None or addr == to:
-                return re.search(r"验证码：(\d{6})", body).group(1)
+                return re.search(r"验证码为：\s*(\d{6})", body).group(1)
         raise AssertionError("no mail")
 
 
@@ -462,6 +462,121 @@ class SmtpSenderTests(unittest.TestCase):
     def test_mask(self):
         self.assertEqual(email_codes.mask_email("alice@qq.com"), "a***@qq.com")
         self.assertEqual(email_codes.mask_email("bad"), "***")
+
+
+class BrandedEmailTests(unittest.TestCase):
+    def setUp(self):
+        self._prev = {key: os.environ.get(key) for key in _KEYS}
+        for key in ("AUU_SMTP_HOST", "AUU_SMTP_PORT", "AUU_SMTP_STARTTLS"):
+            os.environ.pop(key, None)
+        os.environ["AUU_SMTP_HOST"] = "smtp.gmail.com"
+        os.environ["AUU_SMTP_USER"] = "sender@gmail.com"
+        os.environ["AUU_SMTP_PASS"] = SMTP_PASS
+        email_codes.reset_email_codes()
+        email_codes.set_sender(None)
+
+    def tearDown(self):
+        email_codes.reset_email_codes()
+        for key, value in self._prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _send(self, purpose):
+        with mock.patch.object(email_codes.smtplib, "SMTP_SSL") as ssl_cls, mock.patch.object(email_codes.smtplib, "SMTP") as plain:
+            email_codes.send_code(purpose, "to@qq.com", "198.51.100.7")
+        plain.assert_not_called()
+        client = ssl_cls.return_value.__enter__.return_value
+        client.send_message.assert_called_once()
+        return client.send_message.call_args.args[0]
+
+    def _parts(self, msg):
+        from email.utils import parseaddr
+
+        self.assertEqual(msg.get_content_type(), "multipart/alternative")
+        text = msg.get_body(preferencelist=("plain",)).get_content()
+        page = msg.get_body(preferencelist=("html",)).get_content()
+        name, addr = parseaddr(str(msg["From"]))
+        self.assertEqual((name, addr), ("AUUTRADE", "sender@gmail.com"))
+        self.assertEqual(msg["To"], "to@qq.com")
+        self.assertEqual(msg["Auto-Submitted"], "auto-generated")
+        self.assertTrue(msg["Message-ID"] and msg["Date"])
+        msg.as_bytes()  # serialises (non-ASCII subject/body are encoded)
+        return text, page
+
+    def _code_of(self, subject):
+        found = re.fullmatch(r"AUUTRADE (?:注册|重置密码)验证码：(\d{6})", subject)
+        self.assertIsNotNone(found, subject)
+        return found.group(1)
+
+    def test_signup_email_subject_from_and_both_parts(self):
+        msg = self._send("signup")
+        text, page = self._parts(msg)
+        self.assertTrue(str(msg["Subject"]).startswith("AUUTRADE 注册验证码："))
+        code = self._code_of(str(msg["Subject"]))
+        self.assertIn(code, text)
+        self.assertIn(code, page)
+        self.assertIn("您正在注册 AUUTRADE 账号，本次验证码为：", text)
+        self.assertIn("您的邮箱不会被绑定", text)
+        self.assertIn("您的邮箱不会被绑定", page)
+        self.assertIn("验证码 10 分钟内有效", text)
+        self.assertIn("—— AUUTRADE 团队", text)
+        self.assertIn("此邮件由系统自动发送，请勿直接回复。", text)
+        email_codes.check_code("signup", "to@qq.com", code)
+
+    def test_reset_email_subject_and_text(self):
+        msg = self._send("reset")
+        text, page = self._parts(msg)
+        code = self._code_of(str(msg["Subject"]))
+        self.assertTrue(str(msg["Subject"]).startswith("AUUTRADE 重置密码验证码："))
+        self.assertIn(code, text)
+        self.assertIn(code, page)
+        self.assertIn("您正在重置 AUUTRADE 账号的登录密码", text)
+        self.assertIn("并建议尽快修改邮箱密码", text)
+        self.assertIn("并建议尽快修改邮箱密码", page)
+        self.assertNotIn("不会被绑定", text)
+
+    def test_exact_plain_text(self):
+        subject, text, _page = email_codes.render_email("signup", "123456")
+        self.assertEqual(subject, "AUUTRADE 注册验证码：123456")
+        self.assertEqual(
+            text,
+            "您好，\n\n您正在注册 AUUTRADE 账号，本次验证码为：\n\n123456\n\n"
+            "验证码 10 分钟内有效，请勿泄露给任何人。AUUTRADE 工作人员不会以任何理由向您索要验证码。\n"
+            "如果这不是您本人的操作，请忽略本邮件，您的邮箱不会被绑定。\n\n"
+            "—— AUUTRADE 团队\n\n此邮件由系统自动发送，请勿直接回复。\n",
+        )
+        self.assertEqual(email_codes.render_email("reset", "654321")[0], "AUUTRADE 重置密码验证码：654321")
+
+    def test_html_is_self_contained(self):
+        for purpose in ("signup", "reset"):
+            _subject, _text, page = email_codes.render_email(purpose, "123456")
+            lowered = page.lower()
+            for banned in ("<img", "http://", "https://", "<link", "<script", "url(", "src=", "href="):
+                self.assertNotIn(banned, lowered)
+            self.assertIn("AUUTRADE", page)
+            self.assertIn("letter-spacing:10px", page)
+            self.assertIn("background:#0f172a", page)
+            self.assertIn("此邮件由系统自动发送", page)
+
+    def test_ttl_text_follows_config(self):
+        self.assertEqual(email_codes.CODE_TTL, 600.0)
+        with mock.patch.object(email_codes, "CODE_TTL", 300.0):
+            _s, text, page = email_codes.render_email("signup", "123456")
+        self.assertIn("验证码 5 分钟内有效", text)
+        self.assertIn("验证码 5 分钟内有效", page)
+
+    def test_plain_sender_hook_still_gets_text(self):
+        got = []
+        email_codes.set_sender(lambda to, subject, body: got.append((to, subject, body)))
+        try:
+            email_codes.send_code("signup", "to@qq.com", "198.51.100.8")
+        finally:
+            email_codes.set_sender(None)
+        to, subject, body = got[0]
+        self.assertEqual(to, "to@qq.com")
+        self.assertIn(self._code_of(subject), body)
 
 
 if __name__ == "__main__":
