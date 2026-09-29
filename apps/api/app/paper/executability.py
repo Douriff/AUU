@@ -807,12 +807,12 @@ def build_executability(
             window_label = n_window
         except ValueError:
             window_label = "session"
-    from app.paper.ledger import excluded_from_autopaper_stats
+    from app.paper.ledger import excluded_from_autopaper_stats, excluded_from_go
 
     trades = [
         t
         for t in journal.closed_in_window(window=n_window, from_ts=from_ts, to_ts=to_ts)
-        if not excluded_from_autopaper_stats(t)
+        if not excluded_from_autopaper_stats(t) and not excluded_from_go(t)
     ]
     log = get_decision_log()
     rows = log.all() if n_window is None else log.query(from_ts=from_ts, to_ts=to_ts, limit=LOG_QUERY)

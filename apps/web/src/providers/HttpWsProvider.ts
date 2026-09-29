@@ -173,6 +173,8 @@ export class HttpWsProvider {
     defaultSymbol?: string;
     dataSourceOptions?: string[];
     marketProviderOptions?: string[];
+    marketData?: "real" | "synthetic" | "mock" | string;
+    marketDataLabel?: string;
     trading_state?: string;
     auto_paper_orders?: boolean;
     strategy_autopaper?: boolean;

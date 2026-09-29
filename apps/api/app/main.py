@@ -65,11 +65,20 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
     if resolve_discovery_mode() != "off":
         tasks.append(asyncio.create_task(get_discovery().run_loop(), name="pumpfun-discovery"))
+    from app.providers import get_provider
+
+    provider = get_provider()
+    feed = getattr(provider, "run_feed", None)
+    if callable(feed):
+        tasks.append(asyncio.create_task(feed(), name="pumpfun-live-paper-feed"))
     try:
         yield
     finally:
         get_engine().stop()
         get_discovery().stop()
+        stop_feed = getattr(get_provider(), "stop_feed", None)
+        if callable(stop_feed):
+            stop_feed()
         for t in tasks:
             t.cancel()
         for t in tasks:

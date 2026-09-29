@@ -55,6 +55,8 @@ class Fill(BaseModel):
     estimated_impact_net_bps: Optional[float] = None
     protocol_fee_bps: Optional[float] = None
     shadow_slippage_bps: Optional[float] = None
+    # real | synthetic. Unset on older paper fills (in-memory still counts toward Go).
+    market_source: Optional[str] = None
 
 
 class SignalEvent(BaseModel):

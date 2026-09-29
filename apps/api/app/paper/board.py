@@ -127,13 +127,16 @@ def build_board() -> dict[str, Any]:
             }
         )
 
-    from app.paper.ledger import excluded_from_autopaper_stats
+    from app.paper.ledger import excluded_from_autopaper_stats, excluded_from_go
+    from app.providers import market_data_kind
 
     journal = get_paper_journal()
     trades = [
         t
         for t in journal.closed
-        if (t.source or "") != "live" and not excluded_from_autopaper_stats(t)
+        if (t.source or "") != "live"
+        and not excluded_from_autopaper_stats(t)
+        and not excluded_from_go(t)
     ]
     equity: list[dict[str, Any]] = []
     cum = 0.0
@@ -211,6 +214,7 @@ def build_board() -> dict[str, Any]:
         "mode": "paper",
         "liveEnabled": False,
         "liveDisabled": True,
+        "marketData": market_data_kind(provider.name),
         "asof_ts": int(time.time() * 1000),
         "strategyId": "pump-paper-v1",
         "ticker": ticker,

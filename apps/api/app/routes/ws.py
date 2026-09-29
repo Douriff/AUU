@@ -31,7 +31,10 @@ async def ws_endpoint(websocket: WebSocket):
             "version": 1,
             "providers": providers,
             "orderMode": "paper",
-            "venue": "Pump.fun" if provider.name == "pumpfun_paper" else "mock",
+            "venue": "Pump.fun" if provider.name in {"pumpfun_paper", "pumpfun_live_paper"} else "mock",
+            "marketData": "real"
+            if provider.name == "pumpfun_live_paper"
+            else ("synthetic" if provider.name == "pumpfun_paper" else "mock"),
             "eventTypes": [
                 "signal",
                 "risk",

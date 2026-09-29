@@ -5,6 +5,7 @@ Layouts are taken from public-docs / MIT SDK field order. This module does
 """
 from __future__ import annotations
 
+import hashlib
 import struct
 from typing import Any
 
@@ -130,8 +131,102 @@ def decode_create_event(data: bytes) -> dict[str, Any] | None:
         return None
 
 
+def trade_event_discriminator() -> bytes:
+    """Anchor ``event:TradeEvent`` discriminator (sha256, first 8 bytes)."""
+    return hashlib.sha256(b"event:TradeEvent").digest()[:DISCRIMINATOR_LEN]
+
+
+# TradeEvent body after the 8-byte discriminator (borsh, public field order).
+# Trailing bytes (newer program versions) are ignored.
+# mint, sol_amount, token_amount, is_buy, user, timestamp,
+# virtual_sol, virtual_token, real_sol, real_token,
+# fee_recipient, fee_basis_points, fee, creator, creator_fee_basis_points, creator_fee
+_TRADE_EVENT_BODY = 217
+
+
+def decode_trade_event(data: bytes) -> dict[str, Any] | None:
+    """Decode an Anchor TradeEvent. None when the discriminator or length does not match."""
+    if len(data) < DISCRIMINATOR_LEN + _TRADE_EVENT_BODY:
+        return None
+    if data[:DISCRIMINATOR_LEN] != trade_event_discriminator():
+        return None
+    o = DISCRIMINATOR_LEN
+    mint = b58encode(data[o : o + 32])
+    o += 32
+    (sol_amount,) = struct.unpack_from("<Q", data, o)
+    o += 8
+    (token_amount,) = struct.unpack_from("<Q", data, o)
+    o += 8
+    is_buy = bool(data[o])
+    o += 1
+    user = b58encode(data[o : o + 32])
+    o += 32
+    (timestamp,) = struct.unpack_from("<q", data, o)
+    o += 8
+    vs, vt, rs, rt = struct.unpack_from("<4Q", data, o)
+    o += 32
+    o += 32  # fee_recipient
+    (fee_bps,) = struct.unpack_from("<Q", data, o)
+    o += 8
+    (fee,) = struct.unpack_from("<Q", data, o)
+    o += 8
+    creator = b58encode(data[o : o + 32])
+    o += 32
+    (creator_fee_bps,) = struct.unpack_from("<Q", data, o)
+    o += 8
+    (creator_fee,) = struct.unpack_from("<Q", data, o)
+    if not mint:
+        return None
+    return {
+        "mint": mint,
+        "sol_amount": int(sol_amount),
+        "token_amount": int(token_amount),
+        "is_buy": is_buy,
+        "user": user,
+        "timestamp": int(timestamp),
+        "virtual_sol_reserves": int(vs),
+        "virtual_token_reserves": int(vt),
+        "real_sol_reserves": int(rs),
+        "real_token_reserves": int(rt),
+        "fee_basis_points": int(fee_bps),
+        "fee": int(fee),
+        "creator": creator,
+        "creator_fee_basis_points": int(creator_fee_bps),
+        "creator_fee": int(creator_fee),
+    }
+
+
+def extract_trades_from_logs(logs: list[str]) -> list[dict[str, Any]]:
+    """Every TradeEvent in a tx's Program data logs, in log order.
+
+    One tx can carry several pump trades (bundles, routers); each moves the
+    curve, and the last one per mint holds the post-tx reserves.
+    """
+    import base64
+
+    out: list[dict[str, Any]] = []
+    for line in logs:
+        if "Program data:" not in (line or ""):
+            continue
+        b64 = line.split("Program data:", 1)[-1].strip()
+        try:
+            raw = base64.b64decode(b64)
+        except Exception:
+            continue
+        parsed = decode_trade_event(raw)
+        if parsed and parsed.get("mint"):
+            out.append(parsed)
+    return out
+
+
+def extract_trade_from_logs(logs: list[str]) -> dict[str, Any] | None:
+    """Read-only parse of Program data logs whose discriminator is TradeEvent (first one)."""
+    rows = extract_trades_from_logs(logs)
+    return rows[0] if rows else None
+
+
 def extract_create_from_logs(logs: list[str]) -> dict[str, Any] | None:
-    """Read-only parse of RPC logsSubscribe Create traces. No buy/sell handling."""
+    """Read-only parse of RPC logsSubscribe Create traces."""
     import base64
 
     is_create = any("Instruction: Create" in (x or "") or "CreateEvent" in (x or "") for x in logs)

@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -59,7 +60,7 @@ def _snap(**kwargs) -> PumpfunPaperSnapshot:
         price_sol=30_000_000_000 / 1_073_000_000_000_000,
         creator_fee_bps=0,
         updated_ts=1,
-        synthetic=True,
+        synthetic=False,
     )
     base.update(kwargs)
     return PumpfunPaperSnapshot(**base)
@@ -93,6 +94,11 @@ def _item(watch_id: str, address: str, label: str) -> TraderWatchlistItem:
 
 class ShadowEvalTests(unittest.TestCase):
     def setUp(self):
+        # These tests drive shadow mechanics on the mock provider; label the
+        # rows real so the compare counts them (mock rows are excluded).
+        label = mock.patch("app.paper.shadow_compare._market_source", return_value="real")
+        label.start()
+        self.addCleanup(label.stop)
         reset_shadow_compare()
         reset_paper_ledger(wipe_store=True)
         reset_decision_log()

@@ -45,6 +45,10 @@ class MarketDataProvider(ABC):
         """Optional: discovery registers a mint onto the paper watchlist. Mock no-op."""
         return None
 
+    def first_trade_after(self, symbol: str, ts_ms: int):
+        """Earliest real print at or after ``ts_ms``. Synthetic and mock tapes return None."""
+        return None
+
     def watch_flags(self, symbol: str) -> dict:
         return {}
 

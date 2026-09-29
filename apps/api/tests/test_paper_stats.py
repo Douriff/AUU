@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest import mock
 
 from app.models.contracts import Fill
 from app.paper.broker import reset_paper_broker
@@ -166,7 +167,10 @@ class StatsApiTests(unittest.TestCase):
         alias = self.client.get("/api/v1/stats/paper-performance")
         self.assertTrue(alias.json()["ok"])
 
-    def test_round_trip_updates_stats_and_reset(self):
+    # Stats/leaderboard mechanics on a fill labeled real-market; the synthetic
+    # exclusion itself is covered in test_real_market_paper.
+    @mock.patch("app.paper.broker._active_market_kind", return_value="real")
+    def test_round_trip_updates_stats_and_reset(self, _real_label):
         buy = self.client.post(
             "/api/v1/pipeline/decide-and-fill",
             json={"symbol": "PUMPDEMO/SOL", "side": "buy", "notional": 0.05},

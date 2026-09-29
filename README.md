@@ -55,7 +55,7 @@ docker compose up --build
 cd /workspace/AUU/apps/api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export DATA_PROVIDER=mock   # 或 pumpfun_paper（仍是本地曲线仿真）
+export DATA_PROVIDER=mock   # 或 pumpfun_paper（合成）/ pumpfun_live_paper（真实链上纸面）
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 终端 2 — Web
@@ -68,22 +68,22 @@ npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 
 ## Mock vs pumpfun_paper vs Real
 
-| | Mock（默认） | pumpfun_paper | Live adapter（dark） |
-|--|-------------|---------------|----------------------|
-| 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 Pump.fun bonding-curve 模拟（venue=Pump.fun，**paper-only**） | 仍走 paper 行情 |
-| 信号 | `demo-momentum-v0` 周期 long/short | 同源 demo 叠加 | 不自动下单 |
-| 成交 | 纸面 Fill（deny 时不画） | 仍走 **PaperBroker**（无链上 buy/sell） | `LiveBroker` stub；**本轮不发链上 tx** |
-| 密钥 | 无 | 无（禁止私钥 / Jito tip / sniper） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored）；health 仅 `keypairMounted` + `pubkey` |
+| | Mock（默认） | pumpfun_paper | pumpfun_live_paper | Live adapter（dark） |
+|--|-------------|---------------|--------------------|----------------------|
+| 行情 | 确定性 RNG 蜡烛 / book / trades | 本地 bonding-curve 模拟，`synthetic=true` | 真实成交与虚拟储备，无成交则价格不动 | 仍走 paper 行情 |
+| 统计 | 纸面 | **不进** Go / 影子对比 / 排行榜 | `marketData=real`，新窗口从零计 | 不混入纸面胜率 |
+| 成交 | 纸面 Fill | **PaperBroker** | 曲线报价（含协议费）+ 决策延迟后的第一笔真实成交 | `LiveBroker` stub；**不发链上 tx** |
+| 密钥 | 无 | 无 | 无（只读 WS / logs） | **LOCAL-ONLY** `secrets/live-keypair.json`（gitignored） |
 
-切换行情源：环境变量 `DATA_PROVIDER=mock` 或 `DATA_PROVIDER=pumpfun_paper`。  
-`pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS`（逗号分隔 mint 白名单）播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）把 `new_token` 写入自选，**不**自动下单。Portal HTTP 400/403 → health `discoveryReason=portal_auth_rejected`（见 `docs/adapters/pumpportal-discovery-v0.md`）。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交；`paper` / `pumpfun_paper` overlay 只画 PaperBroker Fill。始终 PaperBroker。
+切换行情源：`DATA_PROVIDER=mock`、`DATA_PROVIDER=pumpfun_paper` 或 `DATA_PROVIDER=pumpfun_live_paper`。health 字段 `marketData` 为 `mock` / `synthetic` / `real`。  
+`pumpfun_paper` 可由 `PUMPFUN_WATCH_MINTS` 播种；空则用内置 PUMPDEMO / MOONMOCK / GRADMOCK，且 `synthetic=true` 的成交不进入 Go。`pumpfun_live_paper` 不载入演示 mint，只接受经链上 bonding-curve 账户校验（owner=pump 程序、`complete=false`）的币；行情来自 PumpPortal `subscribeTokenTrade` 和/或 `logsSubscribe` 解码 TradeEvent（`LIVE_PAPER_FEED=auto|portal|logs|off`）。详见 `docs/adapters/pumpfun-live-paper-v0.md`；旧数据清理 `python -m app.paper.legacy_cleanup`（默认 dry-run，`--apply` 才写）。只读发现：`PUMPFUN_DISCOVERY=pumpportal|logs|off`（无 `PUMPFUN_PORTAL_API_KEY` 时默认 off）。Portal HTTP 400/403 → health `discoveryReason=portal_auth_rejected`（见 `docs/adapters/pumpportal-discovery-v0.md`）。下单路径 `dataSource=mock|paper|pumpfun_paper` 与行情源正交。始终 PaperBroker，`liveEnabled` 默认 false。
 
 有 `ctx.pump` 时 `estimated_impact_bps` 走 bonding-curve（buy/`buy_tokens_out` vs sell/`sell_sol_out`），否则 CEX 平方根。
 
 ## 合同摘要
 
 - REST 包络 `{ ok, data|error }` + 头 `X-Api-Version: 1`
-- WS 首帧 `{ type:"hello", version:1, providers:["mock","pumpfun_paper"], venue }`，再 `subscribe` channels：`candles|book|trades|signals|fills|risk`；可选 `type:"pumpfun_curve"` / `type:"new_token"`
+- WS 首帧 `{ type:"hello", version:1, providers:["mock","pumpfun_paper","pumpfun_live_paper"], venue, marketData }`，再 `subscribe` channels：`candles|book|trades|signals|fills|risk`；可选 `type:"pumpfun_curve"` / `type:"new_token"`
 - 字段：`Candle{symbol,interval,t,o,h,l,c,v}` · `SignalOut.side=long|short|flat` · `Fill` · `RiskOut{allow,tags}` · 可选 `ctx.pump` / `PumpCtx`
 - 图上：long→买箭头，short→卖箭头，Fill→方块（菱形近似）；CurveProgressBar 绑 `progress_bps` + `complete`/`migrated`
 

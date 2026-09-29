@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from app.models.contracts import Fill, OrderIntent, StrategyContext, TickCtx
@@ -761,7 +762,10 @@ class ExecutabilityApiTests(unittest.TestCase):
         self.assertNotIn("private_key", blob)
         self.assertNotIn("mnemonic", blob)
 
-    def test_pipeline_fill_carries_exec_fields(self):
+    # Stats/leaderboard mechanics on a fill labeled real-market; the synthetic
+    # exclusion itself is covered in test_real_market_paper.
+    @mock.patch("app.paper.broker._active_market_kind", return_value="real")
+    def test_pipeline_fill_carries_exec_fields(self, _real_label):
         buy = self.client.post(
             "/api/v1/pipeline/decide-and-fill",
             json={"symbol": "PUMPDEMO/SOL", "side": "buy", "notional": 0.05},

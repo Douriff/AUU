@@ -284,8 +284,11 @@ def list_users() -> list[dict[str, Any]]:
 
 
 def account_row(user: dict[str, Any]) -> dict[str, Any]:
+    from app.paper.ledger import excluded_from_go
+
     book = journal_for(user)
-    realized = sum(float(getattr(trade, "pnl", 0.0) or 0.0) for trade in book.closed)
+    ranked = [trade for trade in book.closed if not excluded_from_go(trade)]
+    realized = sum(float(getattr(trade, "pnl", 0.0) or 0.0) for trade in ranked)
     open_n = 0
     upnl = 0.0
     for lots in book.lots.values():
@@ -302,7 +305,7 @@ def account_row(user: dict[str, Any]) -> dict[str, Any]:
         "pnl": pnl,
         "return_pct": pnl / start,
         "equity": start + pnl,
-        "n_closed": len(book.closed),
+        "n_closed": len(ranked),
         "open_positions": open_n,
         "day_pnl": user_day_pnl(book),
         "liveEnabled": False,
