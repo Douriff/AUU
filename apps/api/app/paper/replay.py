@@ -3,6 +3,8 @@
     python -m app.paper.replay [--evidence FILE ...] [--stop 0.05] [--tp 0.06]
         [--exit-delay-ms 300] [--entry-delay-ms N] [--max-hold 120]
         [--tick-ms 1000] [--fee-bps 125] [--notional SOL] [--per-trade] [--json]
+        [--where "top10_pct<=30" ...] [--keep-null] [--split "dev_pct>10" ...]
+        [--bucket "top10_pct:10,20,30,50" ...]
 
 Reads the JSONL written by :mod:`app.paper.evidence` (the active file plus its
 rotations by default) and re-simulates each trade on its stored tape of real
@@ -18,6 +20,16 @@ prints. Model, mirroring the paper engine:
   closed at the last print and flagged ``tape_end``;
 * ``--entry-delay-ms`` re-fills the entry the same way; by default the recorded
   entry fill is reused.
+
+Entry-factor filters (``entry_factors`` of evidence v2, see
+:mod:`app.paper.entry_factors`): ``--where KEY OP VALUE`` keeps only matching
+trades (all ``--where`` must hold; a null factor fails unless ``--keep-null``),
+``--split EXPR`` reports expectancy for matching / not matching / null, and
+``--bucket KEY:E1,E2,..`` reports it per value range. KEY is a factor name
+(``dev_pct``, ``top10_pct``, ``holder_count``, ``bundle_pct``, ``sniper_pct``,
+``mint_authority_revoked`` ...) or a dotted path such as ``tape.top10_pct`` /
+``rpc.curve_pct``. OP is one of ``> >= < <= == !=``; VALUE a number,
+``true`` / ``false`` or ``null``.
 
 Not modelled: sell-pressure / graduation / impact-split exits, competition for
 block space, failed transactions. Paper only; never sends anything.
@@ -226,6 +238,125 @@ def summarize(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+_OPS = (">=", "<=", "!=", "==", ">", "<")
+
+
+def parse_expr(text: str) -> tuple[str, str, Any]:
+    """``"top10_pct>=30"`` → ``("top10_pct", ">=", 30.0)``."""
+    raw = str(text).strip()
+    for op in _OPS:
+        if op in raw:
+            key, val = raw.split(op, 1)
+            key, val = key.strip(), val.strip()
+            if not key or not val:
+                break
+            low = val.lower()
+            value: Any
+            if low in {"true", "false"}:
+                value = low == "true"
+            elif low in {"null", "none"}:
+                value = None
+            else:
+                value = float(val)
+            return key, op, value
+    raise ValueError(f"bad factor expression: {text!r} (use KEY OP VALUE, OP in {' '.join(_OPS)})")
+
+
+def factor_value(factors: Optional[Mapping[str, Any]], key: str) -> Any:
+    cur: Any = factors or {}
+    for part in key.split("."):
+        if not isinstance(cur, Mapping):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def match_expr(factors: Optional[Mapping[str, Any]], expr: tuple[str, str, Any]) -> Optional[bool]:
+    """True / False, or None when the factor is null (unknown)."""
+    key, op, want = expr
+    got = factor_value(factors, key)
+    if want is None:
+        return (got is None) if op == "==" else (got is not None) if op == "!=" else None
+    if got is None:
+        return None
+    if isinstance(want, bool) or isinstance(got, bool):
+        if op not in {"==", "!="}:
+            return None
+        same = bool(got) == bool(want)
+        return same if op == "==" else not same
+    try:
+        g, w = float(got), float(want)
+    except (TypeError, ValueError):
+        return None
+    return {">": g > w, ">=": g >= w, "<": g < w, "<=": g <= w, "==": g == w, "!=": g != w}[op]
+
+
+def parse_bucket(text: str) -> tuple[str, list[float]]:
+    key, _, edges = str(text).partition(":")
+    vals = sorted(float(x) for x in edges.split(",") if x.strip())
+    if not key.strip() or not vals:
+        raise ValueError(f"bad bucket spec: {text!r} (use KEY:E1,E2,...)")
+    return key.strip(), vals
+
+
+def bucket_label(value: Any, edges: Sequence[float]) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return str(value).lower()
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "null"
+    if v < edges[0]:
+        return f"<{edges[0]:g}"
+    for lo, hi in zip(edges, edges[1:]):
+        if lo <= v < hi:
+            return f"[{lo:g},{hi:g})"
+    return f">={edges[-1]:g}"
+
+
+def _stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    ok = [r for r in rows if r.get("status") == "ok" and r.get("net_bps") is not None]
+    bps = [float(r["net_bps"]) for r in ok]
+    return {
+        "n": len(bps),
+        "win_rate": (sum(1 for x in bps if x > 0) / len(bps)) if bps else None,
+        "mean_net_bps": statistics.fmean(bps) if bps else None,
+        "median_net_bps": statistics.median(bps) if bps else None,
+        "se_bps": (statistics.stdev(bps) / len(bps) ** 0.5) if len(bps) > 1 else None,
+        "total_net_sol": sum(float(r.get("net_sol") or 0.0) for r in ok),
+    }
+
+
+def filter_results(
+    results: Sequence[Mapping[str, Any]], wheres: Sequence[tuple[str, str, Any]], *, keep_null: bool = False
+) -> list[Mapping[str, Any]]:
+    out = []
+    for r in results:
+        verdicts = [match_expr(r.get("factors"), w) for w in wheres]
+        if all(v is True or (v is None and keep_null) for v in verdicts):
+            out.append(r)
+    return out
+
+
+def split_report(results: Sequence[Mapping[str, Any]], expr: tuple[str, str, Any]) -> dict[str, Any]:
+    groups: dict[str, list[Mapping[str, Any]]] = {"match": [], "no_match": [], "null": []}
+    for r in results:
+        v = match_expr(r.get("factors"), expr)
+        groups["null" if v is None else "match" if v else "no_match"].append(r)
+    return {k: _stats(v) for k, v in groups.items()}
+
+
+def bucket_report(results: Sequence[Mapping[str, Any]], key: str, edges: Sequence[float]) -> dict[str, Any]:
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    order = [f"<{edges[0]:g}"] + [f"[{a:g},{b:g})" for a, b in zip(edges, edges[1:])] + [f">={edges[-1]:g}"]
+    for r in results:
+        groups.setdefault(bucket_label(factor_value(r.get("factors"), key), edges), []).append(r)
+    keys = [k for k in order if k in groups] + sorted(k for k in groups if k not in order)
+    return {k: _stats(groups[k]) for k in keys}
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     from app.paper.evidence import evidence_files
 
@@ -241,7 +372,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--notional", type=float, default=None, help="re-size entries (SOL)")
     ap.add_argument("--per-trade", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--where", action="append", default=[], help="keep trades whose entry factor matches, e.g. top10_pct<=30")
+    ap.add_argument("--keep-null", action="store_true", help="--where keeps trades whose factor is null")
+    ap.add_argument("--split", action="append", default=[], help="report match / no-match / null for EXPR")
+    ap.add_argument("--bucket", action="append", default=[], help="report per range, e.g. dev_pct:1,5,10")
     args = ap.parse_args(argv)
+    try:
+        wheres = [parse_expr(w) for w in args.where]
+        splits = [(w, parse_expr(w)) for w in args.split]
+        buckets = [(b, *parse_bucket(b)) for b in args.bucket]
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     paths = list(args.evidence) if args.evidence else evidence_files()
     if not paths:
         print("no evidence files found", file=sys.stderr)
@@ -259,9 +401,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             fee_bps=args.fee_bps,
             notional=args.notional,
         )
-        results.append(out or {"id": _rid(rec), "status": "no_tape"})
+        row = dict(out) if out else {"id": _rid(rec), "status": "no_tape"}
+        row["factors"] = rec.get("entry_factors")
+        results.append(row)
+    n_all = len(results)
+    if wheres:
+        results = filter_results(results, wheres, keep_null=args.keep_null)
     summary = summarize(results)
-    summary["config"] = {k: v for k, v in vars(args).items() if k not in {"evidence", "per_trade", "json"}}
+    summary["n_before_filter"] = n_all
+    summary["splits"] = {text: split_report(results, expr) for text, expr in splits}
+    summary["buckets"] = {text: bucket_report(results, key, edges) for text, key, edges in buckets}
+    summary["config"] = {
+        k: v for k, v in vars(args).items() if k not in {"evidence", "per_trade", "json", "split", "bucket"}
+    }
     summary["files"] = [str(p) for p in paths]
     if args.json:
         payload: dict[str, Any] = {"summary": summary}
@@ -272,6 +424,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     s = summary
     def fmt(x: Any, nd: int = 1) -> str:
         return "n/a" if x is None else f"{x:.{nd}f}"
+    if wheres:
+        print(f"filter  {' AND '.join(args.where)}{' (null kept)' if args.keep_null else ''}: {s['n_records']} of {n_all} records")
     print(f"records {s['n_records']}  replayed {s['n_replayed']}  skipped {s['n_skipped']}  tape_end {s['n_tape_end']}")
     print(f"config  {json.dumps(s['config'])}")
     print(
@@ -281,6 +435,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     for k, v in s["by_reason"].items():
         print(f"  {k:<12} n={v['n']:<4} mean {v['mean_net_bps']:.1f} bps  net {v['net_sol']:+.6f} SOL")
+    def line(label: str, st: Mapping[str, Any]) -> str:
+        win = f"{st['win_rate'] * 100:.0f}%" if st["win_rate"] is not None else "n/a"
+        return (
+            f"    {label:<14} n={st['n']:<4} win {win:>4}  mean {fmt(st['mean_net_bps'])} bps"
+            f"  (se {fmt(st['se_bps'])})  median {fmt(st['median_net_bps'])}  net {st['total_net_sol']:+.6f} SOL"
+        )
+    for text, groups in s["splits"].items():
+        print(f"split {text}")
+        for label, st in groups.items():
+            print(line(label, st))
+    for text, groups in s["buckets"].items():
+        print(f"bucket {text}")
+        for label, st in groups.items():
+            print(line(label, st))
     if args.per_trade:
         for r in results:
             if r.get("status") != "ok":

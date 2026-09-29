@@ -53,6 +53,7 @@ from app.providers.pumpfun_curve_math import (
     progress_bps,
 )
 from app.providers.pumpfun_decode import PUMP_PROGRAM_ID, extract_trades_from_logs
+from app.paper.holders import HolderLedgerBook
 
 log = logging.getLogger("auu.pumpfun_live_paper")
 
@@ -152,6 +153,8 @@ class _Curve:
     protocol_fee_bps: Optional[int] = None
     creator_fee_bps: Optional[int] = None
     token_total_supply: int = TOKEN_TOTAL_SUPPLY
+    # Slot of the pump ``Create`` tx (logs discovery); evidence only.
+    created_slot: Optional[int] = None
 
 
 def _default_verifier() -> Callable[[str], Any]:
@@ -194,6 +197,8 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self.feed_status = "idle"
         self.trades_seen = 0
         self.portal_sync_sec = 2.0
+        # Per-mint trade ledger for holder-structure evidence (never read by decisions).
+        self.holder_ledger = HolderLedgerBook()
         raw = watch_mints if watch_mints is not None else os.getenv("PUMPFUN_WATCH_MINTS", "")
         for part in (raw or "").split(","):
             item = part.strip()
@@ -278,7 +283,24 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "created_ts": c.registered_ts or None,
                 "created_basis": "create_event_received" if from_create else "first_seen",
                 "registered_ts": c.registered_ts or None,
+                "created_slot": c.created_slot,
+                "token_total_supply": c.token_total_supply,
             }
+
+    def note_create_slot(self, mint: str, slot: Any) -> None:
+        """Remember the ``Create`` tx slot for evidence (bundle / sniper windows)."""
+        try:
+            slot_i = int(slot)
+        except (TypeError, ValueError):
+            return
+        with self._lock:
+            symbol = self._by_mint.get((mint or "").strip())
+            if symbol and self._curves[symbol].created_slot is None:
+                self._curves[symbol].created_slot = slot_i
+
+    def holder_ledger_snapshot(self, mint: str, upto_ts: Optional[int] = None) -> Optional[dict]:
+        """Copy of the mint's trade ledger up to ``upto_ts`` (evidence only)."""
+        return self.holder_ledger.snapshot(mint, upto_ts)
 
     # ------------------------------------------------------------ registration
     def register_watch_mint(
@@ -384,6 +406,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self._by_mint.pop(mint, None)
         self._trades.pop(symbol, None)
         self._candles.pop(symbol, None)
+        self.holder_ledger.drop(mint)
 
     def verify_pending(self, *, limit: int = 8) -> dict[str, str]:
         """Check pending mints against the chain. Returns ``{mint: outcome}``.
@@ -565,6 +588,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "phase": "graduating" if c.complete else "curve",
                 "seq": next(self._seq),
                 "chain_ts": row.get("chain_ts"),
+                "slot": row.get("slot"),
                 "virtual_sol_reserves": str(c.virtual_sol),
                 "virtual_token_reserves": str(c.virtual_token),
                 "real_sol_reserves": str(c.real_sol),
@@ -583,6 +607,17 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             self.trades_seen += 1
             feed = dumped["feed"] or "other"
             self.trades_by_feed[feed] = self.trades_by_feed.get(feed, 0) + 1
+            try:
+                self.holder_ledger.apply(
+                    c.mint,
+                    trader=dumped["trader"],
+                    side=side,
+                    token_amount=token_amount,
+                    slot=row.get("slot"),
+                    ts=ts,
+                )
+            except Exception:
+                log.debug("holder ledger apply failed", exc_info=True)
             return dumped
 
     def mark_graduated(self, mint: str) -> bool:
@@ -655,16 +690,26 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "creator_fee_bps": int(creator_bps) if creator_bps is not None else None,
                 "signature": event.get("signature"),
                 "trader": event.get("user"),
+                "slot": event.get("slot"),
                 "feed": "logs",
             }
         )
 
-    def observe_logs(self, logs: list[str], *, signature: str | None = None, recv_ts: Optional[int] = None):
+    def observe_logs(
+        self,
+        logs: list[str],
+        *,
+        signature: str | None = None,
+        recv_ts: Optional[int] = None,
+        slot: Optional[int] = None,
+    ):
         """Apply every TradeEvent in one tx's logs; returns the last applied print."""
         last = None
         for event in extract_trades_from_logs([str(x) for x in logs or []]):
             if signature:
                 event["signature"] = signature
+            if slot is not None:
+                event["slot"] = slot
             row = self.observe_trade_event(event, recv_ts=recv_ts)
             if row is not None:
                 last = row
