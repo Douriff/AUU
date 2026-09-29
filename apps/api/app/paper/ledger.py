@@ -384,10 +384,23 @@ class PaperTradeJournal:
         new_closed: list[RoundTrip] = []
 
         fill_ms = _fill_market_source(fill)
+        # Pass 0 nets only same-market lots. Pass 1 lets a SELL close a held
+        # long from another pool (e.g. a legacy_synthetic long still held when
+        # the provider switched) so it never opens a short; the trip keeps the
+        # non-real label and stays out of stats. Buys never settle foreign
+        # (phantom) shorts, so a real position keeps its full quantity.
         i = 0
-        while remaining != 0 and i < len(opened):
+        cross = False
+        while remaining != 0:
+            if i >= len(opened):
+                if cross or remaining > 0:
+                    break
+                cross = True
+                i = 0
+                continue
             lot = opened[i]
-            if lot.qty * remaining > 0 or not _same_market(lot.market_source, fill_ms):
+            same = _same_market(lot.market_source, fill_ms)
+            if lot.qty * remaining > 0 or (same == cross):
                 # Real-market fills never net against synthetic / legacy lots.
                 i += 1
                 continue
@@ -856,7 +869,9 @@ def build_performance(
         mc_method=mc_method,
         equity_0=journal.equity_0,
     )
-    data["open_lots"] = sum(len(v) for v in journal.lots.values())
+    all_lots = [lot for v in journal.lots.values() for lot in v]
+    data["open_lots"] = sum(1 for lot in all_lots if lot.market_source in (None, "real"))
+    data["open_lots_excluded"] = len(all_lots) - data["open_lots"]
     data["fill_count"] = len(journal.fills)
     data["auto_paper_orders"] = engine.params.auto_paper_orders
     data["strategy_autopaper"] = engine.params.auto_paper_orders

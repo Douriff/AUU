@@ -32,8 +32,11 @@ from app.strategies.pump_paper_v1 import (
     PositionState,
     PumpPaperParams,
     TapeWindow,
+    _entry_ttl_ms,
+    _observed_fee_meta,
     curve_impact_bps,
     evaluate,
+    snapshot_from_trade,
 )
 
 MAX_SHADOW_SETS = 3
@@ -134,6 +137,9 @@ _config = _Config()
 _opens: dict[tuple[str, str], _Open] = {}
 _last_open_ms: dict[tuple[str, str], int] = {}
 _skip_key: dict[tuple[str, str], tuple] = {}
+# Real-market virtual orders waiting for the first real print after latency.
+# In memory only (a restart drops them, like the main engine's deferrals).
+_pending: dict[tuple[str, str], dict[str, Any]] = {}
 _closed: list[dict[str, Any]] = []
 _decisions: list[dict[str, Any]] = []
 _loaded = False
@@ -282,6 +288,7 @@ def reset_shadow_compare() -> None:
     with _LOCK:
         _config = _Config()
         _opens.clear()
+        _pending.clear()
         _last_open_ms.clear()
         _skip_key.clear()
         _closed.clear()
@@ -296,6 +303,7 @@ def reload_shadow_from_disk() -> None:
     with _LOCK:
         _config = _Config()
         _opens.clear()
+        _pending.clear()
         _last_open_ms.clear()
         _skip_key.clear()
         _closed.clear()
@@ -614,6 +622,7 @@ def apply_shadow_config(body: Mapping[str, Any], *, main: Optional[PumpPaperPara
         _config.sets = specs
         if changed:
             _opens.clear()
+            _pending.clear()
             _last_open_ms.clear()
             _skip_key.clear()
             _closed.clear()
@@ -643,26 +652,133 @@ def _reserves(snap: PumpfunPaperSnapshot) -> tuple[int, int, int, int, int]:
     )
 
 
-def quote_entry(snap: PumpfunPaperSnapshot, notional_sol: float) -> Optional[tuple[float, int, int]]:
+def _fees_for(snap: PumpfunPaperSnapshot, fees: Optional[tuple[int, int]]) -> tuple[int, int]:
+    if fees is not None:
+        return int(fees[0]), int(fees[1])
+    return DEFAULT_PROTOCOL_FEE_BPS, int(snap.creator_fee_bps or 0)
+
+
+def _market_source(snap: PumpfunPaperSnapshot) -> str:
+    """Label for a shadow row: synthetic snapshot, else the active provider kind."""
+    if snap.synthetic:
+        return "synthetic"
+    from app.providers import market_data_kind
+
+    return market_data_kind()
+
+
+def _defers(snap: PumpfunPaperSnapshot) -> bool:
+    """Real-market tape: virtual orders wait for the first real print after latency."""
+    if snap.synthetic:
+        return False
+    from app.providers import market_data_kind
+
+    return market_data_kind() == "real"
+
+
+def _real_fees(snap: PumpfunPaperSnapshot) -> Optional[tuple[int, int]]:
+    """Same fee resolution as main real-market paper fills; None off the real tape."""
+    if not _defers(snap):
+        return None
+    from app.paper.real_fill import curve_fee_bps
+
+    return curve_fee_bps(_observed_fee_meta(snap.symbol), snap)
+
+
+def quote_entry(
+    snap: PumpfunPaperSnapshot,
+    notional_sol: float,
+    fees: Optional[tuple[int, int]] = None,
+) -> Optional[tuple[float, int, int]]:
     """Curve buy quote: (entry price in price_sol units, tokens, sol lamports in).
 
     Fees match buy_tokens_out (protocol + creator). None when the curve cannot fill.
     """
-    vs, vt, _rs, rt, creator = _reserves(snap)
+    vs, vt, _rs, rt, _creator = _reserves(snap)
+    proto, creator = _fees_for(snap, fees)
     sol_lamports = int(abs(float(notional_sol)) * LAMPORTS_PER_SOL)
     if sol_lamports <= 0:
         return None
-    tokens = buy_tokens_out(vs, vt, rt, sol_lamports, DEFAULT_PROTOCOL_FEE_BPS, creator)
+    tokens = buy_tokens_out(vs, vt, rt, sol_lamports, proto, creator)
     if tokens <= 0:
         return None
     return sol_lamports / tokens, int(tokens), sol_lamports
 
 
-def quote_exit_sol(snap: PumpfunPaperSnapshot, tokens: int) -> float:
+def quote_exit_sol(
+    snap: PumpfunPaperSnapshot, tokens: int, fees: Optional[tuple[int, int]] = None
+) -> float:
     """Net SOL back to the seller after protocol + creator fee."""
-    vs, vt, _rs, _rt, creator = _reserves(snap)
-    net, _gross = sell_sol_out(vs, vt, int(tokens), DEFAULT_PROTOCOL_FEE_BPS, creator)
+    vs, vt, _rs, _rt, _creator = _reserves(snap)
+    proto, creator = _fees_for(snap, fees)
+    net, _gross = sell_sol_out(vs, vt, int(tokens), proto, creator)
     return net / LAMPORTS_PER_SOL
+
+
+def _latency_ms() -> int:
+    from app.paper.broker import get_paper_broker
+
+    return int(get_paper_broker().latency_ms)
+
+
+def _drain_pending(spec: ShadowSetSpec, symbol: str, now_ms: int) -> bool:
+    """Fill a deferred real-market virtual order on the first print after latency.
+
+    Same rule as the main engine: the order reaches the curve
+    ``broker.latency_ms`` after the decision and executes on the reserves of
+    the first real trade received at or after that moment. A quiet tape fills
+    nothing; entries expire after ``LIVE_PAPER_ENTRY_TTL_MS``, exits wait.
+    Returns True while an order is still pending (the set skips evaluation).
+    """
+    key = (spec.id, symbol)
+    with _LOCK:
+        pending = _pending.get(key)
+    if pending is None:
+        return False
+    from app.providers import get_provider
+
+    ready = int(pending["ts"]) + _latency_ms()
+    finder = getattr(get_provider(), "first_trade_after", None)
+    trade = finder(symbol, ready) if callable(finder) else None
+    snap = snapshot_from_trade(symbol, trade, pending["mint"]) if trade else None
+    if snap is None:
+        if pending["action"] == "enter" and now_ms - ready > _entry_ttl_ms():
+            with _LOCK:
+                _pending.pop(key, None)
+                _record_decision(
+                    {
+                        "ts": now_ms,
+                        "set_id": spec.id,
+                        "symbol": symbol,
+                        "mint": pending["mint"],
+                        "action": "skip",
+                        "reason": "no_real_print",
+                        "habit_tag": spec.habit_tag,
+                        "setup_seed_tags": list(spec.setup_seed_tags),
+                    },
+                    debounce=True,
+                )
+            return False
+        return True
+    with _LOCK:
+        _pending.pop(key, None)
+        pos = _opens.get(key)
+    fill_ts = int(trade.get("ts") or now_ms)
+    if pending["action"] == "enter":
+        _open_virtual(
+            spec, snap, fill_ts, pending["notional"], pending["impact_entry_bps"], pending["reason"]
+        )
+    elif pos is not None:
+        _close_virtual(spec, pos, snap, fill_ts, pending["reason"])
+    return False
+
+
+def _defer(spec: ShadowSetSpec, snapshot: PumpfunPaperSnapshot, action: str, now_ms: int, **extra: Any) -> None:
+    with _LOCK:
+        _pending.setdefault(
+            (spec.id, snapshot.symbol),
+            {"action": action, "ts": int(now_ms), "mint": snapshot.mint, **extra},
+        )
 
 
 def hypothetical_net(entry_sol: float, exit_sol: float) -> tuple[float, float]:
@@ -747,6 +863,8 @@ def _observe_one(
     sell_pressure_ms: int,
 ) -> None:
     shadow = shadow_params(params, spec)
+    if _defers(snapshot) and _drain_pending(spec, symbol, now_ms):
+        return
     with _LOCK:
         pos = _opens.get((spec.id, symbol))
         open_count = sum(1 for (sid, _sym) in _opens if sid == spec.id)
@@ -781,7 +899,18 @@ def _observe_one(
     )
     if pos is None:
         if signal.side == "long" and signal.reason == "pump_paper_v1_entry":
-            _open_virtual(spec, snapshot, now_ms, notional, impact_entry_bps, signal.reason)
+            if not _defers(snapshot):
+                _open_virtual(spec, snapshot, now_ms, notional, impact_entry_bps, signal.reason)
+            else:
+                _defer(
+                    spec,
+                    snapshot,
+                    "enter",
+                    now_ms,
+                    notional=float(notional),
+                    impact_entry_bps=float(impact_entry_bps),
+                    reason=signal.reason,
+                )
         else:
             with _LOCK:
                 _record_decision(
@@ -799,7 +928,10 @@ def _observe_one(
                 )
         return
     if signal.side == "flat" and signal.reason and signal.reason != "hold":
-        _close_virtual(spec, pos, snapshot, now_ms, signal.reason)
+        if not _defers(snapshot):
+            _close_virtual(spec, pos, snapshot, now_ms, signal.reason)
+        else:
+            _defer(spec, snapshot, "exit", now_ms, reason=signal.reason)
 
 
 def _open_virtual(
@@ -810,7 +942,7 @@ def _open_virtual(
     impact_entry_bps: float,
     reason: str,
 ) -> None:
-    quoted = quote_entry(snapshot, notional)
+    quoted = quote_entry(snapshot, notional, _real_fees(snapshot))
     with _LOCK:
         if (spec.id, snapshot.symbol) in _opens:
             return
@@ -863,7 +995,7 @@ def _close_virtual(
     now_ms: int,
     reason: str,
 ) -> None:
-    exit_sol = quote_exit_sol(snapshot, pos.tokens)
+    exit_sol = quote_exit_sol(snapshot, pos.tokens, _real_fees(snapshot))
     entry_sol = pos.sol_lamports / LAMPORTS_PER_SOL
     if exit_sol <= 0 and pos.tokens > 0:
         exit_sol = 0.0
@@ -885,7 +1017,7 @@ def _close_virtual(
         "habit_tag": spec.habit_tag,
         "setup_seed_tags": list(spec.setup_seed_tags),
         "entry_impact_net_bps": pos.entry_impact_net_bps,
-        "market_source": "synthetic" if snapshot.synthetic else "real",
+        "market_source": _market_source(snapshot),
     }
     with _LOCK:
         current = _opens.get((spec.id, pos.symbol))
@@ -929,6 +1061,11 @@ def shadow_open_for(symbol: str = "", mint: str = "") -> bool:
             if sym and pos.symbol == sym:
                 return True
             if mid and pos.mint == mid:
+                return True
+        for (_sid, psym), pend in _pending.items():
+            if sym and psym == sym:
+                return True
+            if mid and pend.get("mint") == mid:
                 return True
     return False
 

@@ -1,7 +1,12 @@
 """Curve quotes for real-market paper fills.
 
-Uses the same bonding-curve helpers as the rest of the paper stack
-(protocol fee ``DEFAULT_PROTOCOL_FEE_BPS``). No chain send, no keys.
+Uses the same bonding-curve helpers as the rest of the paper stack. No chain
+send, no keys.
+
+Fee convention (same as the ledger): ``price`` EXCLUDES fees and ``fee`` is
+reported separately, so ``price * qty + fee`` is the SOL spent on a buy and
+``price * qty - fee`` is the SOL received on a sell. The ledger subtracts
+``fee`` once; embedding it in ``price`` too would count it twice.
 """
 from __future__ import annotations
 
@@ -50,10 +55,10 @@ def quote_curve_fill(
         tokens = buy_tokens_out(vs, vt, rt, sol_lamports, proto, creator)
         if tokens <= 0 or sol_lamports <= 0:
             return None
-        px = sol_lamports / tokens
+        after_fee = sol_after_buy_fee(sol_lamports, proto, creator)
+        px = after_fee / tokens
         qty = tokens / LAMPORTS_PER_SOL
-        fee_lamports = sol_lamports - sol_after_buy_fee(sol_lamports, proto, creator)
-        fee = max(0, fee_lamports) / LAMPORTS_PER_SOL
+        fee = max(0, sol_lamports - after_fee) / LAMPORTS_PER_SOL
     elif direction == "sell":
         held = abs(float(flatten_qty or 0.0))
         raw = int(round(held * LAMPORTS_PER_SOL))
@@ -62,7 +67,7 @@ def quote_curve_fill(
         net, gross = sell_sol_out(vs, vt, raw, proto, creator)
         if gross <= 0 or net < 0:
             return None
-        px = net / raw
+        px = gross / raw
         qty = held
         fee = max(0, gross - net) / LAMPORTS_PER_SOL
     else:
@@ -83,19 +88,29 @@ def _int_or_none(val: Any) -> Optional[int]:
         return None
 
 
+# Conservative fallback when no fee was observed on a real TradeEvent (the
+# PumpPortal trade feed carries no fee fields). Current pump.fun bonding-curve
+# fees are ~95 bps protocol + ~30 bps creator; unknown must never understate.
+UNKNOWN_PROTOCOL_FEE_BPS = 95
+UNKNOWN_CREATOR_FEE_BPS = 30
+
+
 def curve_fee_bps(meta: Mapping[str, Any], pump: Any = None) -> tuple[int, int]:
     """(protocol, creator) fee bps for a real-market curve fill.
 
-    Order: fee bps observed on the latest real TradeEvent (``meta``), then
-    ``PAPER_CURVE_PROTOCOL_FEE_BPS`` / the code constant
-    ``DEFAULT_PROTOCOL_FEE_BPS`` and the snapshot creator fee.
+    Each component independently: the bps observed on the latest real
+    TradeEvent (``meta``) wins. When unobserved, use the conservative default
+    (95 protocol / 30 creator), raised (never lowered) by
+    ``PAPER_CURVE_PROTOCOL_FEE_BPS`` / ``PAPER_CURVE_CREATOR_FEE_BPS`` or a
+    larger snapshot creator fee.
     """
     proto = _int_or_none(meta.get("protocol_fee_bps"))
     if proto is None:
-        proto = _int_or_none(os.getenv("PAPER_CURVE_PROTOCOL_FEE_BPS"))
-    if proto is None:
-        proto = DEFAULT_PROTOCOL_FEE_BPS
+        env = _int_or_none(os.getenv("PAPER_CURVE_PROTOCOL_FEE_BPS"))
+        proto = max(UNKNOWN_PROTOCOL_FEE_BPS, env or 0)
     creator = _int_or_none(meta.get("creator_fee_bps"))
     if creator is None:
-        creator = _int_or_none(getattr(pump, "creator_fee_bps", None)) or DEFAULT_CREATOR_FEE_BPS
+        env = _int_or_none(os.getenv("PAPER_CURVE_CREATOR_FEE_BPS"))
+        snap_bps = _int_or_none(getattr(pump, "creator_fee_bps", None))
+        creator = max(UNKNOWN_CREATOR_FEE_BPS, env or 0, snap_bps or 0)
     return max(0, proto), max(0, creator)

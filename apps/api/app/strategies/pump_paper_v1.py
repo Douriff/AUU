@@ -63,6 +63,40 @@ def _observed_fee_meta(symbol: str) -> dict[str, Any]:
         out["creator_fee_bps"] = int(creator)
     return out
 
+def snapshot_from_trade(
+    symbol: str, trade: dict[str, Any], mint: str = ""
+) -> Optional[PumpfunPaperSnapshot]:
+    """Curve snapshot left by one real print (its post-trade reserves)."""
+    vs_raw = trade.get("virtual_sol_reserves")
+    vt_raw = trade.get("virtual_token_reserves")
+    if vs_raw is None or vt_raw is None:
+        return None
+    vs, vt = int(vs_raw), int(vt_raw)
+    if vs <= 0 or vt <= 0:
+        return None
+    rs = int(trade.get("real_sol_reserves") or 0)
+    rt = int(trade.get("real_token_reserves") or 0)
+    px = price_sol(vs, vt)
+    if px <= 0:
+        return None
+    return PumpfunPaperSnapshot(
+        mint=str(trade.get("mint") or mint or symbol),
+        symbol=symbol,
+        phase="curve",
+        progress_bps=progress_bps(rt) if rt else 0,
+        complete=rt <= 0,
+        migrated=False,
+        virtual_sol_reserves=str(vs),
+        virtual_token_reserves=str(vt),
+        real_sol_reserves=str(rs),
+        real_token_reserves=str(rt),
+        token_total_supply=str(TOKEN_TOTAL_SUPPLY),
+        price_sol=px,
+        updated_ts=int(trade.get("ts") or 0),
+        synthetic=False,
+    )
+
+
 STRATEGY_ID = "pump-paper-v1"
 FORBIDDEN_TAGS = {"HONEYPOT", "HONEYPOT_FLAG", "TAX_HIGH", "SPREAD_TOO_WIDE"}
 EXIT_IMPACT_BPS = 250.0
@@ -766,34 +800,7 @@ class PumpPaperEngine:
     def _snapshot_from_trade(
         self, symbol: str, trade: dict[str, Any], pending: dict[str, Any]
     ) -> Optional[PumpfunPaperSnapshot]:
-        vs_raw = trade.get("virtual_sol_reserves")
-        vt_raw = trade.get("virtual_token_reserves")
-        if vs_raw is None or vt_raw is None:
-            return None
-        vs, vt = int(vs_raw), int(vt_raw)
-        if vs <= 0 or vt <= 0:
-            return None
-        rs = int(trade.get("real_sol_reserves") or 0)
-        rt = int(trade.get("real_token_reserves") or 0)
-        px = price_sol(vs, vt)
-        if px <= 0:
-            return None
-        return PumpfunPaperSnapshot(
-            mint=str(trade.get("mint") or pending.get("mint") or symbol),
-            symbol=symbol,
-            phase="curve",
-            progress_bps=progress_bps(rt) if rt else 0,
-            complete=rt <= 0,
-            migrated=False,
-            virtual_sol_reserves=str(vs),
-            virtual_token_reserves=str(vt),
-            real_sol_reserves=str(rs),
-            real_token_reserves=str(rt),
-            token_total_supply=str(TOKEN_TOTAL_SUPPLY),
-            price_sol=px,
-            updated_ts=int(trade.get("ts") or 0),
-            synthetic=False,
-        )
+        return snapshot_from_trade(symbol, trade, str(pending.get("mint") or ""))
 
     async def _drain_real_fill(self, provider: Any, symbol: str, now_ms: int) -> None:
         """Fill a deferred real-market decision on the first print after latency.

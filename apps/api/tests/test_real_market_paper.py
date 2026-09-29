@@ -75,6 +75,7 @@ from app.providers.pumpfun_decode import (
     PUMP_PROGRAM_ID,
     decode_trade_event,
     extract_trade_from_logs,
+    extract_trades_from_logs,
     trade_event_discriminator,
 )
 from app.providers.pumpfun_live_paper import PumpfunLivePaperProvider, sol_to_lamports, tokens_to_raw
@@ -554,8 +555,11 @@ class CurveFillTests(NoNetworkCase):
         lamports = 20_000_000
         tokens = buy_tokens_out(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, INITIAL_REAL_TOKEN_RESERVES, lamports, 95, 30)
         self.assertAlmostEqual(fills[0].qty, tokens / LAMPORTS_PER_SOL)
-        self.assertAlmostEqual(fills[0].price * fills[0].qty, 0.02, places=12)
-        self.assertAlmostEqual(fills[0].fee, (lamports - sol_after_buy_fee(lamports, 95, 30)) / LAMPORTS_PER_SOL)
+        after_fee = sol_after_buy_fee(lamports, 95, 30)
+        # price excludes the fee; price*qty + fee is exactly the SOL spent.
+        self.assertAlmostEqual(fills[0].price, after_fee / tokens, delta=after_fee / tokens * 1e-12)
+        self.assertAlmostEqual(fills[0].fee, (lamports - after_fee) / LAMPORTS_PER_SOL)
+        self.assertAlmostEqual(fills[0].price * fills[0].qty + fills[0].fee, 0.02, places=12)
         self.assertGreater(fills[0].price, price_sol(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES))
         self.assertEqual(fills[0].market_source, "real")
 
@@ -566,9 +570,11 @@ class CurveFillTests(NoNetworkCase):
         fills = PaperBroker().submit(ctx, OrderIntent(side="sell", order_type="market", qty_or_notional=held * ctx.tick.mid * 1.2, max_slippage_bps=10_000, client_tag="paper:pump-paper-v1:flat"))
         self.assertEqual(len(fills), 1)
         self.assertAlmostEqual(fills[0].qty, -held)
-        net, gross = sell_sol_out(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, int(round(held * LAMPORTS_PER_SOL)), 100, 0)
-        self.assertAlmostEqual(fills[0].price * held, net / LAMPORTS_PER_SOL, places=9)
+        # No fee observed on a TradeEvent: conservative 95 + 30 bps.
+        net, gross = sell_sol_out(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, int(round(held * LAMPORTS_PER_SOL)), 95, 30)
+        self.assertAlmostEqual(fills[0].price * held, gross / LAMPORTS_PER_SOL, places=9)
         self.assertAlmostEqual(fills[0].fee, (gross - net) / LAMPORTS_PER_SOL)
+        self.assertAlmostEqual(fills[0].price * held - fills[0].fee, net / LAMPORTS_PER_SOL, places=9)
         self.assertEqual(fills[0].ts, 5_000)
         journal = get_paper_journal()
         journal.record_fill("REAL/SOL", Fill(ts=1, price=fills[0].price, qty=held, fee=0.0, market_source="real", tag="paper:pump-paper-v1"))
@@ -583,11 +589,42 @@ class CurveFillTests(NoNetworkCase):
         self.assertAlmostEqual(fills[0].qty, -held)
 
     def test_fee_resolution(self):
+        # Observed on a real TradeEvent: used as-is (including a real 0 creator fee).
+        self.assertEqual(curve_fee_bps({"protocol_fee_bps": 93, "creator_fee_bps": 0}), (93, 0))
         self.assertEqual(curve_fee_bps({"protocol_fee_bps": 95, "creator_fee_bps": 30}), (95, 30))
-        self.assertEqual(curve_fee_bps({}, PumpCtx(creator_fee_bps=5)), (100, 5))
-        with mock.patch.dict(os.environ, {"PAPER_CURVE_PROTOCOL_FEE_BPS": "95"}):
-            self.assertEqual(curve_fee_bps({}), (95, 0))
+        # PumpPortal-only path (no fee fields): conservative 95 + 30 = 125 bps.
+        self.assertEqual(curve_fee_bps({}), (95, 30))
+        self.assertEqual(sum(curve_fee_bps({})), 125)
+        # Partially observed: the unknown half still gets its default.
+        self.assertEqual(curve_fee_bps({"protocol_fee_bps": 93}), (93, 30))
+        # A smaller snapshot creator fee or env value never lowers the default...
+        self.assertEqual(curve_fee_bps({}, PumpCtx(creator_fee_bps=5)), (95, 30))
+        with mock.patch.dict(os.environ, {"PAPER_CURVE_PROTOCOL_FEE_BPS": "50", "PAPER_CURVE_CREATOR_FEE_BPS": "0"}):
+            self.assertEqual(curve_fee_bps({}), (95, 30))
+        # ...a larger one raises it.
+        self.assertEqual(curve_fee_bps({}, PumpCtx(creator_fee_bps=50)), (95, 50))
+        with mock.patch.dict(os.environ, {"PAPER_CURVE_PROTOCOL_FEE_BPS": "120", "PAPER_CURVE_CREATOR_FEE_BPS": "40"}):
+            self.assertEqual(curve_fee_bps({}), (120, 40))
         self.assertIsNone(quote_curve_fill(side="sell", notional_sol=1.0, virtual_sol_reserves=1, virtual_token_reserves=1, real_token_reserves=1))
+
+    def test_round_trip_pnl_counts_fees_once(self):
+        """Ledger pnl == SOL received - SOL spent (fee not double-counted)."""
+        journal = get_paper_journal()
+        buy_meta = {"curve_fill": True, "market_source": "real"}
+        buy = PaperBroker().submit(_curve_ctx(buy_meta), OrderIntent(side="buy", order_type="market", qty_or_notional=0.05, max_slippage_bps=10_000, client_tag="paper:pump-paper-v1"))[0]
+        journal.record_fill("REAL/SOL", buy)
+        lamports = 50_000_000
+        tokens = buy_tokens_out(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, INITIAL_REAL_TOKEN_RESERVES, lamports, 95, 30)
+        after = sol_after_buy_fee(lamports, 95, 30)
+        vs2, vt2 = INITIAL_VIRTUAL_SOL_RESERVES + after, INITIAL_VIRTUAL_TOKEN_RESERVES - tokens
+        sell_meta = {"curve_fill": True, "market_source": "real", "flatten_qty": buy.qty}
+        sell = PaperBroker().submit(_curve_ctx(sell_meta, held=buy.qty, vs=vs2, vt=vt2), OrderIntent(side="sell", order_type="market", qty_or_notional=1.0, max_slippage_bps=10_000, client_tag="paper:pump-paper-v1:flat"))[0]
+        journal.record_fill("REAL/SOL", sell)
+        net, _gross = sell_sol_out(vs2, vt2, tokens, 95, 30)
+        trip = journal.closed[-1]
+        self.assertAlmostEqual(trip.pnl, (net - lamports) / LAMPORTS_PER_SOL, places=12)
+        self.assertLess(trip.pnl, 0)  # buy-then-sell into your own impact loses ~2x fees
+        self.assertAlmostEqual(trip.pnl / 0.05 * 1e4, -250, delta=5)
 
     def test_latency_env(self):
         reset_paper_broker()
@@ -616,6 +653,26 @@ class LedgerResidualTests(NoNetworkCase):
         journal.record_fill("A/SOL", Fill(ts=3, price=1.0, qty=50.0, fee=0.0, market_source="real", tag="paper:pump-paper-v1"))
         self.assertEqual(len(journal.closed), 1)
         self.assertEqual(journal.lots["A/SOL"][0].qty, 50.0)
+
+    def test_real_sell_closes_held_legacy_long_without_short(self):
+        journal = get_paper_journal()
+        journal.record_fill("L/SOL", Fill(ts=1, price=1.0, qty=10.0, fee=0.0, market_source="legacy_synthetic", tag="manual"))
+        journal.record_fill("L/SOL", Fill(ts=2, price=1.2, qty=-10.0, fee=0.0, market_source="real", tag="manual"))
+        self.assertIsNone(journal.lots.get("L/SOL"))
+        self.assertEqual(len(journal.closed), 1)
+        self.assertEqual(journal.closed[0].market_source, "legacy_synthetic")
+        self.assertTrue(excluded_from_go(journal.closed[0]))
+
+    def test_real_buy_never_settles_a_legacy_short(self):
+        journal = get_paper_journal()
+        journal.record_fill("S/SOL", Fill(ts=1, price=1.0, qty=-3.0, fee=0.0, market_source="legacy_synthetic", tag="manual"))
+        journal.record_fill("S/SOL", Fill(ts=2, price=1.0, qty=10.0, fee=0.0, market_source="real", tag="paper:pump-paper-v1"))
+        self.assertEqual(journal.closed, [])
+        real = [l for l in journal.lots["S/SOL"] if l.market_source == "real"]
+        self.assertEqual(real[0].qty, 10.0)
+        perf = build_performance()
+        self.assertEqual(perf["open_lots"], 1)
+        self.assertEqual(perf["open_lots_excluded"], 1)
 
     def test_strategy_sell_without_holding_opens_nothing(self):
         journal = get_paper_journal()
@@ -805,9 +862,10 @@ class DeferredFillTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("DLAY/SOL", engine._deferred)
         pos = engine.positions["DLAY/SOL"]
         lamports = int(0.005 * LAMPORTS_PER_SOL)
-        tokens = buy_tokens_out(late_vs, late_vt, INITIAL_REAL_TOKEN_RESERVES, lamports, 100, 0)
+        tokens = buy_tokens_out(late_vs, late_vt, INITIAL_REAL_TOKEN_RESERVES, lamports, 95, 30)
         self.assertAlmostEqual(pos.qty, tokens / LAMPORTS_PER_SOL, places=6)
-        self.assertAlmostEqual(pos.entry_price, lamports / tokens, delta=lamports / tokens * 1e-6)
+        after = sol_after_buy_fee(lamports, 95, 30)
+        self.assertAlmostEqual(pos.entry_price, after / tokens, delta=after / tokens * 1e-6)
         lot = get_paper_journal().lots["DLAY/SOL"][0]
         self.assertEqual(lot.market_source, "real")
         self.assertEqual(lot.ts, now + 400)
@@ -825,6 +883,181 @@ class DeferredFillTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("DLAY/SOL", engine._deferred)
         self.assertEqual(engine.positions, {})
         self.assertIsNone(get_paper_journal().lots.get("DLAY/SOL"))
+
+
+def _logs_line(blob: bytes) -> str:
+    return "Program data: " + base64.b64encode(blob).decode()
+
+
+PACK_MINT = decode_trade_event(_pack_trade())["mint"]
+
+
+class FeedDedupeTests(NoNetworkCase):
+    def test_same_trade_from_portal_and_logs_counts_once(self):
+        p = _live()
+        p.register_watch_mint(PACK_MINT, base="DUP", source="logs")
+        base = {"mint": PACK_MINT, "side": "buy", "virtual_sol_reserves": 30_050_000_000, "virtual_token_reserves": 1_072_000_000_000_000, "signature": "SIG1"}
+        self.assertIsNotNone(p.apply_observed_trade({**base, "ts": 1, "feed": "logs"}))
+        self.assertIsNone(p.apply_observed_trade({**base, "ts": 2, "feed": "pumpportal"}))
+        self.assertEqual(len(p.get_recent_trades("DUP/SOL")), 1)
+        self.assertEqual(p.feed_health()["duplicatesDropped"], 1)
+        self.assertEqual(p.feed_health()["tradesByFeed"], {"logs": 1})
+        # Two same-side trades in one tx from one feed are two prints; the
+        # other feed's copies of both are dropped.
+        self.assertIsNotNone(p.apply_observed_trade({**base, "ts": 3, "feed": "logs", "signature": "SIG2"}))
+        self.assertIsNotNone(p.apply_observed_trade({**base, "ts": 4, "feed": "logs", "signature": "SIG2"}))
+        self.assertIsNone(p.apply_observed_trade({**base, "ts": 5, "feed": "pumpportal", "signature": "SIG2"}))
+        self.assertIsNone(p.apply_observed_trade({**base, "ts": 6, "feed": "pumpportal", "signature": "SIG2"}))
+        self.assertEqual(len(p.get_recent_trades("DUP/SOL")), 3)
+        # Unsigned rows are never deduped.
+        unsigned = {k: v for k, v in base.items() if k != "signature"}
+        self.assertIsNotNone(p.apply_observed_trade({**unsigned, "ts": 7, "feed": "pumpportal"}))
+        self.assertIsNotNone(p.apply_observed_trade({**unsigned, "ts": 8, "feed": "pumpportal"}))
+
+    def test_every_trade_event_in_a_tx_is_applied(self):
+        p = _live()
+        p.register_watch_mint(PACK_MINT, base="MULT", source="logs")
+        first = _pack_trade(virtual_sol=30_100_000_000, virtual_token=1_070_000_000_000_000, real_token=790_000_000_000_000)
+        second = _pack_trade(is_buy=False, virtual_sol=30_060_000_000, virtual_token=1_071_000_000_000_000, real_token=791_000_000_000_000)
+        logs = ["Program log: Instruction: Buy", _logs_line(first), "Program log: Instruction: Sell", _logs_line(second)]
+        self.assertEqual(len(extract_trades_from_logs(logs)), 2)
+        row = p.observe_logs(logs, signature="MULTISIG")
+        self.assertEqual(row["side"], "sell")
+        self.assertEqual([r["side"] for r in p.get_recent_trades("MULT/SOL")], ["sell", "buy"])
+        self.assertAlmostEqual(p.get_pumpfun_snapshot("MULT/SOL").price_sol, price_sol(30_060_000_000, 1_071_000_000_000_000))
+
+
+class DiscoveryLogsOrderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_create_registered_before_its_trade_and_failed_tx_ignored(self):
+        p = _live()
+        trade = _logs_line(_pack_trade(virtual_sol=30_500_000_000, virtual_token=1_060_000_000_000_000, real_token=780_000_000_000_000))
+
+        def fake_create(logs):
+            if any("FAKE_CREATE" in x for x in logs):
+                return {"mint": PACK_MINT, "symbol": "NEWT", "name": "New"}
+            return None
+
+        def note(sig, logs, err=None):
+            return json.dumps({"params": {"result": {"context": {"slot": 1}, "value": {"signature": sig, "logs": logs, "err": err}}}})
+
+        ok_logs = ["Program log: FAKE_CREATE", trade]
+        inbox = [note("FAILED", ok_logs, err={"InstructionError": [0, "x"]}), note("CREATESIG", ok_logs)]
+        ws = _FakeWS(list(inbox))
+        runtime = DiscoveryRuntime()
+        runtime._running = True
+
+        async def stopper():
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                if not ws.inbox:
+                    break
+            await asyncio.sleep(0.02)
+            runtime._running = False
+
+        with mock.patch("app.discovery.get_provider", return_value=p), mock.patch(
+            "app.discovery.extract_create_from_logs", side_effect=fake_create
+        ), mock.patch("websockets.connect", return_value=ws), mock.patch.dict(os.environ, {"SOLANA_RPC_URL": "https://rpc.invalid"}):
+            await asyncio.gather(runtime._run_logs(), stopper())
+        trades = p.get_recent_trades("NEWT/SOL")
+        self.assertEqual([t["signature"] for t in trades], ["CREATESIG"])
+        self.assertAlmostEqual(p.get_pumpfun_snapshot("NEWT/SOL").price_sol, price_sol(30_500_000_000, 1_060_000_000_000_000))
+
+
+class ShadowDeferredTests(NoNetworkCase):
+    def setUp(self):
+        super().setUp()
+        reset_shadow_compare()
+        reset_paper_ledger(wipe_store=True)
+        reset_paper_broker()
+        reset_engine()
+        self.p = _live()
+        self.mint = "ShadowDefer11111111111111111111111111111"
+        self.p.register_watch_mint(self.mint, base="SDEF", reserves=INIT, source="logs")
+        for target in ("app.providers.get_provider", "app.strategies.pump_paper_v1.get_provider"):
+            patch = mock.patch(target, return_value=self.p)
+            patch.start()
+            self.addCleanup(patch.stop)
+        kind = mock.patch("app.providers.market_data_kind", return_value="real")
+        kind.start()
+        self.addCleanup(kind.stop)
+
+    def tearDown(self):
+        reset_shadow_compare()
+        reset_paper_ledger(wipe_store=True)
+        reset_paper_broker()
+        reset_engine()
+        super().tearDown()
+
+    def _snap(self, vs, vt, rs="5000000000"):
+        return PumpfunPaperSnapshot(
+            mint=self.mint,
+            symbol="SDEF/SOL",
+            phase="curve",
+            progress_bps=4200,
+            virtual_sol_reserves=str(vs),
+            virtual_token_reserves=str(vt),
+            real_sol_reserves=rs,
+            real_token_reserves=str(INITIAL_REAL_TOKEN_RESERVES),
+            token_total_supply="1000000000000000",
+            price_sol=price_sol(vs, vt),
+            updated_ts=1,
+            synthetic=False,
+        )
+
+    def _observe(self, snap, now):
+        tape = TapeWindow(buy_notional_1m=4.0, sell_notional_1m=1.0, trade_count_1m=12)
+        observe_candidate(symbol=snap.symbol, snapshot=snap, tape=tape, now_ms=now, notional_sol=0.12, impact_entry_bps=20.0, main_params=PumpPaperParams())
+
+    def _trade(self, ts, vs, vt, side="buy"):
+        self.p.apply_observed_trade({"mint": self.mint, "side": side, "ts": ts, "virtual_sol_reserves": vs, "virtual_token_reserves": vt, "sol_amount": 0.1, "token_amount": 1_000})
+
+    def test_shadow_fills_on_first_real_print_after_latency(self):
+        apply_shadow_config({"enabled": True, "sets": [{"id": "loose", "min_trade_count_1m": 1, "min_buy_sell_ratio_1m": 0.5}]})
+        vs0, vt0 = INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES
+        now = 1_700_000_000_000
+        self._observe(self._snap(vs0, vt0), now)
+        self.assertEqual(dict(_opens), {}, "entry waits for a real print")
+        self._trade(now + 100, vs0 + 1_000_000, vt0 - 30_000_000)  # before decision + 300 ms
+        self._observe(self._snap(vs0, vt0), now + 200)
+        self.assertEqual(dict(_opens), {})
+        fill_vs, fill_vt = vs0 + 2_000_000_000, vt0 - 66_000_000_000_000
+        self._trade(now + 350, fill_vs, fill_vt)
+        self._observe(self._snap(fill_vs, fill_vt), now + 400)
+        pos = _opens[("loose", "SDEF/SOL")]
+        self.assertEqual(pos.entry_ts, now + 350)
+        expected = buy_tokens_out(fill_vs, fill_vt, fill_vt - (INITIAL_VIRTUAL_TOKEN_RESERVES - INITIAL_REAL_TOKEN_RESERVES), 120_000_000, 95, 30)
+        self.assertEqual(pos.tokens, expected)
+        # Take-profit decision: the exit also waits for the next real print.
+        rich_vs = int(fill_vs * 1.3)
+        self._observe(self._snap(rich_vs, fill_vt), now + 5_000)
+        self.assertIn(("loose", "SDEF/SOL"), _opens)
+        self.assertEqual(shadow_closed("loose"), [])
+        exit_vs, exit_vt = int(fill_vs * 1.2), fill_vt
+        self._trade(now + 5_400, exit_vs, exit_vt, side="sell")
+        self._observe(self._snap(exit_vs, exit_vt), now + 5_500)
+        rows = shadow_closed("loose")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["exit_ts"], now + 5_400)
+        self.assertEqual(rows[0]["market_source"], "real")
+        net, _g = sell_sol_out(exit_vs, exit_vt, expected, 95, 30)
+        self.assertAlmostEqual(rows[0]["pnl"], (net - 120_000_000) / LAMPORTS_PER_SOL, places=12)
+
+    def test_pending_entry_expires_and_protects_curve(self):
+        from app.paper.shadow_compare import shadow_open_for
+
+        apply_shadow_config({"enabled": True, "sets": [{"id": "loose", "min_trade_count_1m": 1, "min_buy_sell_ratio_1m": 0.5}]})
+        now = 1_700_000_000_000
+        snap = self._snap(INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES)
+        with mock.patch.dict(os.environ, {"LIVE_PAPER_ENTRY_TTL_MS": "2000"}):
+            self._observe(snap, now)
+            self.assertTrue(shadow_open_for("SDEF/SOL", self.mint))
+            self._observe(snap, now + 1_000)
+            self.assertTrue(shadow_open_for("SDEF/SOL"))
+            self._observe(snap, now + 3_000)  # TTL passed with no print: dropped, then re-decided
+        from app.paper.shadow_compare import shadow_decisions
+
+        self.assertIn("no_real_print", [d["reason"] for d in shadow_decisions()])
+        self.assertEqual(dict(_opens), {})
 
 
 class SourceGuardTests(unittest.TestCase):

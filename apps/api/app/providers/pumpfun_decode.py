@@ -196,10 +196,15 @@ def decode_trade_event(data: bytes) -> dict[str, Any] | None:
     }
 
 
-def extract_trade_from_logs(logs: list[str]) -> dict[str, Any] | None:
-    """Read-only parse of Program data logs whose discriminator is TradeEvent."""
+def extract_trades_from_logs(logs: list[str]) -> list[dict[str, Any]]:
+    """Every TradeEvent in a tx's Program data logs, in log order.
+
+    One tx can carry several pump trades (bundles, routers); each moves the
+    curve, and the last one per mint holds the post-tx reserves.
+    """
     import base64
 
+    out: list[dict[str, Any]] = []
     for line in logs:
         if "Program data:" not in (line or ""):
             continue
@@ -210,8 +215,14 @@ def extract_trade_from_logs(logs: list[str]) -> dict[str, Any] | None:
             continue
         parsed = decode_trade_event(raw)
         if parsed and parsed.get("mint"):
-            return parsed
-    return None
+            out.append(parsed)
+    return out
+
+
+def extract_trade_from_logs(logs: list[str]) -> dict[str, Any] | None:
+    """Read-only parse of Program data logs whose discriminator is TradeEvent (first one)."""
+    rows = extract_trades_from_logs(logs)
+    return rows[0] if rows else None
 
 
 def extract_create_from_logs(logs: list[str]) -> dict[str, Any] | None:

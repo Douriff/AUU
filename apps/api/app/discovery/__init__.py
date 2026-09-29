@@ -525,15 +525,18 @@ class DiscoveryRuntime:
                 logs = value.get("logs") or []
                 if not isinstance(logs, list):
                     continue
-                if not value.get("err"):
-                    self._forward_trade_logs(logs, value.get("signature"))
-                parsed_ev = extract_create_from_logs([str(x) for x in logs])
-                if not parsed_ev:
+                if value.get("err"):
+                    # A failed tx created nothing and traded nothing.
                     continue
-                ctx = result.get("context") or {}
-                parsed_ev["slot"] = ctx.get("slot")
-                parsed_ev["ts"] = int(time.time() * 1000)
-                await self.ingest(parsed_ev, "logs")
+                parsed_ev = extract_create_from_logs([str(x) for x in logs])
+                if parsed_ev:
+                    ctx = result.get("context") or {}
+                    parsed_ev["slot"] = ctx.get("slot")
+                    parsed_ev["ts"] = int(time.time() * 1000)
+                    await self.ingest(parsed_ev, "logs")
+                # After ingest, so the creator's first buy in the same tx
+                # lands on the freshly registered curve instead of being dropped.
+                self._forward_trade_logs(logs, value.get("signature"))
 
 
 def get_discovery() -> DiscoveryRuntime:

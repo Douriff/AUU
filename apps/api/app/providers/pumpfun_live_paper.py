@@ -26,6 +26,7 @@ import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Optional
 from urllib.parse import urlparse, urlunparse
@@ -51,7 +52,7 @@ from app.providers.pumpfun_curve_math import (
     price_sol_str,
     progress_bps,
 )
-from app.providers.pumpfun_decode import PUMP_PROGRAM_ID, extract_trade_from_logs
+from app.providers.pumpfun_decode import PUMP_PROGRAM_ID, extract_trades_from_logs
 
 log = logging.getLogger("auu.pumpfun_live_paper")
 
@@ -67,6 +68,7 @@ INTERVAL_MS = {
 # raydium, bonk, ...) is not a live bonding-curve print.
 PUMP_CURVE_POOLS = {"pump", "pumpfun", "pump.fun", ""}
 TRADE_CAP = 600
+_SIG_SEEN_CAP = 50_000
 # Virtual reserves minus real reserves are constant for the standard curve.
 _VT_OFFSET = INITIAL_VIRTUAL_TOKEN_RESERVES - INITIAL_REAL_TOKEN_RESERVES
 _VS_OFFSET = INITIAL_VIRTUAL_SOL_RESERVES
@@ -173,6 +175,9 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self._candles: dict[str, dict[str, list[Candle]]] = {}
         self._rejected: dict[str, str] = {}
         self._seq = itertools.count(1)
+        self._sig_seen: "OrderedDict[tuple[str, str, str], dict[str, int]]" = OrderedDict()
+        self.duplicates_dropped = 0
+        self.trades_by_feed: dict[str, int] = {}
         self._verifier = verifier
         self._clock = clock or (lambda: int(time.time() * 1000))
         self._feed_running = False
@@ -490,6 +495,9 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             symbol = self._by_mint.get(mint)
             if symbol is None:
                 return None
+            sig = str(row.get("signature") or "") or None
+            if self._duplicate_locked(sig, mint, side, str(row.get("feed") or "")):
+                return None
             c = self._curves[symbol]
             c.virtual_sol = vs_i
             c.virtual_token = vt_i
@@ -510,7 +518,6 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             sol_amount = float(row.get("sol_amount") or 0.0)
             token_amount = int(row.get("token_amount") or 0)
             qty = token_amount / LAMPORTS_PER_SOL if token_amount else 0.0
-            sig = str(row.get("signature") or "") or None
             dumped = {
                 "mint": c.mint,
                 "symbol": c.symbol,
@@ -538,6 +545,8 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             del buf[TRADE_CAP:]
             self._push_candle_locked(symbol, ts, px, abs(qty))
             self.trades_seen += 1
+            feed = dumped["feed"] or "other"
+            self.trades_by_feed[feed] = self.trades_by_feed.get(feed, 0) + 1
             return dumped
 
     def mark_graduated(self, mint: str) -> bool:
@@ -613,12 +622,40 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         )
 
     def observe_logs(self, logs: list[str], *, signature: str | None = None, recv_ts: Optional[int] = None):
-        event = extract_trade_from_logs([str(x) for x in logs or []])
-        if not event:
-            return None
-        if signature:
-            event["signature"] = signature
-        return self.observe_trade_event(event, recv_ts=recv_ts)
+        """Apply every TradeEvent in one tx's logs; returns the last applied print."""
+        last = None
+        for event in extract_trades_from_logs([str(x) for x in logs or []]):
+            if signature:
+                event["signature"] = signature
+            row = self.observe_trade_event(event, recv_ts=recv_ts)
+            if row is not None:
+                last = row
+        return last
+
+    def _duplicate_locked(self, sig: Optional[str], mint: str, side: str, feed: str) -> bool:
+        """True when this print already arrived from another feed.
+
+        The same on-chain trade can arrive via PumpPortal and via
+        logsSubscribe. Per ``(signature, mint, side)`` count prints per feed;
+        a print is new only while its feed's count exceeds every other
+        feed's count (so a tx with two identical-side trades still yields two).
+        """
+        if not sig:
+            return False
+        key = (sig, mint, side)
+        counts = self._sig_seen.get(key)
+        if counts is None:
+            counts = {}
+            self._sig_seen[key] = counts
+            if len(self._sig_seen) > _SIG_SEEN_CAP:
+                self._sig_seen.popitem(last=False)
+        n = counts.get(feed, 0) + 1
+        counts[feed] = n
+        other = max((v for f, v in counts.items() if f != feed), default=0)
+        if n <= other:
+            self.duplicates_dropped += 1
+            return True
+        return False
 
     def _push_candle_locked(self, symbol: str, ts: int, px: float, vol: float) -> None:
         book = self._candles.setdefault(symbol, {iv: [] for iv in INTERVAL_MS})
@@ -687,6 +724,8 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             "curvesTradable": tradable,
             "curvesPending": pending,
             "mintsRejected": len(self._rejected),
+            "tradesByFeed": dict(self.trades_by_feed),
+            "duplicatesDropped": self.duplicates_dropped,
         }
 
     def stop_feed(self) -> None:
