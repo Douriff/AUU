@@ -1141,6 +1141,7 @@ export interface AuthMe {
   auth_enabled: boolean;
   signup_allowed: boolean;
   invite_required: boolean;
+  email_verify?: boolean;
   user: AuthUser | null;
   liveEnabled: boolean;
   liveDisabled: boolean;

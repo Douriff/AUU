@@ -77,6 +77,11 @@ export function LoginPage() {
                 还没有账户？<Link to="/register">去注册</Link>
               </p>
             )}
+            {me?.email_verify && (
+              <p className="td-note">
+                忘记密码？<Link to="/forgot-password">用邮箱验证码重置</Link>
+              </p>
+            )}
           </form>
         )}
         {error && !authOn && <p className="td-block">{error}</p>}

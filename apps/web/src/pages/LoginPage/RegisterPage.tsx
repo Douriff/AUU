@@ -2,7 +2,17 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
-import { NAME_RULE, PASSWORD_RULE, displayProblem, nameProblem, parseStartSol, passwordProblem } from "@/lib/authRules";
+import {
+  NAME_RULE,
+  PASSWORD_RULE,
+  codeProblem,
+  displayProblem,
+  emailProblem,
+  nameProblem,
+  parseStartSol,
+  passwordProblem,
+} from "@/lib/authRules";
+import { EmailCodeField } from "./EmailCodeField";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -12,6 +22,8 @@ export function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [invite, setInvite] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
   const [startSol, setStartSol] = useState("100");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -29,8 +41,10 @@ export function RegisterPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const start = parseStartSol(startSol);
+    const verify = Boolean(me?.email_verify);
     const problem =
       nameProblem(name) ??
+      (verify ? emailProblem(email) ?? codeProblem(emailCode) : null) ??
       displayProblem(displayName) ??
       passwordProblem(password) ??
       (password !== confirm ? "两次密码不一致" : null) ??
@@ -49,6 +63,7 @@ export function RegisterPage() {
         display_name: displayName.trim(),
         invite: invite.trim(),
         start_sol: start.value,
+        ...(me?.email_verify ? { email: email.trim(), email_code: emailCode.trim() } : {}),
       });
       navigate("/trade");
     } catch (e) {
@@ -83,6 +98,16 @@ export function RegisterPage() {
               <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" minLength={2} maxLength={32} required />
               <small className="muted">{NAME_RULE}</small>
             </label>
+            {me?.email_verify && (
+              <EmailCodeField
+                purpose="signup"
+                email={email}
+                code={emailCode}
+                onEmail={setEmail}
+                onCode={setEmailCode}
+                onError={setError}
+              />
+            )}
             <label>
               显示名（可选）
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="nickname" />
