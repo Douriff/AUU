@@ -263,6 +263,23 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "market_source": MARKET_SOURCE,
             }
 
+    def curve_evidence(self, symbol: str) -> dict:
+        """Read-only curve metadata for paper evidence logging (never used for decisions)."""
+        with self._lock:
+            c = self._curves.get(symbol)
+            if c is None:
+                return {}
+            from_create = c.source == "logs"
+            return {
+                "mint": c.mint,
+                "source": c.source,
+                "creator": c.creator,
+                "verified": bool(c.verified),
+                "created_ts": c.registered_ts or None,
+                "created_basis": "create_event_received" if from_create else "first_seen",
+                "registered_ts": c.registered_ts or None,
+            }
+
     # ------------------------------------------------------------ registration
     def register_watch_mint(
         self,
@@ -555,6 +572,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "protocol_fee_bps": c.protocol_fee_bps,
                 "creator_fee_bps": c.creator_fee_bps,
                 "feed": row.get("feed") or "",
+                "trader": str(row.get("trader") or "") or None,
                 "synthetic": False,
                 "market_source": MARKET_SOURCE,
             }
@@ -609,6 +627,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "sol_amount": sol_f,
                 "token_amount": tokens_to_raw(msg.get("tokenAmount")),
                 "signature": msg.get("signature"),
+                "trader": msg.get("traderPublicKey"),
                 "feed": "pumpportal",
             }
         )
@@ -635,6 +654,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 "protocol_fee_bps": int(fee_bps) if fee_bps is not None else None,
                 "creator_fee_bps": int(creator_bps) if creator_bps is not None else None,
                 "signature": event.get("signature"),
+                "trader": event.get("user"),
                 "feed": "logs",
             }
         )

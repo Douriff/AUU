@@ -18,3 +18,6 @@ id.json
 
 # Trader watch local store
 apps/api/data/*.json
+
+# Paper evidence sidecar (rotated JSONL)
+apps/api/data/evidence/

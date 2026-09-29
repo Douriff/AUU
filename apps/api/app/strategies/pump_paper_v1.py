@@ -37,6 +37,7 @@ from app.providers.pumpfun_curve_math import (
 from app.paper.pipeline import run_paper_order, run_pre_order
 from app.paper.guard import live_execution_blocked
 from app.paper.decision_log import append_decision, classify_reject_bucket, make_row
+from app.paper.evidence import safe_hook as _evidence_hook
 from app.providers import get_provider
 from app.risk import get_risk_gate
 
@@ -700,6 +701,20 @@ class PumpPaperEngine:
                     "entry_impact_bps": entry_impact_bps,
                     "mint": snap.mint,
                 }
+                # Evidence only: records what was already decided; never alters it.
+                _evidence_hook(
+                    "on_signal",
+                    symbol=symbol,
+                    mint=snap.mint,
+                    side=signal.side,
+                    now_ms=now_ms,
+                    signal=signal,
+                    snapshot=snap,
+                    notional=float(notional),
+                    entry_impact_bps=entry_impact_bps,
+                    params=self.params.model_dump(),
+                    provider=get_provider(),
+                )
                 self._note(
                     symbol,
                     now_ms,
@@ -733,6 +748,11 @@ class PumpPaperEngine:
             if fills:
                 self._last_open_ts[snap.mint] = now_ms
                 self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
+                if not snap.synthetic:
+                    _evidence_hook(
+                        "on_fills", symbol=symbol, mint=snap.mint, side="buy", fills=fills,
+                        reason=signal.reason, closed=False, provider=get_provider(), now_ms=now_ms,
+                    )
                 self._note(
                     symbol,
                     now_ms,
@@ -766,6 +786,7 @@ class PumpPaperEngine:
             slices = 2 if "SPLIT_REDUCE" in signal.tags else 1
             remaining_qty = held
             filled_any = False
+            exit_fills: list[Fill] = []
             last_tags: list[str] = []
             last_notes = ""
             for i in range(slices):
@@ -779,6 +800,7 @@ class PumpPaperEngine:
                 fills = [Fill(**{k: v for k, v in f.items() if k != "symbol"}) for f in data.get("fills") or []]
                 if fills:
                     self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
+                    exit_fills.extend(fills)
                     remaining_qty -= chunk_qty
                     filled_any = True
                 else:
@@ -796,6 +818,12 @@ class PumpPaperEngine:
             )
             if not filled_any:
                 self.record_order_reject(signal.reason, signal.tags or last_tags)
+            elif not snap.synthetic:
+                _evidence_hook(
+                    "on_fills", symbol=symbol, mint=snap.mint, side="sell", fills=exit_fills,
+                    reason=signal.reason, closed=symbol not in self.positions,
+                    provider=get_provider(), now_ms=now_ms,
+                )
 
     def _snapshot_from_trade(
         self, symbol: str, trade: dict[str, Any], pending: dict[str, Any]
@@ -845,6 +873,15 @@ class PumpPaperEngine:
             return
         self._deferred.pop(symbol, None)
         signal = pending["signal"]
+        _evidence_hook(
+            "on_first_print",
+            symbol=symbol,
+            mint=str(pending.get("mint") or snap.mint),
+            side=getattr(signal, "side", ""),
+            pending_ts=int(pending["ts"]),
+            ready_ts=ready,
+            trade=trade,
+        )
         await self.maybe_execute(
             symbol,
             snap,
@@ -992,6 +1029,12 @@ class PumpPaperEngine:
         ]
         if fills:
             self._apply_fills(symbol, snap.mint or pos.mint, fills, now_ms, px)
+            if not snap.synthetic:
+                _evidence_hook(
+                    "on_fills", symbol=symbol, mint=snap.mint or pos.mint, side="sell", fills=fills,
+                    reason="max_hold", closed=symbol not in self.positions,
+                    provider=get_provider(), now_ms=now_ms,
+                )
             self._note(
                 symbol,
                 now_ms,
@@ -1189,6 +1232,11 @@ class PumpPaperEngine:
                 )
             except Exception:
                 log.exception("shadow compare observe failed for %s", symbol)
+        self._poll_evidence(provider, now_ms)
+
+    def _poll_evidence(self, provider: Any, now_ms: int) -> None:
+        """Grow stored tapes and flush finished trades (observation only)."""
+        _evidence_hook("poll", provider, now_ms)
 
     async def run_loop(self) -> None:
         self._running = True
