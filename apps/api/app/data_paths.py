@@ -21,6 +21,7 @@ _TMPDIR: tempfile.TemporaryDirectory[str] | None = None
 _STORE_ENVS = (
     "PAPER_JOURNAL_STORE",
     "SHADOW_COMPARE_STORE",
+    "PAPER_EVIDENCE_STORE",
     "AUU_USER_STORE",
     "AUU_USER_JOURNAL_DIR",
     "AUU_WALLET_STORE",
