@@ -325,8 +325,24 @@ export class HttpWsProvider {
     display_name?: string;
     invite?: string;
     start_sol?: number;
+    email?: string;
+    email_code?: string;
   }): Promise<AuthMe> {
     return postJson("/api/v1/auth/register", body);
+  }
+
+  sendEmailCode(body: { email: string; purpose: "signup" | "reset" }): Promise<{
+    sent: boolean;
+    email: string;
+    ttl_sec: number;
+    resend_after_sec: number;
+    message: string;
+  }> {
+    return postJson("/api/v1/auth/email/code", body);
+  }
+
+  resetPassword(body: { email: string; code: string; new_password: string; new_password_confirm: string }): Promise<{ ok: boolean; message: string }> {
+    return postJson("/api/v1/auth/password/reset", body);
   }
 
   login(body: { name: string; password: string }): Promise<AuthMe> {

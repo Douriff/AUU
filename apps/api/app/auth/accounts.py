@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import bcrypt
 
+from app.auth.email_codes import check_code, email_ok, email_verify_enabled, normalize_email, reset_email_codes
 from app.data_paths import data_dir, guarded_path
 from app.paper.books import user_day_pnl
 from app.paper.ledger import PaperTradeJournal, _load_journal
@@ -26,7 +27,7 @@ _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
 _BOOKS: dict[str, PaperTradeJournal] = {}
 _ATTEMPTS: dict[str, list[float]] = {}
-_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite"}
+_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch"}
 
 
 def reset_accounts() -> None:
@@ -35,6 +36,7 @@ def reset_accounts() -> None:
         _USERS = None
         _BOOKS.clear()
         _ATTEMPTS.clear()
+    reset_email_codes()
 
 
 def auth_enabled() -> bool:
@@ -185,6 +187,8 @@ def register(
     invite: str = "",
     start_sol: Optional[float] = None,
     display_name: str = "",
+    email: str = "",
+    email_code: str = "",
 ) -> dict[str, Any]:
     if not auth_enabled():
         raise ValueError("AUTH_OFF")
@@ -207,6 +211,16 @@ def register(
     users = _load()
     if any(str(row.get("name") or "").lower() == text.lower() for row in users):
         raise ValueError("NAME_TAKEN")
+    address = ""
+    if email_verify_enabled():
+        address = normalize_email(email)
+        if not address:
+            raise ValueError("EMAIL_REQUIRED")
+        if not email_ok(address):
+            raise ValueError("BAD_EMAIL")
+        if user_by_email(address) is not None:
+            raise ValueError("EMAIL_TAKEN")
+        check_code("signup", address, email_code)
     admin_env = os.getenv("AUU_ADMIN_USER", "").strip()
     is_admin = not users or (bool(admin_env) and text == admin_env)
     user = {
@@ -214,6 +228,7 @@ def register(
         "name": text,
         "display_name": shown,
         "password_hash": hash_password(password),
+        "email": address,
         "start_sol": start,
         "is_admin": is_admin,
         "created_ts": int(time.time() * 1000),
@@ -230,6 +245,40 @@ def authenticate(name: str, password: str) -> Optional[dict[str, Any]]:
         if str(user.get("name") or "").lower() == text and verify_password(password, str(user.get("password_hash") or "")):
             return user
     return None
+
+
+def user_by_email(email: str) -> Optional[dict[str, Any]]:
+    address = normalize_email(email)
+    if not address:
+        return None
+    for user in _load():
+        if normalize_email(str(user.get("email") or "")) == address:
+            return user
+    return None
+
+
+def email_taken(email: str) -> bool:
+    return user_by_email(email) is not None
+
+
+def reset_password(email: str, code: str, new: str) -> dict[str, Any]:
+    """Set a new password after an emailed code. Bumps session_epoch so old cookies stop working."""
+    if not email_verify_enabled():
+        raise ValueError("EMAIL_OFF")
+    address = normalize_email(email)
+    if not email_ok(address):
+        raise ValueError("BAD_EMAIL")
+    if not _password_ok(new):
+        raise ValueError("BAD_PASSWORD")
+    check_code("reset", address, code)
+    user = user_by_email(address)
+    if user is None:
+        raise ValueError("EMAIL_CODE_EXPIRED")
+    with _LOCK:
+        user["password_hash"] = hash_password(new)
+        user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
+        _save()
+    return _public(user)
 
 
 def change_password(user_id: str, current: str, new: str) -> None:
@@ -250,11 +299,23 @@ def user_by_id(user_id: str) -> Optional[dict[str, Any]]:
     return None
 
 
+def _token_sig(user_id: str, exp: str, epoch: int) -> str:
+    # Epoch 0 keeps the pre-epoch message so sessions issued before this change stay valid.
+    message = f"{user_id}.{exp}" if epoch <= 0 else f"{user_id}.{exp}.e{epoch}"
+    return hmac.new(_session_secret(), message.encode("utf-8"), sha256).hexdigest()
+
+
+def _epoch_of(user_id: str) -> int:
+    user = user_by_id(user_id)
+    try:
+        return int((user or {}).get("session_epoch") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def issue_token(user_id: str) -> str:
-    exp = int(time.time()) + 14 * 24 * 3600
-    payload = f"{user_id}.{exp}".encode("utf-8")
-    sig = hmac.new(_session_secret(), payload, sha256).hexdigest()
-    return f"{user_id}.{exp}.{sig}"
+    exp = str(int(time.time()) + 14 * 24 * 3600)
+    return f"{user_id}.{exp}.{_token_sig(user_id, exp, _epoch_of(user_id))}"
 
 
 def user_from_token(token: str) -> Optional[dict[str, Any]]:
@@ -267,11 +328,13 @@ def user_from_token(token: str) -> Optional[dict[str, Any]]:
             return None
     except ValueError:
         return None
-    payload = f"{user_id}.{exp}".encode("utf-8")
-    expected = hmac.new(_session_secret(), payload, sha256).hexdigest()
+    user = user_by_id(user_id)
+    if user is None:
+        return None
+    expected = _token_sig(user_id, exp, _epoch_of(user_id))
     if not hmac.compare_digest(sig, expected):
         return None
-    return user_by_id(user_id)
+    return user
 
 
 def journal_for(user: dict[str, Any]) -> PaperTradeJournal:

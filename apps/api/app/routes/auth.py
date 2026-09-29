@@ -19,11 +19,22 @@ from app.auth.accounts import (
     list_users,
     passwords_match,
     register,
+    reset_password,
+    email_taken,
     scrub_secrets,
     signup_allowed,
     user_by_id,
     user_from_token,
 )
+from app.auth.email_codes import (
+    CodeError,
+    email_verify_enabled,
+    mask_email,
+    normalize_email,
+    send_code,
+    smtp_configured,
+)
+from starlette.concurrency import run_in_threadpool
 from app.paper.books import pop_book, push_book
 from app.routes.envelope import err, ok
 
@@ -44,6 +55,18 @@ _MESSAGES = {
     "RATE_LIMIT": "尝试过于频繁，请稍后再试",
     "BAD_BODY": "请求格式不正确",
     "BAD_LOGIN": "用户名或密码错误",
+    "EMAIL_OFF": "邮箱验证未开启",
+    "EMAIL_NOT_CONFIGURED": "邮件发送尚未配置，请联系管理员",
+    "EMAIL_REQUIRED": "请填写邮箱",
+    "BAD_EMAIL": "邮箱格式不正确",
+    "EMAIL_TAKEN": "该邮箱已被注册，可以直接登录或使用忘记密码",
+    "EMAIL_THROTTLE": "验证码发送太频繁，请稍后再试",
+    "EMAIL_IP_LIMIT": "当前网络发送验证码次数过多，请 1 小时后再试",
+    "EMAIL_SEND_FAILED": "验证码邮件发送失败，请检查邮箱地址或稍后再试",
+    "EMAIL_CODE_REQUIRED": "请填写邮箱验证码",
+    "EMAIL_CODE_BAD": "验证码不正确",
+    "EMAIL_CODE_EXPIRED": "验证码已失效或不存在，请重新获取",
+    "EMAIL_CODE_LOCKED": "验证码输错次数过多，已失效，请重新获取",
 }
 
 
@@ -141,7 +164,15 @@ def _fail(exc: ValueError, action: str = "auth"):
     code = str(exc)
     _LOG.warning("%s rejected: %s", action, code)
     status = 401 if code == "BAD_LOGIN" else 400
-    return err(code, _MESSAGES.get(code, "请求无效"), status)
+    if code in {"EMAIL_THROTTLE", "EMAIL_IP_LIMIT"}:
+        status = 429
+    if code == "EMAIL_SEND_FAILED":
+        status = 502
+    message = _MESSAGES.get(code, "请求无效")
+    wait = int(getattr(exc, "retry_after", 0) or 0)
+    if code == "EMAIL_THROTTLE" and wait > 0:
+        message = f"验证码发送太频繁，请 {wait} 秒后再试"
+    return err(code, message, status)
 
 
 def _me_payload(user: Optional[dict]) -> dict:
@@ -149,6 +180,7 @@ def _me_payload(user: Optional[dict]) -> dict:
         "auth_enabled": auth_enabled(),
         "signup_allowed": signup_allowed(),
         "invite_required": bool(invite_code()),
+        "email_verify": bool(auth_enabled() and email_verify_enabled()),
         "user": None,
         "liveEnabled": False,
         "liveDisabled": True,
@@ -177,10 +209,71 @@ async def auth_register(request: Request):
             _text(raw, "invite"),
             _start_sol(raw),
             _text(raw, "display_name"),
+            _text(raw, "email"),
+            _text(raw, "email_code"),
         )
     except ValueError as exc:
         return _fail(exc, "register")
     return _stamp(ok(scrub_secrets(_me_payload(user_by_id(user["id"])))), user["id"])
+
+
+@router.post("/auth/email/code")
+async def auth_email_code(request: Request):
+    """Send a 6-digit code for signup or password reset. Never echoes the code or full address."""
+    if not auth_enabled():
+        return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
+    if not email_verify_enabled():
+        return err("EMAIL_OFF", _MESSAGES["EMAIL_OFF"], 400)
+    if not smtp_configured():
+        _LOG.warning("email code rejected: EMAIL_NOT_CONFIGURED")
+        return err("EMAIL_NOT_CONFIGURED", _MESSAGES["EMAIL_NOT_CONFIGURED"], 503)
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    purpose = _text(raw, "purpose") or "signup"
+    if purpose not in {"signup", "reset"}:
+        return err("BAD_BODY", _MESSAGES["BAD_BODY"], 400)
+    address = normalize_email(_text(raw, "email"))
+    if not address:
+        return err("EMAIL_REQUIRED", _MESSAGES["EMAIL_REQUIRED"], 400)
+    deliver = True
+    if purpose == "signup":
+        if not signup_allowed():
+            return err("SIGNUP_CLOSED", _MESSAGES["SIGNUP_CLOSED"], 400)
+        if email_taken(address):
+            return _fail(ValueError("EMAIL_TAKEN"), "email code")
+    else:
+        # Same answer whether or not the address is registered; only registered ones get mail.
+        deliver = email_taken(address)
+    try:
+        await run_in_threadpool(send_code, purpose, address, _ip(request), deliver=deliver)
+    except CodeError as exc:
+        return _fail(exc, "email code")
+    note = "验证码已发送，请查收邮件（10 分钟内有效）"
+    if purpose == "reset":
+        note = "如果该邮箱已注册，验证码已发送，请查收邮件（10 分钟内有效）"
+    return ok({"sent": True, "email": mask_email(address), "ttl_sec": 600, "resend_after_sec": 60, "message": note, "liveEnabled": False})
+
+
+@router.post("/auth/password/reset")
+async def auth_password_reset(request: Request):
+    if not auth_enabled():
+        return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
+    if not allow_attempt(f"reset:{_ip(request)}"):
+        return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    new = _text(raw, "new_password")
+    if not passwords_match(new, _text(raw, "new_password_confirm")):
+        return err("PASSWORD_MISMATCH", _MESSAGES["PASSWORD_MISMATCH"], 400)
+    try:
+        reset_password(_text(raw, "email"), _text(raw, "code"), new)
+    except ValueError as exc:
+        return _fail(exc, "password reset")
+    response = ok(scrub_secrets({"ok": True, "message": "密码已重置，请使用新密码登录", "liveEnabled": False, "mode": "paper"}))
+    response.delete_cookie(COOKIE, path="/")
+    return response
 
 
 @router.post("/auth/login")
