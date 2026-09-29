@@ -28,7 +28,7 @@ flowchart TB
 | `/positions` | 本地（`AUU_AUTH` 未开）仍是旧纸面单面板。开启账户后只显示当前用户的纸面仓；管理员可切换查看其他人 |
 | LeaderboardPage `/leaderboard` | 排行榜：用户纸面已实现盈亏 / 收益率。系统纸面引擎不计入。无充值、无提现、无实盘 |
 | LoginPage `/login` | 登录。`AUU_AUTH=off`（本地默认）不要求登录。部署（Compose）默认 `AUU_AUTH=on` |
-| RegisterPage `/register` | 公开注册：用户名、密码、确认密码，可选显示名。`AUU_INVITE_CODE` 不设置则开放注册；`AUU_ALLOW_SIGNUP=false` 关闭注册。密码只存 bcrypt 哈希。`AUU_EMAIL_VERIFY=on` 时需填邮箱并输入 6 位邮箱验证码（10 分钟有效，60 秒可重发，错 5 次失效），邮箱不可重复；发件用 `AUU_SMTP_HOST/PORT/USER/PASS`（QQ/163 授权码） |
+| RegisterPage `/register` | 公开注册：用户名、密码、确认密码，可选显示名。`AUU_INVITE_CODE` 不设置则开放注册；`AUU_ALLOW_SIGNUP=false` 关闭注册。密码只存 bcrypt 哈希。`AUU_EMAIL_VERIFY=on` 时需填邮箱并输入 6 位邮箱验证码（10 分钟有效，60 秒可重发，错 5 次失效），邮箱不可重复；发件用 `AUU_SMTP_HOST/PORT/USER/PASS`（Gmail：smtp.gmail.com 465/587 + 应用专用密码；QQ：smtp.qq.com 465 + 授权码；163：smtp.163.com 465 + 授权码；可用 `AUU_SMTP_STARTTLS` 覆盖端口推断） |
 | ForgotPasswordPage `/forgot-password` | 忘记密码：邮箱验证码重置密码，重置后该用户所有旧会话失效。仅在 `AUU_EMAIL_VERIFY=on` 时可用 |
 | Settings | 修改密码；非托管钱包（公钥绑定、devnet memo，默认关）；`DATA_PROVIDER=mock\|pumpfun_paper` + `dataSource=mock\|paper\|pumpfun_paper`；venue=Pump.fun |
 | Mock provider | 固定 5 个伪模因对；seed=symbol+interval 可复现 |

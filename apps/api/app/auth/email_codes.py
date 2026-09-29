@@ -55,15 +55,28 @@ def email_verify_enabled() -> bool:
 
 
 def smtp_settings() -> dict[str, Any]:
+    """Presets: Gmail smtp.gmail.com 465 (SSL) or 587 (STARTTLS) with a Google App Password;
+    QQ smtp.qq.com 465; 163 smtp.163.com 465. Port 465 means implicit SSL, any other port
+    means STARTTLS, unless AUU_SMTP_STARTTLS=on/off says otherwise."""
     try:
         port = int(os.getenv("AUU_SMTP_PORT", "465"))
     except ValueError:
         port = 465
+    flag = (os.getenv("AUU_SMTP_STARTTLS") or "").strip().lower()
+    if flag in {"1", "true", "on", "yes"}:
+        starttls = True
+    elif flag in {"0", "false", "off", "no"}:
+        starttls = False
+    else:
+        starttls = port != 465
+    # Google shows App Passwords as "abcd efgh ijkl mnop"; QQ/163 codes have no spaces either way.
+    password = "".join((os.getenv("AUU_SMTP_PASS") or "").split())
     return {
         "host": (os.getenv("AUU_SMTP_HOST") or "smtp.qq.com").strip(),
         "port": port,
+        "starttls": starttls,
         "user": (os.getenv("AUU_SMTP_USER") or "").strip(),
-        "password": os.getenv("AUU_SMTP_PASS") or "",
+        "password": password,
     }
 
 
@@ -121,13 +134,15 @@ def _smtp_send(to: str, subject: str, body: str) -> None:
     msg["To"] = to
     msg.set_content(body)
     context = ssl.create_default_context()
-    if cfg["port"] == 465:
+    if not cfg["starttls"]:
         with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=15, context=context) as client:
             client.login(cfg["user"], cfg["password"])
             client.send_message(msg)
     else:
         with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as client:
+            client.ehlo()
             client.starttls(context=context)
+            client.ehlo()
             client.login(cfg["user"], cfg["password"])
             client.send_message(msg)
 
