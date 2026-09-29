@@ -15,6 +15,7 @@ import smtplib
 import ssl
 import threading
 import time
+import unicodedata
 from email.message import EmailMessage
 from email.utils import formataddr
 from hashlib import sha256
@@ -54,6 +55,22 @@ def email_verify_enabled() -> bool:
     return _truthy(os.getenv("AUU_EMAIL_VERIFY", "off"))
 
 
+# Invisible/format characters (U+200B zero-width space, U+FEFF BOM, U+2060 word joiner...)
+# and space separators (U+00A0 no-break space, U+3000 ideographic space...) often ride
+# along when an App Password is copied from a web page or chat app.
+_INVISIBLE_CATEGORIES = frozenset({"Cf", "Zs", "Zl", "Zp"})
+
+
+def clean_smtp_password(raw: Optional[str]) -> str:
+    """Drop all whitespace and invisible/format characters from an SMTP password.
+
+    Google shows App Passwords as "abcd efgh ijkl mnop"; QQ/163 codes have no spaces
+    either way, so nothing a real password needs is removed."""
+    return "".join(
+        ch for ch in (raw or "") if not ch.isspace() and unicodedata.category(ch) not in _INVISIBLE_CATEGORIES
+    )
+
+
 def smtp_settings() -> dict[str, Any]:
     """Presets: Gmail smtp.gmail.com 465 (SSL) or 587 (STARTTLS) with a Google App Password;
     QQ smtp.qq.com 465; 163 smtp.163.com 465. Port 465 means implicit SSL, any other port
@@ -69,8 +86,7 @@ def smtp_settings() -> dict[str, Any]:
         starttls = False
     else:
         starttls = port != 465
-    # Google shows App Passwords as "abcd efgh ijkl mnop"; QQ/163 codes have no spaces either way.
-    password = "".join((os.getenv("AUU_SMTP_PASS") or "").split())
+    password = clean_smtp_password(os.getenv("AUU_SMTP_PASS") or "")
     return {
         "host": (os.getenv("AUU_SMTP_HOST") or "smtp.qq.com").strip(),
         "port": port,

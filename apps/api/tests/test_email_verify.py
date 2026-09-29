@@ -422,6 +422,33 @@ class SmtpSenderTests(unittest.TestCase):
         ssl_cls.return_value.__enter__.return_value.login.assert_called_once_with("someone@gmail.com", "abcdefghijklmnop")
         plain.assert_not_called()
 
+    def test_password_strips_invisible_and_format_characters(self):
+        pasted = (
+            "\ufeff\u200babcd\u00a0efgh\u200c\u200d\u2060ijkl\u3000mnop"
+            "\u2028\u2029\u202f\u2009\u00ad\u200e\u200f\r\n"
+        )
+        os.environ["AUU_SMTP_HOST"] = "smtp.gmail.com"
+        os.environ["AUU_SMTP_USER"] = "someone@gmail.com"
+        os.environ["AUU_SMTP_PASS"] = pasted
+        self.assertEqual(email_codes.smtp_settings()["password"], "abcdefghijklmnop")
+        self.assertTrue(email_codes.smtp_configured())
+        with mock.patch.object(email_codes.smtplib, "SMTP_SSL") as ssl_cls, mock.patch.object(email_codes.smtplib, "SMTP"):
+            email_codes._smtp_send("to@qq.com", "s", "b")
+        ssl_cls.return_value.__enter__.return_value.login.assert_called_once_with("someone@gmail.com", "abcdefghijklmnop")
+
+    def test_clean_password_keeps_real_characters(self):
+        clean = email_codes.clean_smtp_password
+        self.assertEqual(clean("Ab1!@#$%^&*()-_=+[]{};:'\",.<>/?`~|\\"), "Ab1!@#$%^&*()-_=+[]{};:'\",.<>/?`~|\\")
+        self.assertEqual(clean("授权码ÄÖü"), "授权码ÄÖü")
+        self.assertEqual(clean(""), "")
+        self.assertEqual(clean(None), "")
+        self.assertEqual(clean("\u200b \ufeff\u00a0"), "")
+
+    def test_invisible_only_password_is_not_configured(self):
+        os.environ["AUU_SMTP_PASS"] = "\u200b\ufeff\u00a0 \u2060"
+        self.assertEqual(email_codes.smtp_settings()["password"], "")
+        self.assertFalse(email_codes.smtp_configured())
+
     def test_starttls_flag_overrides_port(self):
         os.environ["AUU_SMTP_PORT"] = "2525"
         os.environ["AUU_SMTP_STARTTLS"] = "off"
