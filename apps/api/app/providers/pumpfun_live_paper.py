@@ -141,6 +141,11 @@ class _Curve:
     registered_ts: int = 0
     last_trade_ts: int = 0
     verified: bool = False
+    # True once the reserves are observed (a real print, the bonding-curve
+    # account, or reserves carried by the discovery event). A logs ``Create``
+    # carries none, and the 30-SOL template is not every curve's start, so
+    # such a curve has no mark until its first real trade.
+    priced: bool = False
     verify_reason: str = "pending"
     verify_attempts: int = 0
     next_verify_ts: int = 0
@@ -201,7 +206,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
 
     # ------------------------------------------------------------------ catalog
     def _tradable(self, c: _Curve) -> bool:
-        return c.verified
+        return c.verified and c.priced
 
     def list_symbols(self) -> list[SymbolInfo]:
         with self._lock:
@@ -346,6 +351,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 updated_ts=now,
                 registered_ts=now,
                 verified=from_create,
+                priced=bool(reserves and reserves.get("virtual_sol") and reserves.get("virtual_token")),
                 verify_reason="pump_create_event" if from_create else "pending",
             )
             self._curves[symbol] = curve
@@ -399,6 +405,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                     c.verify_reason = reason or "pump_curve"
                     rsv = res.get("reserves") or {}
                     if c.last_trade_ts == 0 and rsv.get("virtual_sol") and rsv.get("virtual_token"):
+                        c.priced = True
                         c.virtual_sol = int(rsv["virtual_sol"])
                         c.virtual_token = int(rsv["virtual_token"])
                         c.real_sol = int(rsv.get("real_sol") or 0)
@@ -509,6 +516,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             if self._duplicate_locked(sig, mint, side, str(row.get("feed") or "")):
                 return None
             c = self._curves[symbol]
+            c.priced = True
             c.virtual_sol = vs_i
             c.virtual_token = vt_i
             rs = row.get("real_sol_reserves")
@@ -726,13 +734,15 @@ class PumpfunLivePaperProvider(MarketDataProvider):
     def feed_health(self) -> dict[str, Any]:
         with self._lock:
             pending = sum(1 for c in self._curves.values() if not c.verified)
-            tradable = sum(1 for c in self._curves.values() if c.verified)
+            tradable = sum(1 for c in self._curves.values() if self._tradable(c))
+            unpriced = sum(1 for c in self._curves.values() if c.verified and not c.priced)
         return {
             "feedMode": feed_mode(),
             "feedStatus": self.feed_status,
             "tradesSeen": self.trades_seen,
             "curvesTradable": tradable,
             "curvesPending": pending,
+            "curvesAwaitingFirstPrint": unpriced,
             "mintsRejected": len(self._rejected),
             "tradesByFeed": dict(self.trades_by_feed),
             "duplicatesDropped": self.duplicates_dropped,

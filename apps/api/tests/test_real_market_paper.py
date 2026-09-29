@@ -281,10 +281,18 @@ class LiveProviderTests(NoNetworkCase):
         self.assertEqual(p.list_symbols(), [])
         self.assertEqual(p.pending_mints(), ["WaitMint11111111111111111111111111111111"])
 
-    def test_create_event_source_is_tradable_immediately(self):
+    def test_create_event_source_needs_no_rpc_but_waits_for_first_print(self):
         p = _live(verifier=lambda m: self.fail("create-event mints need no RPC"))
-        p.register_watch_mint("NewMint1111111111111111111111111111111111", base="NEW", source="logs")
+        mint = "NewMint1111111111111111111111111111111111"
+        p.register_watch_mint(mint, base="NEW", source="logs")
+        # A Create log carries no reserves; the 30-SOL template is not a mark.
+        self.assertEqual(p.list_symbols(), [])
+        self.assertIsNone(p.get_pumpfun_snapshot("NEW/SOL"))
+        self.assertEqual(p.feed_health()["curvesAwaitingFirstPrint"], 1)
+        p.apply_observed_trade({"mint": mint, "side": "buy", "ts": 1, "virtual_sol_reserves": 777_816_609, "virtual_token_reserves": 1_067_420_242_640_253, "real_sol_reserves": 3_728_914, "real_token_reserves": 787_520_242_640_253})
         self.assertEqual([s.symbol for s in p.list_symbols()], ["NEW/SOL"])
+        self.assertAlmostEqual(p.get_pumpfun_snapshot("NEW/SOL").price_sol, 777_816_609 / 1_067_420_242_640_253)
+        self.assertEqual(p.verify_pending(), {})
 
     def test_price_moves_only_on_real_prints(self):
         now = [1_000]
@@ -799,6 +807,7 @@ class ShadowProtectTests(NoNetworkCase):
         px = p.get_pumpfun_snapshot("SHAD/SOL").price_sol
         self._open_shadow("SHAD/SOL", mint)
         p.register_watch_mint("OtherLive11111111111111111111111111111111", base="OTHR", source="logs", max_discovered=1)
+        p.apply_observed_trade({"mint": "OtherLive11111111111111111111111111111111", "side": "buy", "ts": 6, "virtual_sol_reserves": 31_000_000_000, "virtual_token_reserves": 1_040_000_000_000_000})
         snap = p.get_pumpfun_snapshot("SHAD/SOL")
         self.assertIsNotNone(snap)
         self.assertEqual(snap.price_sol, px)  # not re-initialised to the template curve
