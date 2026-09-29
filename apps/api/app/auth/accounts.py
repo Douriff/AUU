@@ -18,8 +18,10 @@ from app.data_paths import data_dir, guarded_path
 from app.paper.books import user_day_pnl
 from app.paper.ledger import PaperTradeJournal, _load_journal
 
-_NAME = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff]{2,24}$")
+_NAME = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff][A-Za-z0-9_.@\-\u4e00-\u9fff]{1,31}$")
 _DISPLAY = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff][A-Za-z0-9_ \u4e00-\u9fff]{0,23}$")
+PASSWORD_MIN = 8
+PASSWORD_MAX_BYTES = 72
 _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
 _BOOKS: dict[str, PaperTradeJournal] = {}
@@ -144,11 +146,18 @@ def scrub_secrets(payload: Any) -> Any:
     return payload
 
 
+def password_problem(password: str) -> Optional[str]:
+    """Return an error code for a new password, or None. Special characters are allowed."""
+    raw = password if isinstance(password, str) else ""
+    if len(raw) < PASSWORD_MIN or len(raw.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        return "BAD_PASSWORD"
+    if not any(ch.isalpha() for ch in raw) or not any("0" <= ch <= "9" for ch in raw):
+        return "BAD_PASSWORD"
+    return None
+
+
 def _password_ok(password: str) -> bool:
-    raw = password or ""
-    if len(raw) < 8:
-        return False
-    return len(raw.encode("utf-8")) <= 72
+    return password_problem(password) is None
 
 
 def hash_password(password: str) -> str:

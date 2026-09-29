@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
+import { PASSWORD_RULE, passwordProblem } from "@/lib/authRules";
 
 export function AccountSection() {
   const [me, setMe] = useState<AuthMe | null>(null);
@@ -21,8 +22,9 @@ export function AccountSection() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (next !== confirm) {
-      setError("两次密码不一致");
+    const problem = passwordProblem(next) ?? (next !== confirm ? "两次密码不一致" : null);
+    if (problem) {
+      setError(problem);
       setNote("");
       return;
     }
@@ -80,6 +82,7 @@ export function AccountSection() {
         <label>
           新密码
           <input value={next} onChange={(e) => setNext(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
+          <small className="muted">{PASSWORD_RULE}</small>
         </label>
         <label>
           确认新密码

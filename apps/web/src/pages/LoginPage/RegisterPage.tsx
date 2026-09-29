@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
+import { NAME_RULE, PASSWORD_RULE, displayProblem, nameProblem, parseStartSol, passwordProblem } from "@/lib/authRules";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -27,21 +28,27 @@ export function RegisterPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (password !== confirm) {
-      setError("两次密码不一致");
+    const start = parseStartSol(startSol);
+    const problem =
+      nameProblem(name) ??
+      displayProblem(displayName) ??
+      passwordProblem(password) ??
+      (password !== confirm ? "两次密码不一致" : null) ??
+      start.problem;
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const start = Number(startSol);
       await marketProvider.registerAccount({
         name: name.trim(),
         password,
         password_confirm: confirm,
         display_name: displayName.trim(),
         invite: invite.trim(),
-        start_sol: Number.isFinite(start) ? start : undefined,
+        start_sol: start.value,
       });
       navigate("/trade");
     } catch (e) {
@@ -73,7 +80,8 @@ export function RegisterPage() {
           <form onSubmit={(event) => void submit(event)}>
             <label>
               用户名
-              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" minLength={2} required />
+              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" minLength={2} maxLength={32} required />
+              <small className="muted">{NAME_RULE}</small>
             </label>
             <label>
               显示名（可选）
@@ -89,6 +97,7 @@ export function RegisterPage() {
                 minLength={8}
                 required
               />
+              <small className="muted">{PASSWORD_RULE}</small>
             </label>
             <label>
               确认密码
