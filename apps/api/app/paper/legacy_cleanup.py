@@ -145,7 +145,8 @@ def _write_with_backup(path: Path, payload: dict[str, Any], stamp: str) -> Path:
     return backup
 
 
-def run(journal: Path, shadow: Path, *, apply: bool, out=sys.stdout) -> dict[str, Any]:
+def run(journal: Path, shadow: Path, *, apply: bool, out=None) -> dict[str, Any]:
+    out = out if out is not None else sys.stdout
     report: dict[str, Any] = {"mode": "apply" if apply else "dry-run", "backups": []}
     stamp = time.strftime("%Y%m%d%H%M%S")
     j_raw = _read(journal)

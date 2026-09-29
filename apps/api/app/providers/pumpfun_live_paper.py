@@ -178,6 +178,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self._feed_running = False
         self.feed_status = "idle"
         self.trades_seen = 0
+        self.portal_sync_sec = 2.0
         raw = watch_mints if watch_mints is not None else os.getenv("PUMPFUN_WATCH_MINTS", "")
         for part in (raw or "").split(","):
             item = part.strip()
@@ -802,7 +803,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             self.feed_status = "portal_subscribed"
             last_sync = time.monotonic()
             while self._feed_running:
-                if time.monotonic() - last_sync >= 2.0:
+                if time.monotonic() - last_sync >= self.portal_sync_sec:
                     last_sync = time.monotonic()
                     want = set(self._watched_mints())
                     add = sorted(want - subscribed)
@@ -813,7 +814,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                         await ws.send(json.dumps({"method": "unsubscribeTokenTrade", "keys": drop}))
                     subscribed = want
                 try:
-                    raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                    raw = await asyncio.wait_for(ws.recv(), timeout=max(0.05, self.portal_sync_sec))
                 except asyncio.TimeoutError:
                     continue
                 try:
