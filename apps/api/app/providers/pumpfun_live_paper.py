@@ -178,6 +178,11 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self._sig_seen: "OrderedDict[tuple[str, str, str], dict[str, int]]" = OrderedDict()
         self.duplicates_dropped = 0
         self.trades_by_feed: dict[str, int] = {}
+        # Cumulative catalog counters (evictions do not decrease them).
+        self.registered_by_source: dict[str, int] = {}
+        self.verified_by_rpc = 0
+        self.rejected_by_rpc = 0
+        self.evicted = 0
         self._verifier = verifier
         self._clock = clock or (lambda: int(time.time() * 1000))
         self._feed_running = False
@@ -299,6 +304,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                     discovered[0].discovered = False
                 else:
                     self._drop_locked(victim.symbol, victim.mint)
+                    self.evicted += 1
                 discovered = [c for c in self._curves.values() if c.discovered]
             ticker = "".join(ch for ch in (base or f"M{mint[-4:]}").upper() if ch.isalnum())[:16]
             if not ticker:
@@ -346,6 +352,8 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             self._by_mint[mint] = symbol
             self._trades[symbol] = []
             self._candles[symbol] = {iv: [] for iv in INTERVAL_MS}
+            key = source or "watch"
+            self.registered_by_source[key] = self.registered_by_source.get(key, 0) + 1
             return curve
 
     def _drop_locked(self, symbol: str, mint: str) -> None:
@@ -399,6 +407,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                             c.token_total_supply = int(rsv["token_total_supply"])
                         c.updated_ts = self._clock()
                     out[mint] = "ok"
+                    self.verified_by_rpc += 1
                 elif retry:
                     c.verify_attempts += 1
                     c.verify_reason = reason or "rpc_unavailable"
@@ -412,6 +421,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                             self._rejected.pop(key, None)
                     self._drop_locked(c.symbol, c.mint)
                     out[mint] = f"rejected:{reason}"
+                    self.rejected_by_rpc += 1
         return out
 
     # ------------------------------------------------------------------ marks
@@ -726,6 +736,10 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             "mintsRejected": len(self._rejected),
             "tradesByFeed": dict(self.trades_by_feed),
             "duplicatesDropped": self.duplicates_dropped,
+            "mintsRegisteredBySource": dict(self.registered_by_source),
+            "mintsVerifiedByRpc": self.verified_by_rpc,
+            "mintsRejectedByRpc": self.rejected_by_rpc,
+            "mintsEvicted": self.evicted,
         }
 
     def stop_feed(self) -> None:
@@ -775,14 +789,23 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         return bool(disc is not None and disc.mode == "pumpportal" and disc.status_reason == "subscribed")
 
     async def _trade_loop(self) -> None:
+        """Pick the trade source.
+
+        ``auto`` prefers pump TradeEvents from ``logsSubscribe`` (free and
+        complete: every pump trade), taken from discovery when its logs
+        stream already runs, else from an own subscription. PumpPortal
+        ``subscribeTokenTrade`` is metered per message on the key's linked
+        wallet, so ``auto`` only falls back to it for 10 minutes after a logs
+        failure; ``portal`` forces it.
+        """
         mode = feed_mode()
-        portal_block_until = 0.0
+        logs_block_until = 0.0
         while self._feed_running:
             try:
-                use_portal = mode == "portal" or (
-                    mode == "auto" and time.time() >= portal_block_until and not self._discovery_holds_portal()
-                )
-                if use_portal:
+                if mode == "portal" or (mode == "auto" and time.time() < logs_block_until):
+                    if mode == "auto" and self._discovery_forwards_logs():
+                        logs_block_until = 0.0
+                        continue
                     await self._portal_once()
                 elif self._discovery_forwards_logs():
                     # Discovery's logsSubscribe already forwards TradeEvents here.
@@ -795,8 +818,10 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             except Exception as exc:
                 log.warning("live paper feed error (%s); switching source", type(exc).__name__)
                 self.feed_status = "error"
-                if mode == "auto":
-                    portal_block_until = time.time() + 600.0
+                if mode == "auto" and time.time() >= logs_block_until:
+                    logs_block_until = time.time() + 600.0
+                elif mode == "auto":
+                    logs_block_until = 0.0
                 await asyncio.sleep(5.0)
 
     async def _portal_once(self) -> None:
@@ -842,6 +867,8 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             self.feed_status = "portal_subscribed"
             last_sync = time.monotonic()
             while self._feed_running:
+                if feed_mode() == "auto" and self._discovery_forwards_logs():
+                    return  # free logs stream is back; stop the metered one
                 if time.monotonic() - last_sync >= self.portal_sync_sec:
                     last_sync = time.monotonic()
                     want = set(self._watched_mints())

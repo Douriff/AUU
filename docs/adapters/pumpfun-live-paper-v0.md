@@ -5,9 +5,10 @@
 ## 行情
 - 价格 = 最近一笔真实成交之后的 `virtual_sol / virtual_token`。没有新成交，价格就不动：不插值、不造单、没有 RNG。
 - 数据源（`LIVE_PAPER_FEED=auto|portal|logs|off`，默认 `auto`）：
-  - PumpPortal `subscribeTokenTrade`（`wss://pumpportal.fun/api/data`）。配置了 `PUMPFUN_PORTAL_API_KEY` 时先带 key；key 被拒（400/403）就改用不带 key 的公共数据 API。新入观察列表的 mint 会补订阅，移出的会退订。`vSolInBondingCurve` 按 SOL、`vTokensInBondingCurve` 按 UI 数量（6 位小数）换算成原始单位。
+  - PumpPortal `subscribeTokenTrade`（`wss://pumpportal.fun/api/data`）。**按消息计费**（PumpPortal 文档：每 10000 条 0.01 SOL，从 key 绑定的钱包扣），所以 `auto` 不优先用它。配置了 `PUMPFUN_PORTAL_API_KEY` 时先带 key；key 被拒（400/403）就改用不带 key 的公共数据 API。新入观察列表的 mint 会补订阅，移出的会退订。`vSolInBondingCurve` 按 SOL、`vTokensInBondingCurve` 按 UI 数量（6 位小数）换算成原始单位。
   - Solana `logsSubscribe`（`SOLANA_RPC_URL`）解码 pump 程序 `TradeEvent`（含真实储备和手续费 bps）。发现层已经在跑 `logs` 时，由发现层直接转发 TradeEvent，不再多开一条 RPC WS。
-  - `auto`：发现层没占用 Portal 连接时用 Portal，出错 10 分钟内改用 logs。
+  - `auto`：优先用免费的 logs（发现层在跑 `logs` 就用它转发的，否则自己订阅）；logs 出错后 10 分钟内改用 Portal，发现层的 logs 恢复就立即断开 Portal。`portal` 强制只用 Portal。
+  - 同一笔链上成交可能从 Portal 和 logs 各来一次：按 `(signature, mint, side)` 去重（health `liveFeed.duplicatesDropped`）。一笔交易里有多个 TradeEvent 时逐个应用。
   - `off` 或旧开关 `AUU_LIVE_PAPER_FEED=off`：不启动行情任务。
 - 成交时间戳是本机收到的时间，和策略决策用的是同一个时钟；链上 `blockTime` 另存为 `chain_ts`。
 
@@ -20,10 +21,14 @@
 ## 纸面成交（主窗）
 - 真实行情下，入场或出场决策会先挂起。决策时刻加上 `PAPER_FILL_LATENCY_MS`（默认 300ms）之后，本机收到的**第一笔真实成交**就是成交基础：订单打在这笔成交之后的真实储备上。
   - 没有这样的成交就不成交。入场挂单超过 `LIVE_PAPER_ENTRY_TTL_MS`（默认 30000）还没等到成交就作废；出场会一直等下一笔真实成交。
-- 价格 = bonding-curve 报价（`buy_tokens_out` / `sell_sol_out`），加上协议费和创作者费。费率优先用最近一笔 TradeEvent 上观察到的 bps；没有时用 `PAPER_CURVE_PROTOCOL_FEE_BPS`，再没有就用代码常量 `DEFAULT_PROTOCOL_FEE_BPS`。
+- 价格 = bonding-curve 报价（`buy_tokens_out` / `sell_sol_out`），加上协议费和创作者费。费率优先用最近一笔 TradeEvent 上观察到的 bps（协议费、创作者费分别看）。没观察到（例如只有 PumpPortal 数据，它不带费率）时按保守值 **95 bps 协议费 + 30 bps 创作者费（共 125）**；`PAPER_CURVE_PROTOCOL_FEE_BPS` / `PAPER_CURVE_CREATOR_FEE_BPS` 只能往上调，不能低于这个值。
+- 成交价不含费，费单独记在 `fee`：买入 `price*qty + fee` = 花掉的 SOL，卖出 `price*qty - fee` = 收到的 SOL。账本只扣一次费。
 - 卖出一律按**实际持有的代币数量**全部平掉（`flatten_qty`），不再用名义金额 ÷ 价格反推数量。
 - 孤儿出场按最后一个真实报价成交，不再用 `max(当前价, 入场价)` 托底。
 - round8b 策略参数与 `evaluate()` 决策逻辑没有改动。
+
+## 影子对比的成交时机
+- 真实行情下影子组也用同一规则：`evaluate()` 给出的虚拟入场/出场先挂起，决策时刻 + `PAPER_FILL_LATENCY_MS` 之后的第一笔真实成交的储备就是成交价，费率同主窗。挂起期间该组该币不再评估；入场超过 `LIVE_PAPER_ENTRY_TTL_MS` 没成交就作废（决策记录 `no_real_print`）。挂起的影子单同样保护曲线不被移出观察列表。合成行情下行为不变（立即按当时快照成交）。
 
 ## 数据源标签与统计
 - 每笔 Fill、每个持仓 lot、每笔已平仓交易都带 `market_source`：`real`、`synthetic`（pumpfun_paper）、`mock`，或者磁盘上旧的未标注行 `legacy_synthetic`。

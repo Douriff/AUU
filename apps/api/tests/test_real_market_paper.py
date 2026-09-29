@@ -418,6 +418,29 @@ class PortalFeedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(p.get_recent_trades("AAA/SOL")), 1)
         self.assertAlmostEqual(p.get_pumpfun_snapshot("AAA/SOL").price_sol, price_sol(30_030_000_000, 1_072_000_000_000_000))
 
+    async def test_auto_prefers_free_logs_and_portal_only_after_logs_failure(self):
+        p = _live()
+        calls: list[str] = []
+
+        async def logs_once():
+            calls.append("logs")
+            if calls.count("logs") == 1:
+                raise ConnectionError("rpc down")
+            p.stop_feed()
+
+        async def portal_once():
+            calls.append("portal")
+            p.stop_feed()
+
+        p._feed_running = True
+        with mock.patch.dict(os.environ, {"LIVE_PAPER_FEED": "auto"}), mock.patch.object(
+            p, "_logs_once", side_effect=logs_once
+        ), mock.patch.object(p, "_portal_once", side_effect=portal_once), mock.patch(
+            "app.providers.pumpfun_live_paper.asyncio.sleep", new=mock.AsyncMock()
+        ), mock.patch.object(PumpfunLivePaperProvider, "_discovery_forwards_logs", return_value=False):
+            await p._trade_loop()
+        self.assertEqual(calls, ["logs", "portal"])
+
     async def test_feed_off_does_nothing(self):
         p = _live()
         with mock.patch.dict(os.environ, {"LIVE_PAPER_FEED": "off"}), mock.patch(
