@@ -186,7 +186,9 @@ def _redact(url: str) -> str:
     return re.sub(r"(?i)api-key=[^&]+", "api-key=***", url)
 
 
-def _as_int_reserve(val: Any, *, sol_unit: bool = False) -> int:
+def _as_int_reserve(val: Any, *, sol_unit: bool = False, token_unit: bool = False) -> int:
+    """Raw reserve units. ``sol_unit``: SOL floats → lamports. ``token_unit``:
+    PumpPortal UI token amounts (6 decimals, < 1e12) → raw base units."""
     if val is None or val == "":
         return 0
     try:
@@ -198,8 +200,8 @@ def _as_int_reserve(val: Any, *, sol_unit: bool = False) -> int:
         return 0
     if sol_unit and 0 < n < 1_000_000:
         return int(n * LAMPORTS_PER_SOL)
-    if n > 1e18:
-        return int(n)
+    if token_unit and 0 < n < 1e12:
+        return int(round(n * 1_000_000))
     return int(n)
 
 
@@ -283,14 +285,16 @@ def normalize_new_token(raw: dict[str, Any], source: str) -> Optional[NewTokenEv
         sol_unit=True,
     )
     vtok = _as_int_reserve(
-        _pick(raw, "virtual_token_reserves", "vTokensInBondingCurve", "vTokens", "virtualTokenReserves")
+        _pick(raw, "virtual_token_reserves", "vTokensInBondingCurve", "vTokens", "virtualTokenReserves"),
+        token_unit=True,
     )
     rsol = _as_int_reserve(
         _pick(raw, "real_sol_reserves", "solInBondingCurve", "realSolReserves"),
         sol_unit=True,
     )
     rtok = _as_int_reserve(
-        _pick(raw, "real_token_reserves", "realTokenReserves", "tokensInBondingCurve")
+        _pick(raw, "real_token_reserves", "realTokenReserves", "tokensInBondingCurve"),
+        token_unit=True,
     )
     nested = raw.get("initial_reserves") if isinstance(raw.get("initial_reserves"), dict) else None
     if nested:
@@ -350,6 +354,7 @@ class DiscoveryRuntime:
         self._seen: set[str] = set()
         self._portal_backoff = PORTAL_BACKOFF_INITIAL_SEC
         self.max_discovered = int(os.getenv("PUMPFUN_DISCOVERY_MAX") or MAX_DISCOVERED_DEFAULT)
+        self.trade_logs_forwarded = 0
 
     async def ingest(self, raw: dict[str, Any], source: str) -> Optional[NewTokenEvent]:
         ev = normalize_new_token(raw, source)
@@ -469,6 +474,21 @@ class DiscoveryRuntime:
                 raise PortalAuthRejected(status) from exc
             raise
 
+    def _forward_trade_logs(self, logs: list[Any], signature: Any) -> None:
+        """Hand pump TradeEvent logs to a real-market provider (read-only market data).
+
+        Only providers exposing ``observe_logs`` (``pumpfun_live_paper``) use
+        this; the synthetic provider ignores real prints. Not an order path.
+        """
+        observe = getattr(get_provider(), "observe_logs", None)
+        if not callable(observe):
+            return
+        try:
+            observe([str(x) for x in logs], signature=str(signature or "") or None)
+            self.trade_logs_forwarded += 1
+        except Exception:
+            log.debug("trade log forward failed", exc_info=True)
+
     async def _run_logs(self) -> None:
         import websockets
 
@@ -505,6 +525,8 @@ class DiscoveryRuntime:
                 logs = value.get("logs") or []
                 if not isinstance(logs, list):
                     continue
+                if not value.get("err"):
+                    self._forward_trade_logs(logs, value.get("signature"))
                 parsed_ev = extract_create_from_logs([str(x) for x in logs])
                 if not parsed_ev:
                     continue
@@ -519,6 +541,14 @@ def get_discovery() -> DiscoveryRuntime:
     if _engine is None:
         _engine = DiscoveryRuntime()
     return _engine
+
+
+def get_discovery_if_running() -> Optional[DiscoveryRuntime]:
+    """The runtime when its loop is running; never constructs one."""
+    engine = _engine
+    if engine is None or not engine._running:
+        return None
+    return engine
 
 
 def reset_discovery() -> None:

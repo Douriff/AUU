@@ -977,7 +977,9 @@ def _column(rows: Sequence[Mapping[str, Any]], *, ident: str, label: str) -> dic
 
 
 def _counts_in_compare(row: Mapping[str, Any]) -> bool:
-    return str(row.get("market_source") or "") not in {"synthetic", "legacy_synthetic"}
+    from app.paper.ledger import NON_REAL_MARKET_SOURCES
+
+    return str(row.get("market_source") or "") not in NON_REAL_MARKET_SOURCES
 
 
 def _main_rows() -> list[dict[str, Any]]:

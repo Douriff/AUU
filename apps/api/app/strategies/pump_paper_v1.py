@@ -42,6 +42,27 @@ from app.risk import get_risk_gate
 
 log = logging.getLogger("auu.pump_paper_v1")
 
+
+def _entry_ttl_ms() -> int:
+    try:
+        return max(1_000, int(os.getenv("LIVE_PAPER_ENTRY_TTL_MS") or 30_000))
+    except ValueError:
+        return 30_000
+
+
+def _observed_fee_meta(symbol: str) -> dict[str, Any]:
+    """Protocol/creator fee bps last seen on a real TradeEvent for ``symbol``."""
+    getter = getattr(get_provider(), "fee_bps_for", None)
+    if not callable(getter):
+        return {}
+    proto, creator = getter(symbol)
+    out: dict[str, Any] = {}
+    if proto is not None:
+        out["protocol_fee_bps"] = int(proto)
+    if creator is not None:
+        out["creator_fee_bps"] = int(creator)
+    return out
+
 STRATEGY_ID = "pump-paper-v1"
 FORBIDDEN_TAGS = {"HONEYPOT", "HONEYPOT_FLAG", "TAX_HIGH", "SPREAD_TOO_WIDE"}
 EXIT_IMPACT_BPS = 250.0
@@ -663,6 +684,8 @@ class PumpPaperEngine:
         }
         if immediate and not snap.synthetic:
             meta["fill_ts"] = now_ms
+        if not snap.synthetic:
+            meta.update(_observed_fee_meta(symbol))
         if pos is None and entry_impact_bps is not None and entry_impact_bps < 1e8:
             meta["entry_impact_bps"] = float(entry_impact_bps)
         ctx = self._build_ctx(symbol, snap, now_ms, extra_meta=meta)
@@ -773,6 +796,14 @@ class PumpPaperEngine:
         )
 
     async def _drain_real_fill(self, provider: Any, symbol: str, now_ms: int) -> None:
+        """Fill a deferred real-market decision on the first print after latency.
+
+        The decision was taken at ``pending["ts"]``; the paper order reaches
+        the curve ``broker.latency_ms`` later and executes against the reserves
+        left by the first real trade received at or after that moment. With no
+        such print, nothing fills (no interpolation). Entries that see no print
+        within ``LIVE_PAPER_ENTRY_TTL_MS`` are dropped; exits keep waiting.
+        """
         pending = self._deferred.get(symbol)
         if not pending:
             return
@@ -784,6 +815,18 @@ class PumpPaperEngine:
         ready = int(pending["ts"]) + int(get_paper_broker().latency_ms)
         trade = finder(symbol, ready)
         if not trade:
+            is_entry = getattr(pending.get("signal"), "side", "") == "long"
+            if is_entry and now_ms - ready > _entry_ttl_ms():
+                self._deferred.pop(symbol, None)
+                self._note(
+                    symbol,
+                    now_ms,
+                    action="skip",
+                    allow=False,
+                    reason=getattr(pending.get("signal"), "reason", "") or "entry",
+                    tags=["NO_REAL_PRINT"],
+                    notes="no real trade after latency; entry dropped",
+                )
             return
         snap = self._snapshot_from_trade(symbol, trade, pending)
         if snap is None:
@@ -883,7 +926,11 @@ class PumpPaperEngine:
         Bypasses curve-impact / halt denies that would otherwise leave the
         position stuck after the mint left the watch list.
         """
-        px = max(float(snap.price_sol), float(pos.entry_price), 1e-18)
+        if snap.synthetic:
+            px = max(float(snap.price_sol), float(pos.entry_price), 1e-18)
+        else:
+            # Real tape: the last observed mark, never floored at the entry price.
+            px = max(float(snap.price_sol), 1e-18)
         close_notional = abs(float(pos.qty)) * px
         if close_notional <= 0:
             self.positions.pop(symbol, None)
@@ -903,6 +950,9 @@ class PumpPaperEngine:
                 "market_source": "synthetic" if snap.synthetic else "real",
             },
         )
+        if not snap.synthetic:
+            meta = {**ctx.meta, "curve_fill": True, **_observed_fee_meta(symbol)}
+            ctx = ctx.model_copy(update={"pump": snap.to_pump_ctx(), "meta": meta})
         signal = SignalOut(
             side="flat",
             strength=0.7,

@@ -487,14 +487,14 @@ def _open_positions() -> int:
 
 def console_stats() -> dict[str, Any]:
     from app.paper.executability import build_executability
-    from app.paper.ledger import get_paper_journal
+    from app.paper.ledger import excluded_from_go, get_paper_journal
 
     start = shanghai_day_start_ms()
     end = start + 86_400_000
     trades = [
         t
         for t in get_paper_journal().closed
-        if (t.source or "") != "live" and start <= int(t.exit_ts) < end
+        if (t.source or "") != "live" and start <= int(t.exit_ts) < end and not excluded_from_go(t)
     ]
     n = len(trades)
     pnl = sum(float(t.pnl) for t in trades) if n else 0.0

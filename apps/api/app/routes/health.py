@@ -41,6 +41,7 @@ def health():
             "strategyId": "pump-paper-v1",
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
             **discovery_health_fields(),
+            "liveFeed": provider.feed_health() if callable(getattr(provider, "feed_health", None)) else None,
             "liveEnabled": payload["liveEnabled"],
             "liveConfirmed": payload["liveConfirmed"],
             "liveDisabled": payload["liveDisabled"],

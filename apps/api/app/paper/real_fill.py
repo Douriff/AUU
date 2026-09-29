@@ -5,7 +5,8 @@ Uses the same bonding-curve helpers as the rest of the paper stack
 """
 from __future__ import annotations
 
-from typing import Optional
+import os
+from typing import Any, Mapping, Optional
 
 from app.providers.pumpfun_curve_math import (
     DEFAULT_CREATOR_FEE_BPS,
@@ -71,3 +72,30 @@ def quote_curve_fill(
         return None
     slip = abs(px - spot) / spot * 1e4 if spot > 0 else 0.0
     return px, qty, fee, slip
+
+
+def _int_or_none(val: Any) -> Optional[int]:
+    if val is None or val == "":
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def curve_fee_bps(meta: Mapping[str, Any], pump: Any = None) -> tuple[int, int]:
+    """(protocol, creator) fee bps for a real-market curve fill.
+
+    Order: fee bps observed on the latest real TradeEvent (``meta``), then
+    ``PAPER_CURVE_PROTOCOL_FEE_BPS`` / the code constant
+    ``DEFAULT_PROTOCOL_FEE_BPS`` and the snapshot creator fee.
+    """
+    proto = _int_or_none(meta.get("protocol_fee_bps"))
+    if proto is None:
+        proto = _int_or_none(os.getenv("PAPER_CURVE_PROTOCOL_FEE_BPS"))
+    if proto is None:
+        proto = DEFAULT_PROTOCOL_FEE_BPS
+    creator = _int_or_none(meta.get("creator_fee_bps"))
+    if creator is None:
+        creator = _int_or_none(getattr(pump, "creator_fee_bps", None)) or DEFAULT_CREATOR_FEE_BPS
+    return max(0, proto), max(0, creator)

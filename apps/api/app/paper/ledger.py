@@ -281,6 +281,11 @@ def excluded_from_autopaper_stats(trade: Any) -> bool:
     return "source=manual" in blob or "source:manual" in blob
 
 
+# Data-source labels that never count toward real-market stats, Go/No-Go,
+# shadow columns or leaderboards. ``mock`` is the random mock provider.
+NON_REAL_MARKET_SOURCES = frozenset({"synthetic", "legacy_synthetic", "mock"})
+
+
 def excluded_from_go(trade: Any) -> bool:
     """Synthetic tapes and pre-real journals stay out of Go, shadow columns, and rank.
 
@@ -291,7 +296,9 @@ def excluded_from_go(trade: Any) -> bool:
     ms = getattr(trade, "market_source", None)
     if ms is None and isinstance(trade, Mapping):
         ms = trade.get("market_source")
-    return str(ms or "") in {"synthetic", "legacy_synthetic"}
+        if trade.get("phantom_short"):
+            return True
+    return str(ms or "") in NON_REAL_MARKET_SOURCES
 
 
 def _fill_market_source(fill: Fill) -> Optional[str]:
@@ -299,6 +306,17 @@ def _fill_market_source(fill: Fill) -> Optional[str]:
     if raw in {None, ""}:
         return None
     return str(raw)
+
+
+def _same_market(lot_ms: Optional[str], fill_ms: Optional[str]) -> bool:
+    """Real lots match only real fills; labeled non-real lots stay in their own pool.
+
+    Unlabeled in-memory rows (``None``) match either side. Rows loaded from
+    disk without a label are ``legacy_synthetic`` and never net against real.
+    """
+    if lot_ms is None or fill_ms is None:
+        return True
+    return (lot_ms == "real") == (fill_ms == "real")
 
 
 def _trip_market_source(lot_ms: Optional[str], fill_ms: Optional[str]) -> Optional[str]:
@@ -365,10 +383,12 @@ class PaperTradeJournal:
         remaining = qty
         new_closed: list[RoundTrip] = []
 
+        fill_ms = _fill_market_source(fill)
         i = 0
         while remaining != 0 and i < len(opened):
             lot = opened[i]
-            if lot.qty * remaining > 0:
+            if lot.qty * remaining > 0 or not _same_market(lot.market_source, fill_ms):
+                # Real-market fills never net against synthetic / legacy lots.
                 i += 1
                 continue
             take = min(abs(lot.qty), abs(remaining))
@@ -432,8 +452,11 @@ class PaperTradeJournal:
                 i += 1
 
         closed_long = any(t.side == "long" for t in new_closed)
-        if remaining < -1e-9 and closed_long:
-            # Oversized sell used to open a residual short that later counted as a win.
+        if remaining < -1e-9 and (closed_long or strategy_id == "pump-paper-v1"):
+            # A sell never opens a residual short: the autopaper strategy is
+            # long-only, and an oversized close used to leave a short lot that
+            # the next entry settled as a fake winning "short" trade.
+            dumped["clamped_residual_qty"] = remaining
             remaining = 0.0
         if abs(remaining) > 1e-12:
             leftover_fee = fee * (abs(remaining) / abs(qty)) if qty else 0.0

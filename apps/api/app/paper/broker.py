@@ -29,13 +29,20 @@ class PaperBroker:
         fill_ts = ctx.ts + self.latency_ms
 
         if intent.order_type == "market":
-            return self._fill_market(ctx, intent, fill_ts)
+            return self._label(ctx, self._fill_market(ctx, intent, fill_ts))
         if intent.order_type == "limit":
-            return self._try_limit(ctx, intent, fill_ts)
+            return self._label(ctx, self._try_limit(ctx, intent, fill_ts))
         if intent.order_type == "twap_sim":
-            return self._twap_slices(ctx, intent, fill_ts)
+            return self._label(ctx, self._twap_slices(ctx, intent, fill_ts))
         self._reject(["MAX_NOTIONAL"], f"unknown order_type={intent.order_type}")
         return []
+
+    def _label(self, ctx: StrategyContext, fills: list[Fill]) -> list[Fill]:
+        """Every paper fill carries a data-source label (real | synthetic | mock)."""
+        if not fills:
+            return fills
+        source = self._market_source(ctx) or _active_market_kind()
+        return [f if f.market_source else f.model_copy(update={"market_source": source}) for f in fills]
 
     def _slippage_bps(self, notional: float, adv_usd: float) -> float:
         adv = max(adv_usd, 1.0)
@@ -124,10 +131,11 @@ class PaperBroker:
         held: float,
         source: str | None,
     ) -> list[Fill]:
-        from app.paper.real_fill import quote_curve_fill
+        from app.paper.real_fill import curve_fee_bps, quote_curve_fill
 
         pump = ctx.pump
         assert pump is not None
+        proto_bps, creator_bps = curve_fee_bps(ctx.meta or {}, pump)
         quoted = quote_curve_fill(
             side=intent.side,
             notional_sol=notional,
@@ -135,7 +143,8 @@ class PaperBroker:
             virtual_token_reserves=int(float(pump.virtual_token_reserves)),
             real_token_reserves=int(float(pump.real_token_reserves)),
             flatten_qty=held if intent.side == "sell" else None,
-            creator_fee_bps=int(pump.creator_fee_bps or 0),
+            protocol_fee_bps=proto_bps,
+            creator_fee_bps=creator_bps,
             mid=self._mid(ctx),
         )
         if quoted is None:
@@ -246,13 +255,31 @@ class PaperBroker:
         return done
 
 
+def _active_market_kind() -> str:
+    try:
+        from app.providers import market_data_kind
+
+        return market_data_kind()
+    except Exception:
+        return "mock"
+
+
+def _latency_from_env() -> int:
+    import os
+
+    try:
+        return max(0, int(os.getenv("PAPER_FILL_LATENCY_MS") or 300))
+    except ValueError:
+        return 300
+
+
 _broker: Optional[PaperBroker] = None
 
 
 def get_paper_broker() -> PaperBroker:
     global _broker
     if _broker is None:
-        _broker = PaperBroker()
+        _broker = PaperBroker(latency_ms=_latency_from_env())
     return _broker
 
 

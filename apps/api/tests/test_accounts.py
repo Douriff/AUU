@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from app.auth.accounts import journal_for, reset_accounts, user_by_id
@@ -119,7 +120,10 @@ class PaperAccountTests(unittest.TestCase):
         self.assertTrue(order.json()["data"]["submitted"])
         self.assertIn("PUMPDEMO/SOL", get_paper_journal().lots)
 
-    def test_two_users_do_not_share_fills_or_the_system_journal(self):
+    # Stats/leaderboard mechanics on a fill labeled real-market; the synthetic
+    # exclusion itself is covered in test_real_market_paper.
+    @mock.patch("app.paper.broker._active_market_kind", return_value="real")
+    def test_two_users_do_not_share_fills_or_the_system_journal(self, _real_label):
         before = self._strategy()
         day = float(get_risk_gate().day_pnl)
         alice = self.client.post(
