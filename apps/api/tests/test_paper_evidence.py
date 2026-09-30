@@ -72,6 +72,8 @@ class _Base(unittest.IsolatedAsyncioTestCase):
         self._env.start()
         for key in ("AUTO_PAPER_ORDERS", "AUU_EVIDENCE", "AUU_EVIDENCE_MAX_MB", "AUU_EVIDENCE_KEEP"):
             os.environ.pop(key, None)
+        # These tests pin the 30 s post-exit window of evidence v1/v2.
+        os.environ["AUU_EVIDENCE_POST_MS"] = "30000"
         ev.reset_evidence_recorder()
         reset_paper_ledger(wipe_store=True)
         reset_paper_broker()

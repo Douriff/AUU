@@ -9,7 +9,8 @@ journal, what is needed to re-check the result offline:
   counts and SOL volume over 5/15/30/60 s, unique buyers, momentum, the
   creator's buy, market cap, discovery source);
 * the exit trigger (trigger mark vs fill price) and the price path;
-* a compact tape of the mint's real prints over [entry signal - 30 s, exit + 30 s];
+* a compact tape of the mint's real prints over [entry signal - 30 s, exit + post]
+  (post = ``AUU_EVIDENCE_POST_MS``, default 90 s; 30 s before evidence v3);
 * ``entry_factors``: holder structure / token safety at the signal, looked up
   off the execution path by ``app.paper.entry_factors``.
 
@@ -44,9 +45,23 @@ from app.providers.pumpfun_curve_math import (
 
 log = logging.getLogger("auu.paper.evidence")
 
-EVIDENCE_VERSION = 2  # v2: + entry_factors (holder structure / token safety)
+EVIDENCE_VERSION = 3  # v2: + entry_factors; v3: post-exit tape window configurable (default 90 s)
 PRE_MS = 30_000
-POST_MS = 30_000
+POST_MS = 30_000  # legacy default; the live value comes from post_ms()
+DEFAULT_POST_MS = 90_000
+
+
+def post_ms() -> int:
+    """Tape kept after the exit fill (``AUU_EVIDENCE_POST_MS``, 5 s .. 10 min, default 90 s).
+
+    Longer than the 30 s of v1/v2 so hold-longer exit variants (trailing,
+    no-TP) can be replayed offline. Record only.
+    """
+    try:
+        val = int(os.getenv("AUU_EVIDENCE_POST_MS") or DEFAULT_POST_MS)
+    except ValueError:
+        val = DEFAULT_POST_MS
+    return max(5_000, min(600_000, val))
 FEATURE_WINDOWS_S = (5, 15, 30, 60)
 MAX_TAPE_ROWS = 6_000
 MAX_EPISODES = 64
@@ -438,7 +453,7 @@ class EvidenceRecorder:
                     self.counters["dropped_stale"] += 1
                 elif ep.phase == "closed" and ep.exit_done_ts is not None:
                     gone = ep.gone_since is not None and now - ep.gone_since > 5_000
-                    if now >= ep.exit_done_ts + POST_MS or gone:
+                    if now >= ep.exit_done_ts + post_ms() or gone:
                         self._eps.pop(sym, None)
                         done.append(ep)
         n = 0
@@ -469,7 +484,7 @@ class EvidenceRecorder:
 
     def _window(self, ep: _Episode, now_ms: int) -> tuple[int, int]:
         lo = int(ep.entry.get("signal_ts") or ep.created_ms) - PRE_MS
-        hi = (ep.exit_done_ts + POST_MS) if ep.exit_done_ts is not None else now_ms
+        hi = (ep.exit_done_ts + post_ms()) if ep.exit_done_ts is not None else now_ms
         return lo, hi
 
     def _collect(self, ep: _Episode, trades: list[Mapping[str, Any]], now_ms: int) -> None:
