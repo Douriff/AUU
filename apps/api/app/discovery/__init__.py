@@ -389,6 +389,12 @@ class DiscoveryRuntime:
                     note_slot(ev.mint, ev.slot)  # evidence only (bundle / sniper windows)
                 except Exception:
                     log.debug("note_create_slot failed", exc_info=True)
+            note_meta = getattr(provider, "note_launch_meta", None)
+            if callable(note_meta):
+                try:
+                    note_meta(ev.mint, name=raw.get("name"), symbol=raw.get("symbol"))  # launch tapes only
+                except Exception:
+                    log.debug("note_launch_meta failed", exc_info=True)
 
         from app.bus import get_hub
 

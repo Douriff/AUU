@@ -54,6 +54,7 @@ from app.providers.pumpfun_curve_math import (
 )
 from app.providers.pumpfun_decode import PUMP_PROGRAM_ID, extract_trades_from_logs
 from app.paper.holders import HolderLedgerBook
+from app.paper.launch_tape import launch_hook
 
 log = logging.getLogger("auu.pumpfun_live_paper")
 
@@ -297,6 +298,11 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             symbol = self._by_mint.get((mint or "").strip())
             if symbol and self._curves[symbol].created_slot is None:
                 self._curves[symbol].created_slot = slot_i
+        launch_hook("note_meta", (mint or "").strip(), slot=slot_i)
+
+    def note_launch_meta(self, mint: str, *, name: Any = None, symbol: Any = None) -> None:
+        """Token name / symbol from the ``Create`` event (launch tapes only)."""
+        launch_hook("note_meta", (mint or "").strip(), name=name, symbol=symbol)
 
     def holder_ledger_snapshot(self, mint: str, upto_ts: Optional[int] = None) -> Optional[dict]:
         """Copy of the mint's trade ledger up to ``upto_ts`` (evidence only)."""
@@ -399,6 +405,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             self._candles[symbol] = {iv: [] for iv in INTERVAL_MS}
             key = source or "watch"
             self.registered_by_source[key] = self.registered_by_source.get(key, 0) + 1
+            launch_hook("on_register", mint, creator=creator, source=source, registered_ts=now)
             return curve
 
     def _drop_locked(self, symbol: str, mint: str) -> None:
@@ -407,6 +414,7 @@ class PumpfunLivePaperProvider(MarketDataProvider):
         self._trades.pop(symbol, None)
         self._candles.pop(symbol, None)
         self.holder_ledger.drop(mint)
+        launch_hook("on_drop", mint, "evicted")
 
     def verify_pending(self, *, limit: int = 8) -> dict[str, str]:
         """Check pending mints against the chain. Returns ``{mint: outcome}``.
@@ -618,6 +626,17 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 )
             except Exception:
                 log.debug("holder ledger apply failed", exc_info=True)
+            launch_hook(
+                "on_print",
+                c.mint,
+                ts=ts,
+                side=side,
+                sol=sol_amount,
+                vs=c.virtual_sol,
+                vt=c.virtual_token,
+                slot=row.get("slot"),
+                trader=dumped["trader"],
+            )
             return dumped
 
     def mark_graduated(self, mint: str) -> bool:

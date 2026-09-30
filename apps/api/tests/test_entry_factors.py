@@ -431,7 +431,7 @@ class EvidenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         recs = self.case._records()
         self.assertEqual(len(recs), 1)
         r = recs[0]
-        self.assertEqual(r["v"], 2)
+        self.assertEqual(r["v"], 3)
         f = r["entry_factors"]
         self.assertEqual(f["signal_ts"], r["entry"]["signal_ts"])
         self.assertIn(f["status"], {"ok", "partial"})
