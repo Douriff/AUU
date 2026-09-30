@@ -124,13 +124,14 @@ class PaperAccountTests(unittest.TestCase):
     # exclusion itself is covered in test_real_market_paper.
     @mock.patch("app.paper.broker._active_market_kind", return_value="real")
     def test_two_users_do_not_share_fills_or_the_system_journal(self, _real_label):
-        before = self._strategy()
         day = float(get_risk_gate().day_pnl)
         alice = self.client.post(
             "/api/v1/auth/register",
             json={"name": "alice", "password": "password1", "password_confirm": "password1", "start_sol": 80},
         )
         self.assertEqual(alice.status_code, 200, alice.text)
+        # AUU_AUTH=on gates every read, so read the system book as the signed-in admin.
+        before = self._strategy()
         self.assertTrue(alice.json()["data"]["user"]["is_admin"])
         self.assertFalse(alice.json()["data"]["liveEnabled"])
         bob = self.other.post(
