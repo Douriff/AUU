@@ -35,6 +35,7 @@ from app.routes import (
     watch,
     ws,
 )
+from app.auth.gate import AuthGateMiddleware
 from app.routes.envelope import API_VERSION
 from app.strategies.pump_paper_v1 import get_engine, loop_enabled
 from app.discovery import get_discovery, resolve_discovery_mode
@@ -92,6 +93,9 @@ app = FastAPI(
     description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. Live adapter is scaffolded but dark (no chain submit).",
     lifespan=lifespan,
 )
+
+# Login gate first so CORS (added after, so outermost) still decorates 401/403s.
+app.add_middleware(AuthGateMiddleware)
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 

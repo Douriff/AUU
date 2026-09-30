@@ -1540,3 +1540,25 @@ code.hl { color: var(--accent); }
 @media (max-width: 720px) {
   .wallet-signal dl, .wallet-signal.is-compact dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Login gate: anonymous visitors only see the auth pages. */
+.auth-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+.auth-screen-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.auth-screen-body {
+  width: 100%;
+  max-width: 440px;
+}
