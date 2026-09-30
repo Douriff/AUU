@@ -4,13 +4,16 @@ With accounts enabled every /api/* request and the /api/v1/ws websocket need a
 valid session cookie, except health and the login/register flow. Writes that
 change the shared system engine (strategy params, autopaper toggle, watch list,
 risk/pipeline/paper test orders, live switches) also need an admin. Per-user
-routes (trade/orders, wallet, password) keep their own checks. AUU_AUTH=off
+routes (trade/orders, wallet, password) keep their own checks. Cross-site writes
+and websocket handshakes (Origin not this site) are refused (CSRF). AUU_AUTH=off
 (local single-user mode) leaves everything as before.
 """
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from starlette.requests import HTTPConnection
 
@@ -51,6 +54,35 @@ def _normalize(path: str) -> str:
     return path
 
 
+def _allowed_origins() -> set[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    return {o.strip().rstrip("/").lower() for o in raw.split(",") if o.strip()}
+
+
+def csrf_problem(method: str, headers: dict[str, str]) -> Optional[str]:
+    """Reject cross-site writes and websocket handshakes (cookie is also SameSite=Lax).
+
+    A browser always sends Origin on cross-origin writes/websockets; it must be this site
+    (same host as the request) or a configured CORS origin. With no Origin, a
+    Sec-Fetch-Site of cross-site is refused too. Non-browser clients without both pass.
+    """
+    if (method or "GET").upper() in SAFE_METHODS:
+        return None
+    origin = (headers.get("origin") or "").strip().rstrip("/").lower()
+    if origin:
+        if origin == "null":
+            return "CSRF_ORIGIN"
+        host = (headers.get("host") or "").strip().lower()
+        if host and urlsplit(origin).netloc == host:
+            return None
+        if origin in _allowed_origins():
+            return None
+        return "CSRF_ORIGIN"
+    if (headers.get("sec-fetch-site") or "").strip().lower() == "cross-site":
+        return "CSRF_ORIGIN"
+    return None
+
+
 def gate_decision(path: str, method: str, user: Optional[dict[str, Any]]) -> Optional[tuple[int, str, str]]:
     """Return (status, code, message) to reject, or None to allow."""
     path = _normalize(path)
@@ -80,6 +112,13 @@ class AuthGateMiddleware:
             return
         conn = HTTPConnection(scope)
         method = scope.get("method", "GET") if kind == "http" else "GET"
+        path = _normalize(scope.get("path", ""))
+        if path == "/api" or path.startswith("/api/"):
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+            # A websocket handshake is a GET, but it carries the cookie like a write.
+            if csrf_problem("POST" if kind == "websocket" else method, headers):
+                await self._reject(kind, send, 403, "CSRF_ORIGIN", "跨站请求被拒绝")
+                return
         user = None
         if _normalize(scope.get("path", "")) not in PUBLIC_PATHS:
             try:
@@ -91,6 +130,10 @@ class AuthGateMiddleware:
             await self.app(scope, receive, send)
             return
         status, code, message = verdict
+        await self._reject(kind, send, status, code, message)
+
+    @staticmethod
+    async def _reject(kind, send, status: int, code: str, message: str) -> None:
         if kind == "websocket":
             # Reject the handshake (client sees HTTP 403) without streaming anything.
             await send({"type": "websocket.close", "code": 1008, "reason": code})

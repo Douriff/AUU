@@ -92,6 +92,12 @@ app = FastAPI(
     version="0.1.0",
     description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. Live adapter is scaffolded but dark (no chain submit).",
     lifespan=lifespan,
+    # AUU_API_DOCS=off hides /docs, /redoc and /openapi.json (public deployments).
+    **(
+        {"docs_url": None, "redoc_url": None, "openapi_url": None}
+        if os.getenv("AUU_API_DOCS", "on").strip().lower() in {"0", "false", "off", "no"}
+        else {}
+    ),
 )
 
 # Login gate first so CORS (added after, so outermost) still decorates 401/403s.
