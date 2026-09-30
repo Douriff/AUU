@@ -57,7 +57,7 @@ def launch_tape_path() -> Path:
 
 
 class _Open:
-    __slots__ = ("mint", "creator", "t0", "slot", "name", "symbol", "rows", "capped", "creator_first_buy_sol")
+    __slots__ = ("mint", "creator", "t0", "slot", "name", "symbol", "rows", "capped", "evicted_ms", "sigs")
 
     def __init__(self, mint: str, creator: str, t0: int) -> None:
         self.mint = mint
@@ -68,6 +68,8 @@ class _Open:
         self.symbol: Optional[str] = None
         self.rows: list[list[Any]] = []
         self.capped = False
+        self.evicted_ms: Optional[int] = None  # watch list dropped it; recording continues
+        self.sigs: set = set()
 
 
 class LaunchTapeRecorder:
@@ -121,12 +123,19 @@ class LaunchTapeRecorder:
             if symbol is not None:
                 ep.symbol = str(symbol)[:32]
 
-    def on_print(self, mint: str, *, ts: int, side: str, sol: float, vs: int, vt: int, slot: Any, trader: Any) -> None:
+    def on_print(
+        self, mint: str, *, ts: int, side: str, sol: float, vs: int, vt: int, slot: Any, trader: Any, sig: Any = None
+    ) -> None:
         ended = None
         with self._lock:
             ep = self._open.get(mint)
             if ep is None:
                 return
+            if sig:
+                key = (str(sig), side)
+                if key in ep.sigs:
+                    return
+                ep.sigs.add(key)
             if len(ep.rows) >= MAX_ROWS:
                 ep.capped = True
             else:
@@ -144,10 +153,12 @@ class LaunchTapeRecorder:
         self.expire()
 
     def on_drop(self, mint: str, reason: str = "evicted") -> None:
+        """The watch list dropped the mint. Prints are fed from the raw stream
+        (before the watch-list filter), so the tape keeps going until max age."""
         with self._lock:
-            ep = self._open.pop(mint, None)
-        if ep is not None:
-            self._emit(ep, reason)
+            ep = self._open.get(mint)
+            if ep is not None and ep.evicted_ms is None:
+                ep.evicted_ms = int(self._clock()) - ep.t0
 
     def expire(self, now_ms: Optional[int] = None) -> int:
         now = int(now_ms if now_ms is not None else self._clock())
@@ -190,6 +201,7 @@ class LaunchTapeRecorder:
             "created_slot": ep.slot,
             "end_reason": reason,
             "capped": ep.capped,
+            "evicted_ms": ep.evicted_ms,
             "fields": list(FIELDS),
             "rows": ep.rows,
         }

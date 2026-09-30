@@ -556,6 +556,20 @@ class PumpfunLivePaperProvider(MarketDataProvider):
             return None
         if vs_i <= 0 or vt_i <= 0:
             return None
+        # Launch tapes (record only) see every print for taped mints, including
+        # ones the watch list already evicted. No-op unless a tape is open.
+        launch_hook(
+            "on_print",
+            mint,
+            ts=int(row.get("ts") or self._clock()),
+            side=side,
+            sol=float(row.get("sol_amount") or 0.0),
+            vs=vs_i,
+            vt=vt_i,
+            slot=row.get("slot"),
+            trader=str(row.get("trader") or "") or None,
+            sig=row.get("signature"),
+        )
         with self._lock:
             symbol = self._by_mint.get(mint)
             if symbol is None:
@@ -626,17 +640,6 @@ class PumpfunLivePaperProvider(MarketDataProvider):
                 )
             except Exception:
                 log.debug("holder ledger apply failed", exc_info=True)
-            launch_hook(
-                "on_print",
-                c.mint,
-                ts=ts,
-                side=side,
-                sol=sol_amount,
-                vs=c.virtual_sol,
-                vt=c.virtual_token,
-                slot=row.get("slot"),
-                trader=dumped["trader"],
-            )
             return dumped
 
     def mark_graduated(self, mint: str) -> bool:

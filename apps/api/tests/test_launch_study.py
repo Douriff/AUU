@@ -75,9 +75,35 @@ class RecorderTests(unittest.TestCase):
             rec.on_register("A", creator=CREATOR, source="logs", registered_ts=T0)
             rec.on_register("B", creator=CREATOR, source="logs", registered_ts=T0)
             rec.on_drop("A")
+            self.assertEqual(rec.status()["open"], 2, "eviction from the watch list does not end the tape")
+            rec.on_print("A", ts=T0 + 3, side="buy", sol=0.5, vs=31_000_000_000, vt=K // 31_000_000_000, slot=None, trader="y", sig="s1")
+            rec.on_print("A", ts=T0 + 3, side="buy", sol=0.5, vs=31_000_000_000, vt=K // 31_000_000_000, slot=None, trader="y", sig="s1")
             rec.on_print("B", ts=T0 + 5, side="buy", sol=80.0, vs=115_000_000_000, vt=279_900_000_000_000, slot=None, trader="x")
-            ends = sorted(json.loads(x)["end_reason"] for x in path.read_text().splitlines())
-            self.assertEqual(ends, ["evicted", "graduated"])
+            rec.expire(T0 + 10**7)
+            out = {json.loads(x)["mint"]: json.loads(x) for x in path.read_text().splitlines()}
+            self.assertEqual((out["A"]["end_reason"], out["B"]["end_reason"]), ("max_age", "graduated"))
+            self.assertEqual((out["A"]["evicted_ms"], len(out["A"]["rows"])), (0, 1), "deduped by signature")
+
+    def test_prints_after_watch_eviction_still_taped(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "lt.jsonl"
+            clock = {"now": T0}
+            rec = LaunchTapeRecorder(EvidenceWriter(path), max_age_ms=60_000, clock=lambda: clock["now"], background=False)
+            mint = "EvictMint11111111111111111111111111111111111"
+            with mock.patch("app.paper.launch_tape.get_launch_recorder", return_value=rec):
+                p = PumpfunLivePaperProvider(watch_mints="", clock=lambda: clock["now"])
+                p.register_watch_mint(mint, base="EVCT", source="logs", creator=CREATOR)
+                with p._lock:
+                    sym = p._by_mint[mint]
+                    p._by_mint.pop(mint)
+                    p._drop_locked(sym, mint)
+                vs = 40_000_000_000
+                self.assertIsNone(p.apply_observed_trade({"mint": mint, "side": "buy", "ts": T0 + 5000, "virtual_sol_reserves": vs,
+                                                          "virtual_token_reserves": K // vs, "sol_amount": 2.0, "trader": "Late1111", "signature": "z"}))
+                clock["now"] = T0 + 61_000
+                rec.expire()
+            r = json.loads(path.read_text().splitlines()[0])
+            self.assertEqual((r["end_reason"], len(r["rows"]), r["rows"][0][6]), ("max_age", 1, "Late1111"))
 
     def test_off_under_tests_by_default(self):
         with mock.patch.dict(os.environ, {}, clear=False):
