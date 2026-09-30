@@ -163,8 +163,22 @@ function Stat({ label, value, tone: toneName }: { label: string; value: string; 
 
 function LogRow({ row }: { row: ConsoleEvent }) {
   const pnl = formatSol(row.pnl);
+  const [open, setOpen] = useState(false);
   return (
-    <div className={`console-row type-${row.type}`}>
+    <div
+      className={`console-row type-${row.type}${open ? " is-open" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      title={row.message}
+      onClick={() => setOpen((v) => !v)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setOpen((v) => !v);
+        }
+      }}
+    >
       <time dateTime={new Date(row.ts).toISOString()}>{clock(row.ts)}</time>
       <span className="console-pill">{row.pill}</span>
       <span className="console-msg">{row.message}</span>

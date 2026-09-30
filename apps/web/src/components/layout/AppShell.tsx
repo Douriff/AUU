@@ -207,6 +207,7 @@ function ShellFrame({
   const [marketData, setMarketData] = useState("");
   const [liveOff, setLiveOff] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
 
   useEffect(() => {
     marketProvider
@@ -258,11 +259,20 @@ function ShellFrame({
         </button>
       </aside>
       <div className="shell-body">
-        <header className="shell-status">
+        <header className={`shell-status${statusOpen ? " is-open" : ""}`}>
+          <button
+            type="button"
+            className="status-more"
+            aria-expanded={statusOpen}
+            aria-label="状态详情"
+            onClick={() => setStatusOpen((v) => !v)}
+          >
+            {statusOpen ? "收起" : "状态"}
+          </button>
           <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
             {tradingState}
           </span>
-          <span className="muted topbar-provider" title="DATA_PROVIDER">
+          <span className="muted topbar-provider status-extra" title="DATA_PROVIDER">
             {provider}
             {marketData ? ` · ${marketData}` : ""}
           </span>
@@ -274,7 +284,7 @@ function ShellFrame({
             title={isAdmin ? undefined : "只有管理员可以切换系统自动纸面"}
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />
-          <div className="mode-badge">PAPER · PUMP.FUN</div>
+          <div className="mode-badge status-extra">PAPER · PUMP.FUN</div>
           <div className="mode-badge live-off" title="liveEnabled=false · LIVE_DISABLED">
             {liveOff ? "LIVE OFF" : "LIVE CHECKLIST"}
           </div>
