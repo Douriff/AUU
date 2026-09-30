@@ -43,8 +43,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 
-from app.paper.replay import _fill, _prints, iter_records
+from app.paper.replay import _VT_OFFSET, _fill, _prints, iter_records
 from app.providers.pumpfun_curve_math import price_sol
+
+BOOTSTRAP_N = 2000
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,16 @@ class ExitPolicy:
     after_partial_stop: Optional[float] = None
     tp2: Optional[float] = None
     fee_bps: int = 125
+    # Fill model extras: priority fee per transaction (SOL), re-filled entry
+    # after ``entry_delay_ms`` from the signal (None = recorded fill).
+    prio_fee_sol: float = 0.0
+    entry_delay_ms: Optional[int] = None
+    # Event exits (checked on every print after the entry fill):
+    # ``dump_k``: a print whose log-return is below median - k * MAD-sigma of
+    # the pre-entry per-print log-returns; ``creator_sell``: the creator sells
+    # (needs the ``who`` tape column, evidence v3+).
+    dump_k: Optional[float] = None
+    creator_sell: bool = False
 
 
 class _Tape:
@@ -81,6 +93,12 @@ class _Tape:
         self.sol = [float(r[2] or 0.0) for r in rows]
         self.res = [(t0 + int(r[0]), int(r[3]), int(r[4])) for r in rows]
         self.px = [price_sol(int(r[3]), int(r[4])) for r in rows]
+        fields = list(tape.get("fields") or [])
+        wi = fields.index("who") if "who" in fields else None
+        self.who = [(r[wi] if wi is not None and len(r) > wi else None) for r in rows]
+        self.has_who = wi is not None
+        # Curve still live at this print (no fills after graduation).
+        self.live = [int(r[4]) - _VT_OFFSET > 0 for r in rows]
         # prefix sums for windowed buy / sell SOL and sell counts
         self._buy = [0.0]
         self._sell = [0.0]
@@ -95,6 +113,8 @@ class _Tape:
 
     def first_ge(self, t: int) -> Optional[tuple[int, int, int]]:
         i = bisect.bisect_left(self.ts, t)
+        while i < len(self.res) and not self.live[i]:
+            i += 1
         return self.res[i] if i < len(self.res) else None
 
     def flow(self, lo: int, hi: int) -> tuple[float, float, int]:
@@ -111,19 +131,48 @@ def simulate_policy(rec: Mapping[str, Any], pol: ExitPolicy) -> Optional[dict[st
     tape = _Tape(rec)
     if not tape.ts:
         return None
-    e_ts = int(entry["fill_ts"])
-    e_px = float(entry["fill_price"])
-    qty = float(entry["fill_qty"])
-    cost = e_px * qty + float(entry.get("fill_fee") or 0.0)
+    if pol.entry_delay_ms is None:
+        e_ts = int(entry["fill_ts"])
+        e_px = float(entry["fill_price"])
+        qty = float(entry["fill_qty"])
+        cost = e_px * qty + float(entry.get("fill_fee") or 0.0)
+    else:
+        sig = int(entry.get("signal_ts") or entry["fill_ts"])
+        p = tape.first_ge(sig + int(pol.entry_delay_ms))
+        size = float(entry.get("notional_sol") or (float(entry["fill_price"]) * float(entry["fill_qty"])))
+        got = _fill("buy", p, notional=size, fee_bps=pol.fee_bps) if p else None
+        if got is None:
+            return {"status": "no_entry"}
+        e_px, qty, fee = got
+        e_ts = p[0]
+        cost = e_px * qty + fee
+    cost += pol.prio_fee_sol
     last_ts = tape.ts[-1]
     anchor = int((rec.get("exit") or {}).get("signal_ts") or e_ts)
+    first = bisect.bisect_right(tape.ts, e_ts)
     if pol.tick_ms > 0:
         k = -((anchor - e_ts) // pol.tick_ms)
         start = anchor + k * pol.tick_ms
-        checks: Iterable[int] = range(start, last_ts + 1, pol.tick_ms)
+        grid = set(range(start, last_ts + 1, pol.tick_ms))
     else:
-        first = bisect.bisect_left(tape.ts, e_ts)
-        checks = tape.ts[first:]
+        grid = set(tape.ts[first:])
+    # Event exits fire on the print itself (event-driven), so add print times.
+    event_idx: dict[int, str] = {}
+    if pol.dump_k is not None:
+        thr = _dump_threshold(tape, e_ts, pol.dump_k)
+        if thr is not None:
+            for i in range(max(first, 1), len(tape.ts)):
+                if math.log(tape.px[i] / tape.px[i - 1]) < thr:
+                    event_idx.setdefault(tape.ts[i], "dump")
+    if pol.creator_sell:
+        creator = str(((rec.get("features") or {}).get("token") or {}).get("creator") or "")
+        if not tape.has_who or not creator:
+            return {"status": "not_applicable"}
+        c8 = creator[:8]
+        for i in range(first, len(tape.ts)):
+            if tape.side[i] < 0 and tape.who[i] == c8:
+                event_idx.setdefault(tape.ts[i], "creator_sell")
+    checks: Iterable[int] = sorted(grid | set(event_idx))
     remaining = qty
     proceeds = 0.0
     fees = 0.0
@@ -145,7 +194,7 @@ def simulate_policy(rec: Mapping[str, Any], pol: ExitPolicy) -> Optional[dict[st
             return False
         px, _q, fee = got
         proceeds += px * q
-        fees += fee
+        fees += fee + pol.prio_fee_sol
         legs.append({"reason": why, "signal_ts": int(t), "fill_ts": p[0], "qty": q, "price": px})
         return True
 
@@ -164,8 +213,8 @@ def simulate_policy(rec: Mapping[str, Any], pol: ExitPolicy) -> Optional[dict[st
         mark = tape.px[i]
         ret = mark / e_px - 1.0
         hold = (t - e_ts) / 1000.0
-        why = None
-        if (
+        why = event_idx.get(t)
+        if why is None and (
             not partial_done
             and pol.partial_frac
             and pol.partial_tp is not None
@@ -179,7 +228,9 @@ def simulate_policy(rec: Mapping[str, Any], pol: ExitPolicy) -> Optional[dict[st
                     stop = -float(pol.after_partial_stop)  # e.g. 0.0 → break-even stop
                 tp = pol.tp2
             continue
-        if tp is not None and ret >= tp:
+        if why is not None:
+            pass
+        elif tp is not None and ret >= tp:
             why = "take_profit"
         elif ret <= -stop:
             why = "stop_loss"
@@ -225,8 +276,33 @@ def simulate_policy(rec: Mapping[str, Any], pol: ExitPolicy) -> Optional[dict[st
     }
 
 
+def _dump_threshold(tape: "_Tape", e_ts: int, k: float, min_n: int = 8) -> Optional[float]:
+    """median - k * 1.4826 * MAD of per-print log-returns before the entry fill."""
+    idx = [i for i in range(1, len(tape.ts)) if tape.ts[i] <= e_ts]
+    rets = [math.log(tape.px[i] / tape.px[i - 1]) for i in idx if tape.px[i - 1] > 0]
+    if len(rets) < min_n:
+        return None
+    med = statistics.median(rets)
+    mad = statistics.median(abs(x - med) for x in rets)
+    sigma = 1.4826 * mad
+    if sigma <= 0:
+        sigma = statistics.pstdev(rets) or 1e-4
+    return med - k * sigma
+
+
+def bootstrap_ci(vals: Sequence[float], n: int = BOOTSTRAP_N, seed: int = 7) -> tuple[Optional[float], Optional[float]]:
+    import random
+
+    if len(vals) < 2:
+        return None, None
+    rng = random.Random(seed)
+    m = len(vals)
+    means = sorted(sum(vals[rng.randrange(m)] for _ in range(m)) / m for _ in range(n))
+    return means[int(0.025 * n)], means[int(0.975 * n) - 1]
+
+
 # ----------------------------------------------------------------- statistics
-def stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def stats(rows: Sequence[Mapping[str, Any]], *, bootstrap: bool = False) -> dict[str, Any]:
     ok = [r for r in rows if r.get("status") == "ok" and r.get("net_bps") is not None]
     bps = [float(r["net_bps"]) for r in ok]
     sol = [float(r["net_sol"]) for r in ok]
@@ -251,14 +327,22 @@ def stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "mean_bps_ex_top3": statistics.fmean([bps[i] for i in keep]) if keep else None,
             "net_sol_ex_top3": sum(sol[i] for i in keep),
             "tape_end_rate": sum(1 for r in ok if r.get("flag") == "tape_end") / n,
+            "mean_bps_ex_top1pct": _mean_ex_top(bps, max(1, math.ceil(0.01 * n))),
         }
     )
+    if bootstrap:
+        out["boot_lo_bps"], out["boot_hi_bps"] = bootstrap_ci(bps)
     return out
 
 
-def time_split(recs: Sequence[Mapping[str, Any]]) -> tuple[list, list]:
+def _mean_ex_top(vals: Sequence[float], k: int) -> Optional[float]:
+    keep = sorted(vals)[: max(0, len(vals) - k)]
+    return statistics.fmean(keep) if keep else None
+
+
+def time_split(recs: Sequence[Mapping[str, Any]], frac: float = 0.5) -> tuple[list, list]:
     ordered = sorted(recs, key=lambda r: int((r.get("entry") or {}).get("signal_ts") or 0))
-    half = len(ordered) // 2
+    half = int(len(ordered) * frac)
     return list(ordered[:half]), list(ordered[half:])
 
 
@@ -322,6 +406,18 @@ def default_policies() -> list[ExitPolicy]:
     pols.append(replace(b, name="stop3_time3s_trail4_3", stop=0.03, time_stop_s=3, time_stop_min_ret=0.0, tp=0.12, trail_activate=0.04, trail_dist=0.03))
     pols.append(replace(b, name="stop4_sp3s_r1_tick250", stop=0.04, sp_window_s=3, sp_ratio=1.0, sp_min_sells=2, tick_ms=250))
     pols.append(replace(b, name="stop3_trail4_3_tick0", stop=0.03, tp=0.12, trail_activate=0.04, trail_dist=0.03, tick_ms=0))
+    # H3 event exits (fire on the print, then + latency)
+    for k in (3.0, 4.0):
+        pols.append(replace(b, name=f"H3_dump{k:g}mad", dump_k=k))
+    pols.append(replace(b, name="H3_creator_sell", creator_sell=True))
+    pols.append(replace(b, name="H3_dump4mad+creator_sell", dump_k=4.0, creator_sell=True))
+    # H4 exits on our entries (gate creator_buy>=1 applied via the gate grid)
+    pols.append(replace(b, name="H4_tp30_sl30_t120", tp=0.30, stop=0.30, max_hold_s=120.0))
+    # Latency stress: entry re-filled and exits filled 1 s / 2 s after the decision
+    for lat in (1000, 2000):
+        pols.append(replace(b, name=f"baseline_lat{lat // 1000}s", entry_delay_ms=lat, exit_delay_ms=lat))
+        pols.append(replace(b, name=f"H3_dump4mad_lat{lat // 1000}s", dump_k=4.0, entry_delay_ms=lat, exit_delay_ms=lat))
+        pols.append(replace(b, name=f"trail4_3_tp12_lat{lat // 1000}s", tp=0.12, trail_activate=0.04, trail_dist=0.03, entry_delay_ms=lat, exit_delay_ms=lat))
     return pols
 
 
@@ -347,15 +443,21 @@ def gate_grid(recs: Sequence[Mapping[str, Any]]) -> list[Gate]:
         gates.append(Gate(f"{label}<{q1:.4g}", path, None, q1))
         gates.append(Gate(f"{label}[{q1:.4g},{q2:.4g})", path, q1, q2))
         gates.append(Gate(f"{label}>={q2:.4g}", path, q2, None))
+    gates.append(Gate("creator_buy>=1SOL", "features.creator_buy.sol", 1.0, None))
     gates.append(Gate("bundle<40", "entry_factors.bundle_pct", None, 40.0))
     gates.append(Gate("top10<40", "entry_factors.top10_pct", None, 40.0))
     return gates
 
 
 def run_grid(
-    recs: Sequence[Mapping[str, Any]], policies: Sequence[ExitPolicy], gates: Sequence[Gate]
+    recs: Sequence[Mapping[str, Any]],
+    policies: Sequence[ExitPolicy],
+    gates: Sequence[Gate],
+    *,
+    split: float = 0.5,
+    bootstrap: bool = False,
 ) -> list[dict[str, Any]]:
-    is_recs, oos_recs = time_split(recs)
+    is_recs, oos_recs = time_split(recs, split)
     out = []
     cache: dict[tuple[str, str], Optional[dict]] = {}
 
@@ -371,7 +473,17 @@ def run_grid(
         for pol in policies:
             rows_is = [x for x in (sim(r, pol) for r in g_is) if x]
             rows_oos = [x for x in (sim(r, pol) for r in g_oos) if x]
-            out.append({"gate": gate.name, "policy": pol.name, "is": stats(rows_is), "oos": stats(rows_oos), "all": stats(rows_is + rows_oos)})
+            na = sum(1 for x in rows_is + rows_oos if x.get("status") == "not_applicable")
+            out.append(
+                {
+                    "gate": gate.name,
+                    "policy": pol.name,
+                    "is": stats(rows_is, bootstrap=bootstrap),
+                    "oos": stats(rows_oos, bootstrap=bootstrap),
+                    "all": stats(rows_is + rows_oos, bootstrap=bootstrap),
+                    "not_applicable": na,
+                }
+            )
     return out
 
 
@@ -393,18 +505,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--json", type=Path, help="write the full grid as JSON")
     ap.add_argument("--top", type=int, default=15, help="rows to print, ranked by in-sample mean")
     ap.add_argument("--min-n", type=int, default=30, help="minimum in-sample n to rank")
+    ap.add_argument("--split", type=float, default=0.5, help="in-sample fraction (time ordered)")
+    ap.add_argument("--prio-fee-sol", type=float, default=0.0, help="priority fee per transaction")
+    ap.add_argument("--bootstrap", action="store_true", help="bootstrap 95%% CIs (slower)")
     args = ap.parse_args(argv)
     paths = list(args.evidence) if args.evidence else evidence_files()
     recs = [r for r in iter_records(paths) if r.get("market_source") == "real"]
     if not recs:
         print("no evidence records", file=sys.stderr)
         return 1
-    is_recs, _ = time_split(recs)
-    grid = run_grid(recs, default_policies(), gate_grid(is_recs))
+    is_recs, _ = time_split(recs, args.split)
+    pols = [replace(p, prio_fee_sol=args.prio_fee_sol) for p in default_policies()]
+    grid = run_grid(recs, pols, gate_grid(is_recs), split=args.split, bootstrap=args.bootstrap)
     if args.json:
         args.json.write_text(json.dumps({"n_records": len(recs), "grid": grid, "policies": [asdict(p) for p in default_policies()]}, indent=1, default=float))
     base = next(g for g in grid if g["gate"] == "all" and g["policy"] == "baseline")
-    print(f"records {len(recs)}  (in-sample first half by signal time, out-of-sample second half)")
+    print(f"records {len(recs)}  (in-sample first {args.split:.0%} by signal time, out-of-sample the rest)")
     print(f"baseline  IS {_fmt(base['is'])}\n          OOS {_fmt(base['oos'])}")
     ranked = sorted((g for g in grid if g["is"].get("n", 0) >= args.min_n), key=lambda g: -g["is"]["mean_bps"])
     for g in ranked[: args.top]:

@@ -32,7 +32,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 from app.data_paths import data_dir, guarded_path
 from app.providers.pumpfun_curve_math import (
@@ -70,7 +70,8 @@ MAX_EPISODES = 64
 # left over from before a restart) are dropped rather than kept forever.
 PENDING_DROP_MS = 90_000
 STALE_OPEN_MS = 30 * 60_000
-TAPE_FIELDS = ("dt_ms", "side", "sol", "vs", "vt")
+# ``who``: first 8 chars of the trader pubkey (v3+; creator-sell / single-wallet exits).
+TAPE_FIELDS = ("dt_ms", "side", "sol", "vs", "vt", "who")
 
 
 def evidence_enabled() -> bool:
@@ -112,16 +113,24 @@ def evidence_files(path: Optional[Path] = None) -> list[Path]:
 class EvidenceWriter:
     """Append-only JSONL with size-based rotation (``file`` → ``file.1`` → … ``file.K``)."""
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        path: Optional[Path] = None,
+        *,
+        max_bytes: Optional[Callable[[], int]] = None,
+        keep: Optional[Callable[[], int]] = None,
+    ) -> None:
         self._path = path
         self._lock = threading.Lock()
+        self._max_bytes = max_bytes or max_file_bytes
+        self._keep = keep or keep_files
 
     @property
     def path(self) -> Path:
         return self._path or evidence_path()
 
     def _rotate(self, path: Path) -> None:
-        keep = keep_files()
+        keep = self._keep()
         if keep <= 0:
             path.unlink(missing_ok=True)
             return
@@ -139,7 +148,7 @@ class EvidenceWriter:
         with self._lock:
             path = guarded_path(self.path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            if path.exists() and path.stat().st_size > 0 and path.stat().st_size + len(data) > max_file_bytes():
+            if path.exists() and path.stat().st_size > 0 and path.stat().st_size + len(data) > self._max_bytes():
                 self._rotate(path)
             with open(path, "ab") as fh:
                 fh.write(data)
@@ -268,7 +277,8 @@ def compact_print(row: Mapping[str, Any], t0: int) -> Optional[list[Any]]:
     if not vs or not vt:
         return None
     side = 1 if row.get("side") == "buy" else -1 if row.get("side") == "sell" else 0
-    return [int(row.get("ts") or 0) - t0, side, round(_row_sol(row), 9), vs, vt]
+    who = str(row.get("trader") or "")[:8] or None
+    return [int(row.get("ts") or 0) - t0, side, round(_row_sol(row), 9), vs, vt, who]
 
 
 class _Episode:

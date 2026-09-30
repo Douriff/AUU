@@ -178,7 +178,8 @@ class EngineEvidenceTests(_Base):
         self.assertEqual(min(abs_ts), T0 - 20_000)
         self.assertEqual(max(abs_ts), T0 + 34_000)
         self.assertEqual(len(abs_ts), 12)
-        self.assertEqual(tape["fields"], ["dt_ms", "side", "sol", "vs", "vt"])
+        self.assertEqual(tape["fields"], ["dt_ms", "side", "sol", "vs", "vt", "who"])
+        self.assertIn(CREATOR[:8], [row[5] for row in tape["rows"]])
         # Path and result agree with the paper journal.
         self.assertGreater(r["path"]["mfe_bps"], 0)
         closed = [t for t in get_paper_journal().closed if t.market_source == "real"]
