@@ -51,6 +51,24 @@ def _entry_ttl_ms() -> int:
         return 30_000
 
 
+def _exit_ttl_ms() -> int:
+    """How long a decided exit waits for a real print before it sells into the
+    last observed curve. A curve with no prints has unchanged reserves, so that
+    quote is what a real sell would get. Without this a dead token never exits
+    and ``max_open_mints`` can stay full forever."""
+    try:
+        return max(1_000, int(os.getenv("LIVE_PAPER_EXIT_TTL_MS") or 30_000))
+    except ValueError:
+        return 30_000
+
+
+def _stall_minutes() -> float:
+    try:
+        return max(1.0, float(os.getenv("AUU_AUTOPAPER_STALL_MIN") or 45))
+    except ValueError:
+        return 45.0
+
+
 def _observed_fee_meta(symbol: str) -> dict[str, Any]:
     """Protocol/creator fee bps last seen on a real TradeEvent for ``symbol``."""
     getter = getattr(get_provider(), "fee_bps_for", None)
@@ -376,6 +394,10 @@ class PumpPaperEngine:
         self._eval_total = 0
         self._eval_by_bucket: dict[str, int] = {}
         self._eval_by_reason: dict[str, int] = {}
+        self._started_ms = int(time.time() * 1000)
+        self._last_entry_fill_ms: Optional[int] = None
+        self._last_exit_fill_ms: Optional[int] = None
+        self._no_print_exits = 0
         self._sync_risk_limits()
 
     def _sync_risk_limits(self) -> None:
@@ -747,6 +769,7 @@ class PumpPaperEngine:
             reject = data.get("reject")
             if fills:
                 self._last_open_ts[snap.mint] = now_ms
+                self._last_entry_fill_ms = now_ms
                 self._apply_fills(symbol, snap.mint, fills, now_ms, snap.price_sol)
                 if not snap.synthetic:
                     _evidence_hook(
@@ -825,6 +848,78 @@ class PumpPaperEngine:
                     provider=get_provider(), now_ms=now_ms,
                 )
 
+    async def _exit_without_print(self, provider: Any, symbol: str, pending: dict[str, Any], now_ms: int) -> None:
+        """Exit decided, no real print for ``LIVE_PAPER_EXIT_TTL_MS``: sell into
+        the last observed curve (fill mechanics only; the decision is unchanged)."""
+        pos = self.positions.get(symbol)
+        if pos is None:
+            self._deferred.pop(symbol, None)
+            return
+        snap, _orphan = self._mark_snapshot(provider, symbol, now_ms)
+        if snap is None:
+            return
+        want = str(pending.get("mint") or pos.mint or "")
+        if want and snap.mint and snap.mint != want:
+            return  # symbol re-used by another mint: the orphan exit path handles it
+        self._deferred.pop(symbol, None)
+        signal = pending["signal"]
+        if "NO_PRINT_CURVE_EXIT" not in (signal.tags or []):
+            signal = signal.model_copy(update={"tags": [*(signal.tags or []), "NO_PRINT_CURVE_EXIT"]})
+        self._no_print_exits += 1
+        log.warning("pump-paper-v1 %s: no real print %d ms after exit decision; selling into last curve", symbol, now_ms - int(pending["ts"]))
+        self._note(
+            symbol,
+            now_ms,
+            action="curve_exit",
+            allow=True,
+            reason=getattr(signal, "reason", "") or "exit",
+            tags=list(signal.tags or []),
+            notes="no real print after exit TTL; sell into last observed curve reserves",
+        )
+        await self.maybe_execute(
+            symbol,
+            snap,
+            signal,
+            now_ms,
+            float(pending["notional"]),
+            immediate=True,
+        )
+
+    def stall_status(self, provider: Any = None, now_ms: Optional[int] = None) -> dict[str, Any]:
+        """Alarm (never acts): autopaper on, candidates listed, yet no entry for N minutes."""
+        now = int(now_ms if now_ms is not None else time.time() * 1000)
+        provider = provider if provider is not None else get_provider()
+        lister = getattr(provider, "list_symbols", None)
+        try:
+            candidates = len(lister() or []) if callable(lister) else 0
+        except Exception:
+            candidates = 0
+        since = self._last_entry_fill_ms or self._started_ms
+        idle_min = (now - since) / 60_000.0
+        waits = [now - int(p["ts"]) for p in self._deferred.values() if getattr(p.get("signal"), "side", "") != "long"]
+        oldest_pos = min((int(p.entry_ts) for p in self.positions.values() if getattr(p, "entry_ts", None)), default=None)
+        limit = _stall_minutes()
+        hints = []
+        if len(self.positions) >= int(self.params.max_open_mints):
+            hints.append("max_open_mints_full")
+        if waits and max(waits) > _exit_ttl_ms():
+            hints.append("exit_waiting_for_print")
+        stalled = bool(self.params.auto_paper_orders and candidates > 0 and idle_min >= limit)
+        return {
+            "stalled": stalled,
+            "idleMin": round(idle_min, 1),
+            "thresholdMin": limit,
+            "candidates": candidates,
+            "openPositions": len(self.positions),
+            "maxOpenMints": int(self.params.max_open_mints),
+            "oldestPositionAgeMin": round((now - oldest_pos) / 60_000.0, 1) if oldest_pos else None,
+            "exitsWaiting": len(waits),
+            "oldestExitWaitSec": round(max(waits) / 1000.0, 1) if waits else None,
+            "noPrintCurveExits": self._no_print_exits,
+            "lastEntryFillTs": self._last_entry_fill_ms,
+            "hints": hints,
+        }
+
     def _snapshot_from_trade(
         self, symbol: str, trade: dict[str, Any], pending: dict[str, Any]
     ) -> Optional[PumpfunPaperSnapshot]:
@@ -856,6 +951,9 @@ class PumpPaperEngine:
             return
         if not trade:
             is_entry = getattr(pending.get("signal"), "side", "") == "long"
+            if not is_entry and now_ms - ready > _exit_ttl_ms():
+                await self._exit_without_print(provider, symbol, pending, now_ms)
+                return
             if is_entry and now_ms - ready > _entry_ttl_ms():
                 self._deferred.pop(symbol, None)
                 self._note(

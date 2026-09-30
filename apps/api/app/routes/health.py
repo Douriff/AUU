@@ -14,6 +14,13 @@ from app.traders.helius import helius_enabled, reader_mode
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
 
+def _stall(provider):
+    try:
+        return get_engine().stall_status(provider)
+    except Exception:
+        return None
+
+
 @router.get("/health")
 def health():
     gate = get_risk_gate()
@@ -42,6 +49,7 @@ def health():
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
             **discovery_health_fields(),
             "liveFeed": provider.feed_health() if callable(getattr(provider, "feed_health", None)) else None,
+            "autopaperStall": _stall(provider),
             "liveEnabled": payload["liveEnabled"],
             "liveConfirmed": payload["liveConfirmed"],
             "liveDisabled": payload["liveDisabled"],

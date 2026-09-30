@@ -934,6 +934,69 @@ class DeferredFillTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(get_paper_journal().lots.get("DLAY/SOL"))
 
 
+    async def _open_position(self, provider, mint, engine, now):
+        snap = provider.get_pumpfun_snapshot("DLAY/SOL")
+        entry = SignalOut(side="long", strength=0.8, reason="pump_paper_v1_entry", tags=["ENTRY"])
+        await engine.maybe_execute("DLAY/SOL", snap, entry, now, 0.005)
+        vs, vt = INITIAL_VIRTUAL_SOL_RESERVES + 50_000_000, INITIAL_VIRTUAL_TOKEN_RESERVES - 5_000_000
+        provider.apply_observed_trade({"mint": mint, "side": "buy", "ts": now + 400, "virtual_sol_reserves": vs, "virtual_token_reserves": vt, "sol_amount": 0.05, "token_amount": 5_000_000})
+        await engine._drain_real_fill(provider, "DLAY/SOL", now + 500)
+        self.assertIn("DLAY/SOL", engine.positions)
+
+    async def test_exit_on_dead_curve_sells_into_last_curve_after_ttl(self):
+        """Root cause of the 2026-09-30 stalls: a curve that never prints again
+        kept its exit deferred forever and max_open_mints stayed full."""
+        provider, mint, engine = self._setup()
+        now = 1_700_000_000_000
+        await self._open_position(provider, mint, engine, now)
+        self.assertIsNotNone(engine._last_entry_fill_ms)
+        snap = provider.get_pumpfun_snapshot("DLAY/SOL")
+        stop = SignalOut(side="flat", strength=1.0, reason="stop_loss", tags=["STOP_LOSS"])
+        t_exit = now + 10_000
+        with mock.patch.dict(os.environ, {"LIVE_PAPER_EXIT_TTL_MS": "5000"}):
+            await engine.maybe_execute("DLAY/SOL", snap, stop, t_exit, 0.005)
+            self.assertIn("DLAY/SOL", engine._deferred)
+            await engine._drain_real_fill(provider, "DLAY/SOL", t_exit + 3_000)
+            self.assertIn("DLAY/SOL", engine.positions, "inside the TTL the exit still waits for a real print")
+            st = engine.stall_status(provider, now_ms=t_exit + 5_500)
+            self.assertEqual(st["exitsWaiting"], 1)
+            self.assertIn("exit_waiting_for_print", st["hints"])
+            await engine._drain_real_fill(provider, "DLAY/SOL", t_exit + 6_000)
+        self.assertNotIn("DLAY/SOL", engine.positions)
+        self.assertNotIn("DLAY/SOL", engine._deferred)
+        self.assertEqual(engine._no_print_exits, 1)
+        closed = get_paper_journal().closed[-1]
+        self.assertIn("STOP_LOSS", closed.tags if hasattr(closed, "tags") else closed["tags"])
+        notes = [d for d in engine._decisions if getattr(d, "action", None) == "curve_exit"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("NO_PRINT_CURVE_EXIT", notes[0].tags)
+
+    async def test_exit_with_a_later_print_is_unchanged(self):
+        provider, mint, engine = self._setup()
+        now = 1_700_000_000_000
+        await self._open_position(provider, mint, engine, now)
+        snap = provider.get_pumpfun_snapshot("DLAY/SOL")
+        stop = SignalOut(side="flat", strength=1.0, reason="stop_loss", tags=["STOP_LOSS"])
+        t_exit = now + 10_000
+        with mock.patch.dict(os.environ, {"LIVE_PAPER_EXIT_TTL_MS": "5000"}):
+            await engine.maybe_execute("DLAY/SOL", snap, stop, t_exit, 0.005)
+            vs, vt = INITIAL_VIRTUAL_SOL_RESERVES + 20_000_000, INITIAL_VIRTUAL_TOKEN_RESERVES - 2_000_000
+            provider.apply_observed_trade({"mint": mint, "side": "sell", "ts": t_exit + 400, "virtual_sol_reserves": vs, "virtual_token_reserves": vt, "sol_amount": 0.03, "token_amount": 3_000_000})
+            await engine._drain_real_fill(provider, "DLAY/SOL", t_exit + 9_000)
+        self.assertNotIn("DLAY/SOL", engine.positions)
+        self.assertEqual(engine._no_print_exits, 0, "a real print still drives the fill")
+
+    async def test_stall_alarm_flags_idle_autopaper_with_candidates(self):
+        provider, mint, engine = self._setup()
+        now = engine._started_ms
+        with mock.patch.dict(os.environ, {"AUU_AUTOPAPER_STALL_MIN": "30"}):
+            self.assertFalse(engine.stall_status(provider, now_ms=now + 10 * 60_000)["stalled"])
+            st = engine.stall_status(provider, now_ms=now + 31 * 60_000)
+        self.assertTrue(st["stalled"])
+        self.assertEqual(st["candidates"], 1)
+        self.assertEqual(st["thresholdMin"], 30.0)
+
+
 def _logs_line(blob: bytes) -> str:
     return "Program data: " + base64.b64encode(blob).decode()
 
