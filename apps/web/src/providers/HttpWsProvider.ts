@@ -96,8 +96,18 @@ function wsUrl(): string {
   return `${proto}//${location.host}/api/v1/ws`;
 }
 
+/** Fired when the API answers 401 (session missing/expired) so the shell can show the login page. */
+export const AUTH_REQUIRED_EVENT = "auu:auth-required";
+
+function noteAuth(res: Response): void {
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, { credentials: "include" });
+  noteAuth(res);
   const body = (await res.json()) as Envelope<T>;
   if (!body.ok) {
     throw new Error(body.error?.message ?? "request failed");
@@ -112,6 +122,7 @@ async function sendJson<T>(path: string, body: unknown, method: "POST" | "PUT"):
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  noteAuth(res);
   const env = (await res.json()) as Envelope<T>;
   if (!env.ok) {
     throw new Error(env.error?.message ?? "request failed");
@@ -129,6 +140,7 @@ async function putJson<T>(path: string, body: unknown): Promise<T> {
 
 async function delJson<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, { method: "DELETE", credentials: "include" });
+  noteAuth(res);
   const env = (await res.json()) as Envelope<T>;
   if (!env.ok) {
     throw new Error(env.error?.message ?? "request failed");

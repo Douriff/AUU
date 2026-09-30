@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { useEffect, useState, type ReactNode } from "react";
-import { marketProvider } from "@/providers/HttpWsProvider";
+import { AUTH_REQUIRED_EVENT, marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 
 const primary = [
@@ -118,14 +118,16 @@ function Icon({ name }: { name: string }) {
   return <svg {...common}>{paths[name]}</svg>;
 }
 
+const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
+
+type Gate = "loading" | "anon" | "ok";
+
+/** Login gate: with accounts on, anonymous visitors only see login/register/forgot-password. */
 export function AppShell() {
-  const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
-  const [provider, setProvider] = useState("…");
-  const [marketData, setMarketData] = useState("");
-  const [liveOff, setLiveOff] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  const [gate, setGate] = useState<Gate>("loading");
   const [who, setWho] = useState("");
   const [authOn, setAuthOn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -135,9 +137,76 @@ export function AppShell() {
       .then((me) => {
         setAuthOn(me.auth_enabled);
         setWho(me.user?.display_name || me.user?.name || "");
+        setIsAdmin(!me.auth_enabled || Boolean(me.user?.is_admin));
+        setGate(me.auth_enabled && !me.user ? "anon" : "ok");
       })
-      .catch(() => undefined);
+      .catch(() => setGate((g) => (g === "loading" ? "ok" : g)));
   };
+
+  useEffect(() => {
+    refreshWho();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onAuthRequired = () => refreshWho();
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, []);
+
+  useEffect(() => {
+    if (gate === "anon" && !AUTH_PATHS.has(location.pathname)) {
+      navigate("/login", { replace: true });
+    }
+  }, [gate, location.pathname, navigate]);
+
+  if (gate === "loading") {
+    return <div className="auth-screen" aria-busy="true" />;
+  }
+  if (gate === "anon") {
+    return (
+      <div className="auth-screen">
+        <div className="auth-screen-brand">
+          <span className="side-mark" aria-hidden="true">
+            A
+          </span>
+          <span>AUU · Pump.fun 纸面终端</span>
+        </div>
+        <main className="auth-screen-body">{AUTH_PATHS.has(location.pathname) ? <Outlet /> : null}</main>
+      </div>
+    );
+  }
+  return (
+    <ShellFrame
+      who={who}
+      authOn={authOn}
+      isAdmin={isAdmin}
+      onLogout={() => {
+        void marketProvider.logout().finally(() => {
+          setWho("");
+          setGate("anon");
+          navigate("/login", { replace: true });
+        });
+      }}
+    />
+  );
+}
+
+function ShellFrame({
+  who,
+  authOn,
+  isAdmin,
+  onLogout,
+}: {
+  who: string;
+  authOn: boolean;
+  isAdmin: boolean;
+  onLogout: () => void;
+}) {
+  const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
+  const [provider, setProvider] = useState("…");
+  const [marketData, setMarketData] = useState("");
+  const [liveOff, setLiveOff] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     marketProvider
@@ -149,11 +218,6 @@ export function AppShell() {
       })
       .catch(() => undefined);
   }, []);
-
-  useEffect(() => {
-    refreshWho();
-  }, [location.pathname]);
-
   return (
     <div className={`app-shell${collapsed ? " is-collapsed" : ""}`}>
       <aside className="sidebar" aria-label="主导航">
@@ -206,6 +270,8 @@ export function AppShell() {
             compact
             label="自动纸面"
             checked={autoPaperOrders}
+            disabled={!isAdmin}
+            title={isAdmin ? undefined : "只有管理员可以切换系统自动纸面"}
             onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
           />
           <div className="mode-badge">PAPER · PUMP.FUN</div>
@@ -216,12 +282,7 @@ export function AppShell() {
             <button
               type="button"
               className="mode-badge auth-chip"
-              onClick={() => {
-                void marketProvider.logout().finally(() => {
-                  setWho("");
-                  navigate("/login");
-                });
-              }}
+              onClick={onLogout}
             >
               {who} · 退出
             </button>
