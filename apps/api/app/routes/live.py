@@ -4,6 +4,7 @@ POST /api/v1/live/orders is never a chain submit in this PR.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 from fastapi import APIRouter
@@ -56,8 +57,26 @@ class LiveOrderBody(BaseModel):
     auto_post_fill: bool = True
 
 
-def _blocked(status, risk: Optional[RiskOut] = None) -> Any:
+REASON_LIVE_API_LOCKED = "LIVE_API_LOCKED"
+
+
+def api_enable_allowed() -> bool:
+    """Turning live ON over HTTP is locked unless the host sets AUU_LIVE_API_ENABLE=on.
+
+    Turning live OFF (and disarming) is always allowed. liveEnabled otherwise comes only
+    from the host environment (LIVE_ENABLED / AUU_LIVE_ENABLED), never from a web request.
+    """
+    return os.getenv("AUU_LIVE_API_ENABLE", "off").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def _locked() -> Any:
+    return _blocked(evaluate(), extra_reason=REASON_LIVE_API_LOCKED)
+
+
+def _blocked(status, risk: Optional[RiskOut] = None, extra_reason: str = "") -> Any:
     reasons = list(status.reasons)
+    if extra_reason and extra_reason not in reasons:
+        reasons.append(extra_reason)
     if REASON_LIVE_DISABLED not in reasons:
         reasons = [REASON_LIVE_DISABLED] + reasons
     code = status.primary_reason() if status.reasons else REASON_LIVE_DISABLED
@@ -113,6 +132,8 @@ def put_live_limits(body: LiveLimitsBody):
 @router.put("/disabled")
 def put_live_disabled(body: LiveDisabledBody):
     """LiveDisabled switch. Turning it off requires a local keypair (limits are locked)."""
+    if not body.live_disabled and not api_enable_allowed():
+        return _locked()
     ok_set, st = try_set_disabled(body.live_disabled)
     if not ok_set:
         return _blocked(st)
@@ -124,6 +145,8 @@ def put_live_enabled(body: LiveEnabledBody):
     """liveEnabled + secondary confirm. Enabling without confirmed=true stays LIVE_DISABLED."""
     want = body.live_enabled if body.live_enabled is not None else body.liveEnabled
     confirmed = body.live_confirmed if body.live_confirmed is not None else body.confirmed
+    if bool(want) and not api_enable_allowed():
+        return _locked()
     ok_set, st = try_set_enabled_with_confirm(bool(want), confirmed=bool(confirmed))
     if not ok_set:
         return _blocked(st)
@@ -133,6 +156,8 @@ def put_live_enabled(body: LiveEnabledBody):
 @router.put("/arm")
 def put_live_arm(body: LiveArmBody):
     """Explicit arm. Refuses unless switch is off and a local keypair exists."""
+    if body.armed and not api_enable_allowed():
+        return _locked()
     ok_set, st = try_set_armed(body.armed)
     if not ok_set:
         return _blocked(st)

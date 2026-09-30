@@ -36,6 +36,7 @@ def reset_accounts() -> None:
         _USERS = None
         _BOOKS.clear()
         _ATTEMPTS.clear()
+        _FAILURES.clear()
     reset_email_codes()
 
 
@@ -124,6 +125,47 @@ def allow_attempt(bucket: str) -> bool:
     rows.append(now)
     _ATTEMPTS[bucket] = rows
     return True
+
+
+_FAILURES: dict[str, list[float]] = {}
+
+
+def _fail_max() -> int:
+    try:
+        return max(1, int(os.getenv("AUU_AUTH_ACCOUNT_FAIL_MAX", "10")))
+    except ValueError:
+        return 10
+
+
+def _fail_window() -> float:
+    try:
+        return max(60.0, float(os.getenv("AUU_AUTH_ACCOUNT_FAIL_WINDOW", "900")))
+    except ValueError:
+        return 900.0
+
+
+def _fail_key(name: str) -> str:
+    return (name or "").strip().lower()
+
+
+def _recent_failures(name: str) -> list[float]:
+    now = time.time()
+    rows = [t for t in _FAILURES.get(_fail_key(name), []) if now - t < _fail_window()]
+    _FAILURES[_fail_key(name)] = rows
+    return rows
+
+
+def account_locked(name: str) -> bool:
+    """Per-account lockout across all source IPs (per-IP limits live in allow_attempt/nginx)."""
+    return len(_recent_failures(name)) >= _fail_max()
+
+
+def note_login_failure(name: str) -> None:
+    _recent_failures(name).append(time.time())
+
+
+def clear_login_failures(name: str) -> None:
+    _FAILURES.pop(_fail_key(name), None)
 
 
 def _public(user: dict[str, Any]) -> dict[str, Any]:

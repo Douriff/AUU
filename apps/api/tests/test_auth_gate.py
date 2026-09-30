@@ -171,3 +171,70 @@ class AuthGateApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SecurityHardeningTests(AuthGateApiTests):
+    def test_cross_site_writes_and_ws_refused(self):
+        admin = self._signed_in("csrfadmin")
+        evil = {"Origin": "https://evil.example"}
+        res = admin.put("/api/v1/strategy/pump-paper-v1", json={"strategy_autopaper": not self.auto_before}, headers=evil)
+        self.assertEqual(res.status_code, 403, res.text)
+        self.assertEqual(res.json()["error"]["code"], "CSRF_ORIGIN")
+        self.assertEqual(bool(self.engine.params.auto_paper_orders), self.auto_before)
+        res = admin.post("/api/v1/auth/login", json={"name": "x", "password": "y"}, headers={"Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(res.status_code, 403)
+        same = admin.get("/api/v1/strategy/pump-paper-v1", headers=evil)  # reads are not CSRF targets
+        self.assertEqual(same.status_code, 200)
+        ok_origin = admin.post("/api/v1/auth/logout", headers={"Origin": "http://testserver"})
+        self.assertEqual(ok_origin.status_code, 200)
+        from starlette.websockets import WebSocketDisconnect
+
+        user = self._signed_in("csrfws")
+        with self.assertRaises(WebSocketDisconnect):
+            with user.websocket_connect("/api/v1/ws", headers=evil) as ws:
+                ws.receive_json()
+
+    def test_account_lockout_after_failures_across_ips(self):
+        os.environ["AUU_AUTH_ACCOUNT_FAIL_MAX"] = "3"
+        try:
+            self._signed_in("lockme")
+            client = self.TestClient(self.app)
+            for _ in range(3):
+                self.assertEqual(client.post("/api/v1/auth/login", json={"name": "lockme", "password": "wrong999x"}).status_code, 401)
+            locked = client.post("/api/v1/auth/login", json={"name": "LockMe", "password": PW})
+            self.assertEqual(locked.status_code, 429)
+            self.assertEqual(locked.json()["error"]["code"], "ACCOUNT_LOCKED")
+        finally:
+            os.environ.pop("AUU_AUTH_ACCOUNT_FAIL_MAX", None)
+
+    def test_cookie_flags(self):
+        client = self.TestClient(self.app)
+        body = {"name": "cookieuser", "password": PW, "password_confirm": PW}
+        cookie = client.post("/api/v1/auth/register", json=body).headers.get("set-cookie", "").lower()
+        self.assertIn("httponly", cookie)
+        self.assertIn("samesite=lax", cookie)
+        self.assertNotIn("secure", cookie)
+        os.environ["AUU_COOKIE_SECURE"] = "on"
+        try:
+            again = client.post("/api/v1/auth/login", json={"name": "cookieuser", "password": PW})
+            self.assertIn("secure", again.headers.get("set-cookie", "").lower())
+        finally:
+            os.environ.pop("AUU_COOKIE_SECURE", None)
+
+    def test_live_cannot_be_enabled_over_http(self):
+        from app.live.gate import evaluate, reset_live_state
+
+        admin = self._signed_in("liveadmin")
+        for method, path, body in [
+            ("PUT", "/api/v1/live/enabled", {"liveEnabled": True, "confirmed": True}),
+            ("PUT", "/api/v1/live/arm", {"armed": True}),
+            ("PUT", "/api/v1/live/disabled", {"live_disabled": False}),
+        ]:
+            with self.subTest(path=path):
+                res = admin.request(method, path, json=body)
+                self.assertEqual(res.status_code, 403, res.text)
+                self.assertIn("LIVE_API_LOCKED", res.json()["error"]["reasons"])
+        self.assertFalse(evaluate().live_enabled)
+        off = admin.put("/api/v1/live/enabled", json={"liveEnabled": False})
+        self.assertEqual(off.status_code, 200, off.text)
+        reset_live_state()

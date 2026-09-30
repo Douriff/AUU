@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
 from app.auth.accounts import (
+    account_locked,
     account_row,
+    clear_login_failures,
+    note_login_failure,
     allow_attempt,
     auth_enabled,
     authenticate,
@@ -55,6 +59,7 @@ _MESSAGES = {
     "RATE_LIMIT": "尝试过于频繁，请稍后再试",
     "BAD_BODY": "请求格式不正确",
     "BAD_LOGIN": "用户名或密码错误",
+    "ACCOUNT_LOCKED": "该账户密码错误次数过多，已临时锁定，请 15 分钟后再试或使用忘记密码",
     "EMAIL_OFF": "邮箱验证未开启",
     "EMAIL_NOT_CONFIGURED": "邮件发送尚未配置，请联系管理员",
     "EMAIL_REQUIRED": "请填写邮箱",
@@ -121,10 +126,16 @@ def _stamp(response, user_id: str):
         issue_token(user_id),
         httponly=True,
         samesite="lax",
+        secure=cookie_secure(),
         path="/",
         max_age=14 * 24 * 3600,
     )
     return response
+
+
+def cookie_secure() -> bool:
+    """Secure flag for the session cookie. Set AUU_COOKIE_SECURE=on when served over HTTPS."""
+    return os.getenv("AUU_COOKIE_SECURE", "off").strip().lower() in {"1", "true", "on", "yes"}
 
 
 def _ip(request: Request) -> str:
@@ -286,10 +297,15 @@ async def auth_login(request: Request):
         return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
     if not auth_enabled():
         return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
+    if account_locked(name):
+        _LOG.warning("login rejected: ACCOUNT_LOCKED")
+        return err("ACCOUNT_LOCKED", _MESSAGES["ACCOUNT_LOCKED"], 429)
     user = authenticate(name, _text(raw, "password"))
     if user is None:
+        note_login_failure(name)
         _LOG.warning("login rejected: BAD_LOGIN")
         return err("BAD_LOGIN", _MESSAGES["BAD_LOGIN"], 401)
+    clear_login_failures(name)
     return _stamp(ok(scrub_secrets(_me_payload(user))), user["id"])
 
 
