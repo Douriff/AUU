@@ -14,8 +14,58 @@ import type { DataSource } from "@/venue";
 import type { LiveStatus } from "@/types/contracts";
 import { AccountSection } from "@/pages/SettingsPage/AccountSection";
 import { WalletSection } from "@/pages/SettingsPage/WalletSection";
+import { useLegacyMode } from "@/hooks/useLegacyMode";
+import type { MainstreamFreshness } from "@/types/mainstream";
 
 export function SettingsPage() {
+  const legacy = useLegacyMode();
+  if (legacy === null) return null;
+  return legacy ? <LegacySettingsPage /> : <MainstreamSettingsPage />;
+}
+
+/** Mainstream mode: account + read-only data/live status (pump wallet/provider/discovery are legacy). */
+function MainstreamSettingsPage() {
+  const [md, setMd] = useState<MainstreamFreshness | null>(null);
+  const [live, setLive] = useState<LiveStatus | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    marketProvider
+      .getHealth()
+      .then((h) => setMd(h.mainstream ?? null))
+      .catch((e: Error) => setErr(e.message));
+    marketProvider
+      .getLiveStatus()
+      .then((st) => setLive(st))
+      .catch(() => undefined);
+  }, []);
+  return (
+    <div className="shell-page">
+      <h1>设置 / Settings</h1>
+      <p className="muted">纸面模式。行情来自交易所公开接口（无 API key、不下单）。实盘锁定，网页无法开启。</p>
+      <AccountSection />
+      <section className="settings-section">
+        <h2>主流行情数据</h2>
+        {err ? <p className="error">{err}</p> : null}
+        <p className="muted">
+          只读（服务端环境变量 <code>AUU_MAINSTREAM_*</code>）。币种 <code>{md?.symbols?.join(", ") || "…"}</code> · 交易所顺序{" "}
+          <code>{md?.exchanges?.join(" → ") || "…"}</code> · 当前 <code>{md?.exchange || "—"}</code>
+          {md && Object.keys(md.blocked || {}).length ? <> · 不可用 <code>{Object.keys(md.blocked).join(", ")}</code></> : null} ·{" "}
+          {md?.stale ? "数据过期" : "数据新鲜"}
+        </p>
+      </section>
+      <section className="settings-section">
+        <h2>实盘</h2>
+        <p className="muted">
+          liveEnabled=<code>{String(Boolean(live?.liveEnabled))}</code> · LIVE_API_LOCKED：HTTP 无法打开实盘。旧版 pump.fun 钱包 / 行情源 / 发现设置在{" "}
+          <code>AUU_LEGACY_PUMP=on</code> 时显示。
+        </p>
+      </section>
+    </div>
+  );
+}
+
+
+function LegacySettingsPage() {
   const [provider, setProvider] = useState<string>("…");
   const [mode, setMode] = useState<string>("…");
   const [status, setStatus] = useState<string>("…");

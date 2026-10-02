@@ -12,7 +12,7 @@ from typing import Any, Mapping, Optional
 
 from app.data_paths import data_dir, guarded_path
 from app.models.contracts import Fill
-from app.providers.pumpfun_curve_math import split_impact_gross_fee_net
+from app.legacy.pump.providers.pumpfun_curve_math import split_impact_gross_fee_net
 
 DEFAULT_MC_PATHS = 500
 DEFAULT_MC_SEED = 42
@@ -843,7 +843,7 @@ def build_performance(
     mc: bool = False,
     mc_method: str = "shuffle",
 ) -> dict[str, Any]:
-    from app.strategies.pump_paper_v1 import get_engine
+    from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
     engine = get_engine()
     n_window: Optional[int] = None

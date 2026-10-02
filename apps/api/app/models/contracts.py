@@ -355,7 +355,7 @@ def _curve_impact_from_source(
     fee_bps: Optional[float],
 ) -> float:
     # Lazy import: models stay usable without loading the provider package first.
-    from app.providers.pumpfun_curve_math import (
+    from app.legacy.pump.providers.pumpfun_curve_math import (
         DEFAULT_IMPACT_FEE_BPS,
         estimated_curve_impact_bps,
     )

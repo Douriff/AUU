@@ -1,3 +1,4 @@
+import type { MainstreamCandles, MainstreamFreshness, MainstreamFunding, MainstreamOverview } from "@/types/mainstream";
 import type {
   BookSnapshot,
   Candle,
@@ -212,6 +213,9 @@ export class HttpWsProvider {
     copy_trade_enabled?: boolean;
     trader_watch_reader?: string;
     helius_enabled?: boolean;
+    legacyPump?: boolean;
+    mainstream?: MainstreamFreshness;
+    runningStrategies?: string[];
   }> {
     return getJson("/api/v1/health");
   }
@@ -274,6 +278,20 @@ export class HttpWsProvider {
   getSearchCoin(mint: string): Promise<SearchCoinDetail> {
     const params = new URLSearchParams({ mint });
     return getJson(`/api/v1/search/coin?${params}`);
+  }
+
+  getMainstreamOverview(): Promise<MainstreamOverview> {
+    return getJson("/api/v1/mainstream/overview");
+  }
+
+  getMainstreamCandles(symbol: string, tf: "1d" | "1h", limit = 200): Promise<MainstreamCandles> {
+    const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
+    return getJson(`/api/v1/mainstream/candles?${q}`);
+  }
+
+  getMainstreamFunding(symbol: string, limit = 90): Promise<MainstreamFunding> {
+    const q = new URLSearchParams({ symbol, limit: String(limit) });
+    return getJson(`/api/v1/mainstream/funding?${q}`);
   }
 
   getMajors(): Promise<MajorsBoard> {

@@ -13,17 +13,25 @@ _provider: MarketDataProvider | None = None
 def get_provider() -> MarketDataProvider:
     """Select market data from DATA_PROVIDER=mock|pumpfun_paper|pumpfun_live_paper.
 
+    The pump providers require AUU_LEGACY_PUMP=on (otherwise mock).
+
     Unknown names fall back to mock. No provider loads a wallet or sends a transaction.
     """
     global _provider
     if _provider is None:
         name = os.getenv("DATA_PROVIDER", "mock").lower().replace("-", "_").strip()
+        from app.legacy import legacy_pump_enabled
+
+        if not legacy_pump_enabled():
+            # Pump providers live in app.legacy.pump and only load with
+            # AUU_LEGACY_PUMP=on; a leftover DATA_PROVIDER=pumpfun_* is inert.
+            name = "mock"
         if name in {"pumpfun_live_paper", "pumpfun_live", "live_paper"}:
-            from .pumpfun_live_paper import PumpfunLivePaperProvider
+            from app.legacy.pump.providers.pumpfun_live_paper import PumpfunLivePaperProvider
 
             _provider = PumpfunLivePaperProvider()
         elif name in {"pumpfun_paper", "pumpfun", "pump.fun", "pump_fun"}:
-            from .pumpfun_paper import PumpfunPaperProvider
+            from app.legacy.pump.providers.pumpfun_paper import PumpfunPaperProvider
 
             _provider = PumpfunPaperProvider()
         else:

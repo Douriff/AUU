@@ -18,31 +18,35 @@ import { AlertsPage } from "@/pages/AlertsPage/AlertsPage";
 import { WatchPage } from "@/pages/WatchPage/WatchPage";
 import { ObservePage } from "@/pages/ObservePage/ObservePage";
 import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
+import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
+import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <BoardPage /> },
+      { index: true, element: <HomeIndex board={<BoardPage />} mainstream={<MainstreamPage />} /> },
+      { path: "mainstream", element: <MainstreamPage /> },
+      { path: "board", element: <LegacyOnly><BoardPage /></LegacyOnly> },
       { path: "console", element: <ConsolePage /> },
-      { path: "markets", element: <MarketsPage /> },
-      { path: "market", element: <MarketPage /> },
-      { path: "review", element: <ReviewPage /> },
-      { path: "strategy", element: <StrategyPage /> },
-      { path: "trade", element: <TradingPage /> },
-      { path: "trade/:mint", element: <TradingPage /> },
+      { path: "markets", element: <LegacyOnly><MarketsPage /></LegacyOnly> },
+      { path: "market", element: <LegacyOnly><MarketPage /></LegacyOnly> },
+      { path: "review", element: <LegacyOnly><ReviewPage /></LegacyOnly> },
+      { path: "strategy", element: <LegacyOnly><StrategyPage /></LegacyOnly> },
+      { path: "trade", element: <LegacyOnly><TradingPage /></LegacyOnly> },
+      { path: "trade/:mint", element: <LegacyOnly><TradingPage /></LegacyOnly> },
       { path: "majors", element: <MajorsPage /> },
-      { path: "positions", element: <PositionsPage /> },
+      { path: "positions", element: <LegacyOnly><PositionsPage /></LegacyOnly> },
       { path: "leaderboard", element: <LeaderboardPage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
-      { path: "backtest", element: <BacktestPage /> },
-      { path: "watch", element: <WatchPage /> },
-      { path: "watch/:watchId", element: <WatchPage /> },
-      { path: "observe", element: <ObservePage /> },
-      { path: "alerts", element: <AlertsPage /> },
+      { path: "backtest", element: <LegacyOnly><BacktestPage /></LegacyOnly> },
+      { path: "watch", element: <LegacyOnly><WatchPage /></LegacyOnly> },
+      { path: "watch/:watchId", element: <LegacyOnly><WatchPage /></LegacyOnly> },
+      { path: "observe", element: <LegacyOnly><ObservePage /></LegacyOnly> },
+      { path: "alerts", element: <LegacyOnly><AlertsPage /></LegacyOnly> },
       { path: "settings", element: <SettingsPage /> },
     ],
   },

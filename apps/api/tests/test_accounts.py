@@ -14,7 +14,7 @@ from app.paper.broker import reset_paper_broker
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
 from app.providers import reset_provider
 from app.risk.gate import get_risk_gate, reset_risk_gate
-from app.strategies.pump_paper_v1 import reset_engine
+from app.legacy.pump.strategies.pump_paper_v1 import reset_engine
 
 
 class PaperAccountTests(unittest.TestCase):

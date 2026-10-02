@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query
 
 from app.providers import get_provider
 from app.routes.envelope import ok
-from app.strategies.pump_paper_v1 import get_engine
+from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
 router = APIRouter(prefix="/api/v1", tags=["signals"])
 

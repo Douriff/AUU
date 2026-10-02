@@ -30,12 +30,12 @@ def has_open_exposure(symbol: str, mint: str) -> bool:
         for lot in lots:
             if _hit(row_symbol, getattr(lot, "mint", None), lot.qty):
                 return True
-    from app.strategies.pump_paper_v1 import get_engine
+    from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
     for pos in get_engine().positions.values():
         if _hit(pos.symbol, pos.mint, pos.qty):
             return True
-    from app.paper.shadow_compare import shadow_open_for
+    from app.legacy.pump.paper.shadow_compare import shadow_open_for
 
     if shadow_open_for(sym, mid):
         return True

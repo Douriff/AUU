@@ -11,10 +11,10 @@ from app.paper.broker import reset_paper_broker
 from app.paper.decision_log import append_decision, reset_decision_log
 from app.paper.events import reset_events, shanghai_day_start_ms
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
-from app.paper.shadow_compare import reset_shadow_compare
+from app.legacy.pump.paper.shadow_compare import reset_shadow_compare
 from app.providers import reset_provider
 from app.risk.gate import reset_risk_gate
-from app.strategies.pump_paper_v1 import reset_engine
+from app.legacy.pump.strategies.pump_paper_v1 import reset_engine
 
 
 class EventsApiTests(unittest.TestCase):
@@ -192,7 +192,7 @@ class EventsApiTests(unittest.TestCase):
         self.assertNotIn("progress", {row["type"] for row in data["events"]})
 
     def test_discovery_event_from_ingest(self):
-        from app.discovery import DiscoveryRuntime
+        from app.legacy.pump.discovery import DiscoveryRuntime
 
         runtime = DiscoveryRuntime()
         mint = "DiscMint111111111111111111111111111111111"
