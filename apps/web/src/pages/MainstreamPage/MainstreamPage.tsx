@@ -17,7 +17,8 @@ function fmtPct(n: number | null | undefined, digits = 2): string {
 
 function fmtRate(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return `${n > 0 ? "+" : ""}${(n * 100).toFixed(4)}%`;
+  const pct = n * 100;
+  return `${n > 0 ? "+" : ""}${pct.toFixed(Math.abs(pct) > 0 && Math.abs(pct) < 0.001 ? 6 : 4)}%`;
 }
 
 function tone(n: number | null | undefined): string {
