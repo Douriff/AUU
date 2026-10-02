@@ -19,7 +19,7 @@ from app.paper.ledger import (
 )
 from app.providers import reset_provider
 from app.risk.gate import reset_risk_gate
-from app.strategies.pump_paper_v1 import PumpPaperEngine, PumpPaperParams, reset_engine
+from app.legacy.pump.strategies.pump_paper_v1 import PumpPaperEngine, PumpPaperParams, reset_engine
 
 
 class LedgerUnitTests(unittest.TestCase):

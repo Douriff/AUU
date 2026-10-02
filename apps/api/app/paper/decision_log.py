@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from app.models.contracts import DecisionLogRow, Fill, RiskOut, SignalOut
-from app.providers.pumpfun_curve_math import (
+from app.legacy.pump.providers.pumpfun_curve_math import (
     impact_net_bps as compute_impact_net_bps,
     impact_venue_phase,
     protocol_fee_bps_for_phase,

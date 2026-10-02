@@ -1719,3 +1719,32 @@ code.hl { color: var(--accent); }
   /* Board tape rows keep their existing ≤640 grid; long names ellipsize at word level. */
   .board-tape li > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* ---- 主流行情 (mainstream market page) ---- */
+.mainstream-page .ms-fresh { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; font-size: 0.75rem; color: #8d8d96; }
+.mainstream-page .ms-fresh span { border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 0.12rem 0.55rem; }
+.mainstream-page .ms-fresh .is-ok { color: #3ee08f; border-color: rgba(62, 224, 143, 0.45); }
+.mainstream-page .ms-fresh .is-down { color: #ff5d5d; border-color: rgba(255, 93, 93, 0.5); }
+.mainstream-page .ms-fresh .is-warn { color: #ffb020; border-color: rgba(255, 176, 32, 0.45); }
+.ms-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.6rem; margin-bottom: 0.8rem; }
+.ms-card {
+  text-align: left; background: var(--panel); color: var(--text); border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px; padding: 0.7rem 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; cursor: pointer; font: inherit;
+}
+.ms-card.is-on { border-color: rgba(88, 166, 255, 0.6); }
+.ms-card-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ms-card-head b { font-size: 1rem; letter-spacing: 0.04em; }
+.ms-price { font-size: 1.35rem; font-weight: 650; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ms-row { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; }
+.ms-row em { font-style: normal; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ms-panel { background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 0.7rem 0.8rem; }
+.ms-chart { width: 100%; height: 220px; display: block; }
+.ms-chart.ms-funding { height: 90px; }
+.ms-axis { fill: #8d8d96; font-size: 10px; font-family: ui-monospace, monospace; }
+.ms-sub { margin-top: 0.6rem; }
+.mainstream-page .flat { color: inherit; }
+@media (max-width: 768px) {
+  .ms-cards { grid-template-columns: 1fr; }
+  .ms-card { min-height: 40px; }
+  .ms-chart { height: 180px; }
+}

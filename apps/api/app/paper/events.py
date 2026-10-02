@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from app.paper.postmortem import exit_reason_of
+from app.legacy.pump.paper.postmortem import exit_reason_of
 
 RING_CAP = 2_000
 EVENT_TYPES = ("discovery", "entry", "exit", "reject", "shadow", "system")
@@ -399,7 +399,7 @@ def _backfill() -> None:
     except Exception:
         pass
     try:
-        from app.paper.shadow_compare import shadow_closed, shadow_decisions
+        from app.legacy.pump.paper.shadow_compare import shadow_closed, shadow_decisions
 
         for row in shadow_decisions():
             note_shadow_decision(row)
@@ -445,7 +445,7 @@ def _locked(lock: Any, fn: Any) -> Any:
 def _sample_status() -> None:
     global _status_auto, _disc_key
     try:
-        from app.discovery import discovery_health_fields
+        from app.legacy.pump.discovery import discovery_health_fields
 
         fields = discovery_health_fields()
         key = (str(fields.get("discoveryActive") or ""), str(fields.get("discoveryReason") or ""))
@@ -454,7 +454,7 @@ def _sample_status() -> None:
     except Exception:
         pass
     try:
-        from app.strategies.pump_paper_v1 import get_engine
+        from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
         auto = bool(get_engine().params.auto_paper_orders)
         if auto != _status_auto:
@@ -465,7 +465,7 @@ def _sample_status() -> None:
 
 def _open_positions() -> int:
     from app.paper.ledger import get_paper_journal
-    from app.strategies.pump_paper_v1 import get_engine
+    from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
     journal = get_paper_journal()
     n = 0
@@ -486,7 +486,7 @@ def _open_positions() -> int:
 
 
 def console_stats() -> dict[str, Any]:
-    from app.paper.executability import build_executability
+    from app.legacy.pump.paper.executability import build_executability
     from app.paper.ledger import excluded_from_go, get_paper_journal
 
     start = shanghai_day_start_ms()

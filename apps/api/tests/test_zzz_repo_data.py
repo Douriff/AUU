@@ -22,7 +22,7 @@ from app.data_paths import (
     snapshot_repo_data,
 )
 from app.paper.ledger import _journal_path, reset_paper_ledger
-from app.paper.shadow_compare import _store_path, reset_shadow_compare
+from app.legacy.pump.paper.shadow_compare import _store_path, reset_shadow_compare
 
 
 class RepoDataIsolationTests(unittest.TestCase):

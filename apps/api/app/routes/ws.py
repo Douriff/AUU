@@ -8,6 +8,7 @@ import os
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.bus import get_hub
+from app.legacy import legacy_pump_enabled
 from app.providers import AVAILABLE_PROVIDERS, get_provider
 
 router = APIRouter(tags=["ws"])
@@ -20,13 +21,15 @@ VALID_CHANNELS = {"candles", "book", "trades", "signals", "fills", "risk"}
 @router.websocket("/api/v1/ws")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
-    provider = get_provider()
-    active = os.getenv("DATA_PROVIDER", "mock").lower().strip()
-    if active not in AVAILABLE_PROVIDERS:
-        active = provider.name
-    providers = [active] + [p for p in AVAILABLE_PROVIDERS if p != active]
-    await websocket.send_json(
-        {
+    flag = getattr(websocket.app.state, "legacy_pump", None)
+    legacy = legacy_pump_enabled() if flag is None else bool(flag)
+    if legacy:
+        provider = get_provider()
+        active = os.getenv("DATA_PROVIDER", "mock").lower().strip()
+        if active not in AVAILABLE_PROVIDERS:
+            active = provider.name
+        providers = [active] + [p for p in AVAILABLE_PROVIDERS if p != active]
+        hello = {
             "type": "hello",
             "version": 1,
             "providers": providers,
@@ -35,17 +38,22 @@ async def ws_endpoint(websocket: WebSocket):
             "marketData": "real"
             if provider.name == "pumpfun_live_paper"
             else ("synthetic" if provider.name == "pumpfun_paper" else "mock"),
-            "eventTypes": [
-                "signal",
-                "risk",
-                "fill",
-                "reject",
-                "trading_state",
-                "pumpfun_curve",
-                "new_token",
-            ],
+            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state", "pumpfun_curve", "new_token"],
         }
-    )
+    else:
+        # Mainstream mode: no pump provider; only the paper event hub streams.
+        provider = None
+        hello = {
+            "type": "hello",
+            "version": 1,
+            "providers": ["cex_public"],
+            "orderMode": "paper",
+            "venue": "CEX",
+            "marketData": "real",
+            "legacyPump": False,
+            "eventTypes": ["signal", "risk", "fill", "reject", "trading_state"],
+        }
+    await websocket.send_json(hello)
 
     tasks: dict[str, asyncio.Task] = {}
     stop = asyncio.Event()
@@ -120,6 +128,14 @@ async def ws_endpoint(websocket: WebSocket):
             channel = msg.get("channel")
             symbol = msg.get("symbol")
             interval = msg.get("interval")
+            if provider is None:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "payload": {"code": "LEGACY_OFF", "message": "provider channels need AUU_LEGACY_PUMP=on"},
+                    }
+                )
+                continue
             if channel not in VALID_CHANNELS or not symbol:
                 await websocket.send_json(
                     {

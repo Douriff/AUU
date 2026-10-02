@@ -35,6 +35,10 @@ PRIVATE_GETS = [
     "/api/v1/live/status",
     "/api/v1/markets",
     "/api/v1/symbols",
+    "/api/v1/mainstream/overview",
+    "/api/v1/mainstream/candles?symbol=BTC&tf=1d",
+    "/api/v1/mainstream/funding?symbol=BTC",
+    "/api/v1/mainstream/status",
 ]
 
 ADMIN_WRITES = [
@@ -88,7 +92,7 @@ class AuthGateApiTests(unittest.TestCase):
         reset_accounts()
         from fastapi.testclient import TestClient
         from app.main import app
-        from app.strategies.pump_paper_v1 import get_engine
+        from app.legacy.pump.strategies.pump_paper_v1 import get_engine
 
         self.TestClient = TestClient
         self.app = app

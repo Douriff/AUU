@@ -12,11 +12,11 @@ journal, what is needed to re-check the result offline:
 * a compact tape of the mint's real prints over [entry signal - 30 s, exit + post]
   (post = ``AUU_EVIDENCE_POST_MS``, default 90 s; 30 s before evidence v3);
 * ``entry_factors``: holder structure / token safety at the signal, looked up
-  off the execution path by ``app.paper.entry_factors``.
+  off the execution path by ``app.legacy.pump.paper.entry_factors``.
 
 It never changes a decision, an order or a parameter: the strategy calls the
 ``on_*`` hooks after it has already acted, every hook swallows its own errors,
-and nothing here is read back by the strategy. ``python -m app.paper.replay``
+and nothing here is read back by the strategy. ``python -m app.legacy.pump.paper.replay``
 consumes the file. Paper only; liveEnabled is untouched.
 
 Storage is bounded: one active file rotated at ``AUU_EVIDENCE_MAX_MB``
@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 from app.data_paths import data_dir, guarded_path
-from app.providers.pumpfun_curve_math import (
+from app.legacy.pump.providers.pumpfun_curve_math import (
     INITIAL_REAL_TOKEN_RESERVES,
     TOKEN_TOTAL_SUPPLY,
     market_cap_sol,
@@ -614,7 +614,7 @@ def _curve_info(provider: Any, symbol: str) -> dict[str, Any]:
 def _submit_entry_factors(provider: Any, *, symbol: str, mint: str, signal_ts: int) -> None:
     """Enqueue the holder / safety lookup (non-blocking; see ``entry_factors``)."""
     try:
-        from app.paper.entry_factors import get_entry_factor_service
+        from app.legacy.pump.paper.entry_factors import get_entry_factor_service
 
         svc = get_entry_factor_service()
         if svc is not None:
@@ -625,7 +625,7 @@ def _submit_entry_factors(provider: Any, *, symbol: str, mint: str, signal_ts: i
 
 def _entry_factor_result(mint: str, signal_ts: int) -> dict[str, Any]:
     try:
-        from app.paper.entry_factors import get_entry_factor_service, pending_result
+        from app.legacy.pump.paper.entry_factors import get_entry_factor_service, pending_result
 
         svc = get_entry_factor_service()
         if svc is None:
@@ -638,7 +638,7 @@ def _entry_factor_result(mint: str, signal_ts: int) -> dict[str, Any]:
 
 def _trade_cap() -> int:
     try:
-        from app.providers.pumpfun_live_paper import TRADE_CAP
+        from app.legacy.pump.providers.pumpfun_live_paper import TRADE_CAP
 
         return int(TRADE_CAP)
     except Exception:

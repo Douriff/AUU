@@ -1,4 +1,4 @@
-"""AUU Market Terminal API — FastAPI entrypoint (paper/mock only)."""
+"""AUU API — FastAPI entrypoint (paper only; mainstream CEX data, legacy pump behind a flag)."""
 from __future__ import annotations
 
 import os
@@ -8,37 +8,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import (
-    auth,
-    board,
-    book,
-    candles,
-    curve,
-    events,
-    fills,
-    health,
-    live,
-    majors,
-    markets,
-    paper,
-    pipeline,
-    pumpfun,
-    risk,
-    signals,
-    search,
-    stats,
-    strategy,
-    symbols,
-    trade_ticket,
-    universe,
-    wallet,
-    watch,
-    ws,
-)
 from app.auth.gate import AuthGateMiddleware
+from app.legacy import legacy_pump_enabled
+from app.routes import auth, events, health, live, mainstream, majors, stats, ws
 from app.routes.envelope import API_VERSION
-from app.strategies.pump_paper_v1 import get_engine, loop_enabled
-from app.discovery import get_discovery, resolve_discovery_mode
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
 # cannot change strategy behavior for the suite. AUU_DOTENV_PATH selects
@@ -51,106 +24,154 @@ if os.getenv("AUU_SKIP_DOTENV", "").strip().lower() not in {"1", "true", "on", "
         load_dotenv()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    import asyncio
+def _legacy_routers():
+    """pump.fun / Solana routes (app.legacy.pump + provider-backed paper routes)."""
+    from app.legacy.pump.routes import (
+        board,
+        curve,
+        markets,
+        pumpfun,
+        search,
+        stats_pump,
+        strategy,
+        trade_ticket,
+        universe,
+        wallet,
+        watch,
+    )
+    from app.routes import book, candles, fills, paper, pipeline, risk, signals, symbols
 
-    tasks: list[asyncio.Task] = []
-    try:
-        from app.paper.events import note_api_start
-
-        note_api_start()
-    except Exception:
-        pass
-    if loop_enabled():
-        tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
-    if resolve_discovery_mode() != "off":
-        tasks.append(asyncio.create_task(get_discovery().run_loop(), name="pumpfun-discovery"))
-    from app.providers import get_provider
-
-    provider = get_provider()
-    feed = getattr(provider, "run_feed", None)
-    if callable(feed):
-        tasks.append(asyncio.create_task(feed(), name="pumpfun-live-paper-feed"))
-    try:
-        yield
-    finally:
-        get_engine().stop()
-        get_discovery().stop()
-        stop_feed = getattr(get_provider(), "stop_feed", None)
-        if callable(stop_feed):
-            stop_feed()
-        for t in tasks:
-            t.cancel()
-        for t in tasks:
-            with suppress(asyncio.CancelledError):
-                await t
+    return [
+        board, markets, universe, search, trade_ticket, symbols, candles, signals, fills, book,
+        curve, risk, paper, pipeline, pumpfun, strategy, stats_pump, watch, wallet,
+    ]
 
 
-app = FastAPI(
-    title="AUU Market Terminal API",
-    version="0.1.0",
-    description="Paper/mock Pump.fun (Solana bonding curve) visualization backend. Live adapter is scaffolded but dark (no chain submit).",
-    lifespan=lifespan,
-    # AUU_API_DOCS=off hides /docs, /redoc and /openapi.json (public deployments).
-    **(
-        {"docs_url": None, "redoc_url": None, "openapi_url": None}
-        if os.getenv("AUU_API_DOCS", "on").strip().lower() in {"0", "false", "off", "no"}
-        else {}
-    ),
-)
+def _make_lifespan(legacy: bool):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        import asyncio
 
-# Login gate first so CORS (added after, so outermost) still decorates 401/403s.
-app.add_middleware(AuthGateMiddleware)
+        tasks: list[asyncio.Task] = []
+        try:
+            from app.paper.events import note_api_start
 
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+            note_api_start()
+        except Exception:
+            pass
+        stops = []
+        if legacy:
+            from app.legacy.pump.discovery import get_discovery, resolve_discovery_mode
+            from app.legacy.pump.strategies.pump_paper_v1 import get_engine, loop_enabled
+            from app.providers import get_provider
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in origins if o.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Api-Version"],
-)
+            if loop_enabled():
+                tasks.append(asyncio.create_task(get_engine().run_loop(), name="pump-paper-v1-loop"))
+            if resolve_discovery_mode() != "off":
+                tasks.append(asyncio.create_task(get_discovery().run_loop(), name="pumpfun-discovery"))
+            feed = getattr(get_provider(), "run_feed", None)
+            if callable(feed):
+                tasks.append(asyncio.create_task(feed(), name="pumpfun-live-paper-feed"))
+            stops += [lambda: get_engine().stop(), lambda: get_discovery().stop()]
+            stops.append(lambda: (getattr(get_provider(), "stop_feed", None) or (lambda: None))())
+        from app.marketdata.mainstream import get_service
 
+        svc = get_service()
+        if svc.cfg.enabled and svc.cfg.refresh:
+            tasks.append(asyncio.create_task(svc.run_loop(), name="mainstream-refresh"))
+            stops.append(svc.stop)
+        try:
+            yield
+        finally:
+            for stop in stops:
+                with suppress(Exception):
+                    stop()
+            for t in tasks:
+                t.cancel()
+            for t in tasks:
+                with suppress(asyncio.CancelledError):
+                    await t
 
-@app.middleware("http")
-async def api_version_header(request: Request, call_next):
-    response: Response = await call_next(request)
-    response.headers["X-Api-Version"] = API_VERSION
-    return response
-
-
-app.include_router(health.router)
-app.include_router(board.router)
-app.include_router(markets.router)
-app.include_router(universe.router)
-app.include_router(events.router)
-app.include_router(search.router)
-app.include_router(majors.router)
-app.include_router(auth.router)
-app.include_router(trade_ticket.router)
-app.include_router(symbols.router)
-app.include_router(candles.router)
-app.include_router(signals.router)
-app.include_router(fills.router)
-app.include_router(book.router)
-app.include_router(curve.router)
-app.include_router(risk.router)
-app.include_router(paper.router)
-app.include_router(live.router)
-app.include_router(pipeline.router)
-app.include_router(pumpfun.router)
-app.include_router(strategy.router)
-app.include_router(stats.router)
-app.include_router(watch.router)
-app.include_router(wallet.router)
-app.include_router(ws.router)
+    return lifespan
 
 
-@app.get("/")
-def root():
+def create_app(legacy: bool | None = None) -> FastAPI:
+    """Build the API. ``legacy`` defaults to ``AUU_LEGACY_PUMP`` (off)."""
+    legacy = legacy_pump_enabled() if legacy is None else bool(legacy)
+    app = FastAPI(
+        title="AUU Market Terminal API",
+        version="0.2.0",
+        description=(
+            "Mainstream-coin quant platform (paper only): public CEX market data, paper ledger, "
+            "Go/No-Go. Live trading stays locked. Legacy pump.fun stack behind AUU_LEGACY_PUMP."
+        ),
+        lifespan=_make_lifespan(legacy),
+        # AUU_API_DOCS=off hides /docs, /redoc and /openapi.json (public deployments).
+        **(
+            {"docs_url": None, "redoc_url": None, "openapi_url": None}
+            if os.getenv("AUU_API_DOCS", "on").strip().lower() in {"0", "false", "off", "no"}
+            else {}
+        ),
+    )
+    app.state.legacy_pump = legacy
+
+    # Login gate first so CORS (added after, so outermost) still decorates 401/403s.
+    app.add_middleware(AuthGateMiddleware)
+
+    origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in origins if o.strip()],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Api-Version"],
+    )
+
+    @app.middleware("http")
+    async def api_version_header(request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Api-Version"] = API_VERSION
+        return response
+
+    for mod in (health, events, majors, auth, live, stats, mainstream):
+        app.include_router(mod.router)
+    if legacy:
+        for mod in _legacy_routers():
+            app.include_router(mod.router)
+    app.include_router(ws.router)
+    app.add_api_route("/", lambda: root(legacy), methods=["GET"])
+    return app
+
+
+def root(legacy: bool = False):
+    if not legacy:
+        return {
+            "ok": True,
+            "data": {
+                "service": "auu-api",
+                "mode": "mainstream",
+                "health": "/api/v1/health",
+                "ws": "/api/v1/ws",
+                "provider": "cex_public",
+                "orderMode": "paper",
+                "legacyPump": False,
+                "endpoints": {
+                    "mainstreamOverview": "GET /api/v1/mainstream/overview",
+                    "mainstreamCandles": "GET /api/v1/mainstream/candles?symbol=&tf=1d|1h",
+                    "mainstreamFunding": "GET /api/v1/mainstream/funding?symbol=",
+                    "mainstreamStatus": "GET /api/v1/mainstream/status",
+                    "majors": "GET /api/v1/majors",
+                    "paperPerformance": "GET /api/v1/stats/paper-performance",
+                    "events": "GET /api/v1/events",
+                    "liveStatus": "GET /api/v1/live/status",
+                    "auth": "POST /api/v1/auth/register|login|logout|password",
+                    "leaderboard": "GET /api/v1/leaderboard",
+                    "legacy": "env AUU_LEGACY_PUMP=on re-enables the pump.fun stack",
+                },
+            },
+        }
     provider = os.getenv("DATA_PROVIDER", "mock")
     return {
         "ok": True,
@@ -203,3 +224,6 @@ def root():
             },
         },
     }
+
+
+app = create_app()

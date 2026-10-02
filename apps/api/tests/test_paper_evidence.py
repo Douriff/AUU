@@ -15,20 +15,20 @@ from unittest import mock
 
 from app.models.contracts import SignalOut
 from app.paper import evidence as ev
-from app.paper import replay
+from app.legacy.pump.paper import replay
 from app.paper.broker import reset_paper_broker
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
-from app.paper.real_fill import quote_curve_fill
-from app.providers.pumpfun_curve_math import (
+from app.legacy.pump.paper.real_fill import quote_curve_fill
+from app.legacy.pump.providers.pumpfun_curve_math import (
     INITIAL_REAL_TOKEN_RESERVES,
     INITIAL_VIRTUAL_SOL_RESERVES,
     INITIAL_VIRTUAL_TOKEN_RESERVES,
     price_sol,
 )
-from app.providers.pumpfun_live_paper import PumpfunLivePaperProvider
+from app.legacy.pump.providers.pumpfun_live_paper import PumpfunLivePaperProvider
 from app.risk.gate import reset_risk_gate
-from app.strategies import pump_paper_v1
-from app.strategies.pump_paper_v1 import PumpPaperEngine, PumpPaperParams, reset_engine
+from app.legacy.pump.strategies import pump_paper_v1
+from app.legacy.pump.strategies.pump_paper_v1 import PumpPaperEngine, PumpPaperParams, reset_engine
 
 VS0 = INITIAL_VIRTUAL_SOL_RESERVES
 VT0 = INITIAL_VIRTUAL_TOKEN_RESERVES

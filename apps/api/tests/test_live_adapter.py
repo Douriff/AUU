@@ -47,7 +47,7 @@ from app.paper.guard import live_execution_blocked
 from app.paper.ledger import PaperLedger, reset_paper_ledger, summarize
 from app.providers import reset_provider
 from app.risk.gate import REASON, RiskGate, RiskLimits, reset_risk_gate
-from app.strategies.pump_paper_v1 import reset_engine
+from app.legacy.pump.strategies.pump_paper_v1 import reset_engine
 
 ROOT = Path(__file__).resolve().parents[3]
 API_APP = ROOT / "apps" / "api" / "app"

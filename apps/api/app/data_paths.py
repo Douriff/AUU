@@ -157,6 +157,10 @@ def install_test_isolation() -> None:
         _SNAPSHOT = snapshot_repo_data()
     os.environ["AUU_SKIP_DOTENV"] = "1"
     os.environ["AUU_TEST"] = "1"
+    # The legacy pump suite exercises app.legacy.pump; mainstream tests build
+    # their own app with create_app(legacy=False). No background CEX refresh.
+    os.environ.setdefault("AUU_LEGACY_PUMP", "on")
+    os.environ.setdefault("AUU_MAINSTREAM_REFRESH", "off")
     raw_root = (os.getenv("AUU_DATA_DIR") or "").strip()
     if not raw_root or _inside_repo_data(Path(raw_root)):
         if _TMPDIR is None:

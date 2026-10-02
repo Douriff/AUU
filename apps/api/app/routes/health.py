@@ -1,38 +1,112 @@
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
-from app.discovery import discovery_health_fields
+from app.legacy import legacy_pump_enabled
 from app.live.gate import evaluate
-from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider, market_data_kind
 from app.risk import get_risk_gate
 from app.routes.envelope import ok
-from app.strategies.pump_paper_v1 import get_engine
-from app.traders import COPY_TRADE_ENABLED
-from app.traders.helius import helius_enabled, reader_mode
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
 
 def _stall(provider):
+    """Stall alarm only for a strategy that actually runs (loop on + autopaper on)."""
+    from app.legacy.pump.strategies.pump_paper_v1 import get_engine, loop_enabled
+
     try:
-        return get_engine().stall_status(provider)
+        engine = get_engine()
+        status = engine.stall_status(provider)
     except Exception:
         return None
+    active = bool(loop_enabled() and engine.params.auto_paper_orders)
+    status["active"] = active
+    if not active:
+        status["stalled"] = False
+        status["reason"] = "no_running_strategy"
+    return status
+
+
+def _live_fields() -> dict:
+    payload = evaluate().as_dict()
+    return {
+        "liveEnabled": payload["liveEnabled"],
+        "liveConfirmed": payload["liveConfirmed"],
+        "liveDisabled": payload["liveDisabled"],
+        "liveArmed": payload["liveArmed"],
+        "liveSendWired": payload["liveSendWired"],
+        "liveReasons": payload["reasons"],
+        "liveLimits": payload["limits"],
+        "keypairConfigured": payload["keypairConfigured"],
+        "keypairMounted": bool(payload["keypairMounted"]),
+        "pubkey": payload.get("pubkey"),
+        "keypairRelpath": payload.get("keypairRelpath"),
+        "keypairEnv": payload["keypairEnv"],
+    }
+
+
+def _mainstream_fields() -> dict:
+    try:
+        from app.marketdata.mainstream import get_service
+
+        svc = get_service()
+        if not svc.cfg.enabled:
+            return {"enabled": False, "stale": False}
+        return svc.freshness()
+    except Exception as exc:  # health must answer even if the store is broken
+        return {"enabled": True, "stale": True, "lastError": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+def _mainstream_health(gate) -> dict:
+    """Health when AUU_LEGACY_PUMP is off: no pump provider is constructed."""
+    md = _mainstream_fields()
+    return {
+        "status": "up",
+        "provider": "cex_public",
+        "mode": "paper",
+        "venue": "CEX",
+        "quote": "USDT",
+        "marketData": "real",
+        "marketDataLabel": "交易所公开行情",
+        "legacyPump": False,
+        "defaultSymbol": "BTC/USDT",
+        "dataSourceOptions": [],
+        "marketProviderOptions": ["cex_public"],
+        "trading_state": gate.trading_state,
+        "auto_paper_orders": False,
+        "strategy_autopaper": False,
+        "strategyId": None,
+        "runningStrategies": [],
+        "liveFeed": None,
+        # Only running strategies can stall; nothing runs in this mode yet.
+        "autopaperStall": {"stalled": False, "active": False, "reason": "no_running_strategy"},
+        "mainstream": md,
+        **_live_fields(),
+        "copy_trade_enabled": False,
+    }
 
 
 @router.get("/health")
-def health():
+def health(request: Request):
     gate = get_risk_gate()
+    legacy = getattr(request.app.state, "legacy_pump", None)
+    if not (legacy_pump_enabled() if legacy is None else legacy):
+        return ok(_mainstream_health(gate))
+    from app.legacy.pump.discovery import discovery_health_fields
+    from app.legacy.pump.strategies.pump_paper_v1 import get_engine, loop_enabled
+    from app.legacy.pump.traders import COPY_TRADE_ENABLED
+    from app.legacy.pump.traders.helius import helius_enabled, reader_mode
+    from app.providers import AVAILABLE_PROVIDERS, default_symbol, get_provider, market_data_kind
+
     provider = get_provider()
     pump_venue = provider.name in {"pumpfun_paper", "pumpfun_live_paper"}
     venue = "Pump.fun" if pump_venue else "mock"
-    live = evaluate()
-    payload = live.as_dict()
     kind = market_data_kind(provider.name)
     return ok(
         {
             "status": "up",
+            "legacyPump": True,
+            "mainstream": _mainstream_fields(),
             "provider": provider.name,
             "mode": "paper",
             "venue": venue,
@@ -46,22 +120,12 @@ def health():
             "auto_paper_orders": get_engine().params.auto_paper_orders,
             "strategy_autopaper": get_engine().params.auto_paper_orders,
             "strategyId": "pump-paper-v1",
+            "runningStrategies": ["pump-paper-v1"] if (loop_enabled() and get_engine().params.auto_paper_orders) else [],
             "watch_mints": os.getenv("PUMPFUN_WATCH_MINTS", ""),
             **discovery_health_fields(),
             "liveFeed": provider.feed_health() if callable(getattr(provider, "feed_health", None)) else None,
             "autopaperStall": _stall(provider),
-            "liveEnabled": payload["liveEnabled"],
-            "liveConfirmed": payload["liveConfirmed"],
-            "liveDisabled": payload["liveDisabled"],
-            "liveArmed": payload["liveArmed"],
-            "liveSendWired": payload["liveSendWired"],
-            "liveReasons": payload["reasons"],
-            "liveLimits": payload["limits"],
-            "keypairConfigured": payload["keypairConfigured"],
-            "keypairMounted": bool(payload["keypairMounted"]),
-            "pubkey": payload.get("pubkey"),
-            "keypairRelpath": payload.get("keypairRelpath"),
-            "keypairEnv": payload["keypairEnv"],
+            **_live_fields(),
             "copy_trade_enabled": COPY_TRADE_ENABLED,
             "trader_watch_reader": reader_mode(),
             "helius_enabled": helius_enabled(),

@@ -1,4 +1,55 @@
-# AUU · Pump.fun 纸面量化终端（P0）
+# AUU · 主流币量化平台（纸面）
+
+**方向（2026-10）：** AUU 已放弃 pump.fun / 模因币，转为 **主流币（BTC / ETH / SOL，可配置）量化研究与纸面交易平台**。计划见 `docs/mainstream/plan.md`（M0 归档旧栈 → M1 行情层 → M2+ 趋势 TSMOM 回测 / 纸面 / Go-No-Go）。
+
+- 行情只用交易所 **公开** 接口（[ccxt](https://github.com/ccxt/ccxt)，MIT），**无 API key、无付费数据、不下单**。
+- 实盘保持锁定：`LIVE_API_LOCKED`，网页 / HTTP 无法打开 live（服务端 `AUU_LIVE_API_ENABLE` 未开启时恒 403）。
+- 登录、邮箱验证码、邀请码、锁定、CSRF 来源校验、管理员写权限、纸面账本、Go/No-Go、health/guard 全部保留。
+- 不合并 GPL / AGPL 代码（不使用 freqtrade 等代码）。
+
+## 当前模式与旧版开关
+
+| 模式 | 开关 | 启动内容 |
+|------|------|----------|
+| **主流（默认）** | `AUU_LEGACY_PUMP` 未设或 `off` | 主流行情层（K 线 + 资金费率刷新循环）、登录、大盘 `/majors`、控制台事件、纸面绩效 / Go-No-Go `GET /api/v1/stats/paper-performance`、live 状态（只读锁定） |
+| 旧版 pump.fun | `AUU_LEGACY_PUMP=on` | 额外挂载并启动 `app/legacy/pump/` 下的全部旧功能（pump provider feed、发现、pump-paper-v1 循环、交易员观察、钱包、盘面 / 市场 / 交易 / 复盘等路由），与迁移前行为一致 |
+
+旧代码用 `git mv` 移到 `apps/api/app/legacy/pump/`（保留历史；放在 `app` 包内以便 import），测试移到 `apps/api/tests/legacy_pump/`。关闭时这些模块不会被 import 启动；`DATA_PROVIDER=pumpfun_*` 残留也只会回落到无害的 mock。health 在主流模式返回 `provider=cex_public`、`legacyPump=false`、`autopaperStall.stalled=false`（`reason=no_running_strategy`：只有真正运行中的策略才会触发停滞告警）。
+
+## 主流行情层（M1）
+
+代码：`apps/api/app/marketdata/mainstream/`（`config.py` / `fetcher.py` / `store.py` / `service.py`），路由 `apps/api/app/routes/mainstream.py`，页面 `/`（主流行情，登录后可见）。
+
+- 数据：每个币的现货 `BASE/USDT` **1d、1h K 线** + 永续 `BASE/USDT:USDT` **资金费率历史**（及当前费率）。
+- 存储：SQLite `AUU_DATA_DIR/mainstream.sqlite`（表 `candles` / `funding` / `fetch_log`）。增量更新（从最后一根继续）、缺口检测与补洞、指数退避重试（1s / 2s / 4s…）。
+- 交易所：`auto` 时依次尝试 Binance → OKX；某所地区封锁（HTTP 451 / 403）或整轮失败时自动切到下一所，并在 health / 页面显示 `blocked`。
+- 只读 API（全部需要登录，未登录 401）：
+  - `GET /api/v1/mainstream/overview` — 价格、24h / 30d 涨跌、资金费率（最近 / 当前 / 年化）、新鲜度
+  - `GET /api/v1/mainstream/candles?symbol=BTC&tf=1d|1h&limit=&since=`
+  - `GET /api/v1/mainstream/funding?symbol=BTC&limit=&since=`
+  - `GET /api/v1/mainstream/status` — 新鲜度（同 health 的 `mainstream` 字段）
+- health 字段 `mainstream`：`exchange`、`blocked`、`lastRefreshMs`、每个序列的 `lastTs/ageMin/stale`、`staleSeries`、`gaps`。过期阈值：1h 线 180 分钟、1d 线 49 小时、资金费率 12.5 小时。guard 对过期只告警（`DATA STALE WARN`），不停服务。
+
+| 环境变量 | 默认 | 说明 |
+|----------|------|------|
+| `AUU_LEGACY_PUMP` | `off` | `on` 重新启用旧 pump.fun 栈 |
+| `AUU_MAINSTREAM_DATA` | `on` | 关闭整个主流行情层 |
+| `AUU_MAINSTREAM_SYMBOLS` | `BTC,ETH,SOL` | 逗号分隔 base 币 |
+| `AUU_MAINSTREAM_QUOTE` | `USDT` | 计价币 |
+| `AUU_MAINSTREAM_EXCHANGE` | `auto` | `binance` / `okx` / `auto`（或 `okx,binance` 指定顺序） |
+| `AUU_MAINSTREAM_REFRESH` | `on` | 后台刷新循环 |
+| `AUU_MAINSTREAM_REFRESH_SEC` | `300` | 刷新间隔（秒） |
+| `AUU_MAINSTREAM_BACKFILL_1D_DAYS` / `_1H_DAYS` | `730` / `90` | 首次回补天数 |
+| `AUU_MAINSTREAM_FUNDING_DAYS` | `60` | 资金费率首次回补天数（OKX 公共接口只给约 3 个月） |
+| `AUU_MAINSTREAM_RETRIES` | `3` | 单次请求重试次数 |
+
+研究回测脚本在 box 的 `/workspace/mainstream/`（不在仓库内；M2 会把它产品化为回测引擎）。
+
+---
+
+以下为 **旧版 pump.fun 终端** 文档（仅 `AUU_LEGACY_PUMP=on` 时适用）。
+
+# 旧版 · Pump.fun 纸面量化终端（legacy）
 
 **Venue = `Pump.fun`（Solana bonding curve）**，不是通用 CEX / Binance 现货。纸面 / Mock 优先。无真实 API Key、无钱包私钥、无自动买币 sniper。图表使用 [lightweight-charts](https://github.com/TradingView/lightweight-charts)（Apache-2.0）；**不**复制 Freqtrade / FreqUI（GPL）代码。
 
@@ -20,7 +71,7 @@ flowchart TB
 | 组件 | 职责 |
 |------|------|
 | ConsolePage `/console` | 控制台：持仓 / 今日平仓 / 今日净盈亏 / Go-No-Go，纸面事件流（`GET /api/v1/events?since=`，只读） |
-| BoardPage `/` | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
+| BoardPage `/`（旧版模式；主流模式下为 `/board`） | 盘面：监控涨跌条、纸面权益曲线、平仓 tape、胜率 / 期望 / 笔数 / Go-No-Go、持仓、影子对照（`GET /api/v1/board`，只读） |
 | MarketsPage `/markets` | 市场：pump.fun 全站表（`GET /api/v1/universe`，热门 / 新币 / 即将毕业 / 已毕业 / 涨跌榜 / 观察池）。与发现模式无关。本地模拟币只在 `AUU_UNIVERSE_MOCK=1` 时出现。点行进入 `/trade/:mint` |
 | TradingPage `/trade` | 交易：全站搜索（`GET /api/v1/search`，pump.fun，失败则 DexScreener）、任意 mint 报价、纸面买卖票。单笔 1 SOL、10 仓、日亏 4.5%。`liveEnabled` 恒 false |
 | MajorsPage `/majors` | 大盘：各所成交额前 100 的 USDT/USD（`GET /api/v1/majors/tickers`），涨跌筛选，跨所买卖价差。无密钥、无下单。单所不可用时其余继续。所址可用 `BINANCE_REST_URL` / `OKX_REST_URL` / `BYBIT_REST_URL` / `COINBASE_MARKET_URL` |
@@ -56,7 +107,7 @@ docker compose up --build
 cd /workspace/AUU/apps/api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export DATA_PROVIDER=mock   # 或 pumpfun_paper（合成）/ pumpfun_live_paper（真实链上纸面）
+# 默认主流模式；旧版：export AUU_LEGACY_PUMP=on DATA_PROVIDER=pumpfun_live_paper
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 终端 2 — Web
@@ -200,4 +251,4 @@ curl -sS 'http://localhost:8000/api/v1/stats/executability'
 
 ## 许可证注意
 
-优先 Apache/MIT 依赖。不要 fork / 粘贴 GPL 前端（FreqUI 等）。本仓库自研脚手架。
+优先 Apache/MIT 依赖（ccxt 为 MIT，其依赖为 MIT / Apache-2.0 / BSD / PSF / MPL-2.0）。不要 fork / 粘贴 GPL / AGPL 代码（FreqUI、freqtrade 等）。本仓库自研脚手架。

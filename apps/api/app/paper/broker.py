@@ -131,7 +131,7 @@ class PaperBroker:
         held: float,
         source: str | None,
     ) -> list[Fill]:
-        from app.paper.real_fill import curve_fee_bps, quote_curve_fill
+        from app.legacy.pump.paper.real_fill import curve_fee_bps, quote_curve_fill
 
         pump = ctx.pump
         assert pump is not None

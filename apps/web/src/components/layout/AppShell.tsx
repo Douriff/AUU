@@ -3,6 +3,7 @@ import { useStrategyConfig } from "@/hooks/useStrategyConfig";
 import { useEffect, useState, type ReactNode } from "react";
 import { AUTH_REQUIRED_EVENT, marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
+import { useLegacyMode } from "@/hooks/useLegacyMode";
 
 const primary = [
   { to: "/console", label: "控制台", icon: "term" },
@@ -23,6 +24,15 @@ const more = [
   { to: "/backtest", label: "回测" },
   { to: "/alerts", label: "告警" },
 ];
+
+/** Default (AUU_LEGACY_PUMP off): mainstream nav only; pump pages are archived. */
+const mainstreamPrimary = [
+  { to: "/", label: "主流行情", title: "BTC/ETH/SOL 价格与资金费率", end: true, icon: "bars" },
+  { to: "/console", label: "控制台", icon: "term" },
+  { to: "/majors", label: "大盘", icon: "globe" },
+  { to: "/leaderboard", label: "排行榜", icon: "rank" },
+  { to: "/settings", label: "设置", icon: "gear" },
+] as const;
 
 function Icon({ name }: { name: string }) {
   const common = {
@@ -169,7 +179,7 @@ export function AppShell() {
           <span className="side-mark" aria-hidden="true">
             A
           </span>
-          <span>AUU · Pump.fun 纸面终端</span>
+          <span>AUU · 主流币量化（纸面）</span>
         </div>
         <main className="auth-screen-body">{AUTH_PATHS.has(location.pathname) ? <Outlet /> : null}</main>
       </div>
@@ -202,7 +212,8 @@ function ShellFrame({
   isAdmin: boolean;
   onLogout: () => void;
 }) {
-  const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
+  const legacy = useLegacyMode();
+  const [healthState, setHealthState] = useState("");
   const [provider, setProvider] = useState("…");
   const [marketData, setMarketData] = useState("");
   const [liveOff, setLiveOff] = useState(true);
@@ -214,6 +225,7 @@ function ShellFrame({
       .getHealth()
       .then((h) => {
         setProvider(h.provider);
+        setHealthState(h.trading_state || "");
         setMarketData(h.marketData || "");
         setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
       })
@@ -229,7 +241,7 @@ function ShellFrame({
           <span className="side-word">AUU</span>
         </div>
         <nav className="side-nav">
-          {primary.map((item) => (
+          {(legacy ? primary : mainstreamPrimary).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -243,7 +255,7 @@ function ShellFrame({
           ))}
         </nav>
         <div className="side-more">
-          {more.map((item) => (
+          {(legacy ? more : []).map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? "is-active" : "")}>
               <span className="side-label">{item.label}</span>
             </NavLink>
@@ -269,22 +281,20 @@ function ShellFrame({
           >
             {statusOpen ? "收起" : "状态"}
           </button>
-          <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
-            {tradingState}
-          </span>
-          <span className="muted topbar-provider status-extra" title="DATA_PROVIDER">
-            {provider}
-            {marketData ? ` · ${marketData}` : ""}
-          </span>
-          <AutoPaperToggle
-            compact
-            label="自动纸面"
-            checked={autoPaperOrders}
-            disabled={!isAdmin}
-            title={isAdmin ? undefined : "只有管理员可以切换系统自动纸面"}
-            onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
-          />
-          <div className="mode-badge status-extra">PAPER · PUMP.FUN</div>
+          {legacy ? (
+            <LegacyControls isAdmin={isAdmin} provider={provider} marketData={marketData} />
+          ) : (
+            <>
+              <span className="trading-state" data-state={healthState} title="RiskGate trading_state">
+                {healthState || "…"}
+              </span>
+              <span className="muted topbar-provider status-extra" title="行情来源">
+                {provider}
+                {marketData ? ` · ${marketData}` : ""}
+              </span>
+              <div className="mode-badge status-extra">PAPER · 主流币</div>
+            </>
+          )}
           <div className="mode-badge live-off" title="liveEnabled=false · LIVE_DISABLED">
             {liveOff ? "LIVE OFF" : "LIVE CHECKLIST"}
           </div>
@@ -308,5 +318,30 @@ function ShellFrame({
         </main>
       </div>
     </div>
+  );
+}
+
+/** pump-paper-v1 status + autopaper toggle (legacy stack only; polls the strategy route). */
+function LegacyControls({ isAdmin, provider, marketData }: { isAdmin: boolean; provider: string; marketData: string }) {
+  const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
+  return (
+    <>
+      <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
+        {tradingState}
+      </span>
+      <span className="muted topbar-provider status-extra" title="DATA_PROVIDER">
+        {provider}
+        {marketData ? ` · ${marketData}` : ""}
+      </span>
+      <AutoPaperToggle
+        compact
+        label="自动纸面"
+        checked={autoPaperOrders}
+        disabled={!isAdmin}
+        title={isAdmin ? undefined : "只有管理员可以切换系统自动纸面"}
+        onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
+      />
+      <div className="mode-badge status-extra">PAPER · PUMP.FUN</div>
+    </>
   );
 }

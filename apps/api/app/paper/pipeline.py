@@ -15,7 +15,7 @@ from app.paper.decision_log import (
     make_row,
     shadow_fields_for_fill,
 )
-from app.paper.executability import annotate_fill_executability
+from app.legacy.pump.paper.executability import annotate_fill_executability
 from app.paper.guard import live_execution_blocked
 from app.paper.ledger import get_paper_ledger
 from app.risk import get_risk_gate
