@@ -4,8 +4,20 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-TIMEFRAMES = ("1d", "1h")
-TF_MS = {"1h": 3_600_000, "1d": 86_400_000}
+# Stored timeframes: refreshed in the background, long history kept.
+TIMEFRAMES = ("1d", "4h", "1h")
+# Intraday timeframes: fetched on demand for the chart, only a recent window kept.
+INTRADAY = ("15m", "5m", "1m")
+CHART_TFS = ("1m", "5m", "15m", "1h", "4h", "1d")
+TF_MS = {
+    "1m": 60_000,
+    "5m": 300_000,
+    "15m": 900_000,
+    "1h": 3_600_000,
+    "4h": 14_400_000,
+    "1d": 86_400_000,
+}
+DEFAULT_BACKFILL_DAYS = {"1d": 730, "4h": 365, "1h": 90}
 FUNDING_STEP_MS = 8 * 3_600_000
 SUPPORTED_EXCHANGES = ("binance", "okx")
 
@@ -55,7 +67,9 @@ class MainstreamConfig:
     symbols: list[str] = field(default_factory=lambda: ["BTC", "ETH", "SOL"])
     quote: str = "USDT"
     exchanges: list[str] = field(default_factory=lambda: ["binance", "okx"])
-    backfill_days: dict[str, int] = field(default_factory=lambda: {"1d": 730, "1h": 90})
+    backfill_days: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_BACKFILL_DAYS))
+    intraday_days: int = 7
+    intraday_tail_sec: int = 10
     funding_backfill_days: int = 60
     refresh: bool = True
     refresh_sec: int = 300
@@ -63,6 +77,9 @@ class MainstreamConfig:
     retry_base_sec: float = 1.0
     timeout_ms: int = 15_000
     max_gap_repairs: int = 5
+
+    def backfill(self, tf: str) -> int:
+        return int(self.backfill_days.get(tf, DEFAULT_BACKFILL_DAYS.get(tf, 30)))
 
     def spot(self, base: str) -> str:
         return f"{base}/{self.quote}"
@@ -80,8 +97,11 @@ def load_config() -> MainstreamConfig:
         exchanges=_exchanges(),
         backfill_days={
             "1d": _int("AUU_MAINSTREAM_BACKFILL_1D_DAYS", 730, 1, 3650),
+            "4h": _int("AUU_MAINSTREAM_BACKFILL_4H_DAYS", 365, 1, 1825),
             "1h": _int("AUU_MAINSTREAM_BACKFILL_1H_DAYS", 90, 1, 730),
         },
+        intraday_days=_int("AUU_MAINSTREAM_INTRADAY_DAYS", 7, 1, 30),
+        intraday_tail_sec=_int("AUU_MAINSTREAM_INTRADAY_TAIL_SEC", 10, 2, 300),
         funding_backfill_days=_int("AUU_MAINSTREAM_FUNDING_DAYS", 60, 1, 730),
         refresh=_flag("AUU_MAINSTREAM_REFRESH", True),
         refresh_sec=_int("AUU_MAINSTREAM_REFRESH_SEC", 300, 30, 86_400),

@@ -229,6 +229,106 @@ class StoreAndRefreshTests(_NoNetwork):
         self.assertAlmostEqual(item["fundingAnnualized"], 0.00012 * 3 * 365)
 
 
+M1 = TF_MS["1m"]
+
+
+class IntradayOnDemandTests(_NoNetwork):
+    """1m/5m/15m: fetched only when asked, recent window only, throttled."""
+
+    def _svc(self, ex, now=NOW, **cfg):
+        svc = self.svc({"binance": ex}, cfg=_cfg(**cfg), now=now)
+        svc.active = "binance"
+        return svc
+
+    def _ohlcv(self, ex, tf):
+        return [c for c in ex.calls if c[0] == "fetch_ohlcv" and c[1][1] == tf]
+
+    def test_background_refresh_never_fetches_intraday(self):
+        ex = FakeExchange()
+        self.svc({"binance": ex}).refresh_once()
+        tfs = {c[1][1] for c in ex.calls if c[0] == "fetch_ohlcv"}
+        self.assertEqual(tfs, {"1d", "4h", "1h"})
+        self.assertEqual(self.store.candle_bounds("binance", "BTC", "1m")[2], 0)
+
+    def test_first_request_fetches_window_then_serves_from_cache(self):
+        ex = FakeExchange()
+        svc = self._svc(ex)
+        out = svc.chart_candles("BTC", "1m", limit=120)
+        self.assertEqual(len(out["candles"]), 120)
+        self.assertEqual(out["candles"][-1]["ts"], NOW // M1 * M1)
+        self.assertEqual(out["retentionDays"], 7)
+        self.assertEqual(self._ohlcv(ex, "1m")[0][2]["since"], NOW // M1 * M1 - 119 * M1)
+        ex.calls.clear()
+        again = svc.chart_candles("BTC", "1m", limit=120)  # within the tail TTL: no exchange call
+        self.assertEqual(len(again["candles"]), 120)
+        self.assertEqual(ex.calls, [])
+
+    def test_tail_refetch_after_ttl_only_from_last_bar(self):
+        ex = FakeExchange()
+        self._svc(ex).chart_candles("BTC", "5m", limit=50)
+        ex.calls.clear()
+        later = self._svc(ex, now=NOW + 11_000)
+        later.chart_candles("BTC", "5m", limit=50)
+        calls = self._ohlcv(ex, "5m")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][2]["since"], NOW // TF_MS["5m"] * TF_MS["5m"])
+
+    def test_paging_back_and_retention_limit(self):
+        ex = FakeExchange()
+        svc = self._svc(ex, intraday_days=1)
+        first = svc.chart_candles("BTC", "15m", limit=40)
+        oldest = first["candles"][0]["ts"]
+        older = svc.chart_candles("BTC", "15m", limit=40, before=oldest)
+        self.assertEqual(older["candles"][-1]["ts"], oldest - TF_MS["15m"])
+        self.assertEqual(len(older["candles"]), 40)
+        # Asking past the 1-day window returns only what's inside it and flags the limit.
+        keep_from = NOW // TF_MS["15m"] * TF_MS["15m"] - D
+        far = svc.chart_candles("BTC", "15m", limit=2000, before=older["candles"][0]["ts"])
+        self.assertTrue(far["limited"])
+        self.assertGreaterEqual(min(c["ts"] for c in far["candles"]), keep_from)
+        ex.calls.clear()
+        none = svc.chart_candles("BTC", "15m", limit=10, before=keep_from - D)
+        self.assertEqual(none["candles"], [])
+        self.assertTrue(none["limited"])
+        self.assertEqual(ex.calls, [])
+
+    def test_old_rows_are_pruned(self):
+        old = NOW // M1 * M1 - 9 * D
+        self.store.upsert_candles("binance", "BTC", "1m", [[old + i * M1, 1, 1, 1, 1, 1] for i in range(30)])
+        self._svc(FakeExchange()).chart_candles("BTC", "1m", limit=10)
+        lo, _, n = self.store.candle_bounds("binance", "BTC", "1m")
+        self.assertGreaterEqual(lo, NOW // M1 * M1 - 7 * D)
+        self.assertEqual(n, 10)
+
+    def test_unfillable_hole_is_not_hammered(self):
+        cur = NOW // M1 * M1
+        ex = FakeExchange(skip={cur - 5 * M1})
+        svc = self._svc(ex)
+        svc.chart_candles("BTC", "1m", limit=20, before=cur - M1)
+        n1 = len(self._ohlcv(ex, "1m"))
+        svc.chart_candles("BTC", "1m", limit=20, before=cur - M1)
+        self.assertEqual(len(self._ohlcv(ex, "1m")), n1)
+
+    def test_fetch_error_serves_cache(self):
+        ex = FakeExchange()
+        svc = self._svc(ex)
+        svc.chart_candles("BTC", "1m", limit=10)
+        ex.fail_times = 99
+        out = self._svc(ex, now=NOW + 60_000).chart_candles("BTC", "1m", limit=10)
+        self.assertIn("fetchError", out)
+        self.assertEqual(len(out["candles"]), 10)
+
+    def test_stored_timeframes_page_back(self):
+        svc = self.svc({"binance": FakeExchange()})
+        svc.refresh_once()
+        first = svc.chart_candles("BTC", "4h", limit=30)
+        self.assertEqual(first["candles"][-1]["ts"], NOW // TF_MS["4h"] * TF_MS["4h"])
+        older = svc.chart_candles("BTC", "4h", limit=30, before=first["candles"][0]["ts"])
+        self.assertEqual(older["candles"][-1]["ts"], first["candles"][0]["ts"] - TF_MS["4h"])
+        tail = svc.chart_candles("BTC", "1d", limit=2000, before=first["candles"][0]["ts"])
+        self.assertTrue(tail["limited"])
+
+
 class ConfigTests(unittest.TestCase):
     def test_legacy_toggle_defaults_off(self):
         from app.legacy import legacy_pump_enabled
@@ -357,8 +457,13 @@ class MainstreamApiTests(_NoNetwork):
         self.assertEqual(c["candles"][-1]["ts"], NOW // H * H)
         f = user.get("/api/v1/mainstream/funding?symbol=ETH").json()["data"]
         self.assertTrue(f["funding"])
+        for tf in ("1m", "5m", "15m", "1h", "4h", "1d"):
+            with self.subTest(tf=tf):
+                r = user.get(f"/api/v1/mainstream/candles?symbol=BTC&tf={tf}&limit=20")
+                self.assertEqual(r.status_code, 200, r.text)
+                self.assertTrue(r.json()["data"]["candles"], tf)
         self.assertEqual(user.get("/api/v1/mainstream/candles?symbol=DOGE").status_code, 404)
-        self.assertEqual(user.get("/api/v1/mainstream/candles?symbol=BTC&tf=5m").status_code, 400)
+        self.assertEqual(user.get("/api/v1/mainstream/candles?symbol=BTC&tf=3m").status_code, 400)
         # Read-only: no write verbs on the new API.
         self.assertEqual(user.post("/api/v1/mainstream/overview", json={}).status_code, 405)
 

@@ -41,6 +41,21 @@ export type MainstreamOverview = {
 
 export type MainstreamCandle = { ts: number; open: number; high: number; low: number; close: number; volume: number };
 
-export type MainstreamCandles = { exchange: string | null; symbol: string; pair: string; tf: string; candles: MainstreamCandle[] };
+export type MainstreamTf = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+
+export type MainstreamCandles = {
+  exchange: string | null;
+  symbol: string;
+  pair: string;
+  tf: string;
+  candles: MainstreamCandle[];
+  /** 1m/5m/15m only: days of history kept on the server. */
+  retentionDays?: number;
+  /** Oldest bar the server can serve for this timeframe (ms). */
+  oldestAllowed?: number | null;
+  /** Paging back reached the oldest available bar. */
+  limited?: boolean;
+  fetchError?: string;
+};
 
 export type MainstreamFunding = { exchange: string | null; symbol: string; perp: string; funding: { ts: number; rate: number }[] };

@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.marketdata.mainstream import get_service
-from app.marketdata.mainstream.config import TIMEFRAMES
+from app.marketdata.mainstream.config import CHART_TFS
 from app.routes.envelope import err, ok
 
 router = APIRouter(prefix="/api/v1/mainstream", tags=["mainstream"])
@@ -35,19 +35,24 @@ def overview():
 @router.get("/candles")
 def candles(
     symbol: str = Query(..., description="BTC | ETH | SOL (configured symbols)"),
-    tf: str = Query("1d", description="1d | 1h"),
+    tf: str = Query("1d", description="1m | 5m | 15m | 1h | 4h | 1d"),
     limit: int = Query(200, ge=1, le=2000),
-    since: Optional[int] = Query(None, description="ms epoch, inclusive"),
+    since: Optional[int] = Query(None, description="ms epoch, inclusive (stored timeframes only)"),
+    before: Optional[int] = Query(None, description="ms epoch, exclusive: page back in history"),
 ):
+    """1h/4h/1d come from the stored history; 1m/5m/15m are fetched on demand
+    (recent window only, see retentionDays) and cached in the same SQLite file."""
     base = _base(symbol)
     if base is None:
         return err("UNKNOWN_SYMBOL", f"symbol not configured: {symbol}", 404)
-    if tf not in TIMEFRAMES:
-        return err("BAD_TIMEFRAME", f"tf must be one of {', '.join(TIMEFRAMES)}", 400)
+    if tf not in CHART_TFS:
+        return err("BAD_TIMEFRAME", f"tf must be one of {', '.join(CHART_TFS)}", 400)
     svc = get_service()
-    ex = svc.exchange_for_read()
-    rows = svc.store.candles(ex, base, tf, since=since, limit=limit) if ex else []
-    return ok({"exchange": ex, "symbol": base, "pair": svc.cfg.spot(base), "tf": tf, "candles": rows})
+    if since is not None and before is None:
+        ex = svc.exchange_for_read()
+        rows = svc.store.candles(ex, base, tf, since=since, limit=limit) if ex else []
+        return ok({"exchange": ex, "symbol": base, "pair": svc.cfg.spot(base), "tf": tf, "candles": rows})
+    return ok(svc.chart_candles(base, tf, limit=limit, before=before))
 
 
 @router.get("/funding")
