@@ -17,7 +17,7 @@
 
 ### A.2 开源映射列（已冻结 · 2026-09-20）
 
-依据：`/workspace/deepdive-channel-brief.md`、`jesse-strategy-deepdive.md`、`nautilus-riskengine-mapping.md`。  
+依据：内部调研笔记 deepdive-channel-brief、jesse-strategy-deepdive、nautilus-riskengine-mapping（未入库）。  
 原则：只借检查清单与节奏；**不**嵌 Nautilus 整引擎；Jesse **不**接全局 store / 真仓。
 
 #### A.2.1 Nautilus → RiskGate / PaperBroker

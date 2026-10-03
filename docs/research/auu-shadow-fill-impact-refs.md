@@ -86,7 +86,7 @@ t1: 下一根 1m bar 的 open（或下一笔 tape trade 价）→ shadow_fill_px
 | **星数档** | **A** · ~8.6k |
 | **许可证** | **MIT** |
 | **活跃** | 活跃 |
-| **能借什么** | `research.monte_carlo`：交易顺序/路径扰动；回测里对 fill/滑点假设做敏感性（详见 `/workspace/jesse-montecarlo-for-auu.md`） |
+| **能借什么** | `research.monte_carlo`：交易顺序/路径扰动；回测里对 fill/滑点假设做敏感性（详见内部笔记 jesse-montecarlo-for-auu，未入库） |
 | **为何适合 AUU** | 影子滑点阈值本身要 **MC 稳健**：冲击中位、shadow P90 是否在种子扰动下仍过 Go |
 | **怎么接到 DecisionLog / 可执行性面板** | 对已落盘 DecisionLog 行做 trades-level shuffle：重算 `median_entry_impact_bps` / `shadow_slippage` P90 置信带；**不**改 PaperBroker 成交路径 |
 

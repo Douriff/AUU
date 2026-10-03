@@ -1,6 +1,6 @@
 """Shadow record of the S3 hypothesis: long after an extreme negative funding rate (no capital).
 
-Frozen rule (leverage report §2 S3 / §3.3; code: /workspace/leverage/hourly.py ``s3_funding`` + ``trade``),
+Frozen rule (leverage report §2 S3 / §3.3; code: research script leverage/hourly.py ``s3_funding`` + ``trade``, not in this repo),
 long-only branch with the director's parameters threshold 0.1%/8h and hold 72h:
 
 - at every funding settlement, f8 = rate * 8 / interval_hours (interval from the spacing to the
