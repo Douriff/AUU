@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_strategy, majors, stats, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, stats, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -85,6 +85,10 @@ def _make_lifespan(legacy: bool):
 
             if runner_enabled():
                 tasks.append(asyncio.create_task(strategy_loop(), name="mainstream-strategy"))
+            from app.paper.shadow_s3 import run_loop as shadow_loop, shadow_enabled
+
+            if shadow_enabled():
+                tasks.append(asyncio.create_task(shadow_loop(), name="shadow-s3"))
         try:
             yield
         finally:
@@ -140,7 +144,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy):
+    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -169,7 +173,8 @@ def root(legacy: bool = False):
                     "mainstreamStatus": "GET /api/v1/mainstream/status",
                     "paperAccount": "GET /api/v1/mainstream/paper/account?symbol=",
                     "paperOrder": "POST /api/v1/mainstream/paper/orders (paper only; login required)",
-                    "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go)",
+                    "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go, risk caps)",
+                    "shadowS3": "GET /api/v1/mainstream/shadow/s3 (shadow hypothesis, no capital, not evidence)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

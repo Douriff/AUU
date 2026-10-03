@@ -116,7 +116,8 @@ class MainstreamService:
         for base in self.cfg.all_symbols():
             spot, perp = self.cfg.spot(base), self.cfg.perp(base)
             strategy_only = base not in display
-            for tf in (("1d",) if strategy_only else TIMEFRAMES):
+            # strategy-only coins: 1d for the strategy, 1h for the risk caps' hourly marks
+            for tf in (("1d", "1h") if strategy_only else TIMEFRAMES):
                 key = f"{base}:{tf}"
                 step = TF_MS[tf]
                 try:

@@ -88,7 +88,7 @@ class MainstreamConfig:
     intraday_days: int = 7
     intraday_tail_sec: int = 10
     funding_backfill_days: int = 60
-    # Strategy universe: daily candles + funding only (no 1h/4h, no live funding), longer funding history.
+    # Strategy universe: daily + 1h candles (1h = hourly risk marks) and funding (no 4h, no live funding), longer funding history.
     strategy_symbols: list[str] = field(default_factory=list)
     strategy_funding_days: int = 730
     refresh: bool = True

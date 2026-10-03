@@ -203,4 +203,69 @@ export interface StrategySummary {
   totals: { strategy?: number; btc?: number | null; tbill?: number };
   goNoGo: StrategyGoNoGo;
   status: StrategyStatus;
+  risk?: StrategyRisk;
+}
+export interface StrategyRiskEvent {
+  ts: number;
+  day: string | null;
+  kind: string;
+  label: string;
+  action: string;
+  value: number | null;
+  threshold: number | null;
+  detail: Record<string, unknown>;
+  at: string;
+}
+export interface StrategyRisk {
+  enabled: boolean;
+  limits?: Record<string, number>;
+  locked?: boolean;
+  lock?: { kind: "24h" | "review"; since: number; until?: number; reason: string } | null;
+  dataBad?: { since: number; reason: string } | null;
+  todayFlags?: { stop_new?: boolean; halve?: boolean; flat?: boolean };
+  lastMark?: { ts: number; nav: number; dayRet: number; drawdown: number; dataBad: boolean; reason: string } | null;
+  events?: StrategyRiskEvent[];
+  eventCount?: number;
+  adjustments?: { ts: number; kinds: string; navMark: number; navAfter: number; cost: number; turnover: number }[];
+  backtestNote?: string;
+}
+
+/** Shadow hypothesis S3 (GET /api/v1/mainstream/shadow/s3): no capital, not evidence. */
+export interface ShadowTrade {
+  id: number;
+  coin: string;
+  signal_ts: number;
+  rate: number;
+  interval_h: number;
+  f8: number;
+  entry_bar: number;
+  exit_bar: number;
+  status: "pending" | "open" | "closed" | "void";
+  entry_px: number | null;
+  exit_px: number | null;
+  gross: number | null;
+  funding: number | null;
+  cost: number | null;
+  net: number | null;
+  note: string | null;
+}
+export interface ShadowS3Summary {
+  label: string;
+  capital: number;
+  ledger: string;
+  rule: Record<string, string | number>;
+  ruleHash: string;
+  ruleFrozen: boolean;
+  registeredAt: number;
+  registeredDay: string;
+  source: string | null;
+  counts: { pending: number; open: number; closed: number; void: number };
+  evalAt: number;
+  progress: number;
+  running: { n: number; mean_net_bps: number; win: number; sum_net: number } | null;
+  runningNote: string;
+  evaluations: { milestone: number; ts: number; n: number; verdict: string; mean_net_bps: number; ci_bps: [number, number]; win: number; ex_best3_bps: number | null }[];
+  trades: ShadowTrade[];
+  notes: string[];
+  lastError: string;
 }

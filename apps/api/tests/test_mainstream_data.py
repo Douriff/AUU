@@ -132,19 +132,20 @@ class StoreAndRefreshTests(_NoNetwork):
         svc.refresh_once()  # already backfilled in this process: no extra history walk
         self.assertLessEqual(len([c for c in ex.calls if c[0] == "fetch_funding_rate_history"]) - calls, 1)
 
-    def test_strategy_only_coins_fetch_daily_and_funding_only(self):
+    def test_strategy_only_coins_fetch_daily_hourly_and_funding_only(self):
         ex = FakeExchange()
         svc = self.svc({"binance": ex}, cfg=_cfg(symbols=["BTC"], strategy_symbols=["BTC", "XRP"], strategy_funding_days=5))
         svc.refresh_once()
         xrp = [(m, a[1] if m == "fetch_ohlcv" else None) for m, a, _ in ex.calls if a and a[0].startswith("XRP")]
         self.assertTrue(xrp)
-        self.assertEqual({tf for m, tf in xrp if m == "fetch_ohlcv"}, {"1d"})
+        self.assertEqual({tf for m, tf in xrp if m == "fetch_ohlcv"}, {"1d", "1h"})  # 1h = risk caps' hourly marks; no 4h
         self.assertNotIn("fetch_funding_rate", {m for m, _ in xrp})
         self.assertIn("fetch_funding_rate_history", {m for m, _ in xrp})
         self.assertGreater(self.store.candle_bounds("binance", "XRP", "1d")[2], 0)
         first, _, _ = self.store.funding_bounds("binance", "XRP")
         self.assertLessEqual(first, NOW - 4 * 86_400_000)  # strategy funding backfill (5 d) > display default (2 d)
-        self.assertEqual(self.store.candle_bounds("binance", "XRP", "1h")[2], 0)
+        self.assertGreater(self.store.candle_bounds("binance", "XRP", "1h")[2], 0)
+        self.assertEqual(self.store.candle_bounds("binance", "XRP", "4h")[2], 0)
         self.assertIn("1h", {a[1] for m, a, _ in ex.calls if m == "fetch_ohlcv" and a[0].startswith("BTC")})
 
     def test_backfill_then_incremental(self):

@@ -1837,3 +1837,18 @@ code.hl { color: var(--accent); }
 .strat-universe { margin: 0.45rem 0.9rem 0; padding: 0.5rem 0.7rem; border-radius: 10px; background: rgba(255,255,255,0.03); font-size: 0.76rem; color: #c6c6ce; display: flex; flex-direction: column; gap: 0.2rem; line-height: 1.45; }
 .strat-universe b { color: #f4f4f5; }
 .strat-warn { color: #f5b041; }
+.strat-risk { margin: 0.45rem 0.9rem 0; padding: 0.5rem 0.7rem; border-radius: 10px; background: rgba(255,255,255,0.03); font-size: 0.76rem; color: #c6c6ce; display: flex; flex-direction: column; gap: 0.35rem; }
+.strat-risk-head { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: baseline; }
+.strat-risk-head b { color: #f4f4f5; }
+.strat-risk-state.up { color: #3ee08f; }
+.strat-risk-state.down { color: #ff5d5d; }
+.strat-risk-rules { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.strat-risk-rules span { padding: 0.1rem 0.45rem; border-radius: 6px; background: rgba(255,255,255,0.05); color: #a9a9b3; font-size: 0.7rem; }
+.strat-risk-events { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.strat-risk-events th { text-align: left; color: #8d8d96; font-weight: 500; padding: 0.2rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.strat-risk-events td { padding: 0.22rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.strat-risk-events .muted { color: #8d8d96; }
+.strat-risk-note { font-size: 0.7rem; }
+.console-card.shadow { border: 1px dashed rgba(245,176,65,0.45); }
+.shadow-badge { color: #f5b041; border-color: rgba(245,176,65,0.5); }
+.strat-tables.single { grid-template-columns: 1fr; }
