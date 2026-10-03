@@ -1937,3 +1937,10 @@ code.hl { color: var(--accent); }
   .ml-search { max-width: none; }
   .ms-detail-meta { width: 100%; }
 }
+
+/* cross-source reconciliation panel */
+.recon-scroll { overflow-x: auto; max-width: 100%; }
+.recon-scroll table { min-width: 0; }
+@media (max-width: 520px) {
+  .recon-scroll th, .recon-scroll td { padding: 0.24rem 0.18rem; font-size: 0.7rem; }
+}

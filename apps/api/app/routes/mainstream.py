@@ -32,6 +32,14 @@ def overview():
     return ok(get_service().overview())
 
 
+@router.get("/recon")
+def recon():
+    """Cross-source daily-close reconciliation (read-only; never switches the strategy's source)."""
+    from app.marketdata.mainstream.recon import get_reconciler
+
+    return ok(get_reconciler().summary())
+
+
 @router.get("/markets")
 def markets():
     """Market list: every display + strategy coin in one batched response (store + cached tickers)."""

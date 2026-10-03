@@ -3,6 +3,7 @@ import { useConsole } from "@/hooks/useConsole";
 import type { ConsoleEvent } from "@/types/contracts";
 import { StrategyPanel } from "@/components/strategy/StrategyPanel";
 import { ShadowS3Panel } from "@/components/strategy/ShadowS3Panel";
+import { ReconPanel } from "@/components/strategy/ReconPanel";
 
 const FILTERS: { id: string; label: string }[] = [
   { id: "all", label: "全部" },
@@ -118,6 +119,8 @@ export function ConsolePage() {
       </section>
 
       <StrategyPanel />
+
+      <ReconPanel />
 
       <ShadowS3Panel />
 

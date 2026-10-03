@@ -93,6 +93,10 @@ def _make_lifespan(legacy: bool):
 
             if alerts_enabled():
                 tasks.append(asyncio.create_task(alerts_loop(), name="alerts"))
+            from app.marketdata.mainstream.recon import recon_enabled, run_loop as recon_loop
+
+            if recon_enabled():
+                tasks.append(asyncio.create_task(recon_loop(), name="recon"))
         try:
             yield
         finally:
