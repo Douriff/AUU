@@ -46,6 +46,26 @@ class CenterTests(unittest.TestCase):
         with unittest.mock.patch.dict("os.environ", {"AUU_ALERT_TO": "ops@example.com"}):
             self.assertEqual(al.recipient(), "ops@example.com")
 
+    def test_every_recipient_is_masked_in_logs_rows_and_status(self):
+        to = "douriff3@gmail.com,olesaruga00@gmail.com"
+        c = al.AlertCenter(Path(self.tmp.name) / "m.sqlite", send=self.box, configured=lambda: True, now_ms=self.clock, to=to)
+        try:
+            with self.assertLogs("auu.alerts", level="WARNING") as cm:
+                self.assertEqual(c.raise_alert("k", "test", "s", "b"), "sent")
+            text = "\n".join(cm.output) + str(c.rows(1)[0]["to_masked"]) + json.dumps(c.status())
+            self.assertNotIn("douriff3@", text)
+            self.assertNotIn("olesaruga00@", text)
+            self.assertIn("d***@gmail.com, o***@gmail.com", text)
+            # rows stored before the fix are re-masked on open
+            c._db.execute("UPDATE alerts SET to_masked=?", ("d***@gmail.com, olesaruga00@gmail.com",))
+        finally:
+            c.close()
+        c2 = al.AlertCenter(Path(self.tmp.name) / "m.sqlite", send=self.box, configured=lambda: True, now_ms=self.clock, to=to)
+        try:
+            self.assertEqual(c2.rows(1)[0]["to_masked"], "d***@gmail.com, o***@gmail.com")
+        finally:
+            c2.close()
+
     def test_dedup_within_cooldown_then_resend(self):
         self.assertEqual(self.c.raise_alert("stall:x", "stall", "s", "b"), "sent")
         self.assertEqual(self.c.raise_alert("stall:x", "stall", "s", "b"), "duplicate")

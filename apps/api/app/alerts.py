@@ -132,6 +132,11 @@ class AlertCenter:
             if c not in cols:
                 self._db.execute(f"ALTER TABLE alerts ADD COLUMN {c} TEXT")
         self._lock = threading.RLock()
+        # Rows written before every recipient was masked: re-mask (only the masked copy is stored).
+        for rid, tm in self._db.execute("SELECT id, to_masked FROM alerts WHERE to_masked LIKE '%,%'").fetchall():
+            fixed = _remask(tm)
+            if fixed != tm:
+                self._db.execute("UPDATE alerts SET to_masked=? WHERE id=?", (fixed, rid))
         self.send = send or _default_send
         self.smtp_user = _smtp_user
         self.configured = configured or _configured
@@ -247,10 +252,16 @@ class AlertCenter:
             return False
 
 
+def _remask(stored: str) -> str:
+    return ", ".join(p if "***@" in p else _mask(p) for p in recipients(stored))
+
+
 def _mask(addr: str) -> str:
+    """Mask every recipient of a (possibly comma/semicolon-separated) address list."""
     from app.auth.email_codes import mask_email
 
-    return mask_email(addr)
+    parts = recipients(addr)
+    return ", ".join(mask_email(p) for p in parts) if parts else mask_email(addr)
 
 
 # ---- checks ----------------------------------------------------------------------------
