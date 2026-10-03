@@ -28,6 +28,9 @@ class OrderBody(BaseModel):
     qty: Optional[float] = None
     notional: Optional[float] = None
     limit_price: Optional[float] = None
+    trigger_price: Optional[float] = None  # type take_profit / stop_loss
+    take_profit_price: Optional[float] = None  # type oco
+    stop_loss_price: Optional[float] = None  # type oco
     mode: str = "paper"
 
 

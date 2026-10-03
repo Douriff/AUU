@@ -7,6 +7,15 @@ from :class:`app.backtest.costs.CostModel` (the same cost model the backtest use
 orders rest until a 1m candle trades through the limit, then fill at the limit price and
 pay the maker fee.
 
+Take-profit / stop-loss (manual paper only; the automated strategy never uses them): sell-side
+trigger orders on an existing long position. A take-profit triggers when a 1m bar's high reaches
+the trigger, a stop-loss when the low reaches it; the fill is a market sell at the trigger (or at
+the bar open when the bar gapped through it) minus slippage, taker fee. Two legs placed together
+form an OCO pair: when one fills the other is cancelled, and the pair reserves the quantity once.
+If one bar touches both legs, the stop-loss is assumed first (conservative). Triggers are checked
+on the same lazy pass as limit orders, from the same 1m candles (no extra exchange requests);
+the bar the order was placed in is skipped so earlier prices in that minute cannot trigger it.
+
 Risk controls: per-order notional cap, per-symbol position cap, cash/position checks,
 max open orders, orders-per-minute limit, idempotent ``client_order_id`` and an
 identical-order window against double submits, stale-price refusal.
@@ -46,6 +55,7 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS orders_user_ts ON orders (user_id, ts);
 """
+TRIGGER_TYPES = ("take_profit", "stop_loss")
 
 
 def _f(name: str, default: float) -> float:
@@ -113,6 +123,10 @@ class PaperAccounts:
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.executescript(_SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(orders)")}
+            for c, t in (("trigger_px", "REAL"), ("oco_group", "TEXT"), ("checked_ts", "INTEGER")):  # TP/SL (older rows NULL)
+                if c not in cols:
+                    self._db.execute(f"ALTER TABLE orders ADD COLUMN {c} {t}")
             self._db.commit()
 
     def close(self) -> None:
@@ -141,11 +155,17 @@ class PaperAccounts:
 
     def _reserved(self, uid: str) -> tuple[float, dict[str, float]]:
         cash, qty = 0.0, {}
-        for r in self._db.execute("SELECT side, symbol, reserved, qty FROM orders WHERE user_id=? AND status='open'", (uid,)):
+        groups: dict[str, tuple[str, float]] = {}
+        for r in self._db.execute("SELECT side, symbol, reserved, qty, oco_group FROM orders WHERE user_id=? AND status='open'", (uid,)):
             if r["side"] == "buy":
                 cash += r["reserved"]
+            elif r["oco_group"]:  # both legs of an OCO pair reserve the quantity once
+                prev = groups.get(r["oco_group"])
+                groups[r["oco_group"]] = (r["symbol"], max(r["qty"], prev[1] if prev else 0.0))
             else:
                 qty[r["symbol"]] = qty.get(r["symbol"], 0.0) + r["qty"]
+        for sym, q in groups.values():
+            qty[sym] = qty.get(sym, 0.0) + q
         return cash, qty
 
     def _price(self, sym: str) -> tuple[float, int]:
@@ -192,11 +212,13 @@ class PaperAccounts:
         )
 
     def match_open(self, uid: str) -> int:
-        """Fill resting limit orders that the market traded through since placement."""
+        """Fill resting limit orders that the market traded through since placement, then TP/SL triggers."""
         n = 0
         with self._lock:
             rows = [dict(r) for r in self._db.execute("SELECT * FROM orders WHERE user_id=? AND status='open' ORDER BY ts", (uid,))]
             for o in rows:
+                if o["type"] in TRIGGER_TYPES:
+                    continue
                 try:
                     bars = self.candles_fn(o["symbol"], o["ts"])
                 except Exception:
@@ -214,7 +236,80 @@ class PaperAccounts:
                         self._apply_fill(uid, o, o["limit_px"], MAKER_FEE, 0.0, max(int(b["ts"]), o["ts"]))
                         n += 1
                     break
+            n += self._match_triggers(uid, [o for o in rows if o["type"] in TRIGGER_TYPES])
             self._db.commit()
+        return n
+
+    @staticmethod
+    def _scan_from(o: dict) -> int:
+        """First 1m bar to check: the minute after placement, or after the last bar already checked."""
+        start = (int(o["ts"]) // 60_000 + 1) * 60_000
+        if o.get("checked_ts") is not None:
+            start = max(start, int(o["checked_ts"]) + 60_000)
+        return start
+
+    @staticmethod
+    def _first_hit(o: dict, bars: list[dict], start: int) -> Optional[tuple[int, float]]:
+        """(bar ts, raw fill price) of the first 1m bar from ``start`` that reaches the trigger."""
+        trig = float(o["trigger_px"])
+        for b in bars:
+            ts = int(b["ts"])
+            if ts < start:
+                continue
+            if o["type"] == "take_profit" and float(b["high"]) >= trig:
+                return ts, max(trig, float(b["open"]))
+            if o["type"] == "stop_loss" and float(b["low"]) <= trig:
+                return ts, min(trig, float(b["open"]))
+        return None
+
+    def _match_triggers(self, uid: str, rows: list[dict]) -> int:
+        n = 0
+        cache: dict[tuple[str, int], Optional[list[dict]]] = {}  # one local candle read per (symbol, start) per pass
+
+        def bars_for(sym: str, start: int) -> Optional[list[dict]]:
+            if (sym, start) not in cache:
+                try:
+                    cache[(sym, start)] = self.candles_fn(sym, start)
+                except Exception:
+                    cache[(sym, start)] = None
+            return cache[(sym, start)]
+
+        groups: dict[str, list[dict]] = {}
+        for o in rows:
+            groups.setdefault(o["oco_group"] or o["id"], []).append(o)
+        for legs in groups.values():
+            hits, scanned = [], []
+            for o in legs:
+                start = self._scan_from(o)
+                bars = bars_for(o["symbol"], start)
+                if not bars:
+                    continue
+                h = self._first_hit(o, bars, start)
+                if h is not None:
+                    hits.append((h[0], 0 if o["type"] == "stop_loss" else 1, h[1], o))
+                else:
+                    # remember progress so long-resting orders keep moving forward; the newest bar may
+                    # still be forming, so it is checked again next time
+                    done = max(int(b["ts"]) for b in bars) - 60_000
+                    if done >= start:
+                        scanned.append((done, o["id"]))
+            if not hits:
+                for done, oid in scanned:
+                    self._db.execute("UPDATE orders SET checked_ts=? WHERE id=?", (done, oid))
+                continue
+            ts, _, raw, o = min(hits, key=lambda x: (x[0], x[1]))  # earliest bar; same bar -> stop-loss first
+            pos = self._position(uid, o["symbol"])
+            if pos["qty"] + 1e-12 < o["qty"]:
+                self._db.execute("UPDATE orders SET status='cancelled', reserved=0, reason='INSUFFICIENT_POSITION' WHERE id=?", (o["id"],))
+            else:
+                slip = self.slippage(o["symbol"])
+                o = {**o, "ref_px": raw}
+                self._apply_fill(uid, o, raw * (1 - slip), self.cost.taker * self.cost.mult, slip, max(ts, int(o["ts"])))
+                self._db.execute("UPDATE orders SET reason=? WHERE id=?", ("TP_TRIGGERED" if o["type"] == "take_profit" else "SL_TRIGGERED", o["id"]))
+                n += 1
+            for other in legs:
+                if other["id"] != o["id"]:
+                    self._db.execute("UPDATE orders SET status='cancelled', reserved=0, reason='OCO_CANCEL' WHERE id=? AND status='open'", (other["id"],))
         return n
 
     # ---- orders ------------------------------------------------------------
@@ -224,8 +319,12 @@ class PaperAccounts:
         if sym not in self.symbols():
             raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404)
         side, otype = body.get("side"), body.get("type", "market")
+        if otype in TRIGGER_TYPES:
+            return self.place_tpsl(uid, {**body, otype: body.get("trigger_price")}, only=otype)
+        if otype == "oco":
+            return self.place_tpsl(uid, {**body, "take_profit": body.get("take_profit_price"), "stop_loss": body.get("stop_loss_price")})
         if side not in ("buy", "sell") or otype not in ("market", "limit"):
-            raise OrderError("BAD_ORDER", "side 必须是 buy/sell，type 必须是 market/limit")
+            raise OrderError("BAD_ORDER", "side 必须是 buy/sell，type 必须是 market/limit/take_profit/stop_loss")
         cid = str(body.get("client_order_id") or "").strip()
         if not (8 <= len(cid) <= 64) or not all(ch.isalnum() or ch in "-_" for ch in cid):
             raise OrderError("BAD_CLIENT_ID", "缺少有效的 client_order_id（防重复提交）")
@@ -326,8 +425,94 @@ class PaperAccounts:
             if row["status"] != "open":
                 raise OrderError("NOT_OPEN", "订单已成交或已撤销", 409)
             self._db.execute("UPDATE orders SET status='cancelled', reserved=0, reason='USER_CANCEL' WHERE id=?", (order_id,))
+            if row["oco_group"]:  # the pair goes together
+                self._db.execute("UPDATE orders SET status='cancelled', reserved=0, reason='OCO_CANCEL' WHERE oco_group=? AND user_id=? AND status='open'",
+                                 (row["oco_group"], uid))
             self._db.commit()
             return self._public(dict(self._db.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()))
+
+    def place_tpsl(self, uid: str, body: dict, only: Optional[str] = None) -> dict:
+        """Take-profit and/or stop-loss sell for an existing long. Both given -> OCO pair (shared quantity).
+
+        Returns the first leg in the usual order shape plus ``orders`` (all legs) and ``ocoGroup``."""
+        lim = self.limits
+        sym = "".join(ch for ch in str(body.get("symbol", "")).split("/")[0].upper() if ch.isalnum())
+        if sym not in self.symbols():
+            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404)
+        if body.get("side", "sell") != "sell":
+            raise OrderError("BAD_ORDER", "止盈止损只用于卖出已有持仓（只做现货多头）")
+        cid = str(body.get("client_order_id") or "").strip()
+        if not (8 <= len(cid) <= 60) or not all(ch.isalnum() or ch in "-_" for ch in cid):
+            raise OrderError("BAD_CLIENT_ID", "缺少有效的 client_order_id（防重复提交）")
+        legs: dict[str, float] = {}
+        for k in ((only,) if only else TRIGGER_TYPES):
+            v = body.get(k)
+            if v in (None, ""):
+                continue
+            try:
+                legs[k] = float(v)
+            except (TypeError, ValueError):
+                raise OrderError("BAD_PRICE", "触发价格式不正确")
+            if not (legs[k] > 0):
+                raise OrderError("BAD_PRICE", "触发价必须大于 0")
+        if not legs or (not only and len(legs) != 2):
+            raise OrderError("BAD_PRICE", "请填写触发价" if only else "OCO 需要同时填写止盈价和止损价")
+        now = self.now_ms()
+        with self._lock:
+            prev = [dict(r) for r in self._db.execute("SELECT * FROM orders WHERE user_id=? AND client_id IN (?,?)",
+                                                        (uid, f"{cid}-tp", f"{cid}-sl"))]
+            if prev:
+                pub = [self._public(o) for o in prev]
+                return {**pub[0], "orders": pub, "ocoGroup": prev[0]["oco_group"], "duplicate": True}
+            self._account(uid)
+            recent = self._db.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND ts>?", (uid, now - 60_000)).fetchone()[0]
+            if recent + len(legs) > lim.orders_per_min:
+                raise OrderError("RATE_LIMIT", "下单太频繁，请稍后再试", 429)
+            px, _ = self._price(sym)
+            tp, sl = legs.get("take_profit"), legs.get("stop_loss")
+            if tp is not None and not (tp > px):
+                raise OrderError("BAD_PRICE", "止盈价必须高于现价（否则会立即触发）")
+            if sl is not None and not (sl < px):
+                raise OrderError("BAD_PRICE", "止损价必须低于现价（否则会立即触发）")
+            if any(abs(v / px - 1) > lim.limit_band for v in legs.values()):
+                raise OrderError("BAD_PRICE", "触发价偏离现价太多（±50% 以内）")
+            try:
+                if body.get("qty") not in (None, ""):
+                    qty = float(body["qty"])
+                elif body.get("notional") not in (None, ""):
+                    qty = float(body["notional"]) / px
+                else:
+                    raise OrderError("BAD_QTY", "请填写数量或金额")
+            except ValueError:
+                raise OrderError("BAD_QTY", "数量或金额格式不正确")
+            qty = round(qty, 8)
+            if not (qty > 0):
+                raise OrderError("BAD_QTY", "数量必须大于 0")
+            for v in legs.values():  # same per-order caps as every other order, at each trigger price
+                if qty * v < lim.min_order_usdt:
+                    raise OrderError("ORDER_TOO_SMALL", f"单笔至少 {lim.min_order_usdt:g} USDT")
+                if qty * v > lim.max_order_usdt + 1e-9:
+                    raise OrderError("ORDER_CAP", f"单笔上限 {lim.max_order_usdt:g} USDT", 422)
+            _, res_qty = self._reserved(uid)
+            pos = self._position(uid, sym)
+            if qty > pos["qty"] - res_qty.get(sym, 0.0) + 1e-12:
+                raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（止盈止损只能保护已有持仓）", 422)
+            open_n = self._db.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='open'", (uid,)).fetchone()[0]
+            if open_n + len(legs) > lim.max_open_orders:
+                raise OrderError("TOO_MANY_OPEN", f"挂单最多 {lim.max_open_orders} 个", 422)
+            group = uuid.uuid4().hex[:12] if len(legs) == 2 else None
+            ids = []
+            for k, v in legs.items():
+                oid = uuid.uuid4().hex[:16]
+                ids.append(oid)
+                self._db.execute(
+                    "INSERT INTO orders (id,user_id,client_id,ts,symbol,side,type,qty,limit_px,status,reserved,ref_px,trigger_px,oco_group)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (oid, uid, f"{cid}-{'tp' if k == 'take_profit' else 'sl'}", now, sym, "sell", k, qty, None, "open", 0.0, px, v, group))
+            self._db.commit()
+            rows = [dict(self._db.execute("SELECT * FROM orders WHERE id=?", (i,)).fetchone()) for i in ids]
+        pub = [self._public(o) for o in rows]
+        return {**pub[0], "orders": pub, "ocoGroup": group, "duplicate": False}
 
     # ---- read model ----------------------------------------------------------
     @staticmethod
@@ -337,6 +522,7 @@ class PaperAccounts:
             "type": o["type"], "qty": o["qty"], "limitPrice": o["limit_px"], "status": o["status"], "fillPrice": o["fill_px"],
             "fillTs": o["fill_ts"], "fee": o["fee"] or 0.0, "slippage": o["slippage"] or 0.0, "notional": o["notional"] or 0.0,
             "realized": o["realized"] or 0.0, "reason": o["reason"], "mode": "paper",
+            "triggerPrice": o.get("trigger_px"), "ocoGroup": o.get("oco_group"),
         }
 
     def snapshot(self, uid: str, symbol: Optional[str] = None, *, limit: int = 50) -> dict:

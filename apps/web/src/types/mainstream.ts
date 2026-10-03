@@ -67,9 +67,13 @@ export type PaperOrder = {
   ts: number;
   symbol: string;
   side: "buy" | "sell";
-  type: "market" | "limit";
+  type: "market" | "limit" | "take_profit" | "stop_loss";
   qty: number;
   limitPrice: number | null;
+  /** take_profit / stop_loss: sell triggers at this price (market fill). */
+  triggerPrice?: number | null;
+  /** set on both legs of an OCO pair: one fills, the other is cancelled */
+  ocoGroup?: string | null;
   status: "open" | "filled" | "cancelled" | "rejected";
   fillPrice: number | null;
   fillTs: number | null;
@@ -80,6 +84,8 @@ export type PaperOrder = {
   reason: string | null;
   mode: "paper";
   duplicate?: boolean;
+  /** TP/SL placement returns every leg here */
+  orders?: PaperOrder[];
 };
 
 export type PaperPosition = {
@@ -114,10 +120,13 @@ export type PaperOrderRequest = {
   client_order_id: string;
   symbol: string;
   side: "buy" | "sell";
-  type: "market" | "limit";
+  type: "market" | "limit" | "take_profit" | "stop_loss" | "oco";
   qty?: number;
   notional?: number;
   limit_price?: number;
+  trigger_price?: number;
+  take_profit_price?: number;
+  stop_loss_price?: number;
 };
 
 /** M3 daily paper runner (GET /api/v1/mainstream/strategy). */
