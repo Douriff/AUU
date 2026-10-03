@@ -6,6 +6,7 @@ import { Empty, Sk, SkCards, SkRows } from "@/components/ui/Skeleton";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
 import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
+import { OrderBook } from "@/components/market/OrderBook";
 import type { MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
 
 const POLL_MS = 30_000;
@@ -333,6 +334,9 @@ export function MainstreamPage() {
               </div>
             </div>
             <MainstreamChart symbol={current.symbol} tf={tf} />
+          </div>
+          <div className="ms-trade-book pane">
+            <OrderBook symbol={current.symbol} />
           </div>
           <div className="ms-trade-side pane">
             <PaperTradePanel symbol={current.symbol} price={current.price} />

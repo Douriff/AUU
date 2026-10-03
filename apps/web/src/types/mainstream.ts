@@ -449,3 +449,24 @@ export type StrategyOverlay = {
   recordedDays: number;
   revised: number[];
 };
+
+/** Display-only spot order book (paper fills never use it). [price, qty] levels, best first. */
+export type MainstreamOrderbook = {
+  symbol: string;
+  pair: string;
+  exchange: string | null;
+  enabled: boolean;
+  depth: number;
+  bids: [number, number][];
+  asks: [number, number][];
+  mid: number | null;
+  spreadBp: number | null;
+  ts: number | null;
+  fetchedAt: number | null;
+  ageMs: number | null;
+  stale: boolean;
+  pending: boolean;
+  error: string | null;
+  ttlSec: number;
+  note: string;
+};

@@ -2,6 +2,7 @@ import type {
   MainstreamCandles,
   MainstreamFreshness,
   MainstreamFunding,
+  MainstreamOrderbook,
   MainstreamOverview,
   MainstreamTf,
   PaperAccount,
@@ -353,6 +354,12 @@ export class HttpWsProvider {
   getMainstreamFunding(symbol: string, limit = 90): Promise<MainstreamFunding> {
     const q = new URLSearchParams({ symbol, limit: String(limit) });
     return getJson(`/api/v1/mainstream/funding?${q}`);
+  }
+
+  /** Display-only order book; served from a short server-side cache. */
+  getMainstreamOrderbook(symbol: string, depth = 12): Promise<MainstreamOrderbook> {
+    const q = new URLSearchParams({ symbol, depth: String(depth) });
+    return getJson(`/api/v1/mainstream/orderbook?${q}`);
   }
 
   getMajors(): Promise<MajorsBoard> {

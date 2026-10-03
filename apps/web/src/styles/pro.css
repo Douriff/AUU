@@ -699,3 +699,49 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 .st-page .up:not(#_) { color: var(--ok); }
 .msc-sig { padding: 0 12px 2px; margin-top: 0; font-size: 11.5px; }
 @media (max-width: 760px) { .msc-sig { font-size: 12.5px; } }
+
+/* ---- order book (display only) ---- */
+.ms-trade-grid { grid-template-columns: minmax(0, 1fr) 272px 320px; }
+.ms-trade-book { display: flex; flex-direction: column; min-height: 0; }
+.ob { display: flex; flex-direction: column; min-height: 0; height: 100%; font-size: 12px; }
+.ob-ph { gap: 8px; }
+.ob-title { color: var(--text); font-weight: 600; }
+.ob-tag { font-size: 10.5px; line-height: 16px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); }
+.ob-age { margin-left: auto; font-size: 11px; }
+.ob-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ob-head { display: grid; grid-template-columns: 1.15fr 1fr 0.9fr; gap: 6px; padding: 6px 10px 4px; font-size: 11px; }
+.ob-head span:not(:first-child) { text-align: right; }
+.ob-side { display: flex; flex-direction: column; }
+.ob-asks { flex: 1; justify-content: flex-end; min-height: 0; overflow: hidden; }
+.ob-bids { flex: 1; min-height: 0; overflow: hidden; }
+.ob-row { position: relative; display: grid; grid-template-columns: 1.15fr 1fr 0.9fr; gap: 6px; align-items: center; height: 20px; padding: 0 10px; font-family: var(--mono, "JetBrains Mono", monospace); font-variant-numeric: tabular-nums; }
+.ob-row > span { position: relative; z-index: 1; white-space: nowrap; overflow: hidden; }
+.ob-row > span:not(:first-of-type) { text-align: right; }
+.ob-bar { position: absolute; top: 1px; bottom: 1px; right: 0; z-index: 0; }
+.ob-ask .ob-bar { background: var(--downbg); }
+.ob-bid .ob-bar { background: var(--upbg); }
+.ob-row:hover { background: rgba(255, 255, 255, 0.03); }
+.ob-mid { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.ob-mid b { font-size: 15px; color: var(--text); }
+.ob-mid span { font-size: 11px; }
+.ob-note { margin: 0; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); line-height: 1.4; }
+.ob-empty { padding: 28px 12px; text-align: center; }
+.ob-sk { display: flex; flex-direction: column; gap: 9px; padding: 12px 10px; }
+.ob-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+.ob-col { background: var(--bg); }
+.ob-split .ob-head, .ob-split .ob-row { grid-template-columns: 1fr 1fr; }
+.ob-split .ob-bid .ob-bar { right: 0; }
+.ob-split .ob-ask .ob-bar { left: 0; right: auto; }
+.ob-split .ob-ask .ob-qty { text-align: right; }
+@media (max-width: 1200px) and (min-width: 901px) {
+  .ms-trade-grid { grid-template-columns: minmax(0, 1fr) 240px 300px; }
+  .ob-row, .ob-head { grid-template-columns: 1.2fr 1fr; }
+  .ob-cum, .ob-head span:nth-child(3) { display: none; }
+}
+@media (max-width: 900px) {
+  .ms-trade-grid { grid-template-columns: minmax(0, 1fr); }
+  .ob { height: auto; font-size: 12.5px; }
+  .ob-row { height: 22px; padding: 0 12px; }
+  .ob-head { padding: 6px 12px 4px; }
+  .ob-mid-m { border-bottom: 0; }
+}
