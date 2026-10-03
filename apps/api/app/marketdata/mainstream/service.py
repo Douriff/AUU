@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -56,6 +57,11 @@ class MainstreamService:
         self._od_lock = threading.Lock()
         self._od_tail_at: dict[tuple, int] = {}
         self._od_fill_at: dict[tuple, int] = {}
+        # Market list: store-built rows cached briefly; optional batched 24h tickers (one request
+        # for every coin, only while someone is looking, refreshed in the background).
+        self._mk_lock = threading.Lock()
+        self._mk_cache: Optional[dict] = None
+        self._tk: dict[str, Any] = {"at": 0, "ex": None, "data": {}, "error": None, "try_at": 0, "busy": False}
 
     @property
     def store(self) -> MarketStore:
@@ -265,6 +271,11 @@ class MainstreamService:
         if ex and tf in INTRADAY:
             meta = self.ensure_intraday(ex, base, tf, limit, before)
         until = None if before is None else int(before) - 1
+        if ex and tf == "4h" and base not in self.cfg.symbols:
+            rows = self._agg_4h_from_1h(ex, base, limit=limit, before=before)
+            return {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows,
+                    "derived": "4h from stored 1h", "oldestAllowed": rows[0]["ts"] if rows else None,
+                    **({"limited": True} if before is not None and len(rows) < limit else {})}
         rows = self.store.candles(ex, base, tf, until=until, limit=limit) if ex else []
         if tf in INTRADAY and "oldestAllowed" in meta:
             rows = [r for r in rows if r["ts"] >= meta["oldestAllowed"]]
@@ -274,6 +285,139 @@ class MainstreamService:
             if before is not None and (not rows or (lo is not None and rows[0]["ts"] <= lo)):
                 meta["limited"] = True
         return {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows, **meta}
+
+    # ---- market list (all display + strategy coins) -----------------------
+    MARKETS_CACHE_MS = 15_000
+
+    def markets(self, holdings: Optional[dict[str, float]] = None) -> dict:
+        """One batched read for the market list. Rows come from the local store (1h/1d candles and
+        funding that the refresh loop already keeps for every strategy coin); when available, a
+        cached batched 24h ticker overlays last price / 24h change / 24h quote volume."""
+        now = self.now_ms()
+        ex = self.exchange_for_read()
+        with self._mk_lock:
+            c = self._mk_cache
+            if c is None or c["ex"] != ex or now - c["at"] >= self.MARKETS_CACHE_MS:
+                c = {"ex": ex, "at": now, "items": [self._market_row(ex, b) for b in self.cfg.all_symbols()]}
+                self._mk_cache = c
+        tk = self._tickers(ex)
+        fresh = tk["ex"] == ex and tk["data"] and now - int(tk["at"]) <= 3 * self._ticker_ttl_ms()
+        hold = holdings or {}
+        items = []
+        for row in c["items"]:
+            it = dict(row)
+            t = tk["data"].get(it["symbol"]) if fresh else None
+            if t and t.get("last"):
+                it["price"], it["priceTs"], it["priceSource"] = t["last"], t.get("ts") or tk["at"], "ticker"
+                if t.get("change24h") is not None:
+                    it["change24h"] = t["change24h"]
+                if t.get("quoteVolume") is not None:
+                    it["quoteVolume24h"] = t["quoteVolume"]
+            w = hold.get(it["symbol"])
+            it["held"] = bool(w)
+            it["weight"] = w if w else None
+            items.append(it)
+        return {"exchange": ex, "quote": self.cfg.quote, "items": items, "asOf": now,
+                "tickers": {"enabled": self._tickers_enabled(), "source": "ticker" if fresh else "store",
+                            "at": tk["at"] or None, "error": tk["error"]}}
+
+    def _market_row(self, ex: Optional[str], base: str) -> dict:
+        it: dict[str, Any] = {"symbol": base, "pair": self.cfg.spot(base), "perp": self.cfg.perp(base),
+                              "display": base in self.cfg.symbols, "strategy": base in self.cfg.strategy_symbols}
+        if not ex:
+            return it
+        h = self.store.candles(ex, base, "1h", limit=25)
+        d = self.store.candles(ex, base, "1d", limit=31)
+        last = h[-1] if h else (d[-1] if d else None)
+        it["price"] = last["close"] if last else None
+        it["priceTs"] = last["ts"] if last else None
+        it["priceSource"] = "store"
+        it["change24h"] = h[-1]["close"] / h[0]["close"] - 1 if len(h) >= 25 and h[0]["close"] else None
+        it["quoteVolume24h"] = sum(float(x["volume"] or 0) * float(x["close"] or 0) for x in h[-24:]) if len(h) >= 24 else None
+        it["change7d"] = d[-1]["close"] / d[-8]["close"] - 1 if len(d) >= 8 and d[-8]["close"] else None
+        it["change30d"] = d[-1]["close"] / d[0]["close"] - 1 if len(d) >= 31 and d[0]["close"] else None
+        it["spark30"] = [x["close"] for x in d]
+        fr = self.store.funding(ex, base, limit=21)
+        live = self.funding_live.get(f"{ex}:{base}") or {}
+        it["fundingLast"] = fr[-1]["rate"] if fr else None
+        it["funding7dAvg"] = (sum(x["rate"] for x in fr) / len(fr)) if fr else None
+        it["fundingNow"] = live.get("rate")
+        it["nextFundingMs"] = live.get("nextFundingMs")
+        ref = it["fundingNow"] if it["fundingNow"] is not None else it["fundingLast"]
+        it["funding"] = ref
+        it["fundingAnnualized"] = None if ref is None else ref * (DAY_MS / FUNDING_STEP_MS) * 365
+        return it
+
+    @staticmethod
+    def _tickers_enabled() -> bool:
+        return os.getenv("AUU_MAINSTREAM_TICKERS", "on").strip().lower() not in {"0", "false", "off", "no"}
+
+    @staticmethod
+    def _ticker_ttl_ms() -> int:
+        try:
+            return max(15, min(600, int(os.getenv("AUU_MAINSTREAM_TICKER_SEC", "30")))) * 1000
+        except ValueError:
+            return 30_000
+
+    TICKER_BACKOFF_MS = 300_000
+
+    def _tickers(self, ex: Optional[str]) -> dict:
+        """Cached batched tickers; never blocks the request. Starts at most one background
+        refresh when the cache is older than the TTL (and not inside the failure back-off)."""
+        tk = self._tk
+        if not ex or not self._tickers_enabled():
+            return tk
+        now = self.now_ms()
+        with self._mk_lock:
+            due = (tk["ex"] != ex or now - int(tk["at"]) >= self._ticker_ttl_ms()) and now >= int(tk["try_at"]) and not tk["busy"]
+            if due:
+                tk["busy"] = True
+        if due:
+            threading.Thread(target=self._refresh_tickers, args=(ex,), name="mainstream-tickers", daemon=True).start()
+        return tk
+
+    def _refresh_tickers(self, ex: str) -> None:
+        tk = self._tk
+        bases = self.cfg.all_symbols()
+        try:
+            with self._od_lock:
+                raw = self._od_fetcher(ex).call("fetch_tickers", [self.cfg.spot(b) for b in bases]) or {}
+            data = {}
+            for b in bases:
+                t = raw.get(self.cfg.spot(b)) or {}
+                last = t.get("last") or t.get("close")
+                if not last:
+                    continue
+                pct = t.get("percentage")
+                if pct is None and t.get("open"):
+                    pct = (float(last) / float(t["open"]) - 1) * 100
+                data[b] = {"last": float(last), "change24h": None if pct is None else float(pct) / 100,
+                           "quoteVolume": None if t.get("quoteVolume") is None else float(t["quoteVolume"]),
+                           "ts": int(t["timestamp"]) if t.get("timestamp") else None}
+            with self._mk_lock:
+                tk.update(at=self.now_ms(), ex=ex, data=data, error=None, try_at=0, busy=False)
+        except Exception as exc:  # keep serving the store rows; back off before the next try
+            with self._mk_lock:
+                tk.update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=self.now_ms() + self.TICKER_BACKOFF_MS, busy=False)
+            log.warning("mainstream tickers %s failed: %s", ex, exc)
+
+    def _agg_4h_from_1h(self, ex: str, base: str, *, limit: int, before: Optional[int]) -> list[dict]:
+        """Strategy-only coins store 1h (not 4h): build UTC-aligned 4h bars from it."""
+        step = TF_MS["4h"]
+        until = None if before is None else int(before) - 1
+        rows = self.store.candles(ex, base, "1h", until=until, limit=limit * 4 + 4)
+        out: list[dict] = []
+        for r in rows:
+            b = int(r["ts"]) // step * step
+            if out and out[-1]["ts"] == b:
+                o = out[-1]
+                o["high"], o["low"] = max(o["high"], r["high"]), min(o["low"], r["low"])
+                o["close"], o["volume"] = r["close"], (o["volume"] or 0) + (r["volume"] or 0)
+            else:
+                out.append({"ts": b, "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]})
+        if rows and out and int(rows[0]["ts"]) != out[0]["ts"]:
+            out = out[1:]  # first bucket only partially covered
+        return out[-limit:]
 
     # ---- read models ---------------------------------------------------
     def exchange_for_read(self) -> Optional[str]:

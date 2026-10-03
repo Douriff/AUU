@@ -465,6 +465,7 @@ class MainstreamApiTests(_NoNetwork):
         "/api/v1/mainstream/candles?symbol=BTC&tf=1d",
         "/api/v1/mainstream/candles?symbol=ETH&tf=1h",
         "/api/v1/mainstream/funding?symbol=SOL",
+        "/api/v1/mainstream/markets",
     ]
 
     def test_new_api_requires_login(self):
@@ -497,6 +498,9 @@ class MainstreamApiTests(_NoNetwork):
                 self.assertTrue(r.json()["data"]["candles"], tf)
         self.assertEqual(user.get("/api/v1/mainstream/candles?symbol=DOGE").status_code, 404)
         self.assertEqual(user.get("/api/v1/mainstream/candles?symbol=BTC&tf=3m").status_code, 400)
+        mk = user.get("/api/v1/mainstream/markets").json()["data"]
+        self.assertEqual([i["symbol"] for i in mk["items"]], ["BTC", "ETH", "SOL"])
+        self.assertTrue(all(i["price"] and "held" in i for i in mk["items"]))
         # Read-only: no write verbs on the new API.
         self.assertEqual(user.post("/api/v1/mainstream/overview", json={}).status_code, 405)
 
