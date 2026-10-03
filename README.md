@@ -48,7 +48,9 @@
 
 前端「主流行情」K 线用 lightweight-charts（Apache-2.0）：6 个周期随时切换、成交量、十字光标、滚轮/拖拽/双指缩放平移，左滑自动加载更早数据；`/mainstream?tf=15m` 可直接打开指定周期。
 
-研究回测脚本不在本仓库内；M2 会把它产品化为回测引擎。
+### 回测引擎（M2）
+
+`app/backtest/`（纯标准库）+ `app/strategies/`（回测和纸面共用的策略，先接入趋势 `trend_tsmom_v1`）。hold-out 30%、walk-forward、block bootstrap CI、去掉最好 3 个月、2 倍成本、延迟 1 天、对比 BTC 买入持有和国债、前视检查。`python -m app.backtest --archive DIR` 或 `--store`；验收 `python -m app.backtest.acceptance --archive DIR` 复现研究数字（31/31，差 0.0pp）。详见 `docs/mainstream/m2-backtest.md`。
 
 ### 旧版 pump 纸面账本归档
 
