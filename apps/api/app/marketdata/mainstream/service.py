@@ -42,6 +42,7 @@ class MainstreamService:
         self.now_ms = now_ms
         self._clients: dict[str, Fetcher] = {}
         self._lock = threading.Lock()
+        self._funding_backfilled: set[str] = set()
         self.active: Optional[str] = None
         self.blocked: dict[str, str] = {}
         self.last_refresh_ms: Optional[int] = None
@@ -137,6 +138,7 @@ class MainstreamService:
                 fdays = max(self.cfg.funding_backfill_days, self.cfg.strategy_funding_days if base in self.cfg.strategy_symbols else 0)
                 since = last + 1 if last is not None else now - fdays * DAY_MS
                 n = st.upsert_funding(name, base, f.funding_history(perp, since))
+                n += self._backfill_funding_older(f, name, base, perp, now)
                 added[f"{base}:funding"] = n
                 st.log_fetch(name, base, "funding", attempt_ms=now, ok=True, error=None, rows=n)
                 ok_any = True
@@ -152,6 +154,23 @@ class MainstreamService:
         if not ok_any:
             raise FetchError("; ".join(failures)[:300] or "no data")
         return {"added": added, "error": "; ".join(failures)[:300] or None}
+
+    def _backfill_funding_older(self, f: Fetcher, name: str, base: str, perp: str, now: int) -> int:
+        """Strategy coins: extend funding history backwards once per process (display coins
+        were first backfilled with the short default). Venues with short history (OKX ~3
+        months) return what they have; trying once per process avoids refetch loops."""
+        if base not in self.cfg.strategy_symbols:
+            return 0
+        key = f"{name}:{base}"
+        if key in self._funding_backfilled:
+            return 0
+        self._funding_backfilled.add(key)
+        first, _, _ = self.store.funding_bounds(name, base)
+        target = now - self.cfg.strategy_funding_days * DAY_MS
+        if first is None or first <= target + 2 * FUNDING_STEP_MS:
+            return 0
+        rows = [r for r in f.funding_history(perp, target) if r[0] < first]
+        return self.store.upsert_funding(name, base, rows)
 
     def _repair_gaps(self, f: Fetcher, name: str, base: str, spot: str, tf: str, step: int) -> int:
         gaps = self.store.find_gaps(name, base, tf, step)
