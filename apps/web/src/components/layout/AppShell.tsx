@@ -128,7 +128,8 @@ function Icon({ name }: { name: string }) {
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
+// pages an anonymous visitor may open (/status is the login-free status page)
+const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password", "/status"]);
 
 type Gate = "loading" | "anon" | "ok";
 

@@ -129,6 +129,9 @@ export function LoginPage() {
                 忘记密码？<Link to="/forgot-password">用邮箱验证码重置</Link>
               </p>
             )}
+            <p className="td-note">
+              <Link to="/status">系统状态</Link>（无需登录）
+            </p>
           </form>
         )}
         {error && !authOn && <p className="td-block">{error}</p>}

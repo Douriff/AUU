@@ -20,6 +20,7 @@ import { ObservePage } from "@/pages/ObservePage/ObservePage";
 import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
 import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
+import { StatusPage } from "@/pages/StatusPage/StatusPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
       { path: "observe", element: <LegacyOnly><ObservePage /></LegacyOnly> },
       { path: "alerts", element: <LegacyOnly><AlertsPage /></LegacyOnly> },
       { path: "settings", element: <SettingsPage /> },
+      { path: "status", element: <StatusPage /> },
     ],
   },
 ]);
