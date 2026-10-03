@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS runs (
   gross_before REAL NOT NULL, gross_after REAL NOT NULL, turnover REAL NOT NULL,
   weights TEXT NOT NULL, targets TEXT NOT NULL, closes TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS universe_changes (
+  day INTEGER PRIMARY KEY,           -- first rebalance day that used the new universe
+  coins TEXT NOT NULL, prev TEXT NOT NULL, recorded_at INTEGER NOT NULL, note TEXT
+);
 CREATE TABLE IF NOT EXISTS fills (
   day INTEGER NOT NULL, coin TEXT NOT NULL, side TEXT NOT NULL,
   w_from REAL NOT NULL, w_to REAL NOT NULL, notional REAL NOT NULL, qty REAL NOT NULL,
@@ -87,6 +91,9 @@ class StrategyLedger:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(runs)")}
+        if "universe" not in cols:  # ledgers created before the universe column (history stays as written)
+            self._db.execute("ALTER TABLE runs ADD COLUMN universe TEXT")
         self._lock = threading.RLock()
         # First time this ledger was ever opened: the stall clock starts here (survives restarts).
         self._db.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('created_at', ?)", (str(now_ms()),))
@@ -111,7 +118,12 @@ class StrategyLedger:
         with self._lock:
             return self._db.execute("SELECT * FROM fills ORDER BY day DESC, coin LIMIT ?", (limit,)).fetchall()
 
-    def commit_day(self, run: dict, fills: list[dict], *, expect_prev: Optional[int], meta: dict[str, str]) -> bool:
+    def universe_changes(self) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._db.execute("SELECT * FROM universe_changes ORDER BY day").fetchall()
+
+    def commit_day(self, run: dict, fills: list[dict], *, expect_prev: Optional[int], meta: dict[str, str],
+                   universe_change: Optional[dict] = None) -> bool:
         """Write one day atomically. False (nothing written) if the day exists or the ledger moved on."""
         with self._lock:
             db = self._db
@@ -127,6 +139,10 @@ class StrategyLedger:
                     db.execute(f"INSERT INTO fills({','.join(f)}) VALUES ({','.join('?' * len(f))})", tuple(f.values()))
                 for k, v in meta.items():
                     db.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (k, v))
+                if universe_change:
+                    db.execute("INSERT INTO universe_changes(day, coins, prev, recorded_at, note) VALUES (?,?,?,?,?)",
+                               (universe_change["day"], universe_change["coins"], universe_change["prev"],
+                                universe_change["recorded_at"], universe_change.get("note")))
                 db.execute("COMMIT")
                 return True
             except Exception:
@@ -169,8 +185,10 @@ class StrategyRunner:
         start_nav: Optional[float] = None,
         max_catchup_days: int = 30,
         exchange_fn: Callable[[], Optional[str]] = lambda: None,
+        universe_fn: Callable[[], dict] = lambda: {},
         now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
     ):
+        self.universe_fn = universe_fn
         self.ledger = ledger
         self.panel_fn, self.ready_fn, self.exchange_fn = panel_fn, ready_fn, exchange_fn
         self.strategy = strategy or TrendTSMOM()
@@ -283,6 +301,13 @@ class StrategyRunner:
                 "fee": notional * self.cost.taker * self.cost.mult, "slippage": notional * slip,
             })
         weights = {c: w for c, w in zip(coins, st.weights) if w != 0.0}
+        universe = list(panel.coins)
+        change = None
+        if last is not None:
+            prev_u = json.loads(last["universe"]) if last["universe"] else list(json.loads(last["targets"]))
+            if set(prev_u) != set(universe):
+                change = {"day": day, "coins": json.dumps(universe), "prev": json.dumps(prev_u), "recorded_at": self.now_ms(),
+                          "note": f"universe {len(prev_u)} -> {len(universe)} coins from the {ms_day(day)} close; earlier days unchanged"}
         run = {
             "day": day, "strategy": self.strategy.name, "ran_at": self.now_ms(), "catchup": int(catchup),
             "exchange": self.exchange_fn(), "source": panel.source,
@@ -290,10 +315,11 @@ class StrategyRunner:
             "nav_close": nav_close, "gross_before": st.gross_held, "gross_after": sum(abs(x) for x in st.weights),
             "turnover": st.turnover, "weights": json.dumps(weights), "targets": json.dumps({c: t for c, t in zip(coins, tg)}),
             "closes": json.dumps({c: close(c, i) for c in coins}),
+            "universe": json.dumps(universe),
         }
         meta = {"strategy": self.strategy.name, "params": json.dumps(self.strategy.describe()),
                 "start_day": str(day), "start_nav": str(self.start_nav)}
-        ok = self.ledger.commit_day(run, fills, expect_prev=int(last["day"]) if last else None, meta=meta)
+        ok = self.ledger.commit_day(run, fills, expect_prev=int(last["day"]) if last else None, meta=meta, universe_change=change)
         if ok:
             log.info("strategy %s rebalanced %s nav=%.2f ret=%.5f fills=%d%s", self.strategy.name, ms_day(day), nav_close, st.ret, len(fills), " (catch-up)" if catchup else "")
         return ok
@@ -383,8 +409,19 @@ class StrategyRunner:
         if curve:
             bench = {"strategy": curve[-1]["strategy"] - 1, "btc": (curve[-1]["btc"] - 1) if curve[-1]["btc"] else None,
                      "tbill": curve[-1]["tbill"] - 1}
+        try:
+            uni = dict(self.universe_fn() or {})
+        except Exception as exc:
+            uni = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        current = json.loads(runs[-1]["universe"]) if runs and runs[-1]["universe"] else (list(json.loads(runs[-1]["targets"])) if runs else [])
+        uni["current"] = current
+        uni["changes"] = [{"day": ms_day(int(x["day"])), "coins": json.loads(x["coins"]), "prev": json.loads(x["prev"]),
+                           "recordedAt": int(x["recorded_at"]), "note": x["note"]} for x in self.ledger.universe_changes()]
+        uni["survivorship"] = ("研究币池是“今天仍存活”的 19 个大币，已退市或崩盘的币（如 LUNA、FTT）不在里面，"
+                               "回测结果有幸存者偏差，偏乐观。")
         return {
             "strategy": self.strategy.describe(),
+            "universe": uni,
             "ledger": "mainstream_strategy.sqlite",
             "mode": "paper",
             "live": {"enabled": False, "reason": "LIVE_API_LOCKED", "message": "实盘未开启"},
@@ -402,6 +439,15 @@ class StrategyRunner:
 
 
 # ---- production wiring (market store) ---------------------------------------------------
+def _configured_universe(svc) -> list[str]:
+    return list(svc.cfg.strategy_symbols or svc.cfg.symbols)
+
+
+def _available(svc, ex: str) -> list[str]:
+    """Universe coins the store has daily candles for (a coin the venue does not list is left out)."""
+    return [c for c in _configured_universe(svc) if svc.store.candle_bounds(ex, c, "1d")[2]]
+
+
 def _store_panel(day: int) -> Optional[Panel]:
     from app.backtest.panel import load_store
     from app.marketdata.mainstream import get_service
@@ -410,9 +456,27 @@ def _store_panel(day: int) -> Optional[Panel]:
     ex = svc.exchange_for_read()
     if not ex:
         return None
-    p = load_store(svc.store, ex, list(svc.cfg.symbols), end=ms_day(day))
-    order = [c for c in svc.cfg.symbols if c in p.coins]
-    return p.subset(order)
+    coins = _available(svc, ex)
+    p = load_store(svc.store, ex, coins, end=ms_day(day))
+    return p.subset([c for c in coins if c in p.coins])
+
+
+def _store_universe() -> dict:
+    from app.marketdata.mainstream import get_service
+
+    svc = get_service()
+    ex = svc.exchange_for_read()
+    configured = _configured_universe(svc)
+    cov, unavailable = {}, {}
+    for c in configured:
+        first, last, n = svc.store.candle_bounds(ex, c, "1d") if ex else (None, None, 0)
+        f_first, f_last, fn = svc.store.funding_bounds(ex, c) if ex else (None, None, 0)
+        if not n:
+            unavailable[c] = f"{ex or '?'} 没有 {c}/USDT 日线（未上架或拉取失败）"
+            continue
+        cov[c] = {"firstDay": ms_day(int(first)), "lastDay": ms_day(int(last)), "days": int(n),
+                  "fundingFrom": ms_day(int(f_first)) if f_first else None, "fundingRows": int(fn)}
+    return {"configured": configured, "exchange": ex, "coverage": cov, "unavailable": unavailable}
 
 
 def _store_ready(day: int) -> tuple[bool, str]:
@@ -423,7 +487,7 @@ def _store_ready(day: int) -> tuple[bool, str]:
     if not ex:
         return False, "no exchange data yet"
     missing = []
-    for c in svc.cfg.symbols:
+    for c in _available(svc, ex):
         _, last, _ = svc.store.candle_bounds(ex, c, "1d")
         # The store re-fetches its newest bar each pass, so a bar for D+1 means D is final.
         if last is None or int(last) < day + DAY_MS:
@@ -467,7 +531,8 @@ def get_runner() -> StrategyRunner:
     global _runner
     with _rlock:
         if _runner is None:
-            _runner = StrategyRunner(StrategyLedger(), panel_fn=_store_panel, ready_fn=_store_ready, exchange_fn=_store_exchange)
+            _runner = StrategyRunner(StrategyLedger(), panel_fn=_store_panel, ready_fn=_store_ready,
+                                     exchange_fn=_store_exchange, universe_fn=_store_universe)
         return _runner
 
 
