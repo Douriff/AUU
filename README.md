@@ -43,7 +43,22 @@
 | `AUU_MAINSTREAM_FUNDING_DAYS` | `60` | 资金费率首次回补天数（OKX 公共接口只给约 3 个月） |
 | `AUU_MAINSTREAM_RETRIES` | `3` | 单次请求重试次数 |
 
-研究回测脚本在 box 的 `/workspace/mainstream/`（不在仓库内；M2 会把它产品化为回测引擎）。
+研究回测脚本不在本仓库内；M2 会把它产品化为回测引擎。
+
+### 旧版 pump 纸面账本归档
+
+主流模式从空账本开始。旧 pump.fun 纸面数据（`paper_journal*.json`、`shadow_compare*.json`、`trader_watchlist.json`、`evidence/`）用下面的命令打包归档（先停 API；默认 dry-run）：
+
+```bash
+cd apps/api
+python -m app.paper.ledger_archive archive --apply      # -> $AUU_DATA_DIR/archive/pump-ledger-<UTC>.tar.gz（含 MANIFEST.json sha256 校验）
+python -m app.paper.ledger_archive list                 # 列出并校验归档
+python -m app.paper.ledger_archive restore <file> --apply [--force]   # 恢复（停 API；--force 覆盖新账本）
+```
+
+`users.json`、用户账本和 `mainstream.sqlite` 不会被归档或删除。
+
+测试依赖：`pip install -r apps/api/requirements-dev.txt`（含 httpx）。
 
 ---
 
