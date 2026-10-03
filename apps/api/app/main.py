@@ -89,6 +89,10 @@ def _make_lifespan(legacy: bool):
 
             if shadow_enabled():
                 tasks.append(asyncio.create_task(shadow_loop(), name="shadow-s3"))
+            from app.alerts import alerts_enabled, run_loop as alerts_loop
+
+            if alerts_enabled():
+                tasks.append(asyncio.create_task(alerts_loop(), name="alerts"))
         try:
             yield
         finally:

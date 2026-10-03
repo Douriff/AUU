@@ -100,9 +100,27 @@ def _mainstream_health(gate) -> dict:
                            "reason": st.get("reason") or "", "idleMin": st.get("idleMin"),
                            "hints": ["strategy_rebalance_overdue"] if st.get("stalled") else []},
         "mainstream": md,
+        "alerts": _alerts_status(),
         **_live_fields(),
         "copy_trade_enabled": False,
     }
+
+
+def _alerts_status() -> dict:
+    """Coarse alert-channel health (public endpoint: no recipient, no subjects)."""
+    try:
+        from app import alerts
+
+        if alerts._center is None and not (alerts.data_dir() / "alerts.sqlite").exists():
+            return {"enabled": alerts.alerts_enabled(), "configured": alerts._configured(), "lastSentAt": None,
+                    "failed24h": 0, "suppressed24h": 0, "lastDigestDay": None}
+        alerts_enabled = alerts.alerts_enabled
+        st = alerts.get_center().status()
+        return {"enabled": alerts_enabled(), "configured": st["configured"], "lastSentAt": st["lastSentAt"],
+                "failed24h": st["last24h"].get("failed", 0), "suppressed24h": st["last24h"].get("suppressed", 0),
+                "lastDigestDay": st["lastDigestDay"]}
+    except Exception as exc:
+        return {"enabled": False, "error": type(exc).__name__}
 
 
 @router.get("/health")
