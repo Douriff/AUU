@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { StrategyReport } from "@/types/mainstream";
+import { Empty, Sk, SkCards } from "@/components/ui/Skeleton";
 
 /** P1-1/P1-2: strategy performance report (paper ledger). Login is enforced by AppShell + the API (401). */
 
@@ -14,8 +15,9 @@ const MONTHS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
 function heat(v: number): string {
   const a = Math.min(1, Math.abs(v) / 0.08);
-  return v >= 0 ? `rgba(62,224,143,${0.12 + 0.6 * a})` : `rgba(255,93,93,${0.12 + 0.6 * a})`;
+  return `color-mix(in srgb, var(${v >= 0 ? "--up" : "--down"}) ${Math.round(14 + 56 * a)}%, transparent)`;
 }
+const tn = (v: number | null | undefined) => (v == null || !Number.isFinite(v) || v === 0 ? "" : v > 0 ? "up" : "down");
 
 export function PerformancePage() {
   const [rep, setRep] = useState<StrategyReport | null>(null);
@@ -44,15 +46,20 @@ export function PerformancePage() {
   const m = rep?.metrics;
   const g = rep?.goNoGo;
   return (
-    <div className="shell-page perf-page">
-      <div className="perf-top">
-        <h1>策略绩效报告</h1>
-        <Link to="/console" className="muted">← 控制台</Link>
-      </div>
-      <p className="muted perf-sub">
-        {rep ? `${rep.strategy} · 纸面账本 · 截至 ${rep.asOf ?? "—"} 收盘 · 起始 ${rep.startNav.toLocaleString()} USDT` : "加载中…"} · 🔒 实盘未开启
-      </p>
-      {err ? <p className="console-err">{err}</p> : null}
+    <div className="shell-page perf-page pro-page">
+      <header className="pro-head">
+        <h1>策略绩效</h1>
+        <p>{rep ? `${rep.strategy} · 纸面账本 · 截至 ${rep.asOf ?? "—"} 收盘 · 起始 ${rep.startNav.toLocaleString()} USDT` : <Sk w={260} h={11} />}</p>
+        <Link to="/console" className="pro-head-link">策略控制台 ›</Link>
+      </header>
+      {err ? <div className="pro-alert">{err}</div> : null}
+      {!rep && !err ? (
+        <>
+          <Sk h={64} r={6} className="sk-block" />
+          <SkCards n={12} h={58} />
+          <Sk h={180} r={6} className="sk-block" />
+        </>
+      ) : null}
       {g ? (
         <section className={`perf-verdict lamp-${g.lamp}`}>
           <b>Go/No-Go：{g.verdict === "go" ? "Go" : g.verdict === "no-go" ? "No-Go" : "待评估"}</b>
@@ -81,13 +88,13 @@ export function PerformancePage() {
           ].map(([k, v]) => (
             <div key={k} className="perf-kpi">
               <span className="muted">{k}</span>
-              <b>{v}</b>
+              <b className={k === "累计收益" ? tn(m.totalReturn) : k === "年化（CAGR）" && !m.shortSample ? tn(m.cagr) : k === "最大回撤" ? tn(m.maxDrawdown) : k === "当前回撤" ? tn(m.currentDrawdown) : ""}>{v}</b>
             </div>
           ))}
           {m.shortSample ? <p className="muted perf-warn">样本少于 30 天：年化、Sortino、Calmar、Sharpe 没有统计意义，暂不显示（满 30 天后自动出现）。</p> : null}
         </section>
       ) : rep ? (
-        <p className="muted">尚无纸面记录。</p>
+        <Empty icon="chart" title="尚无纸面记录" hint="策略完成第一次调仓（北京时间 08:00）后开始生成绩效" />
       ) : null}
 
       {years.length ? (
@@ -193,10 +200,10 @@ function DrawdownChart({ rep }: { rep: StrategyReport }) {
       <h2>净值与回撤</h2>
       <svg viewBox={`0 0 ${W} ${HN}`} className="perf-svg" preserveAspectRatio="none" role="img" aria-label="净值">
         <line x1={0} x2={W} y1={yn(rep.startNav)} y2={yn(rep.startNav)} stroke="currentColor" opacity={0.25} strokeDasharray="4 4" />
-        <path d={nav} fill="none" stroke="#4cc9f0" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        <path d={nav} fill="none" stroke="#f0a531" strokeWidth={2} vectorEffect="non-scaling-stroke" />
       </svg>
       <svg viewBox={`0 0 ${W} ${H}`} className="perf-svg perf-dd" preserveAspectRatio="none" role="img" aria-label="回撤">
-        <path d={dd} fill="rgba(255,93,93,0.35)" stroke="#ff5d5d" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        <path d={dd} className="dd-area" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       </svg>
       <p className="muted perf-note">
         {pts[0].day} ~ {pts[pts.length - 1].day} · 最大回撤 {pct(m.maxDrawdown)} · 最长回撤 {m.longestDrawdownDays ?? 0} 天

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { Leaderboard } from "@/types/contracts";
+import { Empty, SkRows } from "@/components/ui/Skeleton";
 
 function sol(n: number): string {
   const sign = n > 0 ? "+" : "";
@@ -39,12 +40,11 @@ export function LeaderboardPage() {
   }, [sort]);
 
   return (
-    <div className="lb-page">
-      <header className="lb-head">
+    <div className="lb-page pro-page">
+      <header className="lb-head pro-head">
         <div>
           <h1>排行榜</h1>
-          <span className="td-badge paper">PAPER</span>
-          <span className="td-badge live">LIVE OFF</span>
+          <p>纸面账户收益排名</p>
         </div>
         <div className="lb-sort">
           <button type="button" className={sort === "pnl" ? "is-on" : ""} onClick={() => setSort("pnl")}>
@@ -55,13 +55,8 @@ export function LeaderboardPage() {
           </button>
         </div>
       </header>
-      <p className="td-note">{board?.note || (error ? "" : "读取排行榜…")}</p>
-      {error && <p className="td-block">{error}</p>}
-      {board && !board.auth_enabled && (
-        <p className="td-note">
-          <Link to="/trade">去交易</Link>
-        </p>
-      )}
+      {board?.note && board.auth_enabled ? <p className="td-note">{board.note}</p> : null}
+      {error && <div className="pro-alert">{error}</div>}
       <div className="lb-scroll">
         <table className="lb-table">
           <thead>
@@ -80,7 +75,9 @@ export function LeaderboardPage() {
           <tbody>
             {(board?.items ?? []).map((row, index) => (
               <tr key={row.id}>
-                <td className="num">{index + 1}</td>
+                <td className="num">
+                  <span className={`lb-rank${index < 3 ? ` is-top r${index + 1}` : ""}`}>{index + 1}</span>
+                </td>
                 <td>
                   {row.display_name || row.name}
                   {row.display_name && row.display_name !== row.name ? <em> {row.name}</em> : null}
@@ -95,15 +92,18 @@ export function LeaderboardPage() {
                 <td className={`num ${row.day_pnl >= 0 ? "up" : "down"}`}>{sol(row.day_pnl)}</td>
               </tr>
             ))}
-            {board && board.items.length === 0 && (
-              <tr>
-                <td colSpan={9} className="lb-empty">
-                  {board.auth_enabled ? "还没有纸面账户。去登录页注册。" : "账户未开启。"}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
+        {!board && !error ? <SkRows rows={6} cols={9} h={40} /> : null}
+        {board && board.items.length === 0 ? (
+          <div className="lb-empty">
+            {board.auth_enabled ? (
+              <Empty icon="inbox" title="还没有纸面账户" hint="注册账户后即可参与纸面交易排名" />
+            ) : (
+              <Empty icon="inbox" title="账户系统未开启" hint="单机模式下没有多用户排名" action={<Link to="/?symbol=BTC" className="btn-ghost">去交易</Link>} />
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );

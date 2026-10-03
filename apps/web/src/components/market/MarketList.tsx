@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarketRow } from "@/types/mainstream";
+import { Num } from "@/components/ui/Num";
+import { Empty } from "@/components/ui/Skeleton";
 
 /** Exchange-style market list (own implementation): tabs, search, sortable columns, favorites. */
 
 export type MarketTab = "fav" | "all" | "held";
-type SortKey = "symbol" | "price" | "change24h" | "quoteVolume24h" | "funding" | "change30d";
+type SortKey = "symbol" | "price" | "change24h" | "change7d" | "quoteVolume24h" | "funding" | "change30d";
 type SortDir = "asc" | "desc";
 
 const FAV_KEY = "auu.ms.favs";
@@ -53,6 +55,32 @@ export function useFavorites(): [Set<string>, (s: string) => void] {
   return [favs, toggle];
 }
 
+/** Integer / fraction widths (in ch) so a column of prices lines up on the decimal point. */
+export function pxWidths(values: (number | null | undefined)[]): { int: number; frac: number } {
+  let int = 1;
+  let frac = 0;
+  for (const v of values) {
+    const t = fmtPx(v);
+    const i = t.indexOf(".");
+    int = Math.max(int, i < 0 ? t.length : i);
+    frac = Math.max(frac, i < 0 ? 0 : t.length - i);
+  }
+  return { int, frac };
+}
+
+const COIN_HUES: Record<string, string> = { BTC: "#f7931a", ETH: "#627eea", SOL: "#9945ff", BNB: "#f3ba2f", XRP: "#23292f", DOGE: "#c2a633", ADA: "#0033ad", TRX: "#ef0027", LINK: "#2a5ada", AVAX: "#e84142", DOT: "#e6007a", LTC: "#345d9d", BCH: "#0ac18e", TON: "#0098ea" };
+/** Round coin badge (letter mark; no third-party logos). */
+export function CoinBadge({ symbol, size = 20 }: { symbol: string; size?: number }) {
+  let h = 0;
+  for (const ch of symbol) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  const bg = COIN_HUES[symbol] || `hsl(${h} 45% 38%)`;
+  return (
+    <span className="coin" style={{ width: size, height: size, background: bg, fontSize: Math.round(size * 0.5) }} aria-hidden="true">
+      {symbol.slice(0, 1)}
+    </span>
+  );
+}
+
 export function Spark({ values, w = 96, h = 28 }: { values: number[]; w?: number; h?: number }) {
   if (!values || values.length < 2) return <svg width={w} height={h} aria-hidden="true" />;
   const lo = Math.min(...values);
@@ -62,7 +90,7 @@ export function Spark({ values, w = 96, h = 28 }: { values: number[]; w?: number
   const up = values[values.length - 1] >= values[0];
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="ml-spark">
-      <polyline points={pts.join(" ")} fill="none" stroke={up ? "#3ee08f" : "#ff5d5d"} strokeWidth="1.4" />
+      <polyline points={pts.join(" ")} fill="none" className={up ? "spark-up" : "spark-down"} strokeWidth="1.4" />
     </svg>
   );
 }
@@ -115,6 +143,7 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
     return sortRows(filterRows(base, q), sort.key, sort.dir);
   }, [rows, tab, favs, q, sort]);
 
+  const pxW = useMemo(() => pxWidths(shown.map((r) => r.price)), [shown]);
   const Head = ({ k, label, className = "" }: { k: SortKey; label: string; className?: string }) => (
     <button type="button" className={`ml-h ${className}${sort.key === k ? " is-on" : ""}`} onClick={() => setSort(k)} aria-label={`按${label}排序`}>
       {label}
@@ -144,8 +173,10 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
         <Head k="symbol" label="币种" className="ml-c-name" />
         <Head k="price" label="最新价" className="ml-c-px" />
         <Head k="change24h" label="24h 涨跌" className="ml-c-chg" />
+        <Head k="change7d" label="7 天" className="ml-c-7d" />
         <Head k="quoteVolume24h" label="24h 成交额" className="ml-c-vol" />
         <Head k="funding" label="资金费率" className="ml-c-fr" />
+        <span className="ml-h ml-c-w">策略权重</span>
         <Head k="change30d" label="30 天" className="ml-c-spark" />
       </div>
       {shown.map((r) => (
@@ -170,30 +201,58 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
             {favs.has(r.symbol) ? "★" : "☆"}
           </button>
           <span className="ml-c-name">
-            <b>{r.symbol}</b>
-            <span className="muted">/{quote}</span>
-            {r.held ? (
-              <span className={`ml-held ${(r.weight ?? 0) < 0 ? "is-short" : ""}`} title="趋势策略纸面当前持仓">
-                {(r.weight ?? 0) < 0 ? "空" : "多"} {Math.abs((r.weight ?? 0) * 100).toFixed(1)}%
+            <CoinBadge symbol={r.symbol} />
+            <span className="ml-name-txt">
+              <span className="ml-name-top">
+                <b>{r.symbol}</b>
+                <span className="ml-quote">/{quote}</span>
+                {r.held ? (
+                  <span className={`ml-held ${(r.weight ?? 0) < 0 ? "is-short" : ""}`} title="趋势策略纸面当前持仓">
+                    {(r.weight ?? 0) < 0 ? "空" : "持仓"}
+                  </span>
+                ) : null}
               </span>
-            ) : null}
-            <span className="ml-sub muted">成交额 {fmtVol(r.quoteVolume24h)}</span>
+              <span className="ml-sub">成交额 {fmtVol(r.quoteVolume24h)}</span>
+            </span>
           </span>
           <span className="ml-c-px num">
-            {fmtPx(r.price)}
-            <span className="ml-sub muted">资金费 {fmtRate(r.funding)}</span>
+            <Num text={fmtPx(r.price)} int={pxW.int} frac={pxW.frac} />
+            <span className="ml-sub">{fmtPct(r.change7d)} · 7天</span>
           </span>
           <span className="ml-c-chg">
             <em className={`ml-pill ${tone(r.change24h)}`}>{fmtPct(r.change24h)}</em>
           </span>
+          <span className={`ml-c-7d num ${tone(r.change7d)}`}>{fmtPct(r.change7d)}</span>
           <span className="ml-c-vol num">{fmtVol(r.quoteVolume24h)}</span>
           <span className={`ml-c-fr num ${tone(r.funding)}`}>{fmtRate(r.funding)}</span>
+          <span className="ml-c-w num">
+            {r.held && r.weight != null ? (
+              <span className="wbar" title={`${r.weight < 0 ? "空" : "多"} ${Math.abs(r.weight * 100).toFixed(1)}%`}>
+                <span>
+                  <i style={{ width: `${Math.min(100, Math.abs(r.weight) * 100 * 4)}%` }} />
+                </span>
+                {(r.weight * 100).toFixed(1)}%
+              </span>
+            ) : (
+              <span className="dim">—</span>
+            )}
+          </span>
           <span className="ml-c-spark">
-            <Spark values={r.spark30 || []} />
+            <Spark values={r.spark30 || []} w={88} h={26} />
           </span>
         </div>
       ))}
-      {!shown.length ? <p className="ml-empty muted">{tab === "fav" && !q ? "还没有自选：点 ☆ 加入。" : "没有匹配的币种。"}</p> : null}
+      {!shown.length ? (
+        <div className="ml-empty">
+          {tab === "fav" && !q ? (
+            <Empty icon="star" title="还没有自选" hint="在列表里点 ☆ 把常看的币加入自选" action={<button type="button" className="btn-ghost" onClick={() => setTab("all")}>查看全部</button>} />
+          ) : tab === "held" && !q ? (
+            <Empty icon="inbox" title="策略当前空仓" hint="趋势策略每日 08:00 调仓，信号触发后这里会列出持仓" />
+          ) : (
+            <Empty icon="search" title={`没有匹配「${q}」的币种`} hint="试试 BTC、ETH 或交易对名称" />
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -215,11 +274,13 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
     return () => window.removeEventListener("mousedown", off);
   }, [open]);
   const list = filterRows(rows, q).sort((a, b) => Number(favs.has(b.symbol)) - Number(favs.has(a.symbol)));
-  const cur = rows.find((r) => r.symbol === current);
   return (
     <div className="cs" ref={box}>
       <button type="button" className="cs-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <b>{current}</b>/{quote} <span className={tone(cur?.change24h)}>{fmtPct(cur?.change24h)}</span> ▾
+        <CoinBadge symbol={current} size={22} />
+        <b>{current}</b>
+        <span className="cs-quote">/{quote}</span>
+        <span className="cs-caret" aria-hidden="true">▾</span>
       </button>
       {open ? (
         <div className="cs-pop" role="listbox" aria-label="切换币种">
@@ -254,9 +315,10 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
                   setQ("");
                 }}
               >
-                <span>
-                  {favs.has(r.symbol) ? "★ " : ""}
+                <span className="cs-name">
+                  <CoinBadge symbol={r.symbol} size={16} />
                   <b>{r.symbol}</b>
+                  {favs.has(r.symbol) ? <span className="cs-fav">★</span> : null}
                   {r.held ? <span className="ml-held">持仓</span> : null}
                 </span>
                 <span className="num">{fmtPx(r.price)}</span>

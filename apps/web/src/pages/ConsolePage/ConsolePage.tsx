@@ -1,3 +1,4 @@
+import { SkRows } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useConsole } from "@/hooks/useConsole";
 import type { ConsoleEvent } from "@/types/contracts";
@@ -94,7 +95,11 @@ export function ConsolePage() {
   const lamp = stats?.lamp || "gray";
 
   return (
-    <div className="console-page">
+    <div className="console-page pro-page">
+      <header className="pro-head">
+        <h1>策略控制台</h1>
+        <p>趋势策略纸面运行、风控与执行记录</p>
+      </header>
       <section className="console-stats" aria-label="今日纸面">
         <Stat label="持仓" value={stats ? String(stats.open_positions) : "—"} />
         <Stat label="今日平仓" value={stats ? String(stats.closed_today) : "—"} />
@@ -104,7 +109,7 @@ export function ConsolePage() {
           tone={tone(stats?.pnl_today)}
         />
         <Stat
-          label="均净 bps"
+          label="平均净收益 (bp)"
           value={stats ? formatBps(stats.avg_net_bps) : "—"}
           tone={tone(stats?.avg_net_bps)}
         />
@@ -114,8 +119,6 @@ export function ConsolePage() {
         >
           {verdict}
         </span>
-        <span className="console-badge">PAPER</span>
-        <span className="console-badge live-off">LIVE OFF</span>
       </section>
 
       <StrategyPanel />
@@ -151,7 +154,11 @@ export function ConsolePage() {
         {err ? <p className="console-err">{err}</p> : null}
         <div className="console-log" ref={scroller} onScroll={onScroll}>
           {rows.length === 0 ? (
-            <p className="console-empty">{stats ? "此类型暂无事件" : "连接事件流…"}</p>
+            stats ? (
+              <p className="console-empty">此类型暂无事件</p>
+            ) : (
+              <SkRows rows={6} cols={3} h={30} />
+            )
           ) : (
             rows.map((row) => <LogRow key={row.id} row={row} />)
           )}

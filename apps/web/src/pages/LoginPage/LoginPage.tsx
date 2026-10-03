@@ -34,7 +34,7 @@ export function LoginPage() {
         setCode("");
         return;
       }
-      navigate("/trade");
+      navigate("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "登录失败");
     } finally {
@@ -48,7 +48,7 @@ export function LoginPage() {
     setError("");
     try {
       await marketProvider.loginTotp({ ticket, code: code.trim() });
-      navigate("/trade");
+      navigate("/");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "验证失败";
       setError(msg);
@@ -65,13 +65,11 @@ export function LoginPage() {
       <section className="auth-card">
         <header>
           <h1>登录</h1>
-          <span className="td-badge paper">PAPER</span>
-          <span className="td-badge live">LIVE OFF</span>
         </header>
         <p className="td-note">使用你自己的用户名和密码。没有充值、没有提现、没有实盘下单。</p>
         {me && !authOn && (
           <p className="td-note">
-            当前是本地单用户模式，不需要登录。直接去 <Link to="/trade">交易</Link> 或 <Link to="/markets">市场</Link>。
+            当前是本地单用户模式，不需要登录。直接去 <Link to="/">行情</Link> 或 <Link to="/?symbol=BTC">交易</Link>。
           </p>
         )}
         {authOn && ticket && (

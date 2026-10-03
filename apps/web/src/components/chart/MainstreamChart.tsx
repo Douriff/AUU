@@ -14,6 +14,7 @@ import {
 } from "lightweight-charts";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MainstreamCandle, MainstreamTf } from "@/types/mainstream";
+import { CHART_CHROME, chartColors, onColorPref } from "@/theme/colorPref";
 
 /** lightweight-charts (Apache-2.0) candlestick + volume for the mainstream page. */
 
@@ -29,8 +30,6 @@ export const CHART_TFS: { id: MainstreamTf; label: string }[] = [
 const INTRADAY = new Set<MainstreamTf>(["1m", "5m", "15m"]);
 const PAGE = 500;
 const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 15_000, "15m": 20_000, "1h": 60_000, "4h": 60_000, "1d": 60_000 };
-const UP = "#26a69a";
-const DOWN = "#ef5350";
 
 // The chart renders timestamps as UTC; shift by the browser offset so the axis shows local time.
 const TZ_SHIFT_SEC = -new Date().getTimezoneOffset() * 60;
@@ -61,11 +60,14 @@ function fmtTs(ms: number, tf: MainstreamTf) {
 }
 
 const bar = (c: MainstreamCandle): CandlestickData => ({ time: toTime(c.ts), open: c.open, high: c.high, low: c.low, close: c.close });
-const vol = (c: MainstreamCandle): HistogramData => ({
-  time: toTime(c.ts),
-  value: c.volume,
-  color: c.close >= c.open ? "rgba(38,166,154,0.45)" : "rgba(239,83,80,0.45)",
-});
+const vol = (c: MainstreamCandle): HistogramData => {
+  const col = chartColors();
+  return { time: toTime(c.ts), value: c.volume, color: c.close >= c.open ? col.upVol : col.downVol };
+};
+const candleColors = () => {
+  const { up, down } = chartColors();
+  return { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down };
+};
 
 type Legend = { c: MainstreamCandle; prev?: MainstreamCandle };
 
@@ -106,24 +108,17 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     if (!host) return;
     const chart = createChart(host, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8d8d96", fontSize: 11 },
-      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: CHART_CHROME.text, fontSize: 11, fontFamily: CHART_CHROME.font },
+      grid: { vertLines: { color: CHART_CHROME.grid }, horzLines: { color: CHART_CHROME.grid } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.08, bottom: 0.25 } },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, rightOffset: 6 },
+      rightPriceScale: { borderColor: CHART_CHROME.border, scaleMargins: { top: 0.08, bottom: 0.25 } },
+      timeScale: { borderColor: CHART_CHROME.border, timeVisible: true, secondsVisible: false, rightOffset: 6 },
       // Pinch/wheel zoom and drag pan; vertical touch drags still scroll the page on phones.
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       kineticScroll: { touch: true, mouse: false },
     });
-    const candles = chart.addCandlestickSeries({
-      upColor: UP,
-      downColor: DOWN,
-      borderUpColor: UP,
-      borderDownColor: DOWN,
-      wickUpColor: UP,
-      wickDownColor: DOWN,
-    });
+    const candles = chart.addCandlestickSeries(candleColors());
     const volume = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     chartRef.current = chart;
@@ -140,7 +135,13 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
       setLegend({ c: dataRef.current[i], prev: dataRef.current[i - 1] });
     };
     chart.subscribeCrosshairMove(onMove);
+    // 红涨绿跌 toggle: canvas colours do not follow CSS, so re-apply them here.
+    const offColors = onColorPref(() => {
+      candles.applyOptions(candleColors());
+      volume.setData(dataRef.current.map(vol));
+    });
     return () => {
+      offColors();
       chart.unsubscribeCrosshairMove(onMove);
       chart.remove();
       chartRef.current = null;
@@ -247,7 +248,21 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
           <span className="muted">{state.loading ? "加载中…" : state.err || "—"}</span>
         )}
       </div>
-      <div ref={hostRef} className="msc-host" />
+      <div className="msc-stage">
+        <div ref={hostRef} className="msc-host" />
+        {state.loading ? (
+          <div className="msc-overlay msc-skel" aria-label="K线加载中">
+            {Array.from({ length: 28 }, (_, i) => (
+              <i key={i} style={{ height: `${22 + ((i * 37) % 50)}%`, marginTop: `${(i * 23) % 30}%` }} />
+            ))}
+          </div>
+        ) : !state.count && state.err ? (
+          <div className="msc-overlay msc-empty">
+            <b>暂无 K 线</b>
+            <span>{state.err}</span>
+          </div>
+        ) : null}
+      </div>
       <div className="msc-foot muted">
         <span>
           {state.count} 根
