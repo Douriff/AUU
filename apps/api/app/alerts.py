@@ -55,7 +55,33 @@ def alerts_enabled() -> bool:
 
 
 def recipient() -> str:
-    return (os.getenv("AUU_ALERT_TO") or DEFAULT_TO).strip()
+    """AUU_ALERT_TO: one address or a comma-separated list."""
+    return ", ".join(recipients((os.getenv("AUU_ALERT_TO") or DEFAULT_TO)))
+
+
+def recipients(raw: str) -> list[str]:
+    return [x.strip() for x in (raw or "").replace(";", ",").split(",") if x.strip()]
+
+
+def _canon(addr: str) -> str:
+    """Mailbox identity: lower-case; Gmail ignores dots and +tags in the local part."""
+    local, _, dom = addr.strip().lower().rpartition("@")
+    if dom in ("gmail.com", "googlemail.com"):
+        local, dom = local.split("+", 1)[0].replace(".", ""), "gmail.com"
+    return f"{local}@{dom}"
+
+
+def self_send(to: str, smtp_user: str) -> bool:
+    """True when every recipient is the SMTP account itself. Gmail then files the message under
+    Sent / All Mail only (never Inbox), so the user does not see it as a new mail."""
+    rs = recipients(to)
+    return bool(rs and smtp_user) and all(_canon(r) == _canon(smtp_user) for r in rs)
+
+
+def _smtp_user() -> str:
+    from app.auth.email_codes import smtp_settings
+
+    return smtp_settings()["user"]
 
 
 def digest_time() -> tuple[int, int]:
@@ -71,10 +97,10 @@ def bj(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000, BJ).strftime("%Y-%m-%d %H:%M")
 
 
-def _default_send(to: str, subject: str, body: str) -> None:
+def _default_send(to: str, subject: str, body: str) -> Optional[dict]:
     from app.auth import email_codes
 
-    email_codes._smtp_send(to, subject, body)
+    return email_codes._smtp_send(to, subject, body)
 
 
 def _configured() -> bool:
@@ -101,8 +127,13 @@ class AlertCenter:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(alerts)")}
+        for c in ("message_id", "smtp_response"):  # delivery evidence (older rows NULL)
+            if c not in cols:
+                self._db.execute(f"ALTER TABLE alerts ADD COLUMN {c} TEXT")
         self._lock = threading.RLock()
         self.send = send or _default_send
+        self.smtp_user = _smtp_user
         self.configured = configured or _configured
         self.now_ms = now_ms
         self._to = to
@@ -170,13 +201,15 @@ class AlertCenter:
             return "unconfigured"
         attempts = int(row["attempts"]) + 1
         try:
-            self.send(self.to, row["subject"], row["body"])
+            info = self.send(self.to, row["subject"], row["body"])
         except Exception as exc:  # never store exc text: SMTP errors can echo addresses
             self._update(aid, status="failed", attempts=attempts, error=type(exc).__name__,
                          next_try=now + 60_000 * (2 ** attempts))
             log.warning("ALERT send failed (%s, attempt %d) %s: %s", type(exc).__name__, attempts, row["kind"], row["subject"])
             return "failed"
-        self._update(aid, status="sent", attempts=attempts, sent_at=now, error=None, next_try=None)
+        info = info if isinstance(info, dict) else {}
+        self._update(aid, status="sent", attempts=attempts, sent_at=self.now_ms(), error=None, next_try=None,
+                     message_id=info.get("message_id"), smtp_response=info.get("response"))
         log.warning("ALERT sent to %s %s: %s", _mask(self.to), row["kind"], row["subject"])
         return "sent"
 
@@ -204,7 +237,14 @@ class AlertCenter:
         return {"enabled": alerts_enabled(), "configured": bool(self.configured()), "to": _mask(self.to),
                 "lastSentAt": int(last["sent_at"]) if last else None, "lastSentKind": last["kind"] if last else None,
                 "last24h": cnt, "lastError": err["error"] if err else None,
-                "digestTimeBJ": "%02d:%02d" % digest_time(), "lastDigestDay": self.get("digest_day")}
+                "digestTimeBJ": "%02d:%02d" % digest_time(), "lastDigestDay": self.get("digest_day"),
+                "selfSend": self.is_self_send()}
+
+    def is_self_send(self) -> bool:
+        try:
+            return self_send(self.to, self.smtp_user())
+        except Exception:
+            return False
 
 
 def _mask(addr: str) -> str:
@@ -475,7 +515,7 @@ async def run_loop(interval_sec: int = 120) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """python -m app.alerts test | digest-preview | status"""
+    """python -m app.alerts test ["subject"] | digest-preview | status"""
     import sys
 
     args = list(sys.argv[1:] if argv is None else argv)
@@ -487,11 +527,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         now = c.now_ms()
         import secrets
 
-        res = c.raise_alert(f"test:{now}:{secrets.token_hex(4)}", "test", "AUUTRADE 测试邮件：告警通道已接通",
+        subject = (args[1] if len(args) > 1 else "").strip() or "AUUTRADE 测试邮件：告警通道已接通"
+        res = c.raise_alert(f"test:{now}:{secrets.token_hex(4)}", "test", subject,
                             f"这是一封测试邮件，确认 AUUTRADE 告警和每日摘要通道可用。\n时间：{bj(now)}（北京时间）\n"
                             f"代码版本：{git_commit() or 'unknown'}\n每日摘要时间：北京时间 %02d:%02d\n\n纸面账本，实盘锁定；邮件不含任何凭证。" % digest_time(),
                             bypass_limits=True)
-        print(json.dumps({"result": res, "to": _mask(c.to), "at": bj(now)}, ensure_ascii=False))
+        row = c.rows(1)[0] if c.rows(1) else None
+        out = {"result": res, "to": ", ".join(_mask(x) for x in recipients(c.to)), "queuedAt": bj(now),
+               "sentAt": bj(int(row["sent_at"])) if row is not None and row["sent_at"] else None,
+               "subject": row["subject"] if row is not None else None,
+               "messageId": row["message_id"] if row is not None else None, "smtpResponse": row["smtp_response"] if row is not None else None}
+        if c.is_self_send():
+            out["warning"] = "收件人就是发件 SMTP 账号本身：Gmail 只会放进“已发送/所有邮件”，不会进收件箱。请把 AUU_ALERT_TO 设成另一个邮箱（可逗号分隔多个）。"
+        print(json.dumps(out, ensure_ascii=False))
         return 0 if res == "sent" else 1
     if cmd == "digest-preview":
         from app.paper.strategy_runner import peek_runner

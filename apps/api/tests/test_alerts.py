@@ -216,3 +216,31 @@ import unittest.mock  # noqa: E402
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeliveryEvidenceTests(unittest.TestCase):
+    def test_self_send_detection(self):
+        self.assertTrue(al.self_send("olesaruga00@gmail.com", "olesaruga00@gmail.com"))
+        self.assertTrue(al.self_send("Ole.Saruga00+auu@gmail.com", "olesaruga00@gmail.com"))  # same Gmail mailbox
+        self.assertFalse(al.self_send("olesaruga00@gmail.com, me@qq.com", "olesaruga00@gmail.com"))
+        self.assertFalse(al.self_send("me@qq.com", "olesaruga00@gmail.com"))
+        self.assertFalse(al.self_send("a@x.com", ""))
+        self.assertEqual(al.recipients("a@x.com; b@y.com ,"), ["a@x.com", "b@y.com"])
+
+    def test_message_id_and_smtp_response_are_stored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sent = []
+
+            def send(to, s, b):
+                sent.append(to)
+                return {"message_id": "<abc@gmail.com>", "response": "250 2.0.0 OK 1791 - gsmtp"}
+
+            c = al.AlertCenter(Path(tmp) / "a.sqlite", send=send, configured=lambda: True, to="a@x.com, b@y.com")
+            c.smtp_user = lambda: "a@x.com"
+            self.assertEqual(c.raise_alert("k", "test", "AUUTRADE 告警测试 #2", "body", bypass_limits=True), "sent")
+            row = c.rows(1)[0]
+            self.assertEqual(row["message_id"], "<abc@gmail.com>")
+            self.assertTrue(row["smtp_response"].startswith("250"))
+            self.assertEqual(sent, ["a@x.com, b@y.com"])
+            self.assertFalse(c.status()["selfSend"])
+            c.close()

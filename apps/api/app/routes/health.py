@@ -118,7 +118,7 @@ def _alerts_status() -> dict:
         st = alerts.get_center().status()
         return {"enabled": alerts_enabled(), "configured": st["configured"], "lastSentAt": st["lastSentAt"],
                 "failed24h": st["last24h"].get("failed", 0), "suppressed24h": st["last24h"].get("suppressed", 0),
-                "lastDigestDay": st["lastDigestDay"]}
+                "lastDigestDay": st["lastDigestDay"], "selfSend": st.get("selfSend", False)}
     except Exception as exc:
         return {"enabled": False, "error": type(exc).__name__}
 
