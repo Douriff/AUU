@@ -101,9 +101,20 @@ def _mainstream_health(gate) -> dict:
                            "hints": ["strategy_rebalance_overdue"] if st.get("stalled") else []},
         "mainstream": md,
         "alerts": _alerts_status(),
+        "recon": _recon_status(),
         **_live_fields(),
         "copy_trade_enabled": False,
     }
+
+
+def _recon_status() -> dict:
+    """Cross-source close reconciliation: coarse summary only (no prices)."""
+    try:
+        from app.marketdata.mainstream.recon import peek_health
+
+        return peek_health()
+    except Exception as exc:
+        return {"enabled": False, "error": type(exc).__name__}
 
 
 def _alerts_status() -> dict:

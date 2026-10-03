@@ -392,3 +392,35 @@ export interface MarketsResponse {
   asOf: number;
   tickers: { enabled: boolean; source: "ticker" | "store"; at: number | null; error: string | null };
 }
+
+export interface ReconCoin {
+  coin: string;
+  threshold: number;
+  latestDay: string | null;
+  latestDev: number | null;
+  maxDev: number | null;
+  flagged: number;
+  status: string;
+  c1: number | null;
+  c2: number | null;
+}
+export interface ReconSummary {
+  enabled: boolean;
+  lastRunAt: number | null;
+  status: string | null;
+  primary: string | null;
+  secondary: string | null;
+  checked: number;
+  flagged: number;
+  maxDevPct: number | null;
+  maxCoin: string | null;
+  error: string | null;
+  autoSwitch: false;
+  days: number;
+  thresholdPct: number;
+  thresholdOverrides: Record<string, number>;
+  coins: ReconCoin[];
+  flags: { day: string; coin: string; status: string; c1: number | null; c2: number | null; dev: number | null; threshold: number }[];
+  runs: { at: number; status: string; checked: number; flagged: number; maxDevPct: number | null; maxCoin: string | null; error: string | null }[];
+  note: string;
+}
