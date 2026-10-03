@@ -1,7 +1,8 @@
 """Read-only mainstream market data: /api/v1/mainstream/*.
 
 GET only. Login is enforced by AuthGateMiddleware like every other /api path.
-Data comes from the local SQLite store; requests never call the exchange.
+Data comes from the local SQLite store; requests never wait on the exchange (tickers and the
+display-only order book refresh small caches in the background).
 """
 from __future__ import annotations
 
@@ -38,6 +39,20 @@ def recon():
     from app.marketdata.mainstream.recon import get_reconciler
 
     return ok(get_reconciler().summary())
+
+
+@router.get("/orderbook")
+def orderbook(symbol: str = Query(...), depth: int = Query(12, ge=1, le=20)):
+    """Spot order book snapshot for display only (paper fills use the market price ± simulated slippage).
+
+    Served from a short per-coin cache; a stale cache triggers at most one background refresh.
+    """
+    from app.marketdata.mainstream.orderbook import get_book_cache
+
+    base = _base(symbol)
+    if base is None:
+        return err("UNKNOWN_SYMBOL", f"unknown symbol {symbol}", 404)
+    return ok(get_book_cache().get(base, depth))
 
 
 @router.get("/markets")
