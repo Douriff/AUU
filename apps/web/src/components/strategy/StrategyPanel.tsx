@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { StrategySummary } from "@/types/mainstream";
+import type { StrategyRisk, StrategySummary } from "@/types/mainstream";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
@@ -96,6 +96,7 @@ export function StrategyPanel() {
       {err ? <p className="console-err">{err}</p> : null}
       {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
       {data ? <UniverseNote data={data} /> : null}
+      {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
       <div className="strat-kpis">
         <Kpi label="权益 USDT" value={num(data?.nav)} />
         <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
@@ -208,6 +209,72 @@ function UniverseNote({ data }: { data: StrategySummary }) {
       ) : null}
       {unavailable.length ? <div className="down">缺少数据：{unavailable.map(([c, why]) => `${c}（${why}）`).join("；")}</div> : null}
       <div className="strat-warn">⚠ 幸存者偏差：{u.survivorship}</div>
+    </div>
+  );
+}
+
+const RISK_RULES = [
+  "总敞口 ≤ 1x 权益",
+  "单币 ≤ 25%",
+  "当日 −3% 停止新开仓",
+  "当日 −5% 全部减半",
+  "当日 −8% 全部平仓并锁 24h",
+  "回撤 −15% 仓位减半",
+  "回撤 −20% 清仓复查",
+  "资金费：多头 > 0.1%/8h 减仓",
+  "数据：1h 标记价超过 2 根未更新或交易所异常 → 只减不开",
+];
+
+function RiskBox({ risk }: { risk: StrategyRisk }) {
+  const m = risk.lastMark;
+  const f = risk.todayFlags || {};
+  const lock = risk.locked && risk.lock;
+  const flags = [f.stop_new ? "停止新开仓" : "", f.halve ? "已减半" : "", f.flat ? "已平仓" : ""].filter(Boolean);
+  const ev = risk.events || [];
+  return (
+    <div className="strat-risk">
+      <div className="strat-risk-head">
+        <b>风控硬上限</b>
+        <span className={`strat-risk-state ${lock || risk.dataBad ? "down" : "up"}`}>
+          {lock
+            ? risk.lock?.kind === "review"
+              ? `🔒 已锁定，需人工复查（${risk.lock?.reason}）`
+              : `🔒 锁定至 ${SH.format(new Date(risk.lock?.until || 0))}（${risk.lock?.reason}）`
+            : risk.dataBad
+              ? `⚠ 数据熔断：只减不开（${risk.dataBad.reason}）`
+              : "正常，未触发"}
+        </span>
+        {m ? (
+          <span className="muted">
+            小时标记 {SH.format(new Date(m.ts))}：当日 {pct(m.dayRet)} · 回撤 {pct(m.drawdown)}
+            {flags.length ? ` · 今日：${flags.join("、")}` : ""}
+          </span>
+        ) : (
+          <span className="muted">小时标记：尚无（调仓后的下一个整点开始）</span>
+        )}
+      </div>
+      <div className="strat-risk-rules">{RISK_RULES.map((r) => <span key={r}>{r}</span>)}</div>
+      <table className="num strat-risk-events">
+        <thead>
+          <tr><th>时间（北京）</th><th>触发</th><th>动作</th><th>数值</th><th>场景</th></tr>
+        </thead>
+        <tbody>
+          {ev.length ? (
+            ev.slice(0, 10).map((e, i) => (
+              <tr key={`${e.ts}-${e.kind}-${i}`}>
+                <td>{SH.format(new Date(e.ts))}</td>
+                <td>{e.label}</td>
+                <td>{e.action}</td>
+                <td>{e.value == null ? "—" : e.kind.startsWith("cap") ? `${(e.value * 100).toFixed(1)}%` : pct(e.value, e.kind === "funding" ? 3 : 2)}</td>
+                <td>{e.at === "close" ? "收盘调仓" : e.at === "intraday" ? "盘中" : e.at}</td>
+              </tr>
+            ))
+          ) : (
+            <tr><td colSpan={5} className="muted">暂无触发记录（共 {risk.eventCount ?? 0} 条）</td></tr>
+          )}
+        </tbody>
+      </table>
+      {risk.backtestNote ? <div className="muted strat-risk-note">{risk.backtestNote}</div> : null}
     </div>
   );
 }

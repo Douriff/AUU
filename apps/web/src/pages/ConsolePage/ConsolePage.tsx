@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useConsole } from "@/hooks/useConsole";
 import type { ConsoleEvent } from "@/types/contracts";
 import { StrategyPanel } from "@/components/strategy/StrategyPanel";
+import { ShadowS3Panel } from "@/components/strategy/ShadowS3Panel";
 
 const FILTERS: { id: string; label: string }[] = [
   { id: "all", label: "全部" },
@@ -117,6 +118,8 @@ export function ConsolePage() {
       </section>
 
       <StrategyPanel />
+
+      <ShadowS3Panel />
 
       <section className="console-card console-log-card" aria-label="事件日志">
         <header className="console-card-bar">

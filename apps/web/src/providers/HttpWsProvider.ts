@@ -6,6 +6,7 @@ import type {
   MainstreamTf,
   PaperAccount,
   StrategySummary,
+  ShadowS3Summary,
   PaperOrder,
   PaperOrderRequest,
 } from "@/types/mainstream";
@@ -315,6 +316,10 @@ export class HttpWsProvider {
 
   getStrategySummary(): Promise<StrategySummary> {
     return getJson("/api/v1/mainstream/strategy");
+  }
+
+  getShadowS3(): Promise<ShadowS3Summary> {
+    return getJson("/api/v1/mainstream/shadow/s3");
   }
 
   getMainstreamFunding(symbol: string, limit = 90): Promise<MainstreamFunding> {
