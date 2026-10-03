@@ -115,6 +115,23 @@ class _NoNetwork(unittest.TestCase):
 
 
 class StoreAndRefreshTests(_NoNetwork):
+    def test_strategy_funding_is_extended_backwards_once(self):
+        ex = FakeExchange()
+        svc = self.svc({"binance": ex}, cfg=_cfg(symbols=["BTC"], strategy_symbols=["BTC"], funding_backfill_days=2, strategy_funding_days=6))
+        # Simulate a store first filled with the short display default (2 days).
+        svc.cfg.strategy_symbols = []
+        svc.refresh_once()
+        first_short, _, n_short = self.store.funding_bounds("binance", "BTC")
+        self.assertGreater(first_short, NOW - 3 * 86_400_000)
+        svc.cfg.strategy_symbols = ["BTC"]
+        svc.refresh_once()
+        first, _, n = self.store.funding_bounds("binance", "BTC")
+        self.assertLessEqual(first, NOW - 5 * 86_400_000)
+        self.assertGreater(n, n_short)
+        calls = len([c for c in ex.calls if c[0] == "fetch_funding_rate_history"])
+        svc.refresh_once()  # already backfilled in this process: no extra history walk
+        self.assertLessEqual(len([c for c in ex.calls if c[0] == "fetch_funding_rate_history"]) - calls, 1)
+
     def test_strategy_only_coins_fetch_daily_and_funding_only(self):
         ex = FakeExchange()
         svc = self.svc({"binance": ex}, cfg=_cfg(symbols=["BTC"], strategy_symbols=["BTC", "XRP"], strategy_funding_days=5))
