@@ -1805,3 +1805,32 @@ code.hl { color: var(--accent); }
   .ms-panel .mj-tools { flex-wrap: wrap; gap: 0.4rem; }
   .ms-tfs button { min-height: 34px; }
 }
+
+/* M3 strategy panel on the console */
+.console-page { overflow-y: auto; }
+.console-card.strat { flex: none; overflow: visible; }
+.console-log-card { min-height: 320px; }
+.strat-head { gap: 0.5rem; }
+.strat-head .console-go { margin-left: auto; }
+.strat-go { margin: 0.55rem 0.9rem 0; font-size: 0.8rem; color: #c6c6ce; }
+.strat-go.lamp-green { color: #3ee08f; }
+.strat-go.lamp-red { color: #ff5d5d; }
+.strat-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem 1rem; padding: 0.7rem 0.9rem 0.2rem; }
+.strat-kpis small { font-size: 0.68rem; }
+.strat-legend { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; padding: 0.3rem 0.9rem 0; font-size: 0.72rem; color: #8d8d96; }
+.strat-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-left: 0.5rem; }
+.strat-legend i.bar { width: 6px; height: 10px; background: linear-gradient(#3ee08f 50%, #ff5d5d 50%); }
+.strat-chart { height: 280px; margin: 0.2rem 0.4rem 0; }
+.strat-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0.4rem 0.9rem 0.9rem; }
+.strat-tables h4 { margin: 0.4rem 0; font-size: 0.78rem; color: #c6c6ce; font-weight: 600; }
+.strat-tables table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+.strat-tables th { text-align: right; color: #8d8d96; font-weight: 500; padding: 0.25rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.strat-tables td { text-align: right; padding: 0.28rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.04); font-variant-numeric: tabular-nums; }
+.strat-tables th:first-child, .strat-tables td:first-child { text-align: left; }
+.strat-tables .muted { color: #8d8d96; text-align: left; }
+@media (max-width: 760px) {
+  .strat-tables { grid-template-columns: 1fr; }
+  .strat-kpis { grid-template-columns: 1fr 1fr; }
+  .strat-chart { height: 230px; }
+  .strat-head .console-go { margin-left: 0; }
+}

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, majors, stats, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_strategy, majors, stats, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -80,6 +80,11 @@ def _make_lifespan(legacy: bool):
         if svc.cfg.enabled and svc.cfg.refresh:
             tasks.append(asyncio.create_task(svc.run_loop(), name="mainstream-refresh"))
             stops.append(svc.stop)
+        if not legacy and svc.cfg.enabled:
+            from app.paper.strategy_runner import run_loop as strategy_loop, runner_enabled
+
+            if runner_enabled():
+                tasks.append(asyncio.create_task(strategy_loop(), name="mainstream-strategy"))
         try:
             yield
         finally:
@@ -135,7 +140,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper):
+    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -164,6 +169,7 @@ def root(legacy: bool = False):
                     "mainstreamStatus": "GET /api/v1/mainstream/status",
                     "paperAccount": "GET /api/v1/mainstream/paper/account?symbol=",
                     "paperOrder": "POST /api/v1/mainstream/paper/orders (paper only; login required)",
+                    "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

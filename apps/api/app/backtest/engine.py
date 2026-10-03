@@ -33,6 +33,62 @@ class BacktestResult:
         return sum(self.turnover) / len(self.days) * 365 if self.days else 0.0
 
 
+@dataclass
+class DayStep:
+    """One day of the portfolio accounting (shared by the backtest and the paper runner)."""
+
+    weights: list[float]  # after today's trades (fractions of NAV)
+    drifted: list[float]  # after today's returns, before trades
+    pnl: float  # price PnL minus funding (+ cash yield), fraction of yesterday's NAV
+    funding: float
+    cost: float  # fees + slippage, fraction of NAV
+    turnover: float
+    gross_held: float
+    trades: list[tuple[int, float, float]]  # (coin index, weight before, weight after)
+
+    @property
+    def ret(self) -> float:
+        return self.pnl - self.cost
+
+
+def step(
+    w: list[float],
+    r: list[float],
+    f: list[float],
+    tg: list[float],
+    cps: list[float],
+    *,
+    band: float = 0.2,
+    min_trade: float = 0.01,
+    cash_yield: float = 0.0,
+) -> DayStep:
+    """Mark yesterday's weights ``w`` to today's returns ``r`` / funding ``f``, then trade to ``tg``.
+
+    Trades happen at today's close; a coin is traded only outside the band, on exit, or on a
+    side change. Costs are |dw| * per-side cost (taker fee + slippage).
+    """
+    gross_held = sum(abs(x) for x in w)
+    fund = sum(wi * fi for wi, fi in zip(w, f))
+    pnl = sum(wi * ri for wi, ri in zip(w, r)) - fund
+    if cash_yield:
+        pnl += max(0.0, 1.0 - gross_held) * cash_yield / 365
+    g = 1.0 + pnl
+    w = [wi * (1.0 + ri) / g for wi, ri in zip(w, r)] if g > 0 else [0.0] * len(w)
+    drifted = list(w)
+    tr_sum, c_sum, trades = 0.0, 0.0, []
+    for k in range(len(w)):
+        t = tg[k]
+        dw = t - w[k]
+        # trade when outside the band, when exiting, or when entering/flipping side
+        need = abs(dw) > max(band * abs(t), min_trade) or (t == 0 and w[k] != 0) or (t != 0 and _sign(t) != _sign(w[k]))
+        if need and dw != 0:
+            tr_sum += abs(dw)
+            c_sum += abs(dw) * cps[k]
+            trades.append((k, w[k], t))
+            w[k] = t
+    return DayStep(w, drifted, pnl, fund, c_sum, tr_sum, gross_held, trades)
+
+
 def run(
     panel: Panel,
     targets: dict[str, list[float]],
@@ -63,32 +119,17 @@ def run(
     for i in rows:
         r = [ret[c][i] for c in coins]
         f = [panel.funding[c][i] for c in coins]
-        gross_held = sum(abs(x) for x in w)
-        fund = sum(wi * fi for wi, fi in zip(w, f))
-        pnl = sum(wi * ri for wi, ri in zip(w, r)) - fund
-        if cash_yield:
-            pnl += max(0.0, 1.0 - gross_held) * cash_yield / 365
-        g = 1.0 + pnl
-        w = [wi * (1.0 + ri) / g for wi, ri in zip(w, r)] if g > 0 else [0.0] * len(coins)
-        tr_sum, c_sum = 0.0, 0.0
-        for k, c in enumerate(coins):
-            tg = targets.get(c, [0.0] * len(panel))[i] or 0.0
+        tg = []
+        for c in coins:
+            t = targets.get(c, [0.0] * len(panel))[i] or 0.0
             if eligible is not None and not eligible[c][i]:
-                tg = 0.0
-            dw = tg - w[k]
-            # trade when outside the band, when exiting, or when entering/flipping side
-            need = (
-                abs(dw) > max(band * abs(tg), min_trade)
-                or (tg == 0 and w[k] != 0)
-                or (tg != 0 and _sign(tg) != _sign(w[k]))
-            )
-            if need and dw != 0:
-                tr_sum += abs(dw)
-                c_sum += abs(dw) * cps[k]
-                w[k] = tg
-        out.append(pnl - c_sum)
-        turn.append(tr_sum)
-        gross_l.append(gross_held)
-        cost_l.append(c_sum)
-        fund_l.append(fund)
+                t = 0.0
+            tg.append(t)
+        st = step(w, r, f, tg, cps, band=band, min_trade=min_trade, cash_yield=cash_yield)
+        w = st.weights
+        out.append(st.ret)
+        turn.append(st.turnover)
+        gross_l.append(st.gross_held)
+        cost_l.append(st.cost)
+        fund_l.append(st.funding)
     return BacktestResult([panel.days[i] for i in rows], out, turn, gross_l, cost_l, fund_l)

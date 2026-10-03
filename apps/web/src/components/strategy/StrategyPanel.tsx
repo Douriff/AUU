@@ -1,0 +1,182 @@
+import { useEffect, useRef, useState } from "react";
+import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { marketProvider } from "@/providers/HttpWsProvider";
+import type { StrategySummary } from "@/types/mainstream";
+
+/** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
+
+const POLL_MS = 60_000;
+const COL = { strat: "#4cc9f0", btc: "#f7931a", tbill: "#8d8d96", up: "#3ee08f", down: "#ff5d5d" };
+
+const pct = (v: number | null | undefined, d = 2) =>
+  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+const num = (v: number | null | undefined, d = 2) =>
+  v == null || !Number.isFinite(v) ? "—" : v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const tone = (v: number | null | undefined) => (v == null || !v ? "flat" : v > 0 ? "up" : "down");
+const SH = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+
+export function StrategyPanel() {
+  const [data, setData] = useState<StrategySummary | null>(null);
+  const [err, setErr] = useState("");
+  const host = useRef<HTMLDivElement>(null);
+  const chart = useRef<IChartApi | null>(null);
+  const series = useRef<{ s?: ISeriesApi<"Line">; b?: ISeriesApi<"Line">; t?: ISeriesApi<"Line">; r?: ISeriesApi<"Histogram"> }>({});
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      marketProvider
+        .getStrategySummary()
+        .then((d) => alive && (setData(d), setErr("")))
+        .catch((e) => alive && setErr(String(e?.message || e)));
+    load();
+    const id = window.setInterval(load, POLL_MS);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!host.current) return;
+    const c = createChart(host.current, {
+      autoSize: true,
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8d8d96", fontSize: 11 },
+      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.08, bottom: 0.3 } },
+      timeScale: { borderColor: "rgba(255,255,255,0.1)", rightOffset: 2 },
+      handleScroll: { vertTouchDrag: false },
+    });
+    const fmt = { type: "custom" as const, formatter: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%` };
+    series.current = {
+      s: c.addLineSeries({ color: COL.strat, lineWidth: 2, priceFormat: fmt, title: "策略" }),
+      b: c.addLineSeries({ color: COL.btc, lineWidth: 1, priceFormat: fmt, title: "BTC" }),
+      t: c.addLineSeries({ color: COL.tbill, lineWidth: 1, lineStyle: 2, priceFormat: fmt, title: "国债" }),
+      r: c.addHistogramSeries({ priceScaleId: "ret", priceFormat: fmt, lastValueVisible: false, priceLineVisible: false }),
+    };
+    c.priceScale("ret").applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
+    chart.current = c;
+    return () => {
+      c.remove();
+      chart.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!data || !chart.current) return;
+    const t = (ts: number) => (ts / 1000) as UTCTimestamp;
+    const { s, b, t: tb, r } = series.current;
+    s?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.strategy - 1) * 100 })));
+    b?.setData(data.curve.filter((p) => p.btc != null).map((p) => ({ time: t(p.ts), value: ((p.btc as number) - 1) * 100 })));
+    tb?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.tbill - 1) * 100 })));
+    r?.setData(data.curve.map((p) => ({ time: t(p.ts), value: p.ret * 100, color: p.ret >= 0 ? COL.up : COL.down })));
+    const ts = chart.current.timeScale();
+    if (data.curve.length >= 30) ts.fitContent();
+    else {
+      ts.applyOptions({ barSpacing: 24 });
+      ts.scrollToRealTime();
+    }
+  }, [data]);
+
+  const g = data?.goNoGo;
+  const st = data?.status;
+  const last = data?.curve[data.curve.length - 1];
+  return (
+    <section className="console-card strat" aria-label="趋势策略纸面">
+      <header className="console-card-bar strat-head">
+        <div className="console-title">趋势策略 · {data?.strategy.name || "trend_tsmom_v1"}</div>
+        <span className="console-badge">PAPER · 每日 08:00 调仓</span>
+        <span className="console-badge live-off">🔒 实盘未开启</span>
+        {g ? (
+          <span className={`console-go lamp-${g.lamp}`} title={g.message}>
+            {g.verdict === "go" ? "Go" : g.verdict === "no-go" ? "No-Go" : "待评估"}
+          </span>
+        ) : null}
+      </header>
+      {err ? <p className="console-err">{err}</p> : null}
+      {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
+      <div className="strat-kpis">
+        <Kpi label="权益 USDT" value={num(data?.nav)} />
+        <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
+        <Kpi label="BTC 买入持有" value={pct(data?.totals.btc)} tone={tone(data?.totals.btc ?? 0)} />
+        <Kpi label="国债（年化 3.99%）" value={pct(data?.totals.tbill)} />
+        <Kpi label="最近日收益" value={pct(last?.ret, 3)} tone={tone(last?.ret)} />
+        <Kpi label="总敞口" value={last ? `${(last.gross * 100).toFixed(1)}%` : "—"} />
+        <Kpi
+          label="上次调仓"
+          value={st?.lastDay ? `${st.lastDay} 收盘` : "尚未调仓"}
+          sub={st?.lastRunAt ? `执行于 ${SH.format(new Date(st.lastRunAt))}` : st?.waiting || ""}
+        />
+        <Kpi
+          label="调仓状态"
+          value={st ? (st.stalled ? `停滞 ${st.hoursSinceRebalance.toFixed(1)}h` : `正常 · ${st.hoursSinceRebalance.toFixed(1)}h 前`) : "—"}
+          tone={st?.stalled ? "down" : "up"}
+          sub={st ? `已运行 ${st.days} 天 · 超过 ${st.stallHours}h 报警` : ""}
+        />
+      </div>
+      <div className="strat-legend">
+        <i style={{ background: COL.strat }} />策略 <i style={{ background: COL.btc }} />BTC 买入持有 <i style={{ background: COL.tbill }} />国债 <i className="bar" />日收益
+      </div>
+      <div className="strat-chart" ref={host} />
+      <div className="strat-tables">
+        <div>
+          <h4>持仓（{data?.positions.length ?? 0}）</h4>
+          <table className="num">
+            <thead>
+              <tr><th>币</th><th>权重</th><th>市值</th><th>数量</th><th>收盘价</th></tr>
+            </thead>
+            <tbody>
+              {data?.positions.length ? (
+                data.positions.map((p) => (
+                  <tr key={p.coin}>
+                    <td>{p.coin}</td>
+                    <td>{(p.weight * 100).toFixed(2)}%</td>
+                    <td>{num(p.notional)}</td>
+                    <td>{num(p.qty, 6)}</td>
+                    <td>{num(p.price)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan={5} className="muted">空仓（信号为负或尚未调仓）</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h4>调仓成交（费 {(data?.cost.taker ?? 0) * 100}% + 滑点）</h4>
+          <table className="num">
+            <thead>
+              <tr><th>日</th><th>币</th><th>方向</th><th>金额</th><th>成交价</th><th>费+滑点</th></tr>
+            </thead>
+            <tbody>
+              {data?.fills.length ? (
+                data.fills.slice(0, 12).map((f) => (
+                  <tr key={`${f.day}-${f.coin}`}>
+                    <td>{new Date(f.day).toISOString().slice(5, 10)}</td>
+                    <td>{f.coin}</td>
+                    <td className={f.side === "buy" ? "up" : "down"}>{f.side === "buy" ? "买" : "卖"}</td>
+                    <td>{num(f.notional)}</td>
+                    <td>{num(f.fill_price)}</td>
+                    <td>{num(f.fee + f.slippage, 3)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan={6} className="muted">暂无</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Kpi({ label, value, tone: t, sub }: { label: string; value: string; tone?: string; sub?: string }) {
+  return (
+    <div className="console-stat">
+      <span>{label}</span>
+      <strong className={t || ""}>{value}</strong>
+      {sub ? <small className="muted">{sub}</small> : null}
+    </div>
+  );
+}

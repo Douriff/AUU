@@ -475,8 +475,10 @@ class MainstreamApiTests(_NoNetwork):
         self.assertFalse(h["legacyPump"])
         self.assertFalse(h["liveEnabled"])
         self.assertFalse(h["autopaperStall"]["stalled"])
-        self.assertEqual(h["autopaperStall"]["reason"], "no_running_strategy")
-        self.assertEqual(h["runningStrategies"], [])
+        # M3: the daily trend runner is the running strategy (not stalled right after start).
+        self.assertEqual(h["autopaperStall"]["reason"], "")
+        self.assertEqual(h["runningStrategies"], ["trend_tsmom_v1"])
+        self.assertFalse(h["strategyRunner"]["stalled"])
         self.assertEqual(h["mainstream"]["exchange"], "binance")
         self.assertFalse(h["mainstream"]["stale"], h["mainstream"])
         self.assertIn("BTC:1h", h["mainstream"]["series"])

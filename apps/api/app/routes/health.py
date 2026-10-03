@@ -57,9 +57,25 @@ def _mainstream_fields() -> dict:
         return {"enabled": True, "stale": True, "lastError": f"{type(exc).__name__}: {exc}"[:200]}
 
 
+def _strategy_status() -> dict:
+    """M3 runner: stalled when the last rebalance is more than 26 h old."""
+    try:
+        from app.marketdata.mainstream import get_service
+        from app.paper.strategy_runner import not_started_status, peek_runner, runner_enabled
+
+        if not runner_enabled() or not get_service().cfg.enabled:
+            return {"active": False, "stalled": False, "reason": "runner_off"}
+        r = peek_runner()
+        return r.status() if r else not_started_status()
+    except Exception as exc:  # health must answer even if the ledger is broken
+        return {"active": True, "stalled": True, "reason": f"status error: {type(exc).__name__}: {exc}"[:200]}
+
+
 def _mainstream_health(gate) -> dict:
     """Health when AUU_LEGACY_PUMP is off: no pump provider is constructed."""
     md = _mainstream_fields()
+    st = _strategy_status()
+    running = [st["strategy"]] if st.get("active") and st.get("strategy") else []
     return {
         "status": "up",
         "provider": "cex_public",
@@ -75,11 +91,14 @@ def _mainstream_health(gate) -> dict:
         "trading_state": gate.trading_state,
         "auto_paper_orders": False,
         "strategy_autopaper": False,
-        "strategyId": None,
-        "runningStrategies": [],
+        "strategyId": running[0] if running else None,
+        "runningStrategies": running,
         "liveFeed": None,
-        # Only running strategies can stall; nothing runs in this mode yet.
-        "autopaperStall": {"stalled": False, "active": False, "reason": "no_running_strategy"},
+        # Paper strategy runner (M3). autopaperStall mirrors it so existing guards alarm too.
+        "strategyRunner": st,
+        "autopaperStall": {"stalled": bool(st.get("stalled")), "active": bool(st.get("active")),
+                           "reason": st.get("reason") or "", "idleMin": st.get("idleMin"),
+                           "hints": ["strategy_rebalance_overdue"] if st.get("stalled") else []},
         "mainstream": md,
         **_live_fields(),
         "copy_trade_enabled": False,
