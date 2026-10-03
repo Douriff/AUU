@@ -179,7 +179,18 @@ export interface StrategyGoNoGo {
   tbill: number;
   stats?: Record<string, number | null>;
 }
+export interface StrategyUniverse {
+  configured?: string[];
+  exchange?: string | null;
+  coverage?: Record<string, { firstDay: string; lastDay: string; days: number; fundingFrom: string | null; fundingRows: number }>;
+  unavailable?: Record<string, string>;
+  current: string[];
+  changes: { day: string; coins: string[]; prev: string[]; recordedAt: number; note: string | null }[];
+  survivorship: string;
+  error?: string;
+}
 export interface StrategySummary {
+  universe: StrategyUniverse;
   strategy: { name: string; lookbacks: number[]; target_vol: number; cap: number; long_only: boolean };
   mode: "paper";
   live: { enabled: false; reason: string; message: string };

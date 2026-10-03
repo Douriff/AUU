@@ -1,6 +1,7 @@
 """M3 daily paper runner: same decide()/costs as the backtest, idempotent, recovers missed days."""
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
@@ -22,20 +23,21 @@ N = 300
 COINS = ["BTC", "ETH", "SOL"]
 
 
-def make_panel(n=N, seed=3) -> Panel:
+def make_panel(n=N, seed=3, coins=None) -> Panel:
+    coins = list(coins or COINS)
     rnd = random.Random(seed)
     days = [D0 + i * DAY_MS for i in range(n)]
     sc, fu = {}, {}
-    for k, c in enumerate(COINS):
+    for k, c in enumerate(coins):
         px, out = 100.0 * (k + 1), []
-        drift = (0.002, -0.001, 0.0015)[k]
+        drift = (0.002, -0.001, 0.0015, 0.001, -0.0005)[k % 5]
         for i in range(n):
             # regime switch halfway so the long-only signal both enters and exits
             px *= math.exp((drift if i < n // 2 else -drift) + rnd.gauss(0, 0.03))
             out.append(px)
         sc[c] = out
         fu[c] = [0.0001 * (1 + (i % 3)) for i in range(n)]
-    return Panel(days, list(COINS), sc, {c: list(v) for c, v in sc.items()}, fu, source="synthetic")
+    return Panel(days, coins, sc, {c: list(v) for c, v in sc.items()}, fu, source="synthetic")
 
 
 class Clock:
@@ -280,7 +282,7 @@ class StoreReadinessTests(unittest.TestCase):
         class Svc:
             def __init__(self, store):
                 self.store = store
-                self.cfg = type("C", (), {"symbols": ["BTC", "ETH"]})()
+                self.cfg = type("C", (), {"symbols": ["BTC"], "strategy_symbols": ["BTC", "ETH"]})()
 
             def exchange_for_read(self):
                 return "binance"
@@ -289,6 +291,86 @@ class StoreReadinessTests(unittest.TestCase):
         for (l1, lf), want in cases:
             with patch("app.marketdata.mainstream.get_service", return_value=Svc(Store(l1, lf))):
                 self.assertEqual(sr._store_ready(D)[0], want, (l1, lf))
+
+
+class UniverseTests(_Base):
+    def setUp(self):
+        super().setUp()
+        self.panel = make_panel(coins=["BTC", "ETH", "SOL", "XRP", "ADA"])
+        self.switch_at = 160
+
+    def panel_fn(self, day):
+        p = self.panel.truncate(self.panel.days.index(day) + 1)
+        return p.subset(["BTC", "ETH", "SOL"]) if day < self.panel.days[self.switch_at] else p
+
+    def test_switch_is_recorded_and_history_is_not_rebuilt(self):
+        clock = Clock(self.panel.days[150])
+        r = self.runner(clock)
+        self.run_days(r, clock, 150, 159)
+        before = [dict(x) for x in r.ledger.runs()]
+        self.run_days(r, clock, 160, 163)
+        runs = r.ledger.runs()
+        self.assertEqual([dict(x) for x in runs[:10]], before)  # earlier days untouched
+        ch = r.ledger.universe_changes()
+        self.assertEqual(len(ch), 1)
+        self.assertEqual(ch[0]["day"], self.panel.days[160])
+        self.assertEqual(sorted(json.loads(ch[0]["prev"])), ["BTC", "ETH", "SOL"])
+        self.assertEqual(len(json.loads(ch[0]["coins"])), 5)
+        self.assertEqual(len(json.loads(runs[10]["universe"])), 5)
+        s = r.summary()["universe"]
+        self.assertEqual(s["changes"][0]["day"], "2025-06-10")
+        self.assertEqual(len(s["current"]), 5)
+        self.assertIn("幸存者偏差", s["survivorship"])
+
+    def test_legacy_ledger_without_universe_column(self):
+        import sqlite3
+
+        db = sqlite3.connect(self.path)
+        db.executescript(sr._SCHEMA.replace(",\n  universe TEXT", ""))
+        db.execute("INSERT INTO runs(day,strategy,ran_at,catchup,nav_open,pnl,funding,cost,ret,nav_close,gross_before,gross_after,turnover,weights,targets,closes)"
+                   " VALUES (?, 't', 0, 0, 10000, 0, 0, 0, 0, 10000, 0, 0, 0, '{}', '{\"BTC\":0,\"ETH\":0,\"SOL\":0}', '{}')", (self.panel.days[170],))
+        db.commit()
+        db.close()
+        clock = Clock(self.panel.days[171])
+        r = self.runner(clock)
+        self.assertEqual(r.tick(), [self.panel.days[171]])
+        ch = r.ledger.universe_changes()
+        self.assertEqual(len(ch), 1)
+        self.assertEqual(sorted(json.loads(ch[0]["prev"])), ["BTC", "ETH", "SOL"])
+        self.assertIsNone(r.ledger.runs()[0]["universe"])  # old row left as it was
+
+
+class StoreUniverseTests(unittest.TestCase):
+    def test_unavailable_coin_is_listed_and_not_waited_for(self):
+        D = day_ms("2026-10-02")
+
+        class Store:
+            def candle_bounds(self, ex, c, tf):
+                return (None, None, 0) if c == "FIL" else (D - 400 * DAY_MS, D + DAY_MS, 401)
+
+            def funding_bounds(self, ex, c):
+                return (D - 700 * DAY_MS, D + 16 * 3_600_000, 2100)
+
+        svc = type("S", (), {})()
+        svc.store = Store()
+        svc.cfg = type("C", (), {"symbols": ["BTC"], "strategy_symbols": ["BTC", "ETH", "FIL"]})()
+        svc.exchange_for_read = lambda: "okx"
+        with patch("app.marketdata.mainstream.get_service", return_value=svc):
+            u = sr._store_universe()
+            self.assertEqual(list(u["coverage"]), ["BTC", "ETH"])
+            self.assertIn("FIL", u["unavailable"])
+            self.assertEqual(sr._store_ready(D), (True, ""))
+
+    def test_default_universe_is_the_research_list(self):
+        from app.backtest.panel import UNIVERSE_19
+        from app.marketdata.mainstream.config import STRATEGY_UNIVERSE, load_config
+
+        self.assertEqual(STRATEGY_UNIVERSE, UNIVERSE_19)
+        with patch.dict(os.environ, {"AUU_STRATEGY_UNIVERSE": ""}):
+            cfg = load_config()
+        self.assertEqual(cfg.strategy_symbols, UNIVERSE_19)
+        self.assertEqual(cfg.all_symbols()[:3], cfg.symbols)
+        self.assertEqual(len(cfg.all_symbols()), len(set(cfg.symbols) | set(UNIVERSE_19)))
 
 
 _ENV = ("AUU_AUTH", "AUU_ALLOW_SIGNUP", "AUU_INVITE_CODE", "AUU_ADMIN_USER", "AUU_USER_STORE", "AUU_USER_JOURNAL_DIR", "AUU_AUTH_RATE_MAX", "AUU_LEGACY_PUMP")

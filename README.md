@@ -54,7 +54,7 @@
 
 ### 趋势策略每日纸面运行（M3）
 
-`trend_tsmom_v1` 每天北京时间 08:00（UTC 收盘）后，在交易所公开日线上调用和回测同一份 `decide()` 调仓。成本模型（手续费、滑点、资金费）和逐日记账（`engine.step`）也与回测共用。结果写入系统主流纸面账本 `data/mainstream_strategy.sqlite`。每天一个事务，重启或补跑都不会重复下单；超过 26 小时没调仓，health 和 guard 会报停滞。控制台显示净值曲线（对比 BTC 买入持有和国债）、日收益和持仓。Go/No-Go 需要至少 250 天日收益，在此之前显示“数据积累中，未证明优势”。详见 `docs/mainstream/m3-paper-runner.md`。
+`trend_tsmom_v1` 用和研究相同的 19 币池（有幸存者偏差，见文档），每天北京时间 08:00（UTC 收盘）后，在交易所公开日线上调用和回测同一份 `decide()` 调仓。成本模型（手续费、滑点、资金费）和逐日记账（`engine.step`）也与回测共用。结果写入系统主流纸面账本 `data/mainstream_strategy.sqlite`。每天一个事务，重启或补跑都不会重复下单；超过 26 小时没调仓，health 和 guard 会报停滞。控制台显示净值曲线（对比 BTC 买入持有和国债）、日收益和持仓。Go/No-Go 需要至少 250 天日收益，在此之前显示“数据积累中，未证明优势”。详见 `docs/mainstream/m3-paper-runner.md`。
 
 ### 纸面交易面板
 

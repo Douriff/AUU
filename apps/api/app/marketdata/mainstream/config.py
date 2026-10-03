@@ -52,6 +52,23 @@ def _symbols() -> list[str]:
     return out[:20] or ["BTC", "ETH", "SOL"]
 
 
+# Research universe of trend_tsmom_v1 (same list as app.backtest.panel.UNIVERSE_19; kept
+# here so the market layer does not import the backtest package).
+STRATEGY_UNIVERSE = "BTC ETH SOL XRP DOGE BNB ADA AVAX LINK LTC TRX DOT BCH ETC XLM ATOM FIL UNI NEAR".split()
+
+
+def _strategy_symbols() -> list[str]:
+    raw = os.getenv("AUU_STRATEGY_UNIVERSE", "").strip()
+    if not raw:
+        return list(STRATEGY_UNIVERSE)
+    out: list[str] = []
+    for part in raw.split(","):
+        base = "".join(ch for ch in part.strip().upper() if ch.isalnum())
+        if base and base not in out:
+            out.append(base)
+    return out[:40]
+
+
 def _exchanges() -> list[str]:
     raw = os.getenv("AUU_MAINSTREAM_EXCHANGE", "auto").strip().lower()
     if raw in SUPPORTED_EXCHANGES:
@@ -71,12 +88,19 @@ class MainstreamConfig:
     intraday_days: int = 7
     intraday_tail_sec: int = 10
     funding_backfill_days: int = 60
+    # Strategy universe: daily candles + funding only (no 1h/4h, no live funding), longer funding history.
+    strategy_symbols: list[str] = field(default_factory=list)
+    strategy_funding_days: int = 730
     refresh: bool = True
     refresh_sec: int = 300
     retries: int = 3
     retry_base_sec: float = 1.0
     timeout_ms: int = 15_000
     max_gap_repairs: int = 5
+
+    def all_symbols(self) -> list[str]:
+        """Display symbols first, then strategy-only symbols."""
+        return list(self.symbols) + [c for c in self.strategy_symbols if c not in self.symbols]
 
     def backfill(self, tf: str) -> int:
         return int(self.backfill_days.get(tf, DEFAULT_BACKFILL_DAYS.get(tf, 30)))
@@ -103,6 +127,8 @@ def load_config() -> MainstreamConfig:
         intraday_days=_int("AUU_MAINSTREAM_INTRADAY_DAYS", 7, 1, 30),
         intraday_tail_sec=_int("AUU_MAINSTREAM_INTRADAY_TAIL_SEC", 10, 2, 300),
         funding_backfill_days=_int("AUU_MAINSTREAM_FUNDING_DAYS", 60, 1, 730),
+        strategy_symbols=_strategy_symbols(),
+        strategy_funding_days=_int("AUU_STRATEGY_FUNDING_DAYS", 730, 1, 1825),
         refresh=_flag("AUU_MAINSTREAM_REFRESH", True),
         refresh_sec=_int("AUU_MAINSTREAM_REFRESH_SEC", 300, 30, 86_400),
         retries=_int("AUU_MAINSTREAM_RETRIES", 3, 1, 10),

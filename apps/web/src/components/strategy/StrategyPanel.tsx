@@ -95,6 +95,7 @@ export function StrategyPanel() {
       </header>
       {err ? <p className="console-err">{err}</p> : null}
       {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
+      {data ? <UniverseNote data={data} /> : null}
       <div className="strat-kpis">
         <Kpi label="权益 USDT" value={num(data?.nav)} />
         <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
@@ -177,6 +178,36 @@ function Kpi({ label, value, tone: t, sub }: { label: string; value: string; ton
       <span>{label}</span>
       <strong className={t || ""}>{value}</strong>
       {sub ? <small className="muted">{sub}</small> : null}
+    </div>
+  );
+}
+
+function UniverseNote({ data }: { data: StrategySummary }) {
+  const u = data.universe;
+  const cur = u.current || [];
+  const conf = u.configured || [];
+  const avail = Object.keys(u.coverage || {});
+  const last = u.changes[u.changes.length - 1];
+  const pending = cur.length > 0 && avail.length > 0 && (cur.length !== avail.length || avail.some((c) => !cur.includes(c)));
+  const nextDay = data.status.nextDueDay;
+  const unavailable = Object.entries(u.unavailable || {});
+  return (
+    <div className="strat-universe">
+      <div>
+        <b>币池</b>：当前 {cur.length} 个（{cur.join(" ")}）
+        {conf.length ? <> · 研究币池 {conf.length} 个，已有数据 {avail.length} 个</> : null}
+      </div>
+      {last ? (
+        <div>
+          切换记录：{last.day} 收盘起 {last.prev.length} → {last.coins.length} 个币（之前的账本历史保持原样）
+        </div>
+      ) : pending ? (
+        <div>
+          待切换：从 {nextDay} 收盘（次日北京时间 08:00 调仓）起改用 {avail.length} 个币；之前的账本历史不重算
+        </div>
+      ) : null}
+      {unavailable.length ? <div className="down">缺少数据：{unavailable.map(([c, why]) => `${c}（${why}）`).join("；")}</div> : null}
+      <div className="strat-warn">⚠ 幸存者偏差：{u.survivorship}</div>
     </div>
   );
 }

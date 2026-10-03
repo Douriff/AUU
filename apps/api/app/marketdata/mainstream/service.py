@@ -111,9 +111,11 @@ class MainstreamService:
         added: dict[str, int] = {}
         failures: list[str] = []
         ok_any = False
-        for base in self.cfg.symbols:
+        display = set(self.cfg.symbols)
+        for base in self.cfg.all_symbols():
             spot, perp = self.cfg.spot(base), self.cfg.perp(base)
-            for tf in TIMEFRAMES:
+            strategy_only = base not in display
+            for tf in (("1d",) if strategy_only else TIMEFRAMES):
                 key = f"{base}:{tf}"
                 step = TF_MS[tf]
                 try:
@@ -132,7 +134,8 @@ class MainstreamService:
                         raise
             try:
                 _, last, _ = st.funding_bounds(name, base)
-                since = last + 1 if last is not None else now - self.cfg.funding_backfill_days * DAY_MS
+                fdays = max(self.cfg.funding_backfill_days, self.cfg.strategy_funding_days if base in self.cfg.strategy_symbols else 0)
+                since = last + 1 if last is not None else now - fdays * DAY_MS
                 n = st.upsert_funding(name, base, f.funding_history(perp, since))
                 added[f"{base}:funding"] = n
                 st.log_fetch(name, base, "funding", attempt_ms=now, ok=True, error=None, rows=n)
@@ -140,6 +143,8 @@ class MainstreamService:
             except FetchError as exc:
                 st.log_fetch(name, base, "funding", attempt_ms=now, ok=False, error=str(exc), rows=0)
                 failures.append(f"{base}:funding {exc}")
+            if strategy_only:
+                continue
             try:
                 self.funding_live[f"{name}:{base}"] = f.funding_now(perp)
             except FetchError:
