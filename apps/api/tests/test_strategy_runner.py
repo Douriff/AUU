@@ -422,6 +422,21 @@ class StrategyApiTests(_Base):
         bad = self.TestClient(self.app, cookies={"auu_session": "forged.9999999999.sig"})
         self.assertEqual(bad.get("/api/v1/mainstream/strategy").status_code, 401)
 
+    def test_report_route_requires_login_and_returns_report(self):
+        anon = self.TestClient(self.app)
+        self.assertEqual(anon.get("/api/v1/mainstream/strategy/report").status_code, 401)
+        from starlette.requests import Request
+        from app.routes import mainstream_strategy
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""})
+        self.assertEqual(mainstream_strategy.strategy_report(req).status_code, 401)
+        c = self.TestClient(self.app)
+        self.assertEqual(c.post("/api/v1/auth/register", json={"name": "vin2", "password": PW, "password_confirm": PW}).status_code, 200)
+        d = c.get("/api/v1/mainstream/strategy/report").json()["data"]
+        self.assertEqual(d["metrics"]["days"], 6)
+        self.assertEqual(len(d["drawdown"]), 6)
+        self.assertIn("coins", d["attribution"])
+
     def test_route_rechecks_session_even_without_gate(self):
         from starlette.requests import Request
         from app.routes import mainstream_strategy

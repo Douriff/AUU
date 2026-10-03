@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { ExecShadowSummary, ExpectedBand, RunVersion, StrategyRisk, StrategySummary } from "@/types/mainstream";
 
@@ -87,6 +88,7 @@ export function StrategyPanel() {
         <div className="console-title">趋势策略 · {data?.strategy.name || "trend_tsmom_v1"}</div>
         <span className="console-badge">PAPER · 每日 08:00 调仓</span>
         <span className="console-badge live-off">🔒 实盘未开启</span>
+        <Link to="/performance" className="console-badge strat-report-link">绩效报告 →</Link>
         {g ? (
           <span className={`console-go lamp-${g.lamp}`} title={g.message}>
             {g.verdict === "go" ? "Go" : g.verdict === "no-go" ? "No-Go" : "待评估"}

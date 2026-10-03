@@ -19,6 +19,7 @@ import { WatchPage } from "@/pages/WatchPage/WatchPage";
 import { ObservePage } from "@/pages/ObservePage/ObservePage";
 import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
+import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: "mainstream", element: <MainstreamPage /> },
       { path: "board", element: <LegacyOnly><BoardPage /></LegacyOnly> },
       { path: "console", element: <ConsolePage /> },
+      { path: "performance", element: <PerformancePage /> },
       { path: "markets", element: <LegacyOnly><MarketsPage /></LegacyOnly> },
       { path: "market", element: <LegacyOnly><MarketPage /></LegacyOnly> },
       { path: "review", element: <LegacyOnly><ReviewPage /></LegacyOnly> },
