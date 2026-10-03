@@ -52,6 +52,10 @@
 
 `app/backtest/`（纯标准库）+ `app/strategies/`（回测和纸面共用的策略，先接入趋势 `trend_tsmom_v1`）。hold-out 30%、walk-forward、block bootstrap CI、去掉最好 3 个月、2 倍成本、延迟 1 天、对比 BTC 买入持有和国债、前视检查。`python -m app.backtest --archive DIR` 或 `--store`；验收 `python -m app.backtest.acceptance --archive DIR` 复现研究数字（31/31，差 0.0pp）。详见 `docs/mainstream/m2-backtest.md`。
 
+### 纸面交易面板
+
+每个币的图表页（`/mainstream?symbol=ETH`）右侧（手机在图下方）有纸面下单面板：买/卖、市价/限价、按金额或数量、预估手续费和滑点（与回测共用 `CostModel`）、持仓与盈亏、挂单和订单记录。只写纸面账本 `data/mainstream_paper.sqlite`，每个登录用户一个独立账户（初始 10,000 USDT，只做现货多头）；未登录下单返回 401。风控：单笔 ≤2,000、单币持仓 ≤5,000 USDT，最多 20 张挂单，每分钟 20 单，`client_order_id` 幂等，同样的单 3 秒内重复提交返回 409，价格超过 3 分钟没更新时拒单。可用 `AUU_PAPER_START_USDT`、`AUU_PAPER_MAX_ORDER_USDT`、`AUU_PAPER_MAX_POSITION_USDT`、`AUU_PAPER_MAX_OPEN_ORDERS`、`AUU_PAPER_ORDERS_PER_MIN` 调整。实盘仍被 `LIVE_API_LOCKED` 锁住：面板只显示“实盘未开启”，`mode` 不是 `paper` 一律 403，接口也不接收交易所/密钥字段。API：`GET /api/v1/mainstream/paper/account`、`POST /api/v1/mainstream/paper/orders`、`POST /api/v1/mainstream/paper/orders/{id}/cancel`。
+
 ### 旧版 pump 纸面账本归档
 
 主流模式从空账本开始。旧 pump.fun 纸面数据（`paper_journal*.json`、`shadow_compare*.json`、`trader_watchlist.json`、`evidence/`）用下面的命令打包归档（先停 API；默认 dry-run）：

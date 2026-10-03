@@ -1742,6 +1742,46 @@ code.hl { color: var(--accent); }
 .ms-chart.ms-funding { height: 90px; }
 .ms-axis { fill: #8d8d96; font-size: 10px; font-family: ui-monospace, monospace; }
 .ms-sub { margin-top: 0.6rem; }
+.ms-trade-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0.8rem; align-items: start; }
+.ms-trade-chart { min-width: 0; }
+.pt { border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 0.6rem 0.7rem; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; }
+.pt-head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.pt-paper { font-size: 0.66rem; color: #ffb020; border: 1px solid rgba(255, 176, 32, 0.5); border-radius: 999px; padding: 0.05rem 0.45rem; }
+.pt-lock { margin-left: auto; font-size: 0.68rem; color: #ff6b6b; border: 1px solid rgba(255, 93, 93, 0.45); border-radius: 999px; padding: 0.05rem 0.5rem; }
+.pt button { font: inherit; color: var(--text); background: transparent; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; padding: 0.3rem 0.55rem; cursor: pointer; min-height: 32px; }
+.pt button.is-on { background: rgba(255, 255, 255, 0.08); }
+.pt-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+.pt-sides .pt-buy.is-on { background: rgba(38, 166, 154, 0.25); border-color: #26a69a; color: #5fe0d2; }
+.pt-sides .pt-sell.is-on { background: rgba(239, 83, 80, 0.22); border-color: #ef5350; color: #ff8a87; }
+.pt-row { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
+.pt-last { margin-left: auto; font-size: 0.74rem; }
+.pt-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.pt-field > span { display: flex; justify-content: space-between; align-items: center; color: #8d8d96; font-size: 0.74rem; }
+.pt-field input { font: inherit; font-size: 16px; color: var(--text); background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; padding: 0.45rem 0.55rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pt .pt-unit { min-height: 24px; padding: 0.05rem 0.4rem; font-size: 0.7rem; }
+.pt-pcts button { flex: 1; padding: 0.2rem 0; min-height: 30px; font-size: 0.72rem; }
+.pt-est { display: flex; flex-direction: column; gap: 0.15rem; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; }
+.pt-est div { display: flex; justify-content: space-between; gap: 0.5rem; }
+.pt-est dt { color: #8d8d96; }
+.pt-est dd { margin: 0; text-align: right; }
+.pt-total { border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 0.2rem; font-weight: 600; }
+.pt .pt-submit { min-height: 40px; font-weight: 650; border: none; color: #fff; }
+.pt .pt-submit.buy { background: #1f8f84; }
+.pt .pt-submit.sell { background: #c8423f; }
+.pt .pt-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+.pt-warn { color: #ffb020; margin: 0; font-size: 0.74rem; }
+.pt-ok { color: #3ee08f; margin: 0; font-size: 0.74rem; }
+.pt-note { margin: 0; font-size: 0.7rem; }
+.pt-box { border-top: 1px solid rgba(255, 255, 255, 0.07); padding-top: 0.45rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.pt-box-head { display: flex; gap: 0.3rem; align-items: center; }
+.pt-acct { border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 0.25rem; }
+.pt-orders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; max-height: 220px; overflow-y: auto; font-size: 0.7rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pt-orders li { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: 0.1rem 0.4rem; align-items: center; padding: 0.15rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.pt-orders li > span:nth-child(3), .pt-orders li > span:nth-child(4) { grid-column: 2 / 4; }
+.pt-orders li button { grid-column: 3; grid-row: 1; min-height: 26px; padding: 0.05rem 0.45rem; }
+.pt .up { color: #26a69a; }
+.pt .down { color: #ef5350; }
+@media (max-width: 1100px) { .ms-trade-grid { grid-template-columns: minmax(0, 1fr); } }
 .ms-tfs { margin-bottom: 0; flex-wrap: nowrap; overflow-x: auto; }
 .ms-tfs button { min-width: 2.6rem; }
 .msc { display: flex; flex-direction: column; gap: 0.3rem; }

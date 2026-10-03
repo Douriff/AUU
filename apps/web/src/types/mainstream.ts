@@ -59,3 +59,63 @@ export type MainstreamCandles = {
 };
 
 export type MainstreamFunding = { exchange: string | null; symbol: string; perp: string; funding: { ts: number; rate: number }[] };
+
+/** /api/v1/mainstream/paper/* — per-user paper account (paper only). */
+export type PaperOrder = {
+  id: string;
+  clientOrderId: string;
+  ts: number;
+  symbol: string;
+  side: "buy" | "sell";
+  type: "market" | "limit";
+  qty: number;
+  limitPrice: number | null;
+  status: "open" | "filled" | "cancelled" | "rejected";
+  fillPrice: number | null;
+  fillTs: number | null;
+  fee: number;
+  slippage: number;
+  notional: number;
+  realized: number;
+  reason: string | null;
+  mode: "paper";
+  duplicate?: boolean;
+};
+
+export type PaperPosition = {
+  symbol: string;
+  qty: number;
+  avgPrice: number;
+  last: number;
+  value: number;
+  unrealized: number;
+  realized: number;
+  fees: number;
+  available: number;
+};
+
+export type PaperAccount = {
+  mode: "paper";
+  cash: number;
+  availableCash: number;
+  startCash: number;
+  equity: number;
+  pnl: number;
+  pnlPct: number;
+  positions: PaperPosition[];
+  openOrders: PaperOrder[];
+  orders: PaperOrder[];
+  limits: { maxOrderUsdt: number; maxPositionUsdt: number; minOrderUsdt: number; maxOpenOrders: number; ordersPerMin: number };
+  costs: Record<string, { takerFee: number; makerFee: number; slippage: number }>;
+  live: { enabled: false; reason: string; message: string };
+};
+
+export type PaperOrderRequest = {
+  client_order_id: string;
+  symbol: string;
+  side: "buy" | "sell";
+  type: "market" | "limit";
+  qty?: number;
+  notional?: number;
+  limit_price?: number;
+};
