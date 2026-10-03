@@ -443,6 +443,9 @@ export type StrategyOverlay = {
   asOfDay: number;
   inUniverse: boolean;
   /** one row per daily close: look-back returns (same order as lookbacks), signal, target weight */
-  series: { ts: number; close: number | null; mom: (number | null)[]; signal: number | null; target: number }[];
+  series: { ts: number; close: number | null; mom: (number | null)[]; signal: number | null; target: number; recorded: number | null }[];
   fills: { day: number; side: "buy" | "sell"; wFrom: number; wTo: number; price: number; fillPrice: number; notional: number }[];
+  /** days the runner recorded; days whose recomputed target differs from the recorded one */
+  recordedDays: number;
+  revised: number[];
 };

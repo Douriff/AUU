@@ -35,6 +35,8 @@ class OverlayTests(_Base):
             self.assertEqual(row["mom"][1], m60[i])
             if row["signal"] is not None and row["signal"] == 0:
                 self.assertEqual(row["target"], 0.0)
+        self.assertEqual(ov["revised"], [])  # same data as when the runner ran
+        self.assertEqual(sum(1 for x in ov["series"] if x["recorded"] is not None), 51)
         fills = ov["fills"]
         self.assertTrue(fills)
         led = [f for f in self.r.ledger.fills(5000) if f["coin"] == "ETH"]
@@ -43,6 +45,17 @@ class OverlayTests(_Base):
         for f in fills:  # every rebalance trades to that day's target weight (what the marker shows)
             row = next(x for x in ov["series"] if x["ts"] == f["day"])
             self.assertAlmostEqual(f["wTo"], row["target"], places=12)
+
+    def test_revised_days_are_flagged(self):
+        # the data under past days changes after they ran (e.g. a late backfill): recompute differs
+        for i in range(len(self.panel.days)):
+            self.panel.spot_close["ETH"][i] *= 1 + 0.2 * ((i * 7919) % 13 - 6) / 6
+        strategy_overlay.clear_cache()
+        ov = strategy_overlay.build(self.r, "ETH", days=120)
+        self.assertTrue(ov["revised"])
+        for ts in ov["revised"]:
+            row = next(x for x in ov["series"] if x["ts"] == ts)
+            self.assertNotAlmostEqual(row["recorded"], row["target"], places=9)
 
     def test_read_only_and_unknown_coin(self):
         before = (len(self.r.ledger.runs()), len(self.r.ledger.fills(5000)))

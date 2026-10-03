@@ -2,11 +2,15 @@
 
 For one coin: the paper runner's rebalance fills (markers) and, per day, the TSMOM look-back
 returns, the signal and the target weight, computed by the strategy's own ``targets()`` on the
-same store panel the runner reads. Nothing here writes to the ledger or changes a decision; it
+same store panel the runner reads, next to the targets the runner actually recorded for each
+day (``runs.targets``). The two differ when the data under a past day changed after it ran (late
+backfill, a coin added to the store): those days are listed in ``revised`` so the difference is
+visible instead of silently redrawn. Nothing here writes to the ledger or changes a decision; it
 only re-reads what the runner already uses, so a person can check "why did it add/cut here".
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -45,6 +49,19 @@ def build(runner, symbol: str, *, panel_fn: Optional[Callable[[int], Any]] = Non
                 s = sum(sign(m) for m in ms) / len(ms)
                 sig = max(0.0, s) if strat.params.long_only else s
             series.append({"ts": int(panel.days[t]), "close": close[t], "mom": ms, "signal": sig, "target": weights[t]})
+    recorded: dict[int, float] = {}
+    for r in runner.ledger.runs():
+        try:
+            tg = json.loads(r["targets"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        recorded[int(r["day"])] = float(tg.get(sym, 0.0) or 0.0)
+    revised = []
+    for row in series:
+        rec = recorded.get(row["ts"])
+        row["recorded"] = rec
+        if rec is not None and abs(rec - row["target"]) > 1e-9:
+            revised.append(row["ts"])
     fills = []
     for r in runner.ledger.fills(limit=5000):
         if r["coin"] != sym:
@@ -53,7 +70,8 @@ def build(runner, symbol: str, *, panel_fn: Optional[Callable[[int], Any]] = Non
                       "price": r["price"], "fillPrice": r["fill_price"], "notional": r["notional"]})
     fills.sort(key=lambda f: f["day"])
     out = {"symbol": sym, "strategy": strat.name, "lookbacks": lbs, "longOnly": strat.params.long_only,
-           "asOfDay": due, "inUniverse": in_universe, "series": series, "fills": fills}
+           "asOfDay": due, "inUniverse": in_universe, "series": series, "fills": fills,
+           "recordedDays": len(recorded), "revised": revised}
     with _clock:
         if len(_cache) > 64:
             _cache.clear()

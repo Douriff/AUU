@@ -331,9 +331,27 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
                   {L}日 {pctTxt((ovRow ?? ov.series[ov.series.length - 1])?.mom[k])}
                 </span>
               ))}
-              <span>信号 <b>{(ovRow ?? ov.series[ov.series.length - 1])?.signal?.toFixed(2) ?? "—"}</b></span>
-              <span>目标仓位 <b>{pctTxt((ovRow ?? ov.series[ov.series.length - 1])?.target, 2)}</b></span>
+              {(() => {
+                const row = ovRow ?? ov.series[ov.series.length - 1];
+                const rec = row?.recorded;
+                const differs = rec != null && Math.abs(rec - row.target) > 1e-9;
+                return (
+                  <>
+                    <span>信号 <b>{row?.signal?.toFixed(2) ?? "—"}</b></span>
+                    <span>
+                      目标仓位 <b>{pctTxt(rec ?? row?.target, 2)}</b>
+                      {rec != null ? <span className="muted">（记录）</span> : null}
+                      {differs ? <span className="down"> · 按现数据重算 {pctTxt(row.target, 2)}</span> : null}
+                    </span>
+                  </>
+                );
+              })()}
               <span className="muted">纸面调仓 {ov.fills.length} 次</span>
+              {ov.revised.length ? (
+                <span className="down" title="这些天的历史数据在调仓之后有变化（补数据/新增币种），按现数据重算的目标仓位与当时记录的不同">
+                  {ov.revised.length} 天重算≠记录
+                </span>
+              ) : null}
             </>
           ) : (
             <span className="muted">{ovErr || "加载策略信号…"}</span>
