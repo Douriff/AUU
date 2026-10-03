@@ -532,7 +532,7 @@ class StrategyRunner:
         coins = [c for c, w in w_ref.items() if w]
         if not coins:  # flat book (e.g. locked): nothing to mark or reduce
             mark = {"ts": mark_ts, "nav": nav_ref, "dayRet": nav_ref / float(last["nav_close"]) - 1.0,
-                    "drawdown": nav_ref / self.ledger.peak_nav(self.start_nav) - 1.0, "dataBad": False, "reason": "", "weights": {}}
+                    "drawdown": min(0.0, nav_ref / self.ledger.peak_nav(self.start_nav) - 1.0), "dataBad": False, "reason": "", "weights": {}}
             self.ledger.commit_risk([], {"last_mark_bar": bar, "last_mark": mark}, expect_day=int(last["day"]))
             return mark
         m = self.marks_fn(coins, bar) or {}
@@ -561,7 +561,7 @@ class StrategyRunner:
         nav_mark = nav_ref * g
         day_ret = nav_mark / float(last["nav_close"]) - 1.0
         peak = self.ledger.peak_nav(self.start_nav)
-        dd = nav_mark / peak - 1.0
+        dd = min(0.0, nav_mark / peak - 1.0)  # above the recorded peak = no drawdown
         flags = dict(self.ledger.risk_get(f"day:{day_key}", {}) or {})
         seen = dict(self.ledger.risk_get("funding_seen", {}) or {})
         f8_new = {}
@@ -861,8 +861,9 @@ def _store_marks(coins: list[str], bar: int) -> dict:
         if rows:
             prices[c] = (int(rows[-1]["ts"]), float(rows[-1]["close"]))
     ok, reason = True, ""
-    if last is None or now - last > 3 * max(60, svc.cfg.refresh_sec) * 1000 + 600_000:
-        mins = "never" if last is None else f"{(now - last) / 60_000:.0f} min"
+    since = last if last is not None else _PROC_START_MS  # first refresh of this process may still be backfilling
+    if now - since > 3 * max(60, svc.cfg.refresh_sec) * 1000 + 600_000:
+        mins = f"{(now - since) / 60_000:.0f} min" + ("" if last is not None else " since start")
         ok, reason = False, f"no successful market refresh ({mins}): {svc.last_error or ''}"[:200]
     return {"prices": prices, "ok": ok, "reason": reason}
 
