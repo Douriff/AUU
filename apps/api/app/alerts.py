@@ -29,6 +29,7 @@ BJ = timezone(timedelta(hours=8))
 DEFAULT_TO = "olesaruga00@gmail.com"
 MAX_ATTEMPTS = 5
 STALE_CONSECUTIVE = 2  # a data problem must be seen on 2 consecutive checks before it alerts
+BAND_REPEAT_MS = 7 * 86_400_000  # while paper stays outside the expected band, repeat the alert weekly
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS alerts (
@@ -217,8 +218,10 @@ class AlertMonitor:
     """Collects alert conditions from the runner, risk ledger and market data each check."""
 
     def __init__(self, center: AlertCenter, *, runner_fn: Callable[[], Any], freshness_fn: Callable[[], dict],
-                 extra_fn: Callable[[], dict] = lambda: {}, now_ms: Optional[Callable[[], int]] = None):
+                 extra_fn: Callable[[], dict] = lambda: {}, now_ms: Optional[Callable[[], int]] = None,
+                 band_fn: Optional[Callable[[Any], dict]] = None):
         self.c = center
+        self.band_fn = band_fn  # ledger -> expected-band evaluation (production: app.paper.expected_band.from_ledger)
         self.runner_fn, self.freshness_fn, self.extra_fn = runner_fn, freshness_fn, extra_fn
         self.now_ms = now_ms or center.now_ms
 
@@ -227,6 +230,7 @@ class AlertMonitor:
         r = self.runner_fn()
         if r is not None:
             out += self._runner(r)
+            out += self._band(r)
         out += self._data(r)
         self.c.retry_failed()
         d = self._digest(r)
@@ -265,6 +269,34 @@ class AlertMonitor:
                                           "风控事件（北京时间）：\n" + "\n".join(lines) + "\n\n纸面账本，实盘锁定。"))
             self.c.set("risk_event_id", mx)
         return out
+
+    def _band(self, r) -> list[str]:
+        """Paper outside the pre-registered backtest band: alert on entering a new outside state, then weekly while it lasts."""
+        from app.paper.expected_band import OUTSIDE
+
+        if self.band_fn is None:
+            return []
+        try:
+            ev = self.band_fn(r.ledger)
+        except Exception:
+            log.exception("expected band check failed")
+            return []
+        st, prev, now = ev.get("status"), self.c.get("band_alert"), self.now_ms()
+        if st not in OUTSIDE:
+            if prev is not None and st == "inside":
+                self.c.set("band_alert", None)
+            return []
+        if prev is not None and prev.get("status") == st and now - int(prev.get("at", 0)) < BAND_REPEAT_MS:
+            return []
+        body = (f"纸面结果{ev['label']}。\n运行天数 N={ev['n']}（截至 {ev.get('day')} 收盘）\n"
+                f"纸面累计收益 {_fmt(ev['cum'])}，区间 5%–95%：{_fmt(ev['p05'])} ~ {_fmt(ev['p95'])}（中位 {_fmt(ev['p50'])}）\n"
+                f"纸面最大回撤 {_fmt(ev['mdd'])}，预期 5% 最差：{_fmt(ev['mddP05'])}\n"
+                f"区间：{ev['name']} v{ev['version']}，seed {ev['registered']['seed']}，block {ev['registered']['block']}，"
+                f"{ev['registered']['n_paths']} 条路径，来源 sha {ev['sourceSha']}\n\n{ev['note']}\n纸面账本，实盘锁定。")
+        res = self.c.raise_alert(f"band:{st}:{ev.get('day')}", "band", f"AUUTRADE 告警：纸面{ev['label'][:12]}", body)
+        if res in ("sent", "unconfigured", "duplicate", "failed"):
+            self.c.set("band_alert", {"status": st, "at": now, "day": ev.get("day")})
+        return [res]
 
     def _data(self, r) -> list[str]:
         out = []
@@ -369,6 +401,13 @@ def build_digest(r, center: AlertCenter, now: int, *, extra: Optional[dict] = No
 
         lines += ["", f"风控事件（近 24h）：{len(ev)} 条"]
         lines += [f"  {bj(int(e['ts']))} {KIND_LABEL.get(e['kind'], e['kind'])} · {e['action']}" for e in ev[:20]]
+        eb = s.get("expectedBand") or {}
+        if eb.get("status") in ("inside", "below", "above", "dd_breach"):
+            lines += ["", f"回测预期区间（N={eb['n']} 天，非 Go 判定）：{eb['label']} · 累计 {_fmt(eb['cum'])}，"
+                          f"5%–95% {_fmt(eb['p05'])} ~ {_fmt(eb['p95'])} · 回撤 {_fmt(eb['mdd'])}（5% 最差 {_fmt(eb['mddP05'])}）"]
+        ver = (s.get("version") or {}).get("lastRun") or {}
+        if ver.get("params_sha"):
+            lines.append(f"本次运行版本：commit {str(ver.get('git_commit') or '—')[:12]} · 参数 {ver['params_sha'][:12]} · 成本模型 {str(ver.get('cost_model_sha'))[:12]}")
         risk = s.get("risk") or {}
         if risk.get("locked"):
             lines.append(f"  🔒 锁定中：{(risk.get('lock') or {}).get('reason')}")
@@ -416,7 +455,10 @@ def production_monitor() -> AlertMonitor:
     from app.marketdata.mainstream import get_service
     from app.paper.strategy_runner import peek_runner
 
-    return AlertMonitor(get_center(), runner_fn=peek_runner, freshness_fn=lambda: get_service().freshness(), extra_fn=_extra)
+    from app.paper.expected_band import from_ledger
+
+    return AlertMonitor(get_center(), runner_fn=peek_runner, freshness_fn=lambda: get_service().freshness(), extra_fn=_extra,
+                        band_fn=from_ledger)
 
 
 async def run_loop(interval_sec: int = 120) -> None:

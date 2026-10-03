@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { ExecShadowSummary, StrategyRisk, StrategySummary } from "@/types/mainstream";
+import type { ExecShadowSummary, ExpectedBand, RunVersion, StrategyRisk, StrategySummary } from "@/types/mainstream";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
@@ -97,7 +97,9 @@ export function StrategyPanel() {
       {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
       {data ? <UniverseNote data={data} /> : null}
       {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
+      <BandBox b={data?.expectedBand ?? null} />
       <ExecShadowBox s={data?.execShadow ?? null} />
+      {data?.version ? <VersionLine v={data.version} /> : null}
       <div className="strat-kpis">
         <Kpi label="权益 USDT" value={num(data?.nav)} />
         <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
@@ -317,6 +319,62 @@ function ExecShadowBox({ s }: { s: ExecShadowSummary | null }) {
         <div className="muted">暂无记录（下一次调仓开始积累）{s?.error ? ` · ${s.error}` : ""}</div>
       )}
       {s ? <div className="muted strat-risk-note">{s.note}{s.skipped ? ` 补跑日跳过 ${s.skipped} 笔。` : ""}{s.errors ? ` 读取失败 ${s.errors} 笔。` : ""}</div> : null}
+    </div>
+  );
+}
+
+const bpct = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
+const short = (x: string | null | undefined) => (x ? x.slice(0, 10) : "—");
+
+function BandBox({ b }: { b: ExpectedBand | null }) {
+  if (!b || b.status === "no_band") return null;
+  const curve = b.curve ?? [];
+  const W = 320, H = 120;
+  const ys = curve.flatMap((c) => [c.p05, c.p95, c.paper ?? 0]);
+  const lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
+  const x = (n: number) => ((n - 1) / Math.max(1, curve.length - 1)) * W;
+  const y = (v: number) => H - ((v - lo) / (hi - lo || 1)) * H;
+  const area = curve.length
+    ? `M${curve.map((c) => `${x(c.n).toFixed(1)},${y(c.p95).toFixed(1)}`).join("L")}L${[...curve].reverse().map((c) => `${x(c.n).toFixed(1)},${y(c.p05).toFixed(1)}`).join("L")}Z`
+    : "";
+  const mid = curve.map((c, i) => `${i ? "L" : "M"}${x(c.n).toFixed(1)},${y(c.p50).toFixed(1)}`).join("");
+  const paper = curve.filter((c) => c.paper != null).map((c, i) => `${i ? "L" : "M"}${x(c.n).toFixed(1)},${y(c.paper as number).toFixed(1)}`).join("");
+  const bad = b.status === "below" || b.status === "dd_breach";
+  return (
+    <div className="strat-risk strat-band">
+      <div className="strat-risk-head">
+        <b>纸面 vs 回测预期区间</b>
+        <span className={bad ? "down" : b.status === "above" ? "warn" : "up"}>{b.label ?? b.status}</span>
+        {b.n ? (
+          <span className="muted">
+            N={b.n} 天 · 累计 {bpct(b.cum)}（5%–95%：{bpct(b.p05)} ~ {bpct(b.p95)}）· 回撤 {bpct(b.mdd)}（5% 最差 {bpct(b.mddP05)}）
+          </span>
+        ) : null}
+      </div>
+      {curve.length ? (
+        <svg viewBox={`0 0 ${W} ${H}`} className="strat-band-svg" preserveAspectRatio="none" role="img" aria-label="预期区间">
+          <path d={area} fill="currentColor" opacity={0.12} />
+          <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="currentColor" opacity={0.25} strokeDasharray="3 3" />
+          <path d={mid} fill="none" stroke="currentColor" opacity={0.4} strokeWidth={1} />
+          {paper ? <path d={paper} fill="none" stroke="#2f80ed" strokeWidth={2} /> : null}
+        </svg>
+      ) : null}
+      <div className="muted strat-risk-note">
+        {b.note} 区间 {b.name} v{b.version} · seed {b.registered?.seed} · block {b.registered?.block} · {b.registered?.n_paths} 条路径 · 来源 {b.sourceSha}
+        {b.error ? ` · ${b.error}` : ""}
+      </div>
+    </div>
+  );
+}
+
+function VersionLine({ v }: { v: RunVersion }) {
+  const l = v.lastRun;
+  return (
+    <div className="muted strat-version">
+      本次运行版本：commit {short(l.git_commit)} · 参数 {short(l.params_sha)} · 成本模型 {short(l.cost_model_sha)}
+      {v.unversionedRuns ? ` · 早期 ${v.unversionedRuns} 天无版本记录` : ""}
+      {v.changedSinceLastRun ? " · ⚠ 当前参数与上次运行不同" : ""}
+      {l.git_commit && v.current.git_commit && l.git_commit !== v.current.git_commit ? ` · 当前代码 ${short(v.current.git_commit)}` : ""}
     </div>
   );
 }

@@ -205,6 +205,40 @@ export interface StrategySummary {
   status: StrategyStatus;
   risk?: StrategyRisk;
   execShadow?: ExecShadowSummary | null;
+  expectedBand?: ExpectedBand | null;
+  version?: RunVersion;
+}
+export interface ExpectedBand {
+  status: "inside" | "below" | "above" | "dd_breach" | "beyond_horizon" | "no_data" | "no_band" | "error";
+  label?: string;
+  name?: string;
+  version?: number;
+  registered?: { seed: number; block: number; n_paths: number; horizon?: number };
+  sourceSha?: string;
+  horizon?: number;
+  n?: number;
+  cum?: number;
+  mdd?: number;
+  p05?: number;
+  p50?: number;
+  p95?: number;
+  mddP05?: number;
+  outside?: boolean;
+  curve?: { n: number; p05: number; p50: number; p95: number; paper: number | null; day: string | null }[];
+  note?: string;
+  error?: string;
+}
+export interface RunVersionHashes {
+  git_commit: string | null;
+  params_sha: string | null;
+  cost_model_sha: string | null;
+}
+export interface RunVersion {
+  current: RunVersionHashes;
+  lastRun: RunVersionHashes;
+  distinct: Record<string, number>;
+  unversionedRuns: number;
+  changedSinceLastRun: boolean;
 }
 export interface ExecShadowSummary {
   ledger: string;
