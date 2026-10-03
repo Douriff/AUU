@@ -486,7 +486,6 @@ def _open_positions() -> int:
 
 
 def console_stats() -> dict[str, Any]:
-    from app.legacy.pump.paper.executability import build_executability
     from app.paper.ledger import excluded_from_go, get_paper_journal
 
     start = shanghai_day_start_ms()
@@ -499,10 +498,24 @@ def console_stats() -> dict[str, Any]:
     n = len(trades)
     pnl = sum(float(t.pnl) for t in trades) if n else 0.0
     avg_bps = (sum(float(t.pnl_pct) * 10_000.0 for t in trades) / n) if n else None
-    try:
-        exe = build_executability(window="session")
-    except Exception:
-        exe = {}
+    from app.legacy import legacy_pump_enabled
+
+    legacy = legacy_pump_enabled()
+    if legacy:
+        from app.legacy.pump.paper.executability import build_executability
+
+        try:
+            exe = build_executability(window="session")
+        except Exception:
+            exe = {}
+    else:
+        # Mainstream ledger: no strategy runs yet, so there is no Go/No-Go to show
+        # (the pump executability verdict does not apply to it).
+        exe = {
+            "verdict": "pending",
+            "lamp": "gray",
+            "nogo_reason": f"主流纸面账本：已平仓 {len(get_paper_journal().closed)} 笔，Go/No-Go 待策略运行后评估",
+        }
     return {
         "open_positions": _open_positions(),
         "closed_today": n,
@@ -512,7 +525,7 @@ def console_stats() -> dict[str, Any]:
         "verdict": exe.get("verdict") or "no-go",
         "lamp": exe.get("lamp") or "gray",
         "nogo_reason": exe.get("nogo_reason") or "",
-        "go_window_label": "round8b",
+        "go_window_label": "round8b" if legacy else "mainstream",
         "mode": "paper",
         "liveEnabled": False,
         "liveDisabled": True,

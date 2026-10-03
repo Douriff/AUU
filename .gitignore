@@ -21,3 +21,6 @@ apps/api/data/*.json
 
 # Paper evidence sidecar (rotated JSONL)
 apps/api/data/evidence/
+# Mainstream market-data store + archived legacy pump ledger (runtime data)
+apps/api/data/*.sqlite*
+apps/api/data/archive/

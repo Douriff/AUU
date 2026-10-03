@@ -94,5 +94,28 @@ class LedgerArchiveTests(unittest.TestCase):
                 ledger._ledger = None
 
 
+class MainstreamConsoleStatsTests(unittest.TestCase):
+    def test_fresh_mainstream_ledger_shows_pending_not_nogo(self):
+        import os
+        from unittest.mock import patch
+
+        from app.paper import ledger
+        from app.paper.events import console_stats
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"AUU_LEGACY_PUMP": "off", "AUU_DATA_DIR": tmp}):
+            os.environ.pop("PAPER_JOURNAL_STORE", None)
+            ledger._ledger = None
+            try:
+                with patch("app.legacy.pump.paper.executability.build_executability", side_effect=AssertionError("pump verdict")):
+                    stats = console_stats()
+            finally:
+                ledger._ledger = None
+        self.assertEqual(stats["open_positions"], 0)
+        self.assertEqual(stats["closed_today"], 0)
+        self.assertEqual(stats["verdict"], "pending")
+        self.assertEqual(stats["go_window_label"], "mainstream")
+        self.assertFalse(stats["liveEnabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

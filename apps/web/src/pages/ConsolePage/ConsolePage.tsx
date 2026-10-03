@@ -87,7 +87,7 @@ export function ConsolePage() {
     });
   }
 
-  const verdict = stats?.verdict === "go" ? "Go" : "No-Go";
+  const verdict = stats?.verdict === "go" ? "Go" : stats?.verdict === "pending" ? "待评估" : "No-Go";
   const lamp = stats?.lamp || "gray";
 
   return (
@@ -107,7 +107,7 @@ export function ConsolePage() {
         />
         <span
           className={`console-go lamp-${lamp}`}
-          title={stats?.nogo_reason || stats?.go_window_label || "round8b"}
+          title={stats?.nogo_reason || stats?.go_window_label || ""}
         >
           {verdict}
         </span>
