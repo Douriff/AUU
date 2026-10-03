@@ -5,6 +5,7 @@ import type {
   MainstreamOverview,
   MainstreamTf,
   PaperAccount,
+  StrategySummary,
   PaperOrder,
   PaperOrderRequest,
 } from "@/types/mainstream";
@@ -310,6 +311,10 @@ export class HttpWsProvider {
 
   cancelPaperOrder(id: string): Promise<PaperOrder> {
     return postJson(`/api/v1/mainstream/paper/orders/${encodeURIComponent(id)}/cancel`, {});
+  }
+
+  getStrategySummary(): Promise<StrategySummary> {
+    return getJson("/api/v1/mainstream/strategy");
   }
 
   getMainstreamFunding(symbol: string, limit = 90): Promise<MainstreamFunding> {

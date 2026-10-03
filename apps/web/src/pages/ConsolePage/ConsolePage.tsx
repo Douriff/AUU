@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useConsole } from "@/hooks/useConsole";
 import type { ConsoleEvent } from "@/types/contracts";
+import { StrategyPanel } from "@/components/strategy/StrategyPanel";
 
 const FILTERS: { id: string; label: string }[] = [
   { id: "all", label: "全部" },
@@ -97,7 +98,7 @@ export function ConsolePage() {
         <Stat label="今日平仓" value={stats ? String(stats.closed_today) : "—"} />
         <Stat
           label="今日净盈亏"
-          value={stats ? `${formatSol(stats.pnl_today) || "0"} SOL` : "—"}
+          value={stats ? `${formatSol(stats.pnl_today) || "0"}${stats.go_window_label === "mainstream" ? "" : " SOL"}` : "—"}
           tone={tone(stats?.pnl_today)}
         />
         <Stat
@@ -115,7 +116,9 @@ export function ConsolePage() {
         <span className="console-badge live-off">LIVE OFF</span>
       </section>
 
-      <section className="console-card" aria-label="事件日志">
+      <StrategyPanel />
+
+      <section className="console-card console-log-card" aria-label="事件日志">
         <header className="console-card-bar">
           <div className="console-title">
             <span className={`console-live${paused ? " is-paused" : ""}`} aria-hidden="true" />

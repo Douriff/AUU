@@ -119,3 +119,77 @@ export type PaperOrderRequest = {
   notional?: number;
   limit_price?: number;
 };
+
+/** M3 daily paper runner (GET /api/v1/mainstream/strategy). */
+export interface StrategyCurvePoint {
+  day: string;
+  ts: number;
+  nav: number;
+  strategy: number;
+  ret: number;
+  cost: number;
+  funding: number;
+  gross: number;
+  btc: number | null;
+  tbill: number;
+  catchup: boolean;
+}
+export interface StrategyPosition {
+  coin: string;
+  weight: number;
+  notional: number;
+  price: number | null;
+  qty: number | null;
+  target: number | null;
+}
+export interface StrategyFill {
+  day: number;
+  coin: string;
+  side: "buy" | "sell";
+  w_from: number;
+  w_to: number;
+  notional: number;
+  qty: number;
+  price: number;
+  fill_price: number;
+  fee: number;
+  slippage: number;
+}
+export interface StrategyStatus {
+  active: boolean;
+  strategy?: string;
+  lastDay: string | null;
+  lastRunAt?: number | null;
+  nextDueDay?: string;
+  hoursSinceRebalance: number;
+  stallHours: number;
+  stalled: boolean;
+  reason: string;
+  waiting?: string;
+  lastError?: string;
+  days: number;
+}
+export interface StrategyGoNoGo {
+  standard: string;
+  verdict: "pending" | "go" | "no-go";
+  lamp: string;
+  days: number;
+  minDays: number;
+  message: string;
+  tbill: number;
+  stats?: Record<string, number | null>;
+}
+export interface StrategySummary {
+  strategy: { name: string; lookbacks: number[]; target_vol: number; cap: number; long_only: boolean };
+  mode: "paper";
+  live: { enabled: false; reason: string; message: string };
+  startNav: number;
+  nav: number;
+  cost: { taker: number; slippage: Record<string, number>; slippageDefault: number; band: number; funding: string };
+  curve: StrategyCurvePoint[];
+  positions: StrategyPosition[];
+  fills: StrategyFill[];
+  totals: { strategy?: number; btc?: number | null; tbill?: number };
+  goNoGo: StrategyGoNoGo;
+  status: StrategyStatus;
+}

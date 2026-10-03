@@ -1,0 +1,21 @@
+# M3 · 趋势策略每日纸面运行
+
+- **策略**：`trend_tsmom_v1`，参数和 M2 预注册一致。纸面运行器每天调用 `decide()`，和回测是同一份代码。
+- **数据**：主流行情存储里的交易所公开日线（服务器 Binance，box OKX）和资金费率。永续价格用现货收盘价近似，和 `--store` 回测一样。
+- **调仓时间**：每天 UTC 00:00 收盘后，即北京时间 08:00 之后。运行器每分钟检查一次。日线 D 的数据只有在存储里已经出现 D+1 的 K 线、且资金费率已更新到 D 16:00 UTC 时才算定稿，否则等待。
+- **记账**：用 `app.backtest.engine.step()`，和回测逐日共用。
+  - 前一天的权重按 D 的收盘到收盘涨跌计盈亏，再扣除 D 的资金费（多头付正费率）。
+  - 调仓在 D 收盘价成交，规则是 20% 漂移带。
+  - 成本 = |Δw| ×（taker 0.05% + 每币滑点），即 `CostModel`。
+  - 测试 `test_daily_runner_reproduces_backtest_engine` 证明逐日收益和回测引擎一致，误差在 1e-12 以内。
+- **账本**：`data/mainstream_strategy.sqlite` 是系统主流纸面账本，表 `runs`（每天一行，主键是日期）和 `fills`。初始资金 10,000 USDT，可用 `AUU_STRATEGY_START_USDT` 调整。
+- **幂等**：每天在一个事务里写入（`BEGIN IMMEDIATE`），先检查日期，同时有文件锁防止多进程同时写。重启、重复 tick、两个进程同时跑，都不会重复下单。提交前崩溃则什么都不写，下次重算出同样的结果。
+- **补跑**：停机漏掉的天数，下次 tick 按顺序补跑，标记 `catchup=1`，结果和连续运行完全相同。超过 30 天不自动补跑，需要人工确认。
+- **停滞告警**：上次调仓用的收盘时间距今超过 26 小时，就判为 `stalled`。`/api/v1/health` 里的 `strategyRunner` 和 `autopaperStall` 都会显示；auu-guard 记一条 `STRATEGY STALL WARN` 日志，不会停 API。
+- **控制台**：`GET /api/v1/mainstream/strategy` 需要登录，未登录返回 401。返回内容：
+  - 策略净值、BTC 买入持有、国债 3.99% 三条曲线，以及日收益；
+  - 持仓、调仓成交；
+  - Go/No-Go。
+- **Go/No-Go**：按日收益评估，至少 250 天。在此之前一律显示“数据积累中，未证明优势”。250 天后判 Go 的条件：日收益年化 block-bootstrap CI 下限 > 0，且超额收益的 CI 下限 > 0（跑赢国债）。
+- **实盘**：仍被 `LIVE_API_LOCKED` 锁住。运行器不引用任何交易所下单接口，有测试检查源码。
+- **关闭**：设 `AUU_STRATEGY_RUNNER=off`。

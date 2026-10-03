@@ -5,6 +5,8 @@ Nothing here submits orders, edits strategy params, or arms live trading.
 """
 from __future__ import annotations
 
+import json
+
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -509,15 +511,19 @@ def console_stats() -> dict[str, Any]:
         except Exception:
             exe = {}
     else:
-        # Mainstream ledger: no strategy runs yet, so there is no Go/No-Go to show
-        # (the pump executability verdict does not apply to it).
-        exe = {
-            "verdict": "pending",
-            "lamp": "gray",
-            "nogo_reason": f"主流纸面账本：已平仓 {len(get_paper_journal().closed)} 笔，Go/No-Go 待策略运行后评估",
-        }
+        # Mainstream: Go/No-Go comes from the M3 strategy runner's daily returns (>= 250 days).
+        try:
+            from app.paper.strategy_runner import GO_MIN_DAYS, peek_runner
+
+            r = peek_runner()
+            g = r.go_no_go() if r else {"verdict": "pending", "lamp": "gray", "message": f"数据积累中，未证明优势（日收益 0/{GO_MIN_DAYS} 天）"}
+            last = r.ledger.last_run() if r else None
+            n_pos = len(json.loads(last["weights"])) if last else 0
+            exe = {"verdict": g["verdict"], "lamp": g["lamp"], "nogo_reason": "趋势策略纸面账本：" + g["message"], "open_positions": n_pos}
+        except Exception as exc:
+            exe = {"verdict": "pending", "lamp": "gray", "nogo_reason": f"策略账本读取失败：{type(exc).__name__}"}
     return {
-        "open_positions": _open_positions(),
+        "open_positions": exe["open_positions"] if "open_positions" in exe else _open_positions(),
         "closed_today": n,
         "pnl_today": pnl,
         "avg_net_bps": avg_bps,
