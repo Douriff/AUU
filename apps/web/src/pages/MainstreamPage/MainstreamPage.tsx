@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CoinBadge, CoinSwitcher, MarketList, Spark, fmtPct, fmtPx, fmtRate, fmtVol, pxWidths, tone } from "@/components/market/MarketList";
 import { Num } from "@/components/ui/Num";
 import { Empty, Sk, SkCards, SkRows } from "@/components/ui/Skeleton";
@@ -7,7 +7,7 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
 import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
 import { OrderBook } from "@/components/market/OrderBook";
-import type { MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
+import type { MainstreamCoin, MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
 
 const POLL_MS = 30_000;
 
@@ -195,7 +195,11 @@ function HeldTable({ rows, onOpen }: { rows: MarketRow[]; onOpen: (s: string) =>
 /** 主流行情: market overview + list of every strategy coin, then the coin's trading view (chart + paper panel). */
 export function MainstreamPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const pick = (params.get("symbol") || "").toUpperCase();
+  const venueParam = (params.get("venue") || "").toLowerCase() || null;
+  const [coin, setCoin] = useState<MainstreamCoin | null>(null);
+  const [coinErr, setCoinErr] = useState("");
   const [mk, setMk] = useState<MarketsResponse | null>(null);
   const [err, setErr] = useState("");
   const [tf, setTf] = useState<MainstreamTf>(() => {
@@ -220,7 +224,38 @@ export function MainstreamPage() {
     };
   }, [tick]);
 
-  const current = useMemo(() => mk?.items.find((i) => i.symbol === pick), [mk, pick]);
+  const poolRow = useMemo(() => mk?.items.find((i) => i.symbol === pick), [mk, pick]);
+  // 大盘 coin (outside the pool), or a pool coin opened from another venue's tab: on-demand data path.
+  const extraMode = Boolean(pick && mk && (!poolRow || (venueParam && venueParam !== mk.exchange && (venueParam === "binance" || venueParam === "okx"))));
+
+  useEffect(() => {
+    if (!extraMode) {
+      setCoin(null);
+      setCoinErr("");
+      return;
+    }
+    let alive = true;
+    marketProvider
+      .getMainstreamCoin(pick, venueParam)
+      .then((c) => alive && (setCoin(c), setCoinErr("")))
+      .catch((e: unknown) => alive && setCoinErr(e instanceof Error ? e.message : "读取失败"));
+    return () => {
+      alive = false;
+    };
+  }, [extraMode, pick, venueParam, tick]);
+
+  const current: MarketRow | undefined = useMemo(() => {
+    if (!extraMode) return poolRow;
+    if (!coin || coin.symbol !== pick) return undefined;
+    return {
+      ...(poolRow ?? { symbol: coin.symbol, pair: coin.pair, perp: "", display: false, strategy: false, held: false, weight: null }),
+      price: coin.price ?? poolRow?.price ?? null,
+      change24h: coin.change24h ?? poolRow?.change24h ?? null,
+      quoteVolume24h: coin.quoteVolume24h ?? poolRow?.quoteVolume24h ?? null,
+    };
+  }, [extraMode, poolRow, coin, pick]);
+  const dataVenue = extraMode ? coin?.dataVenue ?? null : null;
+  const venueLabel = (v: string | null | undefined) => (v ? ({ binance: "Binance", okx: "OKX", bybit: "Bybit", coinbase: "Coinbase" } as Record<string, string>)[v] ?? v : "");
 
   useEffect(() => {
     if (!current) return;
@@ -237,12 +272,19 @@ export function MainstreamPage() {
   const open = (symbol: string) => {
     const next = new URLSearchParams(params);
     next.set("symbol", symbol);
+    next.delete("venue"); // the coin switcher / held table open pool coins on the strategy source
     setParams(next);
     window.scrollTo({ top: 0 });
   };
   const back = () => {
     const next = new URLSearchParams(params);
     next.delete("symbol");
+    const from = next.get("venue");
+    next.delete("venue");
+    if (from) {
+      navigate("/majors");
+      return;
+    }
     setParams(next);
   };
   const pickTf = (id: MainstreamTf) => {
@@ -264,15 +306,16 @@ export function MainstreamPage() {
         ) : null}
         {!mk && !err ? <OverviewSkeleton /> : null}
         {mk?.tickers.error ? <div className="pro-alert is-warn">实时价格暂不可用，已改用本地 K 线收盘价（每 5 分钟刷新）。</div> : null}
-        {mk && pick ? (
+        {mk && pick && extraMode && !coinErr ? <OverviewSkeleton /> : null}
+        {mk && pick && (!extraMode || coinErr) ? (
           <div className="pro-alert">
-            未知币种 {pick}
+            {coinErr ? `${pick}：${coinErr}` : `未知币种 ${pick}`}
             <button type="button" className="btn-ghost ms-back" onClick={back}>
               返回列表
             </button>
           </div>
         ) : null}
-        {mk ? (
+        {mk && !(pick && extraMode && !coinErr) ? (
           <>
             <Overview mk={mk} onOpen={open} now={now} />
             <MarketList rows={mk.items} onOpen={open} quote={quote} />
@@ -293,6 +336,13 @@ export function MainstreamPage() {
             ‹
           </button>
           <CoinSwitcher rows={mk!.items} current={current.symbol} onPick={open} quote={quote} />
+          {extraMode ? (
+            <span className="tk-src" title="数据来源交易所">
+              {venueLabel(dataVenue) || venueLabel(venueParam) || "—"}
+              {coin && !coin.inPool ? <em>大盘币 · 非策略币池</em> : null}
+              {coin && coin.viewOnly ? <em className="warn">仅查看</em> : null}
+            </span>
+          ) : null}
           <div className="tk-last">
             <b className={`num ${tone(current.change24h)}`}>{fmtPx(current.price)}</b>
             <em className={`num ${tone(current.change24h)}`}>{fmtPct(current.change24h)}</em>
@@ -333,13 +383,28 @@ export function MainstreamPage() {
                 ))}
               </div>
             </div>
-            <MainstreamChart symbol={current.symbol} tf={tf} />
+            {extraMode && !dataVenue ? (
+              <div className="ms-viewonly-chart">
+                <b>仅查看</b>
+                <span>{coin?.reason || "该币暂无 K 线数据"}</span>
+              </div>
+            ) : (
+              <MainstreamChart symbol={current.symbol} tf={tf} venue={dataVenue} overlay={!extraMode || Boolean(coin?.inPool)} />
+            )}
           </div>
           <div className="ms-trade-book pane">
-            <OrderBook symbol={current.symbol} />
+            {extraMode && !dataVenue ? <div className="ob-empty dim">暂无订单簿</div> : <OrderBook symbol={current.symbol} venue={dataVenue} />}
           </div>
           <div className="ms-trade-side pane">
-            <PaperTradePanel symbol={current.symbol} price={current.price} />
+            {extraMode && coin && !coin.tradable ? (
+              <div className="ms-viewonly">
+                <b>仅查看</b>
+                <p>{coin.reason || "该币暂不支持纸面交易"}</p>
+                <p className="dim">纸面交易支持：趋势策略 19 币 + Binance / OKX 成交额前 100 的现货。</p>
+              </div>
+            ) : (
+              <PaperTradePanel symbol={current.symbol} price={current.price} />
+            )}
           </div>
         </div>
         <div className="ms-bottom pane">

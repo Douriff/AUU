@@ -39,7 +39,8 @@ const toTime = (ms: number) => (Math.floor(ms / 1000) + TZ_SHIFT_SEC) as UTCTime
 const fromTime = (t: Time) => ((t as number) - TZ_SHIFT_SEC) * 1000;
 
 function priceFormat(px: number) {
-  const precision = px >= 1000 ? 2 : px >= 10 ? 2 : px >= 1 ? 3 : 5;
+  // sub-cent 大盘 coins (PEPE ~ 0.0000043) keep ~4 significant digits
+  const precision = px >= 10 ? 2 : px >= 1 ? 3 : px >= 0.01 ? 5 : Math.min(10, Math.max(5, Math.ceil(-Math.log10(px || 1e-10)) + 3));
   return { type: "price" as const, precision, minMove: 10 ** -precision };
 }
 
@@ -77,7 +78,7 @@ type OvRow = StrategyOverlay["series"][number];
 const MOM_COLORS = ["#f2c94c", "#bb86fc", "#4fc3f7"];
 const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 
-export function MainstreamChart({ symbol, tf }: { symbol: string; tf: MainstreamTf }) {
+export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { symbol: string; tf: MainstreamTf; venue?: string | null; overlay?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -173,7 +174,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     setLegend(null);
     setState({ loading: true, err: "", limited: false, count: 0 });
     marketProvider
-      .getMainstreamCandles(symbol, tf, tf === "1d" ? 1000 : PAGE)
+      .getMainstreamCandles(symbol, tf, tf === "1d" ? 1000 : PAGE, undefined, venue)
       .then((d) => {
         if (gen.current !== my) return;
         setAll(d.candles);
@@ -183,7 +184,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
         setState({ loading: false, err: d.candles.length ? "" : d.fetchError || "暂无K线数据", limited: !!d.limited, retention: d.retentionDays, count: n });
       })
       .catch((e: unknown) => gen.current === my && setState({ loading: false, err: e instanceof Error ? e.message : "读取失败", limited: false, count: 0 }));
-  }, [symbol, tf, setAll, lastLegend]);
+  }, [symbol, tf, venue, setAll, lastLegend]);
 
   // Scroll/zoom near the left edge pages older history in (bounded by the server's window).
   useEffect(() => {
@@ -195,7 +196,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
       const oldest = dataRef.current[0].ts;
       loadingOld.current = true;
       marketProvider
-        .getMainstreamCandles(symbol, tf, PAGE, oldest)
+        .getMainstreamCandles(symbol, tf, PAGE, oldest, venue)
         .then((d) => {
           if (gen.current !== my) return;
           const older = d.candles.filter((c) => c.ts < oldest);
@@ -210,7 +211,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     return () => chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
-  }, [symbol, tf, setAll]);
+  }, [symbol, tf, venue, setAll]);
 
   // Keep the forming bar live.
   useEffect(() => {
@@ -218,7 +219,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     const t = window.setInterval(() => {
       if (document.hidden || !dataRef.current.length) return;
       marketProvider
-        .getMainstreamCandles(symbol, tf, 3)
+        .getMainstreamCandles(symbol, tf, 3, undefined, venue)
         .then((d) => {
           if (gen.current !== my) return;
           const last = dataRef.current[dataRef.current.length - 1];
@@ -238,14 +239,14 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
         .catch(() => undefined);
     }, POLL_MS[tf]);
     return () => window.clearInterval(t);
-  }, [symbol, tf, lastLegend]);
+  }, [symbol, tf, venue, lastLegend]);
 
   // Buy/sell markers follow the 红涨绿跌 toggle too.
   const [colorRev, setColorRev] = useState(0);
   useEffect(() => onColorPref(() => setColorRev((n) => n + 1)), []);
 
   // Overlay data: daily chart + toggle on. Read-only endpoint; refreshed when the symbol changes.
-  const showSig = sigOn && tf === "1d";
+  const showSig = overlay && sigOn && tf === "1d";
   useEffect(() => {
     if (!showSig) {
       setOv(null);
@@ -386,7 +387,7 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
           {state.limited ? " · 已到最早可用数据" : ""}
         </span>
         <span className="msc-actions">
-          {tf === "1d" ? (
+          {tf === "1d" && overlay ? (
             <button
               type="button"
               className={sigOn ? "is-on" : ""}

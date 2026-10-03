@@ -576,6 +576,10 @@ def _market_price(sym: str) -> Optional[tuple[float, int]]:
     from app.marketdata.mainstream import get_service
 
     svc = get_service()
+    if sym not in svc.cfg.all_symbols():  # 大盘 coin outside the pool: on-demand public 1m close
+        from app.marketdata.extra import get_extra
+
+        return get_extra().last_price(sym)
     for tf in ("1m", "1h"):
         try:
             rows = svc.chart_candles(sym, tf, limit=1)["candles"]
@@ -593,11 +597,33 @@ def _market_candles(sym: str, since: int) -> list[dict]:
     from app.marketdata.mainstream import get_service
 
     svc = get_service()
+    if sym not in svc.cfg.all_symbols():
+        from app.marketdata.extra import get_extra
+
+        return get_extra().bars_since(sym, since)
     ex = svc.exchange_for_read()
     if not ex:
         return []
     svc.chart_candles(sym, "1m", limit=5)  # refresh the tail (throttled)
     return svc.store.candles(ex, sym, "1m", since=since // 60_000 * 60_000, limit=2000)
+
+
+def _paper_symbols() -> list[str]:
+    from app.marketdata.extra import get_extra
+
+    return get_extra().paper_symbols()
+
+
+def held_symbols() -> set[str]:
+    """Coins with an open paper position or open order (any user): always tradable/closable."""
+    acc = _accounts
+    if acc is None:
+        return set()
+    with acc._lock:
+        rows = acc._db.execute(
+            "SELECT symbol FROM positions WHERE qty > 1e-12 UNION SELECT symbol FROM orders WHERE status='open'"
+        ).fetchall()
+    return {str(r[0]) for r in rows}
 
 
 def get_accounts() -> PaperAccounts:
@@ -606,7 +632,7 @@ def get_accounts() -> PaperAccounts:
         if _accounts is None:
             from app.marketdata.mainstream import get_service
 
-            _accounts = PaperAccounts(price_fn=_market_price, candles_fn=_market_candles, symbols=lambda: get_service().cfg.all_symbols())  # display + strategy universe; limits unchanged
+            _accounts = PaperAccounts(price_fn=_market_price, candles_fn=_market_candles, symbols=_paper_symbols)  # pool + 大盘 top-100 coins + held; limits unchanged
         return _accounts
 
 

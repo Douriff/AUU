@@ -209,11 +209,13 @@ export function AppShell() {
   }
   if (gate === "anon") {
     return (
-      <div className="auth-screen">
-        <div className="auth-screen-brand">
-          <Brand />
-          <ModeBadge />
-        </div>
+      <div className={`auth-screen${location.pathname === "/status" ? " is-status" : " is-card"}`}>
+        {location.pathname === "/status" ? (
+          <div className="auth-screen-brand">
+            <Brand />
+            <ModeBadge />
+          </div>
+        ) : null}
         <main className="auth-screen-body">{AUTH_PATHS.has(location.pathname) ? <Outlet /> : null}</main>
       </div>
     );

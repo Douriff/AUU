@@ -745,3 +745,49 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
   .ob-head { padding: 6px 12px 4px; }
   .ob-mid-m { border-bottom: 0; }
 }
+
+/* ---- auth screens: card centred in the viewport, brand inside the card ---- */
+.auth-screen { width: 100%; padding: 24px 16px; }
+.auth-screen.is-card { justify-content: center; }
+.auth-screen.is-card .auth-screen-body { flex: 0 0 auto; width: 100%; max-width: 420px; margin: auto; }
+.auth-screen.is-status .auth-screen-body { width: 100%; max-width: 880px; }
+.auth-screen.is-status .auth-screen-brand { width: 100%; max-width: 880px; margin: 0 auto 8px; padding: 0 0 12px; }
+.auth-page { width: 100%; display: flex; justify-content: center; }
+.auth-page .auth-card { width: 100%; max-width: 420px; margin: 0 auto; padding: 28px 28px 24px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); }
+.auth-screen.is-card .auth-page .auth-card { margin: 0 auto; }
+.pro-main .auth-page, .app-main .auth-page { padding: 7vh 16px 40px; }
+.auth-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.auth-head-brand { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.auth-head-brand a { color: inherit; text-decoration: none; display: inline-flex; }
+.auth-head-brand .brand { font-size: 17px; }
+.auth-head h1 { margin: 0; }
+.auth-sub { margin: 0; }
+.auth-card form { display: flex; flex-direction: column; gap: 12px; }
+.auth-card form label { display: flex; flex-direction: column; gap: 6px; }
+.auth-card .email-code-row button { white-space: nowrap; padding: 0 14px; min-width: 112px; }
+@media (max-width: 760px) {
+  .auth-screen.is-card { justify-content: flex-start; padding-top: 6vh; }
+  .auth-page .auth-card { padding: 22px 18px; box-shadow: none; }
+}
+
+/* ---- /status: wider centred column; empty outage state on one line ---- */
+.st-page { max-width: 880px; width: 100%; margin: 0 auto; }
+.auth-screen .st-page { padding-left: 0; padding-right: 0; }
+.st-outages li.st-empty { display: block; padding: 10px 0; font-size: 13px; }
+
+/* ---- 大盘 rows open the coin's trade view ---- */
+.mj-table tr.mj-row-link { cursor: pointer; }
+.mj-table tr.mj-row-link:hover td, .mj-table tr.mj-row-link:focus-visible td { background: rgba(240, 165, 49, 0.06); }
+.mj-table tr.mj-row-link:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.mj-table tr.mj-row-link:hover .mj-base { color: var(--accent); }
+.tk-src { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tk-src em { font-style: normal; font-size: 11px; padding: 0 6px; line-height: 18px; border: 1px solid var(--border); border-radius: 3px; }
+.tk-src em.warn { border-color: rgba(240, 165, 49, 0.5); }
+.ms-viewonly, .ms-viewonly-chart { display: flex; flex-direction: column; gap: 8px; padding: 22px 16px; color: var(--muted); font-size: 13px; }
+.ms-viewonly b, .ms-viewonly-chart b { color: var(--warn); font-size: 14px; }
+.ms-viewonly p { margin: 0; line-height: 1.5; }
+.ms-viewonly-chart { min-height: 320px; align-items: center; justify-content: center; text-align: center; }
+.auth-card .email-code-row input { min-width: 0; width: auto; }
+.auth-card .email-code-row { width: 100%; }
+.auth-head { text-align: center; }
+.auth-head-brand { justify-content: center; gap: 14px; }

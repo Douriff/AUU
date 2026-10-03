@@ -470,3 +470,21 @@ export type MainstreamOrderbook = {
   ttlSec: number;
   note: string;
 };
+
+/** /api/v1/mainstream/coin: a coin opened from the 大盘 board. */
+export type MainstreamCoin = {
+  symbol: string;
+  pair: string;
+  venue: string | null;
+  dataVenue: string | null;
+  inPool: boolean;
+  tradable: boolean;
+  viewOnly: boolean;
+  reason: string | null;
+  price: number | null;
+  priceTs: number | null;
+  change24h: number | null;
+  quoteVolume24h: number | null;
+  bid: number | null;
+  ask: number | null;
+};

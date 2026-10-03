@@ -42,7 +42,7 @@ function withCum(levels: [number, number][]): Row[] {
 }
 
 /** Read-only spot order book (12 levels). Polls only while the tab is visible. */
-export function OrderBook({ symbol }: { symbol: string }) {
+export function OrderBook({ symbol, venue = null }: { symbol: string; venue?: string | null }) {
   const [book, setBook] = useState<MainstreamOrderbook | null>(null);
   const [err, setErr] = useState("");
   const narrow = useNarrow();
@@ -57,7 +57,7 @@ export function OrderBook({ symbol }: { symbol: string }) {
       if (document.hidden) return; // resumes on visibilitychange
       let next = POLL_MS;
       try {
-        const b = await marketProvider.getMainstreamOrderbook(symbol, BOOK_LEVELS);
+        const b = await marketProvider.getMainstreamOrderbook(symbol, BOOK_LEVELS, venue);
         if (!alive) return;
         setBook(b);
         setErr("");
@@ -79,7 +79,7 @@ export function OrderBook({ symbol }: { symbol: string }) {
       window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [symbol]);
+  }, [symbol, venue]);
 
   const asks = useMemo(() => withCum(book?.asks ?? []), [book]);
   const bids = useMemo(() => withCum(book?.bids ?? []), [book]);

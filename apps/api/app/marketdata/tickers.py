@@ -23,6 +23,18 @@ _LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
+def peek_board(venue: str) -> Optional[tuple[float, dict[str, Any]]]:
+    """(age_sec, board) of the cached top-100 board, without any network call."""
+    with _LOCK:
+        hit = _CACHE.get(venue)
+    return None if hit is None else (time.monotonic() - hit[0], hit[1])
+
+
+def load_board(venue: str) -> dict[str, Any]:
+    """Top-100 board for one venue (cached TTL seconds; one HTTP request when stale)."""
+    return _load_one(venue) if venue in _VENUES else {"status": "unavailable", "rows": []}
+
+
 def reset_ticker_cache() -> None:
     with _LOCK:
         _CACHE.clear()

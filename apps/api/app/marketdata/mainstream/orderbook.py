@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 FETCH_LEVELS = 20  # accepted by both Binance (5/10/20/...) and OKX spot (1..400)
 MAX_DEPTH = 20
 BACKOFF_MS = 60_000
+MAX_SLOTS = 48  # pool coins + recently viewed 大盘 coins
 
 
 def _env_int(name: str, default: int, lo: int, hi: int) -> int:
@@ -69,6 +70,10 @@ class BookCache:
     def _slot(self, base: str) -> dict:
         b = self._books.get(base)
         if b is None:
+            if len(self._books) >= MAX_SLOTS:  # bounded: drop the least recently fetched idle slot
+                idle = [k for k, v in self._books.items() if not v["busy"]]
+                if idle:
+                    self._books.pop(min(idle, key=lambda k: self._books[k]["at"]), None)
             b = self._books[base] = {"at": 0, "ex": None, "bids": [], "asks": [], "ts": None,
                                      "error": None, "try_at": 0, "busy": False}
         return b
@@ -78,16 +83,21 @@ class BookCache:
             self._starts.popleft()
         return len(self._starts) < book_budget_per_min()
 
-    def get(self, base: str, depth: int = 12) -> dict:
+    def get(self, base: str, depth: int = 12, ex: Optional[str] = None) -> dict:
+        """Pool coin on the strategy source (``ex=None``), or an already-validated coin/venue."""
         svc = self.svc
         depth = max(1, min(MAX_DEPTH, int(depth)))
-        if base not in svc.cfg.all_symbols():
-            raise KeyError(base)
-        ex = svc.exchange_for_read()
+        if ex is None:
+            if base not in svc.cfg.all_symbols():
+                raise KeyError(base)
+            ex = svc.exchange_for_read()
+            key = base
+        else:
+            key = f"{ex}:{base}"
         now = svc.now_ms()
         start = False
         with self._lock:
-            b = self._slot(base)
+            b = self._slot(key)
             if ex and books_enabled():
                 due = (b["ex"] != ex or now - int(b["at"]) >= book_ttl_ms()) and now >= int(b["try_at"]) and not b["busy"]
                 if due and self._budget_ok(now):
@@ -97,7 +107,7 @@ class BookCache:
             snap = {k: b[k] for k in ("at", "ex", "ts", "error", "busy")}
             bids, asks = b["bids"][:depth], b["asks"][:depth]
         if start:
-            threading.Thread(target=self._refresh, args=(base, ex), name=f"mainstream-book-{base}", daemon=True).start()
+            threading.Thread(target=self._refresh, args=(base, ex, key), name=f"mainstream-book-{base}", daemon=True).start()
         same = snap["ex"] == ex
         if not same:
             bids, asks = [], []
@@ -108,7 +118,7 @@ class BookCache:
         age = now - int(snap["at"]) if snap["at"] and same else None
         return {
             "symbol": base,
-            "pair": svc.cfg.spot(base),
+            "pair": svc.cfg.spot(base) if key == base else f"{base}/USDT",
             "exchange": ex,
             "enabled": books_enabled(),
             "depth": depth,
@@ -126,21 +136,22 @@ class BookCache:
             "note": "display_only",
         }
 
-    def _refresh(self, base: str, ex: str) -> None:
+    def _refresh(self, base: str, ex: str, key: Optional[str] = None) -> None:
+        key = key or base
         svc = self.svc
         try:
             with self._net:
                 # single attempt, no retry/sleep while holding the lock: the next viewer poll retries
-                raw = svc._od_fetcher(ex).client.fetch_order_book(svc.cfg.spot(base), FETCH_LEVELS) or {}
+                raw = svc._od_fetcher(ex).client.fetch_order_book(f"{base}/USDT" if key != base else svc.cfg.spot(base), FETCH_LEVELS) or {}
             bids = _levels(raw.get("bids"), MAX_DEPTH)
             asks = _levels(raw.get("asks"), MAX_DEPTH)
             ts = raw.get("timestamp")
             with self._lock:
-                self._slot(base).update(at=svc.now_ms(), ex=ex, bids=bids, asks=asks, ts=int(ts) if ts else None,
+                self._slot(key).update(at=svc.now_ms(), ex=ex, bids=bids, asks=asks, ts=int(ts) if ts else None,
                                         error=None, try_at=0, busy=False)
         except Exception as exc:  # keep serving the last snapshot; back off this coin
             with self._lock:
-                self._slot(base).update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=svc.now_ms() + BACKOFF_MS, busy=False)
+                self._slot(key).update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=svc.now_ms() + BACKOFF_MS, busy=False)
             log.warning("mainstream book %s/%s failed: %s", ex, base, exc)
 
 
