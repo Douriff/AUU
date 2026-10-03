@@ -1,7 +1,7 @@
 # 邮件告警与每日摘要
 
 - 通道：复用 AUUTRADE 验证码的 SMTP（`AUU_SMTP_*`），不新增任何密钥。
-- 收件人：`AUU_ALERT_TO`，默认 `olesaruga00@gmail.com`。总开关 `AUU_ALERTS=on`。
+- 收件人：`AUU_ALERT_TO`（可逗号分隔多个；生产在服务器环境文件里配置）。总开关 `AUU_ALERTS=on`。
 - 立即告警（每 2 分钟检查一次）：
   - 策略停滞（超过 26h 没调仓）、runner 异常；
   - 每条新的 `risk_events`（同一批合成一封）；

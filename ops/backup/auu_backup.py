@@ -5,7 +5,7 @@ Runs on the box (initiated from here with the existing SSH key; nothing is insta
 server). On the server, as the ``auu`` user, each database is copied with the SQLite online backup API
 (consistent under WAL while the API runs) into a private temp dir, checked with ``PRAGMA integrity_check``
 and hashed (SHA-256). The box pulls the copies over SFTP, gzips them into
-``/workspace/backups/auu/<YYYYmmdd-HHMMSS>/``, verifies every hash, writes ``MANIFEST.json`` +
+``$AUU_BACKUP_DIR/<YYYYmmdd-HHMMSS>/``, verifies every hash, writes ``MANIFEST.json`` +
 ``SHA256SUMS``, runs a restore drill (decompress → integrity_check → row counts → open with the app's
 ledger code) and prunes snapshots older than 30 days. The server temp dir is removed afterwards.
 
@@ -27,14 +27,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 BJ = timezone(timedelta(hours=8))
-DEST = Path(os.environ.get("AUU_BACKUP_DIR", "/workspace/backups/auu"))
+DEST = Path(os.environ.get("AUU_BACKUP_DIR") or Path.home() / "backups" / "auu")
 KEEP_DAYS = int(os.environ.get("AUU_BACKUP_KEEP_DAYS", "30"))
-HOST = os.environ.get("AUU_BACKUP_HOST", "156.227.238.242")
+# Host, key and pinned known_hosts come from the box-local config (auu_backup.env next to the installed script).
+HOST = os.environ.get("AUU_BACKUP_HOST", "")
 SSH_USER = "root"
-KEY = os.environ.get("AUU_BACKUP_KEY", "/workspace/.ssh_auu/auu_server")
-KNOWN_HOSTS = os.environ.get("AUU_BACKUP_KNOWN_HOSTS", "/workspace/.ssh_auu/known_hosts")
-DATA = "/var/lib/auu/data"
-APP_API = os.environ.get("AUU_BACKUP_APP", "/workspace/AUU/apps/api")
+KEY = os.environ.get("AUU_BACKUP_KEY", "")
+KNOWN_HOSTS = os.environ.get("AUU_BACKUP_KNOWN_HOSTS", "")
+DATA = os.environ.get("AUU_BACKUP_REMOTE_DATA", "/var/lib/auu/data")
+REMOTE_REPO = os.environ.get("AUU_BACKUP_REMOTE_REPO", "/opt/auu")
+APP_API = os.environ.get("AUU_BACKUP_APP") or str(Path(__file__).resolve().parents[2] / "apps" / "api")
 # Key SQLite files (ledgers + evidence). mainstream.sqlite = market data the strategy read (re-fetchable but kept for audit).
 FILES = [
     "mainstream_strategy.sqlite",
@@ -89,6 +91,8 @@ def sha256(path: Path) -> str:
 def connect():
     import paramiko
 
+    if not (HOST and KEY and KNOWN_HOSTS):
+        raise SystemExit("set AUU_BACKUP_HOST, AUU_BACKUP_KEY and AUU_BACKUP_KNOWN_HOSTS (see ops/backup/README.md)")
     c = paramiko.SSHClient()
     c.load_host_keys(KNOWN_HOSTS)  # pinned host key; never auto-accept
     c.set_missing_host_key_policy(paramiko.RejectPolicy())
@@ -120,7 +124,7 @@ def backup() -> Path:
         remote_dir = res["dir"]
         if not remote_dir.startswith("/tmp/auu-bk-"):
             raise RuntimeError("unexpected remote dir")
-        _, rev, _ = run(c, "cd /opt/auu && git rev-parse --short HEAD")
+        _, rev, _ = run(c, f"cd {REMOTE_REPO} && git rev-parse --short HEAD")
         sftp = c.open_sftp()
         manifest = {"created_bj": datetime.now(BJ).isoformat(timespec="seconds"), "host": HOST, "server_rev": rev.strip(),
                     "method": "sqlite3 online backup API (server, as auu) -> sftp -> gzip", "files": {}}

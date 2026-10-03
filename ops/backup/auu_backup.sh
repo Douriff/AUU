@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Box-side daily scheduler for auu_backup.py (the box has no cron). Single instance (flock).
-#   auu_backup.sh start | status | now | run
+#   auu_backup.sh start | status | now | run | list | verify [DIR] | restore-test [DIR]
 # Daily at AUU_BACKUP_AT_BJ (default 09:30 Beijing: after the 08:00 rebalance and 08:30 digest,
 # outside the 07:30-08:45 no-touch window). A missed day (box down) runs at the next check.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-PY=${AUU_BACKUP_PY:-/workspace/.srvvenv/bin/python}
+# Box-local settings (host, key, paths): never committed. Default: auu_backup.env next to this script.
+CONF=${AUU_BACKUP_CONF:-$HERE/auu_backup.env}
+if [ -f "$CONF" ]; then set -a; . "$CONF"; set +a; fi
+DEST=${AUU_BACKUP_DIR:-$HOME/backups/auu}
+PY=${AUU_BACKUP_PY:-python3}
 LOCK=/tmp/auu_backup.lock
-LOG=${AUU_BACKUP_LOG:-/workspace/backups/auu/backup.log}
+LOG=${AUU_BACKUP_LOG:-$DEST/backup.log}
 AT=${AUU_BACKUP_AT_BJ:-09:30}
-STAMP=/workspace/backups/auu/.last_ok_day
+STAMP=$DEST/.last_ok_day
 mkdir -p "$(dirname "$LOG")"
 now() { "$PY" "$HERE/auu_backup.py" backup >>"$LOG" 2>&1; }
 loop() {
@@ -29,6 +33,7 @@ case "${1:-status}" in
   start) setsid nohup "$0" run >/dev/null 2>&1 </dev/null & sleep 1; "$0" status ;;
   run) loop ;;
   now) now; rc=$?; tail -n 3 "$LOG"; exit $rc ;;
+  list|verify|restore-test) exec "$PY" "$HERE/auu_backup.py" "$@" ;;
   status) if flock -n "$LOCK" true 2>/dev/null; then echo "backup scheduler NOT running"; exit 1; else echo "backup scheduler running"; fi ;;
-  *) echo "usage: $0 start|status|now|run" >&2; exit 2 ;;
+  *) echo "usage: $0 start|status|now|run|list|verify|restore-test" >&2; exit 2 ;;
 esac

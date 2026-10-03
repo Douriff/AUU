@@ -122,7 +122,7 @@ flowchart TB
 ### 方式 A：Docker Compose
 
 ```bash
-cd /workspace/AUU
+cd AUU   # 仓库根目录
 docker compose up --build
 ```
 
@@ -134,14 +134,14 @@ docker compose up --build
 
 ```bash
 # 终端 1 — API
-cd /workspace/AUU/apps/api
+cd AUU/apps/api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 # 默认主流模式；旧版：export AUU_LEGACY_PUMP=on DATA_PROVIDER=pumpfun_live_paper
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 终端 2 — Web
-cd /workspace/AUU/apps/web
+cd AUU/apps/web
 npm install
 npm run dev          # http://localhost:5173 ，/api 代理到 :8000
 ```

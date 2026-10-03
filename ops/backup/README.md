@@ -1,6 +1,6 @@
 # Offsite ledger backup (P1-7)
 
-Pulled **from the box** (`/workspace/backups/auu/`) with the box's existing SSH key; nothing is installed or stored on
+Pulled **from the box** (`$AUU_BACKUP_DIR`, default `~/backups/auu/`) with the box's existing SSH key; nothing is installed or stored on
 the server (no credentials, no cron there). Only a temp dir `/tmp/auu-bk-*` (mode 700, owner `auu`) exists on the
 server for the seconds of a run and is removed afterwards.
 
@@ -17,10 +17,21 @@ server for the seconds of a run and is removed afterwards.
   (`AUU_BACKUP_AT_BJ`; after the 08:00 rebalance, outside 07:30–08:45), retry every 30 min on failure; the box
   watchdog restarts it if it is not running.
 
+Box-local config `auu_backup.env` next to the installed scripts (not committed):
+
 ```
-cp ops/backup/auu_backup.{py,sh} /workspace/bin/ && /workspace/bin/auu_backup.sh start   # install / start
-/workspace/bin/auu_backup.sh now                                                         # one backup now
-/workspace/.srvvenv/bin/python /workspace/bin/auu_backup.py list | verify [DIR] | restore-test [DIR]
+AUU_BACKUP_HOST=<server ip>
+AUU_BACKUP_KEY=<path to the existing ssh private key>
+AUU_BACKUP_KNOWN_HOSTS=<pinned known_hosts>
+AUU_BACKUP_DIR=<backup dir>
+AUU_BACKUP_PY=<python with paramiko>
+AUU_BACKUP_APP=<checkout>/apps/api        # for the restore drill
+```
+
+```
+cp ops/backup/auu_backup.{py,sh} <bin>/ && <bin>/auu_backup.sh start   # install / start
+<bin>/auu_backup.sh now                                                 # one backup now
+<bin>/auu_backup.sh list | verify [DIR] | restore-test [DIR]            # via the same config
 ```
 
 Manual restore of one file (server, API stopped, outside 07:30–08:45, keep the current file first):
