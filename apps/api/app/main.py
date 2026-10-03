@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, majors, stats, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, majors, stats, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -135,7 +135,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, events, majors, auth, live, stats, mainstream):
+    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -159,9 +159,11 @@ def root(legacy: bool = False):
                 "legacyPump": False,
                 "endpoints": {
                     "mainstreamOverview": "GET /api/v1/mainstream/overview",
-                    "mainstreamCandles": "GET /api/v1/mainstream/candles?symbol=&tf=1d|1h",
+                    "mainstreamCandles": "GET /api/v1/mainstream/candles?symbol=&tf=1m|5m|15m|1h|4h|1d&before=",
                     "mainstreamFunding": "GET /api/v1/mainstream/funding?symbol=",
                     "mainstreamStatus": "GET /api/v1/mainstream/status",
+                    "paperAccount": "GET /api/v1/mainstream/paper/account?symbol=",
+                    "paperOrder": "POST /api/v1/mainstream/paper/orders (paper only; login required)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

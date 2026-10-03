@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
+import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
 import type { MainstreamFreshness, MainstreamItem, MainstreamOverview, MainstreamTf } from "@/types/mainstream";
 
 const POLL_MS = 60_000;
@@ -117,7 +118,18 @@ function Card({ item, active, onPick }: { item: MainstreamItem; active: boolean;
 export function MainstreamPage() {
   const [ov, setOv] = useState<MainstreamOverview | null>(null);
   const [err, setErr] = useState("");
-  const [pick, setPick] = useState("");
+  const [pick, setPickState] = useState(() => (new URLSearchParams(window.location.search).get("symbol") || "").toUpperCase());
+  const setPick = (v: string | ((p: string) => string)) => {
+    setPickState((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      if (next && next !== prev) {
+        const u = new URL(window.location.href);
+        u.searchParams.set("symbol", next);
+        window.history.replaceState(null, "", u);
+      }
+      return next;
+    });
+  };
   const [tf, setTf] = useState<MainstreamTf>(() => {
     const saved = (new URLSearchParams(window.location.search).get("tf") ?? window.localStorage.getItem("auu.ms.tf")) as MainstreamTf | null;
     return saved && CHART_TFS.some((t) => t.id === saved) ? saved : "1h";
@@ -133,7 +145,7 @@ export function MainstreamPage() {
         if (!alive) return;
         setOv(data);
         setErr("");
-        setPick((p) => p || data.items[0]?.symbol || "");
+        setPick((p) => (p && data.items.some((i) => i.symbol === p) ? p : data.items[0]?.symbol || ""));
       })
       .catch((e: unknown) => alive && setErr(e instanceof Error ? e.message : "读取失败"));
     const t = window.setTimeout(() => setTick((n) => n + 1), POLL_MS);
@@ -195,7 +207,12 @@ export function MainstreamPage() {
               ))}
             </div>
           </div>
-          <MainstreamChart symbol={current.symbol} tf={tf} />
+          <div className="ms-trade-grid">
+            <div className="ms-trade-chart">
+              <MainstreamChart symbol={current.symbol} tf={tf} />
+            </div>
+            <PaperTradePanel symbol={current.symbol} price={current.price} />
+          </div>
           <div className="mj-tools ms-sub">
             <b>{current.perp} 资金费率</b>
             <span className="muted">最近 {funding.length} 期 · 绿=多头付费 红=空头付费</span>

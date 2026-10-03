@@ -1,4 +1,13 @@
-import type { MainstreamCandles, MainstreamFreshness, MainstreamFunding, MainstreamOverview, MainstreamTf } from "@/types/mainstream";
+import type {
+  MainstreamCandles,
+  MainstreamFreshness,
+  MainstreamFunding,
+  MainstreamOverview,
+  MainstreamTf,
+  PaperAccount,
+  PaperOrder,
+  PaperOrderRequest,
+} from "@/types/mainstream";
 import type {
   BookSnapshot,
   Candle,
@@ -288,6 +297,19 @@ export class HttpWsProvider {
     const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
     if (before != null) q.set("before", String(before));
     return getJson(`/api/v1/mainstream/candles?${q}`);
+  }
+
+  getPaperAccount(symbol?: string): Promise<PaperAccount> {
+    const q = new URLSearchParams(symbol ? { symbol } : {});
+    return getJson(`/api/v1/mainstream/paper/account?${q}`);
+  }
+
+  placePaperOrder(body: PaperOrderRequest): Promise<PaperOrder> {
+    return postJson("/api/v1/mainstream/paper/orders", body);
+  }
+
+  cancelPaperOrder(id: string): Promise<PaperOrder> {
+    return postJson(`/api/v1/mainstream/paper/orders/${encodeURIComponent(id)}/cancel`, {});
   }
 
   getMainstreamFunding(symbol: string, limit = 90): Promise<MainstreamFunding> {
