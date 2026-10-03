@@ -1854,3 +1854,28 @@ code.hl { color: var(--accent); }
 .console-card.shadow { border: 1px dashed rgba(245,176,65,0.45); }
 .shadow-badge { color: #f5b041; border-color: rgba(245,176,65,0.5); }
 .strat-tables.single { grid-template-columns: 1fr; }
+
+/* performance report (P1-1) */
+.perf-page { max-width: 980px; margin: 0 auto; overflow-x: hidden; }
+.perf-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.perf-sub { margin-top: 0; font-size: 0.8rem; }
+.perf-verdict { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 12px; font-size: 0.85rem; }
+.perf-verdict.lamp-green { border-color: rgba(62,224,143,0.5); }
+.perf-verdict.lamp-red { border-color: rgba(255,93,93,0.5); }
+.perf-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.perf-kpi { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03); min-width: 0; }
+.perf-kpi span { font-size: 0.72rem; }
+.perf-kpi b { font-size: 0.95rem; word-break: break-word; }
+.perf-warn { grid-column: 1 / -1; font-size: 0.75rem; margin: 0; }
+.perf-card { margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.02); min-width: 0; }
+.perf-card h2 { font-size: 0.95rem; margin: 0 0 8px; }
+.perf-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.perf-heat, .perf-attr { border-collapse: collapse; font-size: 0.75rem; width: 100%; }
+.perf-heat th, .perf-heat td { padding: 4px 5px; text-align: center; white-space: nowrap; border: 1px solid rgba(255,255,255,0.05); }
+.perf-attr th, .perf-attr td { padding: 4px 8px; text-align: right; white-space: nowrap; }
+.perf-attr th:first-child, .perf-attr td:first-child { text-align: left; }
+.perf-attr tfoot td { border-top: 1px solid rgba(255,255,255,0.1); color: var(--muted, #8a8f98); }
+.perf-svg { width: 100%; height: 120px; display: block; color: var(--muted, #8a8f98); }
+.perf-dd { height: 90px; margin-top: 4px; }
+.perf-note { font-size: 0.72rem; }
+.strat-report-link { text-decoration: none; cursor: pointer; }

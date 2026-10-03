@@ -17,3 +17,14 @@ def strategy_summary(request: Request):
     from app.paper.strategy_runner import get_runner
 
     return ok(get_runner().summary())
+
+
+@router.get("/report")
+def strategy_report(request: Request):
+    """Performance report page (monthly heatmap, drawdown, Sortino/Calmar, per-coin attribution)."""
+    if _uid(request) is None:
+        return err("AUTH_REQUIRED", "请先登录", 401)
+    from app.paper import perf_report
+    from app.paper.strategy_runner import _store_funding, get_runner
+
+    return ok(perf_report.build(get_runner(), funding_fn=_store_funding))

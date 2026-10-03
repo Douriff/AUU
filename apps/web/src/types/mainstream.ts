@@ -316,3 +316,51 @@ export interface ShadowS3Summary {
   notes: string[];
   lastError: string;
 }
+
+export interface PerfMetrics {
+  days: number;
+  totalReturn?: number;
+  cagr?: number;
+  annMean?: number;
+  annVol?: number;
+  sharpe?: number | null;
+  sortino?: number | null;
+  calmar?: number | null;
+  maxDrawdown?: number;
+  maxDrawdownDay?: string;
+  longestDrawdownDays?: number;
+  longestDrawdown?: { from: string; to: string } | null;
+  currentDrawdownDays?: number;
+  currentDrawdown?: number;
+  winRate?: number;
+  winLossRatio?: number | null;
+  bestDay?: number;
+  worstDay?: number;
+  shortSample?: boolean;
+}
+export interface PerfAttributionRow {
+  coin: string;
+  price: number;
+  funding: number;
+  cost: number;
+  total: number;
+}
+export interface StrategyReport {
+  strategy: string;
+  startNav: number;
+  asOf: string | null;
+  goNoGo: StrategySummary["goNoGo"];
+  ci: { lo: number; hi: number; method: string } | null;
+  metrics: PerfMetrics;
+  monthly: { month: string; ret: number; days: number }[];
+  drawdown: { day: string; ts: number; nav: number; dd: number }[];
+  attribution: {
+    coins: PerfAttributionRow[];
+    totalUsd: number;
+    explainedUsd: number;
+    residualUsd: number;
+    fundingByCoin: boolean;
+    segmentsFromAdjustments: number;
+  };
+  note: string;
+}
