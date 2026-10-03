@@ -279,11 +279,13 @@ class StrategyRunner:
         risk_limits: Optional[RiskLimits] = None,
         marks_fn: Optional[Callable[[list[str], int], dict]] = None,
         funding_fn: Optional[Callable[[str, int, int], list[tuple[int, float]]]] = None,
+        on_commit: Optional[Callable[[int, list[dict], bool], None]] = None,
     ):
         """``risk_limits`` None = caps off. ``marks_fn(coins, bar_ts)`` -> {"prices": {coin: (bar_ts, close)}, "ok", "reason"}
         gives 1h closes for the intraday monitor; ``funding_fn(coin, lo, hi)`` -> settlements with lo <= ts < hi."""
         self.risk = risk_limits
         self.marks_fn, self.funding_fn = marks_fn, funding_fn
+        self.on_commit = on_commit  # observers only (exec-price shadow); never feeds back into the ledger
         self.universe_fn = universe_fn
         self.ledger = ledger
         self.panel_fn, self.ready_fn, self.exchange_fn = panel_fn, ready_fn, exchange_fn
@@ -455,6 +457,11 @@ class StrategyRunner:
             log.info("strategy %s rebalanced %s nav=%.2f ret=%.5f fills=%d%s", self.strategy.name, ms_day(day), nav_close, ret, len(fills), " (catch-up)" if catchup else "")
             for e in r_events:
                 log.warning("RISK %s %s at %s close: value=%s threshold=%s %s", e["kind"], e["action"], ms_day(day), e.get("value"), e.get("threshold"), e.get("detail"))
+            if self.on_commit is not None:
+                try:
+                    self.on_commit(day, [dict(f) for f in fills], catchup)
+                except Exception:
+                    log.exception("on_commit observer failed (ledger unaffected)")
         return ok
 
     # ---- risk caps -----------------------------------------------------------------
@@ -778,7 +785,17 @@ class StrategyRunner:
             "goNoGo": self.go_no_go(runs),
             "status": self.status(),
             "risk": self.risk_summary(),
+            "execShadow": _exec_shadow_summary(),
         }
+
+
+def _exec_shadow_summary() -> Optional[dict]:
+    try:
+        from app.paper.exec_shadow import peek_summary
+
+        return peek_summary()
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
 # ---- production wiring (market store) ---------------------------------------------------
@@ -878,6 +895,14 @@ def _store_funding(coin: str, lo: int, hi: int) -> list[tuple[int, float]]:
     return [(int(x["ts"]), float(x["rate"])) for x in svc.store.funding(ex, coin, since=lo, limit=100_000) if int(x["ts"]) < hi]
 
 
+def _exec_shadow_hook():
+    if os.getenv("AUU_EXEC_SHADOW", "on").strip().lower() in {"0", "false", "off", "no"}:
+        return None
+    from app.paper.exec_shadow import on_commit
+
+    return on_commit
+
+
 def _store_exchange() -> Optional[str]:
     from app.marketdata.mainstream import get_service
 
@@ -914,7 +939,7 @@ def get_runner() -> StrategyRunner:
             _runner = StrategyRunner(StrategyLedger(), panel_fn=_store_panel, ready_fn=_store_ready,
                                      exchange_fn=_store_exchange, universe_fn=_store_universe,
                                      risk_limits=RiskLimits() if risk.risk_enabled() else None,
-                                     marks_fn=_store_marks, funding_fn=_store_funding)
+                                     marks_fn=_store_marks, funding_fn=_store_funding, on_commit=_exec_shadow_hook())
         return _runner
 
 
