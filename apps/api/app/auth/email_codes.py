@@ -146,8 +146,11 @@ def reset_email_codes() -> None:
 BRAND = "AUUTRADE"
 
 
-def _smtp_send(to: str, subject: str, body: str, html_body: Optional[str] = None) -> None:
-    """Send plain text, or multipart/alternative (text + HTML) when html_body is given."""
+def _smtp_send(to: str, subject: str, body: str, html_body: Optional[str] = None) -> dict[str, Any]:
+    """Send plain text, or multipart/alternative (text + HTML) when html_body is given.
+
+    Returns {"message_id", "response"} where response is the server's reply to DATA
+    (e.g. "250 2.0.0 OK ... - gsmtp"), kept as delivery evidence."""
     cfg = smtp_settings()
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -161,17 +164,31 @@ def _smtp_send(to: str, subject: str, body: str, html_body: Optional[str] = None
     if html_body:
         msg.add_alternative(html_body, subtype="html")
     context = ssl.create_default_context()
+    out: dict[str, Any] = {"message_id": msg["Message-ID"], "response": None}
+
+    def _send(client) -> None:
+        orig = client.data
+
+        def data(m):
+            code, resp = orig(m)
+            out["response"] = f"{code} {resp.decode('utf-8', 'replace') if isinstance(resp, bytes) else resp}"[:200]
+            return code, resp
+
+        client.data = data
+        client.send_message(msg)
+
     if not cfg["starttls"]:
         with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=15, context=context) as client:
             client.login(cfg["user"], cfg["password"])
-            client.send_message(msg)
+            _send(client)
     else:
         with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as client:
             client.ehlo()
             client.starttls(context=context)
             client.ehlo()
             client.login(cfg["user"], cfg["password"])
-            client.send_message(msg)
+            _send(client)
+    return out
 
 
 def _digest(purpose: str, email: str, code: str, salt: str) -> str:
