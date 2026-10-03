@@ -1742,9 +1742,26 @@ code.hl { color: var(--accent); }
 .ms-chart.ms-funding { height: 90px; }
 .ms-axis { fill: #8d8d96; font-size: 10px; font-family: ui-monospace, monospace; }
 .ms-sub { margin-top: 0.6rem; }
+.ms-tfs { margin-bottom: 0; flex-wrap: nowrap; overflow-x: auto; }
+.ms-tfs button { min-width: 2.6rem; }
+.msc { display: flex; flex-direction: column; gap: 0.3rem; }
+.msc-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 0.74rem; min-height: 1.1rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.msc-legend b { font-weight: 600; }
+.msc-legend .up, .msc .up { color: #26a69a; }
+.msc-legend .down, .msc .down { color: #ef5350; }
+.msc-host { position: relative; width: 100%; height: 440px; touch-action: pan-y; }
+.msc-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.72rem; flex-wrap: wrap; }
+.msc-actions { display: flex; gap: 0.3rem; }
+.msc-actions button {
+  background: transparent; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px;
+  padding: 0.25rem 0.6rem; font: inherit; cursor: pointer; min-height: 30px;
+}
 .mainstream-page .flat { color: inherit; }
 @media (max-width: 768px) {
   .ms-cards { grid-template-columns: 1fr; }
   .ms-card { min-height: 40px; }
   .ms-chart { height: 180px; }
+  .msc-host { height: 340px; }
+  .ms-panel .mj-tools { flex-wrap: wrap; gap: 0.4rem; }
+  .ms-tfs button { min-height: 34px; }
 }

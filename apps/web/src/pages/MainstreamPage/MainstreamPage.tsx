@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { MainstreamCandle, MainstreamFreshness, MainstreamItem, MainstreamOverview } from "@/types/mainstream";
+import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
+import type { MainstreamFreshness, MainstreamItem, MainstreamOverview, MainstreamTf } from "@/types/mainstream";
 
 const POLL_MS = 60_000;
 
@@ -41,26 +42,6 @@ function Spark({ values, w = 120, h = 32 }: { values: number[]; w?: number; h?: 
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="ms-spark">
       <polyline points={pts.join(" ")} fill="none" stroke={up ? "#3ee08f" : "#ff5d5d"} strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function PriceChart({ candles }: { candles: MainstreamCandle[] }) {
-  const w = 720;
-  const h = 220;
-  if (candles.length < 2) return <p className="mj-err">暂无K线数据。</p>;
-  const closes = candles.map((c) => c.close);
-  const lo = Math.min(...candles.map((c) => c.low));
-  const hi = Math.max(...candles.map((c) => c.high));
-  const span = hi - lo || 1;
-  const y = (v: number) => h - ((v - lo) / span) * (h - 16) - 8;
-  const x = (i: number) => (i / (candles.length - 1)) * w;
-  const line = closes.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  return (
-    <svg className="ms-chart" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label="收盘价走势">
-      <polyline points={line} fill="none" stroke="#58a6ff" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
-      <text x="4" y="12" className="ms-axis">{fmtPx(hi)}</text>
-      <text x="4" y={h - 2} className="ms-axis">{fmtPx(lo)}</text>
     </svg>
   );
 }
@@ -137,8 +118,10 @@ export function MainstreamPage() {
   const [ov, setOv] = useState<MainstreamOverview | null>(null);
   const [err, setErr] = useState("");
   const [pick, setPick] = useState("");
-  const [tf, setTf] = useState<"1d" | "1h">("1d");
-  const [candles, setCandles] = useState<MainstreamCandle[]>([]);
+  const [tf, setTf] = useState<MainstreamTf>(() => {
+    const saved = (new URLSearchParams(window.location.search).get("tf") ?? window.localStorage.getItem("auu.ms.tf")) as MainstreamTf | null;
+    return saved && CHART_TFS.some((t) => t.id === saved) ? saved : "1h";
+  });
   const [funding, setFunding] = useState<{ ts: number; rate: number }[]>([]);
   const [tick, setTick] = useState(0);
 
@@ -164,17 +147,18 @@ export function MainstreamPage() {
     if (!pick) return;
     let alive = true;
     void marketProvider
-      .getMainstreamCandles(pick, tf, tf === "1d" ? 365 : 24 * 14)
-      .then((d) => alive && setCandles(d.candles))
-      .catch(() => alive && setCandles([]));
-    void marketProvider
       .getMainstreamFunding(pick, 90)
       .then((d) => alive && setFunding(d.funding))
       .catch(() => alive && setFunding([]));
     return () => {
       alive = false;
     };
-  }, [pick, tf, tick]);
+  }, [pick, tick]);
+
+  const pickTf = (id: MainstreamTf) => {
+    setTf(id);
+    window.localStorage.setItem("auu.ms.tf", id);
+  };
 
   const current = useMemo(() => ov?.items.find((i) => i.symbol === pick), [ov, pick]);
 
@@ -203,15 +187,15 @@ export function MainstreamPage() {
         <section className="ms-panel">
           <div className="mj-tools">
             <b>{current.pair}</b>
-            <div className="mk-tabs" role="tablist" aria-label="周期">
-              {(["1d", "1h"] as const).map((id) => (
-                <button key={id} type="button" className={tf === id ? "is-on" : ""} onClick={() => setTf(id)}>
-                  {id === "1d" ? "日线 1年" : "小时 14天"}
+            <div className="mk-tabs ms-tfs" role="tablist" aria-label="周期">
+              {CHART_TFS.map((t) => (
+                <button key={t.id} type="button" role="tab" aria-selected={tf === t.id} className={tf === t.id ? "is-on" : ""} onClick={() => pickTf(t.id)}>
+                  {t.label}
                 </button>
               ))}
             </div>
           </div>
-          <PriceChart candles={candles} />
+          <MainstreamChart symbol={current.symbol} tf={tf} />
           <div className="mj-tools ms-sub">
             <b>{current.perp} 资金费率</b>
             <span className="muted">最近 {funding.length} 期 · 绿=多头付费 红=空头付费</span>

@@ -1,4 +1,4 @@
-import type { MainstreamCandles, MainstreamFreshness, MainstreamFunding, MainstreamOverview } from "@/types/mainstream";
+import type { MainstreamCandles, MainstreamFreshness, MainstreamFunding, MainstreamOverview, MainstreamTf } from "@/types/mainstream";
 import type {
   BookSnapshot,
   Candle,
@@ -284,8 +284,9 @@ export class HttpWsProvider {
     return getJson("/api/v1/mainstream/overview");
   }
 
-  getMainstreamCandles(symbol: string, tf: "1d" | "1h", limit = 200): Promise<MainstreamCandles> {
+  getMainstreamCandles(symbol: string, tf: MainstreamTf, limit = 200, before?: number): Promise<MainstreamCandles> {
     const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
+    if (before != null) q.set("before", String(before));
     return getJson(`/api/v1/mainstream/candles?${q}`);
   }
 

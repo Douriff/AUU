@@ -25,10 +25,11 @@
 - 交易所：`auto` 时依次尝试 Binance → OKX；某所地区封锁（HTTP 451 / 403）或整轮失败时自动切到下一所，并在 health / 页面显示 `blocked`。
 - 只读 API（全部需要登录，未登录 401）：
   - `GET /api/v1/mainstream/overview` — 价格、24h / 30d 涨跌、资金费率（最近 / 当前 / 年化）、新鲜度
-  - `GET /api/v1/mainstream/candles?symbol=BTC&tf=1d|1h&limit=&since=`
+  - `GET /api/v1/mainstream/candles?symbol=BTC&tf=1m|5m|15m|1h|4h|1d&limit=&before=`（`before`=ms，向前翻页；`since` 仅对存储周期有效）
+    - 1h/4h/1d：后台刷新、长历史存储；1m/5m/15m：图表请求时按需拉取并缓存，只保留最近 `AUU_MAINSTREAM_INTRADAY_DAYS` 天（超出窗口的行会被清理，返回 `limited: true`），最新一根最多每 `AUU_MAINSTREAM_INTRADAY_TAIL_SEC` 秒向交易所刷新一次
   - `GET /api/v1/mainstream/funding?symbol=BTC&limit=&since=`
   - `GET /api/v1/mainstream/status` — 新鲜度（同 health 的 `mainstream` 字段）
-- health 字段 `mainstream`：`exchange`、`blocked`、`lastRefreshMs`、每个序列的 `lastTs/ageMin/stale`、`staleSeries`、`gaps`。过期阈值：1h 线 180 分钟、1d 线 49 小时、资金费率 12.5 小时。guard 对过期只告警（`DATA STALE WARN`），不停服务。
+- health 字段 `mainstream`：`exchange`、`blocked`、`lastRefreshMs`、每个序列的 `lastTs/ageMin/stale`、`staleSeries`、`gaps`。过期阈值：1h 线 180 分钟、4h 线 6 小时、1d 线 49 小时（按需周期不计入）、资金费率 12.5 小时。guard 对过期只告警（`DATA STALE WARN`），不停服务。
 
 | 环境变量 | 默认 | 说明 |
 |----------|------|------|
@@ -39,9 +40,13 @@
 | `AUU_MAINSTREAM_EXCHANGE` | `auto` | `binance` / `okx` / `auto`（或 `okx,binance` 指定顺序） |
 | `AUU_MAINSTREAM_REFRESH` | `on` | 后台刷新循环 |
 | `AUU_MAINSTREAM_REFRESH_SEC` | `300` | 刷新间隔（秒） |
-| `AUU_MAINSTREAM_BACKFILL_1D_DAYS` / `_1H_DAYS` | `730` / `90` | 首次回补天数 |
+| `AUU_MAINSTREAM_BACKFILL_1D_DAYS` / `_4H_DAYS` / `_1H_DAYS` | `730` / `365` / `90` | 首次回补天数 |
+| `AUU_MAINSTREAM_INTRADAY_DAYS` | `7` | 1m/5m/15m 保留天数（1–30） |
+| `AUU_MAINSTREAM_INTRADAY_TAIL_SEC` | `10` | 按需周期最新一根的最短刷新间隔（秒） |
 | `AUU_MAINSTREAM_FUNDING_DAYS` | `60` | 资金费率首次回补天数（OKX 公共接口只给约 3 个月） |
 | `AUU_MAINSTREAM_RETRIES` | `3` | 单次请求重试次数 |
+
+前端「主流行情」K 线用 lightweight-charts（Apache-2.0）：6 个周期随时切换、成交量、十字光标、滚轮/拖拽/双指缩放平移，左滑自动加载更早数据；`/mainstream?tf=15m` 可直接打开指定周期。
 
 研究回测脚本不在本仓库内；M2 会把它产品化为回测引擎。
 

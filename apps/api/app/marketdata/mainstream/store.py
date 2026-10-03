@@ -102,6 +102,24 @@ class MarketStore:
             rows = self._conn.execute(q, args).fetchall()
         return [dict(r) for r in reversed(rows)]
 
+    def range_stats(self, exchange: str, symbol: str, tf: str, lo: int, hi: int) -> tuple[Optional[int], Optional[int], int]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MIN(ts), MAX(ts), COUNT(*) FROM candles WHERE exchange=? AND symbol=? AND tf=? AND ts>=? AND ts<=?",
+                (exchange, symbol, tf, int(lo), int(hi)),
+            ).fetchone()
+        return row[0], row[1], row[2]
+
+    def prune_candles(self, exchange: str, symbol: str, tf: str, older_than: int) -> int:
+        """Drop candles with ts < older_than (rolling window for intraday timeframes)."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM candles WHERE exchange=? AND symbol=? AND tf=? AND ts<?",
+                (exchange, symbol, tf, int(older_than)),
+            )
+            self._conn.commit()
+            return cur.rowcount or 0
+
     def candle_ts(self, exchange: str, symbol: str, tf: str) -> list[int]:
         with self._lock:
             rows = self._conn.execute(
