@@ -15,7 +15,16 @@ from app.auth.accounts import (
     allow_attempt,
     auth_enabled,
     authenticate,
+    bump_epoch,
     change_password,
+    find_user,
+    security_view,
+    session_epoch,
+    totp_disable,
+    totp_enable,
+    totp_login,
+    totp_new_recovery,
+    totp_setup,
     invite_code,
     issue_token,
     journal_for,
@@ -39,6 +48,7 @@ from app.auth.email_codes import (
     smtp_configured,
 )
 from starlette.concurrency import run_in_threadpool
+from app.auth import security
 from app.paper.books import pop_book, push_book
 from app.routes.envelope import err, ok
 
@@ -72,6 +82,12 @@ _MESSAGES = {
     "EMAIL_CODE_BAD": "验证码不正确",
     "EMAIL_CODE_EXPIRED": "验证码已失效或不存在，请重新获取",
     "EMAIL_CODE_LOCKED": "验证码输错次数过多，已失效，请重新获取",
+    "TOTP_REQUIRED": "请输入两步验证码（或恢复码）",
+    "TOTP_BAD": "两步验证码不正确或已使用",
+    "TOTP_TICKET": "登录步骤已过期，请重新输入密码",
+    "TOTP_ALREADY_ON": "两步验证已开启",
+    "TOTP_OFF": "两步验证未开启",
+    "TOTP_SETUP_EXPIRED": "绑定已过期，请重新开始",
 }
 
 
@@ -174,7 +190,7 @@ def _start_sol(raw: dict) -> Optional[float]:
 def _fail(exc: ValueError, action: str = "auth"):
     code = str(exc)
     _LOG.warning("%s rejected: %s", action, code)
-    status = 401 if code == "BAD_LOGIN" else 400
+    status = 401 if code in {"BAD_LOGIN", "TOTP_BAD", "TOTP_TICKET"} else 400
     if code in {"EMAIL_THROTTLE", "EMAIL_IP_LIMIT"}:
         status = 429
     if code == "EMAIL_SEND_FAILED":
@@ -303,10 +319,158 @@ async def auth_login(request: Request):
     user = authenticate(name, _text(raw, "password"))
     if user is None:
         note_login_failure(name)
+        known = find_user(name)
+        if known is not None:
+            _record(request, known["id"], "bad_password", "password")
         _LOG.warning("login rejected: BAD_LOGIN")
         return err("BAD_LOGIN", _MESSAGES["BAD_LOGIN"], 401)
+    if security.enabled(user):
+        # Password ok; the session cookie is only issued after the TOTP / recovery step.
+        _record(request, user["id"], "password_ok_2fa_pending", "password")
+        return ok({"totp_required": True, "ticket": security.issue_ticket(user["id"], session_epoch(user["id"])),
+                   "ticket_ttl_sec": security.TICKET_TTL, "liveEnabled": False, "mode": "paper"})
     clear_login_failures(name)
+    _record(request, user["id"], "ok", "password")
     return _stamp(ok(scrub_secrets(_me_payload(user))), user["id"])
+
+
+def _record(request: Request, user_id: str, result: str, method: str) -> None:
+    try:
+        security.login_log().add(user_id, _ip(request), request.headers.get("user-agent", ""), result, method)
+    except Exception:  # a broken log must never block a login
+        _LOG.exception("login record failed")
+
+
+@router.post("/auth/login/totp")
+async def auth_login_totp(request: Request):
+    """Second step: the ticket from /auth/login plus a 6-digit TOTP or a one-time recovery code."""
+    if not auth_enabled():
+        return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    uid = security.read_ticket(_text(raw, "ticket"), session_epoch)
+    user = user_by_id(uid) if uid else None
+    if user is None or not security.enabled(user):
+        return err("TOTP_TICKET", _MESSAGES["TOTP_TICKET"], 401)
+    name = str(user.get("name") or "")
+    if not allow_attempt(f"totp:{uid}:{_ip(request)}"):
+        return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
+    if account_locked(name):
+        return err("ACCOUNT_LOCKED", _MESSAGES["ACCOUNT_LOCKED"], 429)
+    how = totp_login(uid, _text(raw, "code"))
+    if how is None:
+        note_login_failure(name)
+        _record(request, uid, "bad_2fa", "totp")
+        _LOG.warning("login rejected: TOTP_BAD")
+        return err("TOTP_BAD", _MESSAGES["TOTP_BAD"], 401)
+    clear_login_failures(name)
+    _record(request, uid, "ok", how)
+    body = _me_payload(user_by_id(uid))
+    if how == "recovery":
+        body["notice"] = f"已使用一个恢复码，剩余 {security_view(user_by_id(uid))['recovery_left']} 个"
+    return _stamp(ok(scrub_secrets(body)), uid)
+
+
+def _actor(request: Request):
+    if not auth_enabled():
+        return None, err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)
+    actor = session_user(request)
+    if actor is None:
+        return None, err("AUTH_REQUIRED", "请先登录", 401)
+    return actor, None
+
+
+@router.get("/auth/security")
+def auth_security(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    logins = security.login_log().recent(str(actor["id"]), 20)
+    return ok({**security_view(actor), "logins": logins, "liveEnabled": False,
+               "sessions_note": "会话是签名 Cookie（14 天）。“退出其他会话”会让其他设备的登录立即失效，当前设备保持登录。"})
+
+
+async def _sec_body(request: Request, actor) -> dict | object:
+    if not allow_attempt(f"security:{actor['id']}"):
+        return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
+    return await _json(request)
+
+
+@router.post("/auth/2fa/setup")
+async def auth_2fa_setup(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    raw = await _sec_body(request, actor)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        out = totp_setup(str(actor["id"]), _text(raw, "password"))
+    except ValueError as exc:
+        return _fail(exc, "2fa setup")
+    return ok({**out, "liveEnabled": False})
+
+
+@router.post("/auth/2fa/enable")
+async def auth_2fa_enable(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    raw = await _sec_body(request, actor)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        codes = totp_enable(str(actor["id"]), _text(raw, "code"))
+    except ValueError as exc:
+        return _fail(exc, "2fa enable")
+    _record(request, str(actor["id"]), "2fa_enabled", "settings")
+    return ok({"enabled": True, "recovery_codes": codes, "liveEnabled": False,
+               "message": "两步验证已开启。恢复码只显示这一次，请离线保存；每个只能用一次。"})
+
+
+@router.post("/auth/2fa/disable")
+async def auth_2fa_disable(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    raw = await _sec_body(request, actor)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        totp_disable(str(actor["id"]), _text(raw, "password"), _text(raw, "code"))
+    except ValueError as exc:
+        return _fail(exc, "2fa disable")
+    _record(request, str(actor["id"]), "2fa_disabled", "settings")
+    return ok({"enabled": False, "liveEnabled": False})
+
+
+@router.post("/auth/2fa/recovery")
+async def auth_2fa_recovery(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    raw = await _sec_body(request, actor)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        codes = totp_new_recovery(str(actor["id"]), _text(raw, "password"), _text(raw, "code"))
+    except ValueError as exc:
+        return _fail(exc, "2fa recovery")
+    _record(request, str(actor["id"]), "recovery_regenerated", "settings")
+    return ok({"recovery_codes": codes, "liveEnabled": False, "message": "旧恢复码已全部作废。新恢复码只显示这一次。"})
+
+
+@router.post("/auth/sessions/revoke-others")
+async def auth_revoke_others(request: Request):
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    if not allow_attempt(f"security:{actor['id']}"):
+        return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
+    bump_epoch(str(actor["id"]))
+    _record(request, str(actor["id"]), "revoked_other_sessions", "settings")
+    return _stamp(ok({"ok": True, "liveEnabled": False, "message": "其他设备的登录已失效"}), str(actor["id"]))
 
 
 @router.post("/auth/password")
@@ -325,10 +489,12 @@ async def auth_password(request: Request):
     if not passwords_match(new, _text(raw, "new_password_confirm")):
         return err("PASSWORD_MISMATCH", _MESSAGES["PASSWORD_MISMATCH"], 400)
     try:
-        change_password(str(actor["id"]), _text(raw, "current_password"), new)
+        change_password(str(actor["id"]), _text(raw, "current_password"), new, _text(raw, "totp_code"))
     except ValueError as exc:
         return _fail(exc, "password change")
-    return ok(scrub_secrets({"ok": True, "liveEnabled": False, "mode": "paper"}))
+    _record(request, str(actor["id"]), "password_changed", "settings")
+    # Other sessions end (session_epoch bumped); this device gets a fresh cookie.
+    return _stamp(ok(scrub_secrets({"ok": True, "liveEnabled": False, "mode": "paper"})), str(actor["id"]))
 
 
 @router.post("/auth/logout")

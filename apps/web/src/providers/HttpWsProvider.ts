@@ -21,6 +21,9 @@ import type {
   PaperOrderResult,
   PaperPerformance,
   AuthMe,
+  AccountSecurity,
+  LoginStep,
+  TotpSetup,
   AuthUser,
   BoardSnapshot,
   ConsoleFeed,
@@ -424,15 +427,43 @@ export class HttpWsProvider {
     return postJson("/api/v1/auth/password/reset", body);
   }
 
-  login(body: { name: string; password: string }): Promise<AuthMe> {
+  login(body: { name: string; password: string }): Promise<AuthMe | LoginStep> {
     return postJson("/api/v1/auth/login", body);
+  }
+
+  loginTotp(body: { ticket: string; code: string }): Promise<AuthMe & { notice?: string }> {
+    return postJson("/api/v1/auth/login/totp", body);
+  }
+
+  getSecurity(): Promise<AccountSecurity> {
+    return getJson("/api/v1/auth/security");
+  }
+
+  totpSetup(password: string): Promise<TotpSetup> {
+    return postJson("/api/v1/auth/2fa/setup", { password });
+  }
+
+  totpEnable(code: string): Promise<{ enabled: boolean; recovery_codes: string[]; message: string }> {
+    return postJson("/api/v1/auth/2fa/enable", { code });
+  }
+
+  totpDisable(password: string, code: string): Promise<{ enabled: boolean }> {
+    return postJson("/api/v1/auth/2fa/disable", { password, code });
+  }
+
+  totpNewRecovery(password: string, code: string): Promise<{ recovery_codes: string[]; message: string }> {
+    return postJson("/api/v1/auth/2fa/recovery", { password, code });
+  }
+
+  revokeOtherSessions(): Promise<{ ok: boolean; message: string }> {
+    return postJson("/api/v1/auth/sessions/revoke-others", {});
   }
 
   logout(): Promise<{ ok: boolean }> {
     return postJson("/api/v1/auth/logout", {});
   }
 
-  changePassword(body: { current_password: string; new_password: string; new_password_confirm: string }): Promise<{ ok: boolean }> {
+  changePassword(body: { current_password: string; new_password: string; new_password_confirm: string; totp_code?: string }): Promise<{ ok: boolean }> {
     return postJson("/api/v1/auth/password", body);
   }
 

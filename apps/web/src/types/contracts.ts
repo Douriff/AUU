@@ -1128,6 +1128,7 @@ export interface AuthUser {
   is_admin: boolean;
   start_sol: number;
   created_ts?: number;
+  totp_enabled?: boolean;
   pnl: number;
   return_pct: number;
   equity: number;
@@ -1146,6 +1147,35 @@ export interface AuthMe {
   liveEnabled: boolean;
   liveDisabled: boolean;
   mode: string;
+}
+
+export interface LoginStep {
+  totp_required: true;
+  ticket: string;
+  ticket_ttl_sec: number;
+}
+
+export interface LoginRecord {
+  ts: number;
+  ip: string | null;
+  ua: string | null;
+  result: string;
+  method: string | null;
+}
+
+export interface AccountSecurity {
+  totp_enabled: boolean;
+  recovery_left: number;
+  totp_enabled_at: number | null;
+  logins: LoginRecord[];
+  sessions_note: string;
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauth: string;
+  qr_svg: string;
+  expires_in: number;
 }
 
 export interface WalletRisk {

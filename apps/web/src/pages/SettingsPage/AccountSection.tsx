@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
 import { PASSWORD_RULE, passwordProblem } from "@/lib/authRules";
+import { SecuritySection } from "@/pages/SettingsPage/SecuritySection";
 
 export function AccountSection() {
   const [me, setMe] = useState<AuthMe | null>(null);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [totp, setTotp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -36,11 +38,13 @@ export function AccountSection() {
         current_password: current,
         new_password: next,
         new_password_confirm: confirm,
+        ...(me?.user?.totp_enabled ? { totp_code: totp.trim() } : {}),
       });
+      setTotp("");
       setCurrent("");
       setNext("");
       setConfirm("");
-      setNote("密码已更新");
+      setNote("密码已更新，其他设备上的登录已失效");
     } catch (e) {
       setError(e instanceof Error ? e.message : "修改失败");
     } finally {
@@ -88,12 +92,19 @@ export function AccountSection() {
           确认新密码
           <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
         </label>
+        {me.user.totp_enabled && (
+          <label>
+            两步验证码 / 恢复码
+            <input value={totp} onChange={(e) => setTotp(e.target.value)} autoComplete="one-time-code" maxLength={16} required />
+          </label>
+        )}
         {error && <p className="td-block">{error}</p>}
         {note && <p className="td-note">{note}</p>}
         <button className="td-submit buy" type="submit" disabled={busy}>
           {busy ? "提交中…" : "修改密码"}
         </button>
       </form>
+      <SecuritySection onChange={() => void marketProvider.getMe().then(setMe)} />
     </section>
   );
 }

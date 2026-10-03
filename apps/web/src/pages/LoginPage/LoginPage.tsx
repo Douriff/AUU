@@ -10,6 +10,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [ticket, setTicket] = useState("");
+  const [code, setCode] = useState("");
 
   useEffect(() => {
     marketProvider
@@ -26,10 +28,31 @@ export function LoginPage() {
     setBusy(true);
     setError("");
     try {
-      await marketProvider.login({ name: name.trim(), password });
+      const res = await marketProvider.login({ name: name.trim(), password });
+      if ("totp_required" in res && res.totp_required) {
+        setTicket(res.ticket);
+        setCode("");
+        return;
+      }
       navigate("/trade");
     } catch (e) {
       setError(e instanceof Error ? e.message : "登录失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCode(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await marketProvider.loginTotp({ ticket, code: code.trim() });
+      navigate("/trade");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "验证失败";
+      setError(msg);
+      if (msg.includes("过期")) setTicket("");
     } finally {
       setBusy(false);
     }
@@ -51,7 +74,31 @@ export function LoginPage() {
             当前是本地单用户模式，不需要登录。直接去 <Link to="/trade">交易</Link> 或 <Link to="/markets">市场</Link>。
           </p>
         )}
-        {authOn && (
+        {authOn && ticket && (
+          <form onSubmit={(event) => void submitCode(event)}>
+            <p className="td-note">此账户已开启两步验证。请输入验证器 App 里的 6 位数字，或一个恢复码（形如 abcde-fghjk）。</p>
+            <label>
+              两步验证码 / 恢复码
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="one-time-code"
+                inputMode="text"
+                autoFocus
+                maxLength={16}
+                required
+              />
+            </label>
+            {error && <p className="td-block">{error}</p>}
+            <button className="td-submit buy" type="submit" disabled={busy}>
+              {busy ? "验证中…" : "验证并登录"}
+            </button>
+            <button type="button" className="td-link" onClick={() => (setTicket(""), setError(""))}>
+              返回重新输入密码
+            </button>
+          </form>
+        )}
+        {authOn && !ticket && (
           <form onSubmit={(event) => void submit(event)}>
             <label>
               用户名

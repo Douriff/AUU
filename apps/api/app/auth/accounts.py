@@ -27,7 +27,7 @@ _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
 _BOOKS: dict[str, PaperTradeJournal] = {}
 _ATTEMPTS: dict[str, list[float]] = {}
-_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch"}
+_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch", "totp", "totp_code"}
 
 
 def reset_accounts() -> None:
@@ -38,6 +38,9 @@ def reset_accounts() -> None:
         _ATTEMPTS.clear()
         _FAILURES.clear()
     reset_email_codes()
+    from app.auth.security import reset_login_log
+
+    reset_login_log()
 
 
 def auth_enabled() -> bool:
@@ -178,6 +181,7 @@ def _public(user: dict[str, Any]) -> dict[str, Any]:
         "is_admin": bool(user.get("is_admin")),
         "start_sol": float(user.get("start_sol") or start_sol_default()),
         "created_ts": int(user.get("created_ts") or 0),
+        "totp_enabled": bool((user.get("totp") or {}).get("enabled")),
     }
 
 
@@ -323,15 +327,159 @@ def reset_password(email: str, code: str, new: str) -> dict[str, Any]:
     return _public(user)
 
 
-def change_password(user_id: str, current: str, new: str) -> None:
+def change_password(user_id: str, current: str, new: str, totp_code: str = "") -> None:
+    """Current password (+ a TOTP / recovery code when 2FA is on). Bumps session_epoch: other sessions end."""
+    from app.auth import security
+
     user = user_by_id(user_id)
     if user is None or not verify_password(current or "", str(user.get("password_hash") or "")):
         raise ValueError("BAD_LOGIN")
     if not _password_ok(new):
         raise ValueError("BAD_PASSWORD")
-    user["password_hash"] = hash_password(new)
     with _LOCK:
+        if security.enabled(user):
+            if not (totp_code or "").strip():
+                raise ValueError("TOTP_REQUIRED")
+            if security.verify_second_factor(user, totp_code) is None:
+                _save()
+                raise ValueError("TOTP_BAD")
+        user["password_hash"] = hash_password(new)
+        user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
         _save()
+
+
+def find_user(name: str) -> Optional[dict[str, Any]]:
+    text = (name or "").strip().lower()
+    for user in _load():
+        if str(user.get("name") or "").lower() == text:
+            return user
+    return None
+
+
+def bump_epoch(user_id: str) -> None:
+    """Invalidate every session cookie of this user (the caller re-stamps its own)."""
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
+        _save()
+
+
+def session_epoch(user_id: str) -> int:
+    return _epoch_of(user_id)
+
+
+def _reverify(user: dict[str, Any], password: str, code: str) -> None:
+    """Password, plus a TOTP / recovery code when 2FA is already on."""
+    from app.auth import security
+
+    if not verify_password(password or "", str(user.get("password_hash") or "")):
+        raise ValueError("BAD_LOGIN")
+    if security.enabled(user):
+        if not (code or "").strip():
+            raise ValueError("TOTP_REQUIRED")
+        if security.verify_second_factor(user, code) is None:
+            _save()
+            raise ValueError("TOTP_BAD")
+
+
+def totp_setup(user_id: str, password: str) -> dict[str, Any]:
+    """Start enabling 2FA: new secret kept as pending (encrypted) until one code is verified."""
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        if security.enabled(user):
+            raise ValueError("TOTP_ALREADY_ON")
+        if not verify_password(password or "", str(user.get("password_hash") or "")):
+            raise ValueError("BAD_LOGIN")
+        secret = security.new_secret()
+        t = dict(user.get("totp") or {})
+        t.update(enabled=False, pending_enc=security.encrypt(secret), pending_at=int(time.time()))
+        user["totp"] = t
+        _save()
+    uri = security.otpauth_uri(secret, str(user.get("name") or "user"))
+    return {"secret": secret, "otpauth": uri, "qr_svg": security.qr_svg(uri), "expires_in": security.SETUP_TTL}
+
+
+def totp_enable(user_id: str, code: str) -> list[str]:
+    """Verify one code against the pending secret, switch 2FA on, return the recovery codes (shown once)."""
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        t = dict(user.get("totp") or {})
+        if t.get("enabled"):
+            raise ValueError("TOTP_ALREADY_ON")
+        if not t.get("pending_enc") or int(time.time()) - int(t.get("pending_at") or 0) > security.SETUP_TTL:
+            raise ValueError("TOTP_SETUP_EXPIRED")
+        try:
+            secret = security.decrypt(str(t["pending_enc"]))
+        except Exception as exc:
+            raise ValueError("TOTP_SETUP_EXPIRED") from exc
+        step = security.match_step(secret, code)
+        if step is None:
+            raise ValueError("TOTP_BAD")
+        codes = security.new_recovery_codes()
+        user["totp"] = {"enabled": True, "secret_enc": t["pending_enc"], "last_step": step, "enabled_at": int(time.time() * 1000),
+                        "recovery": [security.recovery_hash(c) for c in codes]}
+        _save()
+    return codes
+
+
+def totp_disable(user_id: str, password: str, code: str) -> None:
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        if not security.enabled(user):
+            raise ValueError("TOTP_OFF")
+        _reverify(user, password, code)
+        user.pop("totp", None)
+        _save()
+
+
+def totp_new_recovery(user_id: str, password: str, code: str) -> list[str]:
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        if not security.enabled(user):
+            raise ValueError("TOTP_OFF")
+        _reverify(user, password, code)
+        codes = security.new_recovery_codes()
+        user["totp"]["recovery"] = [security.recovery_hash(c) for c in codes]
+        _save()
+    return codes
+
+
+def totp_login(user_id: str, code: str) -> Optional[str]:
+    """Second login step. Returns 'totp' | 'recovery' | None and persists the replay step / used code."""
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None:
+        return None
+    with _LOCK:
+        how = security.verify_second_factor(user, code)
+        if how is not None:
+            _save()
+        return how
+
+
+def security_view(user: dict[str, Any]) -> dict[str, Any]:
+    t = user.get("totp") or {}
+    return {"totp_enabled": bool(t.get("enabled")), "recovery_left": len(t.get("recovery") or []) if t.get("enabled") else 0,
+            "totp_enabled_at": t.get("enabled_at") if t.get("enabled") else None}
 
 
 def user_by_id(user_id: str) -> Optional[dict[str, Any]]:
