@@ -298,9 +298,16 @@ class AlertMonitor:
         t = datetime.fromtimestamp(now / 1000, BJ)
         h, m = digest_time()
         if (t.hour, t.minute) < (h, m):
+            if self.c.get("digest_armed") is None:
+                self.c.set("digest_armed", now)
             return None
         day = t.strftime("%Y-%m-%d")
-        if self.c.get("digest_day") == day:
+        prev = self.c.get("digest_day")
+        if prev == day:
+            return None
+        if prev is None and self.c.get("digest_armed") is None:
+            self.c.set("digest_armed", self.now_ms())  # first start after the day's slot: begin with the next 08:30
+            self.c.set("digest_day", day)
             return None
         if r is not None and t.hour < 10:
             last = r.ledger.last_run()
@@ -436,7 +443,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         from app.version import git_commit
 
         now = c.now_ms()
-        res = c.raise_alert(f"test:{now}", "test", "AUUTRADE 测试邮件：告警通道已接通",
+        import secrets
+
+        res = c.raise_alert(f"test:{now}:{secrets.token_hex(4)}", "test", "AUUTRADE 测试邮件：告警通道已接通",
                             f"这是一封测试邮件，确认 AUUTRADE 告警和每日摘要通道可用。\n时间：{bj(now)}（北京时间）\n"
                             f"代码版本：{git_commit() or 'unknown'}\n每日摘要时间：北京时间 %02d:%02d\n\n纸面账本，实盘锁定；邮件不含任何凭证。" % digest_time(),
                             bypass_limits=True)

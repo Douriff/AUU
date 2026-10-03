@@ -137,6 +137,22 @@ class MonitorTests(_RiskBase):
         self.mon.check()
         self.assertIn("没有可用交易所", self.box.sent[-1][2])
 
+    def test_first_start_after_the_slot_waits_for_the_next_0830(self):
+        self.at(self.clock, self.e, 12)  # 20:00 Beijing on first start
+        self.mon.check()
+        self.assertFalse(any("每日摘要" in s for s in self.subjects()))
+        self.at(self.clock, self.e + 1, 0, 31)  # next day 08:31 (rebalance written first)
+        self.r.tick()
+        self.mon.check()
+        self.assertEqual(len([s for s in self.subjects() if "每日摘要" in s]), 1)
+
+    def test_missed_slot_is_caught_up_later_that_day(self):
+        self.at(self.clock, self.e, 0, 20)
+        self.mon.check()  # armed before the slot
+        self.at(self.clock, self.e, 3)  # process was down at 08:30; 11:00 Beijing
+        self.mon.check()
+        self.assertEqual(len([s for s in self.subjects() if "每日摘要" in s]), 1)
+
     def test_daily_digest_at_0830_beijing_once(self):
         self.at(self.clock, self.e, 0, 25)  # 08:25 Beijing
         self.mon.check()
@@ -163,6 +179,7 @@ class MonitorTests(_RiskBase):
         self.assertEqual(len([s for s in self.subjects() if "每日摘要" in s]), 1)
 
     def test_digest_waits_for_todays_rebalance(self):
+        self.center.set("digest_armed", 1)
         self.at(self.clock, self.e + 1, 0, 31)  # 08:31 Beijing, but day e+1 not rebalanced yet
         self.mon.check()
         self.assertFalse(any("每日摘要" in s for s in self.subjects()))
