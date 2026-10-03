@@ -24,6 +24,7 @@ COOKIE = "auu_session"
 PUBLIC_PATHS = frozenset(
     {
         "/api/v1/health",
+        "/api/v1/status",
         "/api/v1/auth/me",
         "/api/v1/auth/login",
         "/api/v1/auth/login/totp",

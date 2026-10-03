@@ -1332,3 +1332,29 @@ export interface PipelineResult extends PaperOrderResult {
     pump?: PumpCtx | null;
   };
 }
+
+/** GET /api/v1/status — login-free, coarse status (P1-6). */
+export interface PublicStatus {
+  api: "up";
+  checkedAt: number;
+  healthy: boolean;
+  liveTrading: "locked" | "unlocked";
+  marketData: { fresh: boolean; staleSeries: number; exchangesBlocked: number; exchangesTotal: number; lastRefreshMs: number | null };
+  strategy: {
+    active: boolean;
+    lastRebalanceDay: string | null;
+    lastRebalanceAt: number | null;
+    hoursSinceClose: number | null;
+    overdueAfterH: number | null;
+    overdue: boolean;
+  };
+  uptime30d: {
+    windowDays: number;
+    since: number | null;
+    measuredMin: number;
+    upPct: number | null;
+    healthyPct: number | null;
+    days: { day: string; measuredMin: number; upPct: number | null; healthyPct: number | null }[];
+    outages: { start: number; minutes: number; kind: "down" | "degraded" }[];
+  } | null;
+}

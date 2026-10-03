@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, stats, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, stats, status, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -97,6 +97,10 @@ def _make_lifespan(legacy: bool):
 
             if recon_enabled():
                 tasks.append(asyncio.create_task(recon_loop(), name="recon"))
+            from app.status import run_loop as uptime_loop, uptime_enabled
+
+            if uptime_enabled():
+                tasks.append(asyncio.create_task(uptime_loop(), name="uptime"))
         try:
             yield
         finally:
@@ -152,7 +156,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow):
+    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -170,6 +174,7 @@ def root(legacy: bool = False):
                 "service": "auu-api",
                 "mode": "mainstream",
                 "health": "/api/v1/health",
+                "status": "/api/v1/status",
                 "ws": "/api/v1/ws",
                 "provider": "cex_public",
                 "orderMode": "paper",

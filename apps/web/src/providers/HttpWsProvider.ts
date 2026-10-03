@@ -21,6 +21,7 @@ import type {
   PaperOrderResult,
   PaperPerformance,
   AuthMe,
+  PublicStatus,
   AccountSecurity,
   LoginStep,
   TotpSetup,
@@ -323,6 +324,10 @@ export class HttpWsProvider {
 
   cancelPaperOrder(id: string): Promise<PaperOrder> {
     return postJson(`/api/v1/mainstream/paper/orders/${encodeURIComponent(id)}/cancel`, {});
+  }
+
+  getPublicStatus(): Promise<PublicStatus> {
+    return getJson("/api/v1/status");
   }
 
   getStrategySummary(): Promise<StrategySummary> {

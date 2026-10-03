@@ -1964,3 +1964,35 @@ code.hl { color: var(--accent); }
 @media (max-width: 520px) {
   .sec-log th:nth-child(4), .sec-log td:nth-child(4) { display: none; }
 }
+
+/* ---- public status page (/status) ---- */
+.st-page { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+.st-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.st-head h1 { font-size: 20px; margin: 0; }
+.st-badge { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; }
+.st-badge.ok { color: var(--green); border-color: var(--green); }
+.st-badge.warn { color: var(--warn); border-color: var(--warn); }
+.st-badge.bad { color: var(--red); border-color: var(--red); }
+.st-list, .st-outages { list-style: none; margin: 0; padding: 0; }
+.st-list { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.st-row { display: grid; grid-template-columns: 12px minmax(84px, auto) 1fr; gap: 10px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); }
+.st-row:first-child { border-top: 0; }
+.st-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.st-dot.ok { background: var(--green); }
+.st-dot.bad { background: var(--red); }
+.st-value { text-align: right; overflow-wrap: anywhere; }
+.st-box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.st-box-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.st-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.st-kpis div { display: flex; flex-direction: column; gap: 2px; }
+.st-kpis b { font-size: 22px; }
+.st-bars { display: grid; grid-template-columns: repeat(31, 1fr); gap: 2px; height: 28px; }
+.st-bar { background: var(--border); border-radius: 2px; }
+.st-bar.ok { background: var(--green); }
+.st-bar.warn { background: var(--warn); }
+.st-bar.bad { background: var(--red); }
+.st-note { font-size: 12px; margin: 0; }
+.st-outages li { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; padding: 4px 0; font-size: 13px; }
+.st-outages .down { color: var(--red); }
+.st-outages .warn { color: var(--warn); }
+.auth-screen .st-page { width: 100%; }
