@@ -204,6 +204,19 @@ export interface StrategySummary {
   goNoGo: StrategyGoNoGo;
   status: StrategyStatus;
   risk?: StrategyRisk;
+  execShadow?: ExecShadowSummary | null;
+}
+export interface ExecShadowSummary {
+  ledger: string;
+  n: number;
+  skipped: number;
+  errors: number;
+  partial: number;
+  notionalWeightedDeviationBp: number | null;
+  notionalWeightedShortfallMidBp: number | null;
+  coins: { coin: string; n: number; notional: number; spreadBp: number; shortfallMidBp: number; shortfallCloseBp: number | null; assumedBp: number; deviationBp: number }[];
+  note: string;
+  error?: string;
 }
 export interface StrategyRiskEvent {
   ts: number;

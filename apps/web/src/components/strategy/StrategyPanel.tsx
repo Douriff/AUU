@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { StrategyRisk, StrategySummary } from "@/types/mainstream";
+import type { ExecShadowSummary, StrategyRisk, StrategySummary } from "@/types/mainstream";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
@@ -97,6 +97,7 @@ export function StrategyPanel() {
       {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
       {data ? <UniverseNote data={data} /> : null}
       {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
+      <ExecShadowBox s={data?.execShadow ?? null} />
       <div className="strat-kpis">
         <Kpi label="权益 USDT" value={num(data?.nav)} />
         <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
@@ -275,6 +276,47 @@ function RiskBox({ risk }: { risk: StrategyRisk }) {
         </tbody>
       </table>
       {risk.backtestNote ? <div className="muted strat-risk-note">{risk.backtestNote}</div> : null}
+    </div>
+  );
+}
+
+const bp = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(d)} bp`);
+
+function ExecShadowBox({ s }: { s: ExecShadowSummary | null }) {
+  return (
+    <div className="strat-risk strat-exec">
+      <div className="strat-risk-head">
+        <b>执行价影子记录</b>
+        <span className="muted">每次调仓时按成交金额读取永续公开盘口（不影响成交和账本）</span>
+        {s && s.n ? (
+          <span className={(s.notionalWeightedDeviationBp ?? 0) > 0 ? "down" : "up"}>
+            按金额加权：实际 {bp(s.notionalWeightedShortfallMidBp)} vs 假设 · 偏差 {bp(s.notionalWeightedDeviationBp)}
+          </span>
+        ) : null}
+      </div>
+      {s && s.coins.length ? (
+        <table className="num strat-risk-events">
+          <thead>
+            <tr><th>币</th><th>次数</th><th>价差</th><th>盘口成本（对中间价）</th><th>假设滑点</th><th>偏差</th><th>对收盘价</th></tr>
+          </thead>
+          <tbody>
+            {s.coins.map((c) => (
+              <tr key={c.coin}>
+                <td>{c.coin}</td>
+                <td>{c.n}</td>
+                <td>{bp(c.spreadBp, 2)}</td>
+                <td>{bp(c.shortfallMidBp, 2)}</td>
+                <td>{bp(c.assumedBp, 1)}</td>
+                <td className={c.deviationBp > 0 ? "down" : "up"}>{bp(c.deviationBp, 2)}</td>
+                <td>{bp(c.shortfallCloseBp, 1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="muted">暂无记录（下一次调仓开始积累）{s?.error ? ` · ${s.error}` : ""}</div>
+      )}
+      {s ? <div className="muted strat-risk-note">{s.note}{s.skipped ? ` 补跑日跳过 ${s.skipped} 笔。` : ""}{s.errors ? ` 读取失败 ${s.errors} 笔。` : ""}</div> : null}
     </div>
   );
 }
