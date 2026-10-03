@@ -1996,3 +1996,6 @@ code.hl { color: var(--accent); }
 .st-outages .down { color: var(--red); }
 .st-outages .warn { color: var(--warn); }
 .auth-screen .st-page { width: 100%; }
+/* strategy overlay toggle + legend (daily chart) */
+.msc-actions button.is-on { border-color: var(--accent); color: var(--accent); }
+.msc-sig { margin-top: 0.15rem; }

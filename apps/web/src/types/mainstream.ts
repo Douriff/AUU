@@ -433,3 +433,16 @@ export interface ReconSummary {
   runs: { at: number; status: string; checked: number; flagged: number; maxDevPct: number | null; maxCoin: string | null; error: string | null }[];
   note: string;
 }
+
+/** GET /api/v1/mainstream/strategy/overlay?symbol= — read-only chart overlay (P1-5). */
+export type StrategyOverlay = {
+  symbol: string;
+  strategy: string;
+  lookbacks: number[];
+  longOnly: boolean;
+  asOfDay: number;
+  inUniverse: boolean;
+  /** one row per daily close: look-back returns (same order as lookbacks), signal, target weight */
+  series: { ts: number; close: number | null; mom: (number | null)[]; signal: number | null; target: number }[];
+  fills: { day: number; side: "buy" | "sell"; wFrom: number; wTo: number; price: number; fillPrice: number; notional: number }[];
+};
