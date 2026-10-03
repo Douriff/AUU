@@ -364,3 +364,31 @@ export interface StrategyReport {
   };
   note: string;
 }
+
+export interface MarketRow {
+  symbol: string;
+  pair: string;
+  perp: string;
+  display: boolean;
+  strategy: boolean;
+  price?: number | null;
+  priceTs?: number | null;
+  priceSource?: "ticker" | "store";
+  change24h?: number | null;
+  quoteVolume24h?: number | null;
+  change7d?: number | null;
+  change30d?: number | null;
+  spark30?: number[];
+  funding?: number | null;
+  fundingAnnualized?: number | null;
+  nextFundingMs?: number | null;
+  held: boolean;
+  weight: number | null;
+}
+export interface MarketsResponse {
+  exchange: string | null;
+  quote: string;
+  items: MarketRow[];
+  asOf: number;
+  tickers: { enabled: boolean; source: "ticker" | "store"; at: number | null; error: string | null };
+}

@@ -420,7 +420,7 @@ def get_accounts() -> PaperAccounts:
         if _accounts is None:
             from app.marketdata.mainstream import get_service
 
-            _accounts = PaperAccounts(price_fn=_market_price, candles_fn=_market_candles, symbols=lambda: list(get_service().cfg.symbols))
+            _accounts = PaperAccounts(price_fn=_market_price, candles_fn=_market_candles, symbols=lambda: get_service().cfg.all_symbols())  # display + strategy universe; limits unchanged
         return _accounts
 
 

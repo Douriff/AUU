@@ -6,7 +6,7 @@ import type {
   MainstreamTf,
   PaperAccount,
   StrategySummary,
-  ShadowS3Summary, StrategyReport,
+  ShadowS3Summary, StrategyReport, MarketsResponse,
   PaperOrder,
   PaperOrderRequest,
 } from "@/types/mainstream";
@@ -289,6 +289,14 @@ export class HttpWsProvider {
   getSearchCoin(mint: string): Promise<SearchCoinDetail> {
     const params = new URLSearchParams({ mint });
     return getJson(`/api/v1/search/coin?${params}`);
+  }
+
+  getMainstreamMarkets(): Promise<MarketsResponse> {
+    return getJson("/api/v1/mainstream/markets");
+  }
+
+  getMainstreamStatus(): Promise<MainstreamFreshness> {
+    return getJson("/api/v1/mainstream/status");
   }
 
   getMainstreamOverview(): Promise<MainstreamOverview> {

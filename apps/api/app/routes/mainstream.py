@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/mainstream", tags=["mainstream"])
 def _base(symbol: str) -> Optional[str]:
     svc = get_service()
     base = "".join(ch for ch in symbol.split("/")[0].upper() if ch.isalnum())
-    return base if base in svc.cfg.symbols else None
+    return base if base in svc.cfg.all_symbols() else None
 
 
 @router.get("/status")
@@ -32,9 +32,31 @@ def overview():
     return ok(get_service().overview())
 
 
+@router.get("/markets")
+def markets():
+    """Market list: every display + strategy coin in one batched response (store + cached tickers)."""
+    return ok(get_service().markets(holdings=_strategy_holdings()))
+
+
+def _strategy_holdings() -> dict[str, float]:
+    """Current strategy paper weights (read-only; empty when the runner has not started)."""
+    try:
+        import json
+
+        from app.paper.strategy_runner import peek_runner
+
+        r = peek_runner()
+        last = r.ledger.last_run() if r is not None else None
+        if last is None:
+            return {}
+        return {k: float(v) for k, v in json.loads(last["weights"]).items() if v}
+    except Exception:
+        return {}
+
+
 @router.get("/candles")
 def candles(
-    symbol: str = Query(..., description="BTC | ETH | SOL (configured symbols)"),
+    symbol: str = Query(..., description="any configured display or strategy-universe symbol"),
     tf: str = Query("1d", description="1m | 5m | 15m | 1h | 4h | 1d"),
     limit: int = Query(200, ge=1, le=2000),
     since: Optional[int] = Query(None, description="ms epoch, inclusive (stored timeframes only)"),
