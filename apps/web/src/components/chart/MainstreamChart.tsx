@@ -8,12 +8,15 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LogicalRange,
+  type LineData,
   type MouseEventParams,
+  type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { marketProvider } from "@/providers/HttpWsProvider";
-import type { MainstreamCandle, MainstreamTf } from "@/types/mainstream";
+import type { MainstreamCandle, MainstreamTf, StrategyOverlay } from "@/types/mainstream";
+import { CHART_CHROME, chartColors, onColorPref } from "@/theme/colorPref";
 
 /** lightweight-charts (Apache-2.0) candlestick + volume for the mainstream page. */
 
@@ -29,8 +32,6 @@ export const CHART_TFS: { id: MainstreamTf; label: string }[] = [
 const INTRADAY = new Set<MainstreamTf>(["1m", "5m", "15m"]);
 const PAGE = 500;
 const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 15_000, "15m": 20_000, "1h": 60_000, "4h": 60_000, "1d": 60_000 };
-const UP = "#26a69a";
-const DOWN = "#ef5350";
 
 // The chart renders timestamps as UTC; shift by the browser offset so the axis shows local time.
 const TZ_SHIFT_SEC = -new Date().getTimezoneOffset() * 60;
@@ -61,13 +62,20 @@ function fmtTs(ms: number, tf: MainstreamTf) {
 }
 
 const bar = (c: MainstreamCandle): CandlestickData => ({ time: toTime(c.ts), open: c.open, high: c.high, low: c.low, close: c.close });
-const vol = (c: MainstreamCandle): HistogramData => ({
-  time: toTime(c.ts),
-  value: c.volume,
-  color: c.close >= c.open ? "rgba(38,166,154,0.45)" : "rgba(239,83,80,0.45)",
-});
+const vol = (c: MainstreamCandle): HistogramData => {
+  const col = chartColors();
+  return { time: toTime(c.ts), value: c.volume, color: c.close >= c.open ? col.upVol : col.downVol };
+};
+const candleColors = () => {
+  const { up, down } = chartColors();
+  return { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down };
+};
 
 type Legend = { c: MainstreamCandle; prev?: MainstreamCandle };
+type OvRow = StrategyOverlay["series"][number];
+
+const MOM_COLORS = ["#f2c94c", "#bb86fc", "#4fc3f7"];
+const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 
 export function MainstreamChart({ symbol, tf }: { symbol: string; tf: MainstreamTf }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -80,6 +88,13 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
   const exhausted = useRef(false);
   const gen = useRef(0);
   const [legend, setLegend] = useState<Legend | null>(null);
+  // strategy overlay (daily only): rebalance markers + TSMOM look-back return lines
+  const [sigOn, setSigOn] = useState(false);
+  const [ov, setOv] = useState<StrategyOverlay | null>(null);
+  const [ovErr, setOvErr] = useState("");
+  const ovRows = useRef<Map<number, OvRow>>(new Map());
+  const momRefs = useRef<ISeriesApi<"Line">[]>([]);
+  const [ovRow, setOvRow] = useState<OvRow | null>(null);
   const [state, setState] = useState<{ loading: boolean; err: string; limited: boolean; retention?: number; count: number }>({
     loading: true,
     err: "",
@@ -106,24 +121,17 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     if (!host) return;
     const chart = createChart(host, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8d8d96", fontSize: 11 },
-      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: CHART_CHROME.text, fontSize: 11, fontFamily: CHART_CHROME.font },
+      grid: { vertLines: { color: CHART_CHROME.grid }, horzLines: { color: CHART_CHROME.grid } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.08, bottom: 0.25 } },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, rightOffset: 6 },
+      rightPriceScale: { borderColor: CHART_CHROME.border, scaleMargins: { top: 0.08, bottom: 0.25 } },
+      timeScale: { borderColor: CHART_CHROME.border, timeVisible: true, secondsVisible: false, rightOffset: 6 },
       // Pinch/wheel zoom and drag pan; vertical touch drags still scroll the page on phones.
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       kineticScroll: { touch: true, mouse: false },
     });
-    const candles = chart.addCandlestickSeries({
-      upColor: UP,
-      downColor: DOWN,
-      borderUpColor: UP,
-      borderDownColor: DOWN,
-      wickUpColor: UP,
-      wickDownColor: DOWN,
-    });
+    const candles = chart.addCandlestickSeries(candleColors());
     const volume = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     chartRef.current = chart;
@@ -135,12 +143,19 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
         setLegend(lastLegend());
         return;
       }
+      setOvRow(ovRows.current.get(fromTime(p.time)) ?? null);
       const i = byTs.current.get(fromTime(p.time));
       if (i == null) return;
       setLegend({ c: dataRef.current[i], prev: dataRef.current[i - 1] });
     };
     chart.subscribeCrosshairMove(onMove);
+    // 红涨绿跌 toggle: canvas colours do not follow CSS, so re-apply them here.
+    const offColors = onColorPref(() => {
+      candles.applyOptions(candleColors());
+      volume.setData(dataRef.current.map(vol));
+    });
     return () => {
+      offColors();
       chart.unsubscribeCrosshairMove(onMove);
       chart.remove();
       chartRef.current = null;
@@ -225,6 +240,71 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
     return () => window.clearInterval(t);
   }, [symbol, tf, lastLegend]);
 
+  // Buy/sell markers follow the 红涨绿跌 toggle too.
+  const [colorRev, setColorRev] = useState(0);
+  useEffect(() => onColorPref(() => setColorRev((n) => n + 1)), []);
+
+  // Overlay data: daily chart + toggle on. Read-only endpoint; refreshed when the symbol changes.
+  const showSig = sigOn && tf === "1d";
+  useEffect(() => {
+    if (!showSig) {
+      setOv(null);
+      setOvErr("");
+      return;
+    }
+    let live = true;
+    marketProvider
+      .getStrategyOverlay(symbol)
+      .then((d) => live && (setOv(d), setOvErr(d.inUniverse ? "" : "该币不在策略池内")))
+      .catch((e: unknown) => live && (setOv(null), setOvErr(e instanceof Error ? e.message : "读取失败")));
+    return () => {
+      live = false;
+    };
+  }, [showSig, symbol]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candles = candleRef.current;
+    if (!chart || !candles) return;
+    for (const s of momRefs.current) chart.removeSeries(s);
+    momRefs.current = [];
+    ovRows.current = new Map();
+    setOvRow(null);
+    if (!showSig || !ov) {
+      candles.setMarkers([]);
+      volRef.current?.applyOptions({ visible: true });
+      return;
+    }
+    volRef.current?.applyOptions({ visible: false }); // the bottom band shows the look-back returns instead
+    ovRows.current = new Map(ov.series.map((r) => [r.ts, r]));
+    momRefs.current = ov.lookbacks.map((L, k) => {
+      const s = chart.addLineSeries({
+        color: MOM_COLORS[k % MOM_COLORS.length],
+        lineWidth: 1,
+        priceScaleId: "mom",
+        lastValueVisible: false,
+        priceLineVisible: false,
+        priceFormat: { type: "percent", precision: 1, minMove: 0.1 },
+        title: `${L}日`,
+      });
+      s.setData(
+        ov.series.filter((r) => r.mom[k] != null).map((r): LineData => ({ time: toTime(r.ts), value: (r.mom[k] as number) * 100 })),
+      );
+      if (k === 0) s.createPriceLine({ price: 0, color: "rgba(255,255,255,0.25)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      return s;
+    });
+    chart.priceScale("mom").applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+    const col = chartColors();
+    const markers: SeriesMarker<Time>[] = ov.fills.map((f) => ({
+      time: toTime(f.day),
+      position: f.side === "buy" ? "belowBar" : "aboveBar",
+      color: f.side === "buy" ? col.up : col.down,
+      shape: f.side === "buy" ? "arrowUp" : "arrowDown",
+      text: `${f.side === "buy" ? "买" : "卖"}→${(f.wTo * 100).toFixed(1)}%`,
+    }));
+    candles.setMarkers(markers);
+  }, [ov, showSig, colorRev]);
+
   const lg = legend;
   const d = lg ? priceFormat(lg.c.close).precision : 2;
   const chg = lg?.prev ? lg.c.close / lg.prev.close - 1 : lg ? lg.c.close / lg.c.open - 1 : 0;
@@ -247,7 +327,58 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
           <span className="muted">{state.loading ? "加载中…" : state.err || "—"}</span>
         )}
       </div>
-      <div ref={hostRef} className="msc-host" />
+      {showSig ? (
+        <div className="msc-legend msc-sig num">
+          {ov && ov.inUniverse ? (
+            <>
+              <span className="muted">{ov.strategy}</span>
+              {ov.lookbacks.map((L, k) => (
+                <span key={L} style={{ color: MOM_COLORS[k % MOM_COLORS.length] }}>
+                  {L}日 {pctTxt((ovRow ?? ov.series[ov.series.length - 1])?.mom[k])}
+                </span>
+              ))}
+              {(() => {
+                const row = ovRow ?? ov.series[ov.series.length - 1];
+                const rec = row?.recorded;
+                const differs = rec != null && Math.abs(rec - row.target) > 1e-9;
+                return (
+                  <>
+                    <span>信号 <b>{row?.signal?.toFixed(2) ?? "—"}</b></span>
+                    <span>
+                      目标仓位 <b>{pctTxt(rec ?? row?.target, 2)}</b>
+                      {rec != null ? <span className="muted">（记录）</span> : null}
+                      {differs ? <span className="bad"> · 按现数据重算 {pctTxt(row.target, 2)}</span> : null}
+                    </span>
+                  </>
+                );
+              })()}
+              <span className="muted">纸面调仓 {ov.fills.length} 次</span>
+              {ov.revised.length ? (
+                <span className="bad" title="这些天的历史数据在调仓之后有变化（补数据/新增币种），按现数据重算的目标仓位与当时记录的不同">
+                  {ov.revised.length} 天重算≠记录
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="muted">{ovErr || "加载策略信号…"}</span>
+          )}
+        </div>
+      ) : null}
+      <div className="msc-stage">
+        <div ref={hostRef} className="msc-host" />
+        {state.loading ? (
+          <div className="msc-overlay msc-skel" aria-label="K线加载中">
+            {Array.from({ length: 28 }, (_, i) => (
+              <i key={i} style={{ height: `${22 + ((i * 37) % 50)}%`, marginTop: `${(i * 23) % 30}%` }} />
+            ))}
+          </div>
+        ) : !state.count && state.err ? (
+          <div className="msc-overlay msc-empty">
+            <b>暂无 K 线</b>
+            <span>{state.err}</span>
+          </div>
+        ) : null}
+      </div>
       <div className="msc-foot muted">
         <span>
           {state.count} 根
@@ -255,6 +386,17 @@ export function MainstreamChart({ symbol, tf }: { symbol: string; tf: Mainstream
           {state.limited ? " · 已到最早可用数据" : ""}
         </span>
         <span className="msc-actions">
+          {tf === "1d" ? (
+            <button
+              type="button"
+              className={sigOn ? "is-on" : ""}
+              aria-pressed={sigOn}
+              title="叠加 M3 策略：纸面调仓买卖点（箭头 + 目标仓位）和 20/60/120 日回看收益线（只读）"
+              onClick={() => setSigOn((v) => !v)}
+            >
+              策略信号
+            </button>
+          ) : null}
           <button type="button" onClick={() => chartRef.current?.timeScale().fitContent()}>全部</button>
           <button type="button" onClick={() => chartRef.current?.timeScale().scrollToRealTime()}>最新</button>
         </span>

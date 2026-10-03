@@ -1,33 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { CoinSwitcher, MarketList, fmtPct, fmtPx, fmtRate, fmtVol, tone } from "@/components/market/MarketList";
+import { Link, useSearchParams } from "react-router-dom";
+import { CoinBadge, CoinSwitcher, MarketList, Spark, fmtPct, fmtPx, fmtRate, fmtVol, pxWidths, tone } from "@/components/market/MarketList";
+import { Num } from "@/components/ui/Num";
+import { Empty, Sk, SkCards, SkRows } from "@/components/ui/Skeleton";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
 import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
-import type { MainstreamFreshness, MainstreamTf, MarketsResponse } from "@/types/mainstream";
+import type { MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
 
 const POLL_MS = 30_000;
-
-
-
-
-
-function fmtTime(ms: number | null | undefined): string {
-  if (!ms) return "—";
-  return new Date(ms).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
 
 function FundingBars({ rows }: { rows: { ts: number; rate: number }[] }) {
   const w = 720;
   const h = 90;
-  if (!rows.length) return <p className="mj-err">暂无资金费率数据。</p>;
+  if (!rows.length) return <Empty icon="chart" title="暂无资金费率数据" hint="该币种的永续资金费率尚未同步" />;
   const m = Math.max(...rows.map((r) => Math.abs(r.rate)), 1e-6);
   const bw = w / rows.length;
   const mid = h / 2;
   return (
     <svg className="ms-chart ms-funding" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label="资金费率历史">
-      <line x1="0" x2={w} y1={mid} y2={mid} stroke="rgba(255,255,255,0.15)" />
+      <line x1="0" x2={w} y1={mid} y2={mid} className="ms-zero" />
       {rows.map((r, i) => {
         const bh = (Math.abs(r.rate) / m) * (mid - 4);
         return (
@@ -37,7 +29,7 @@ function FundingBars({ rows }: { rows: { ts: number; rate: number }[] }) {
             width={Math.max(bw - 1, 1)}
             y={r.rate >= 0 ? mid - bh : mid}
             height={Math.max(bh, 0.5)}
-            fill={r.rate >= 0 ? "#3ee08f" : "#ff5d5d"}
+            className={r.rate >= 0 ? "fill-up" : "fill-down"}
           />
         );
       })}
@@ -45,26 +37,165 @@ function FundingBars({ rows }: { rows: { ts: number; rate: number }[] }) {
   );
 }
 
-function FreshnessLine({ f }: { f: MainstreamFreshness }) {
-  const blocked = Object.keys(f.blocked || {});
+function countdown(ms: number | null | undefined, now: number): string {
+  if (!ms) return "—";
+  const s = Math.max(0, Math.floor((ms - now) / 1000));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+}
+
+/** Next 08:00 Beijing time (= 00:00 UTC), the daily strategy rebalance. */
+function nextRebalance(now: number): number {
+  return (Math.floor(now / 86400_000) + 1) * 86400_000;
+}
+
+function useNow(ms = 1000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), ms);
+    return () => window.clearInterval(t);
+  }, [ms]);
+  return now;
+}
+
+function MiniCard({ r, onOpen }: { r: MarketRow; onOpen: (s: string) => void }) {
   return (
-    <div className="ms-fresh">
-      <span className={f.stale ? "is-down" : "is-ok"}>{f.stale ? "数据过期" : "数据新鲜"}</span>
-      <span>来源 {f.exchange ? f.exchange.toUpperCase() : "—"}</span>
-      <span>上次刷新 {fmtTime(f.lastRefreshMs)}</span>
-      {blocked.length ? <span className="is-warn">不可用: {blocked.join(", ").toUpperCase()}</span> : null}
-      {f.stale && f.staleSeries.length ? <span className="is-warn">过期: {f.staleSeries.join(", ")}</span> : null}
-      {Object.keys(f.gaps || {}).length ? <span className="is-warn">缺口: {Object.entries(f.gaps).map(([k, v]) => `${k.split(":").slice(1).join(":")}×${v}`).join(", ")}</span> : null}
+    <button type="button" className="ov-card ov-coin" onClick={() => onOpen(r.symbol)}>
+      <h6>
+        <span>
+          <CoinBadge symbol={r.symbol} size={16} /> {r.symbol}
+          <span className="dim">/USDT</span>
+        </span>
+        <em className={tone(r.change24h)}>{fmtPct(r.change24h)}</em>
+      </h6>
+      <div className="ov-mini">
+        <span className={`ov-px num ${tone(r.change24h)}`}>{fmtPx(r.price)}</span>
+        <Spark values={r.spark30 || []} w={78} h={26} />
+      </div>
+      <div className="ov-kv">
+        <span>24h 成交额</span>
+        <b className="num">{fmtVol(r.quoteVolume24h)}</b>
+      </div>
+    </button>
+  );
+}
+
+function Overview({ mk, onOpen, now }: { mk: MarketsResponse; onOpen: (s: string) => void; now: number }) {
+  const items = mk.items;
+  const pick = ["BTC", "ETH", "SOL"].map((s) => items.find((r) => r.symbol === s)).filter(Boolean) as MarketRow[];
+  const ups = items.filter((r) => (r.change24h ?? 0) > 0).length;
+  const downs = items.filter((r) => (r.change24h ?? 0) < 0).length;
+  const withChg = items.filter((r) => r.change24h != null);
+  const avg = withChg.length ? withChg.reduce((a, r) => a + (r.change24h ?? 0), 0) / withChg.length : null;
+  const held = items.filter((r) => r.held);
+  const gross = held.reduce((a, r) => a + Math.abs(r.weight ?? 0), 0);
+  return (
+    <div className="ov-cards">
+      {pick.map((r) => (
+        <MiniCard key={r.symbol} r={r} onOpen={onOpen} />
+      ))}
+      <div className="ov-card">
+        <h6>
+          <span>市场宽度 · 24h</span>
+          <span className="dim">{items.length} 币</span>
+        </h6>
+        <div className="ov-breadth" aria-label={`上涨 ${ups} 下跌 ${downs}`}>
+          <i className="bg-up" style={{ flex: ups || 0.001 }} />
+          <i className="bg-down" style={{ flex: downs || 0.001 }} />
+        </div>
+        <div className="ov-kv">
+          <span>
+            <b className="up num">{ups}</b> 涨 · <b className="down num">{downs}</b> 跌
+          </span>
+          <span>
+            均值 <b className={`num ${tone(avg)}`}>{fmtPct(avg)}</b>
+          </span>
+        </div>
+      </div>
+      <Link to="/console" className="ov-card ov-strat">
+        <h6>
+          <span>趋势策略 · 纸面</span>
+          <span className="ov-go">详情 ›</span>
+        </h6>
+        <div className="ov-kv">
+          <span>持仓币数</span>
+          <b className="num">{held.length}</b>
+        </div>
+        <div className="ov-kv">
+          <span>总敞口</span>
+          <b className="num">{(gross * 100).toFixed(1)}%</b>
+        </div>
+        <div className="ov-kv">
+          <span>下次调仓 08:00</span>
+          <b className="num">{countdown(nextRebalance(now), now)}</b>
+        </div>
+      </Link>
     </div>
   );
 }
 
-/** 主流行情: market list of every strategy coin (exchange-style), then the coin's chart + paper panel. */
+function OverviewSkeleton() {
+  return (
+    <>
+      <SkCards n={5} h={92} />
+      <div className="ml">
+        <div className="ml-bar">
+          <Sk w={180} h={14} />
+        </div>
+        <SkRows rows={10} cols={7} />
+      </div>
+    </>
+  );
+}
+
+function HeldTable({ rows, onOpen }: { rows: MarketRow[]; onOpen: (s: string) => void }) {
+  const held = rows.filter((r) => r.held).sort((a, b) => Math.abs(b.weight ?? 0) - Math.abs(a.weight ?? 0));
+  if (!held.length) return <Empty icon="inbox" title="策略当前空仓" hint="趋势策略每日 08:00 调仓，信号触发后这里会列出持仓" />;
+  const w = pxWidths(held.map((r) => r.price));
+  return (
+    <div className="pro-table-wrap">
+      <table className="pro-table">
+        <thead>
+          <tr>
+            <th>币种</th>
+            <th>方向</th>
+            <th>目标权重</th>
+            <th>最新价</th>
+            <th>24h</th>
+            <th>7 天</th>
+            <th>资金费率</th>
+          </tr>
+        </thead>
+        <tbody>
+          {held.map((r) => (
+            <tr key={r.symbol} onClick={() => onOpen(r.symbol)} className="is-link">
+              <td>
+                <span className="pair">
+                  <CoinBadge symbol={r.symbol} size={16} />
+                  <b>{r.symbol}</b>
+                </span>
+              </td>
+              <td className={(r.weight ?? 0) < 0 ? "down" : "up"}>{(r.weight ?? 0) < 0 ? "空" : "多"}</td>
+              <td className="num">{(Math.abs(r.weight ?? 0) * 100).toFixed(1)}%</td>
+              <td className="num">
+                <Num text={fmtPx(r.price)} int={w.int} frac={w.frac} />
+              </td>
+              <td className={`num ${tone(r.change24h)}`}>{fmtPct(r.change24h)}</td>
+              <td className={`num ${tone(r.change7d)}`}>{fmtPct(r.change7d)}</td>
+              <td className={`num ${tone(r.funding)}`}>{fmtRate(r.funding)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** 主流行情: market overview + list of every strategy coin, then the coin's trading view (chart + paper panel). */
 export function MainstreamPage() {
   const [params, setParams] = useSearchParams();
   const pick = (params.get("symbol") || "").toUpperCase();
   const [mk, setMk] = useState<MarketsResponse | null>(null);
-  const [fresh, setFresh] = useState<MainstreamFreshness | null>(null);
   const [err, setErr] = useState("");
   const [tf, setTf] = useState<MainstreamTf>(() => {
     const saved = (params.get("tf") ?? window.localStorage.getItem("auu.ms.tf")) as MainstreamTf | null;
@@ -72,6 +203,8 @@ export function MainstreamPage() {
   });
   const [funding, setFunding] = useState<{ ts: number; rate: number }[]>([]);
   const [tick, setTick] = useState(0);
+  const [bottom, setBottom] = useState<"held" | "funding">("held");
+  const now = useNow();
 
   useEffect(() => {
     let alive = true;
@@ -79,10 +212,6 @@ export function MainstreamPage() {
       .getMainstreamMarkets()
       .then((d) => alive && (setMk(d), setErr("")))
       .catch((e: unknown) => alive && setErr(e instanceof Error ? e.message : "读取失败"));
-    marketProvider
-      .getMainstreamStatus()
-      .then((f) => alive && setFresh(f))
-      .catch(() => undefined);
     const t = window.setTimeout(() => setTick((n) => n + 1), POLL_MS);
     return () => {
       alive = false;
@@ -121,66 +250,113 @@ export function MainstreamPage() {
   };
   const quote = mk?.quote || "USDT";
 
-  return (
-    <div className="majors-page mj-dense mainstream-page">
-      <header className="mj-top">
-        <div>
-          <h1>{current ? "主流行情 · 交易" : "主流行情"}</h1>
-          <p>交易所公开行情与永续资金费率（只读，无 API key）。纸面交易，实盘锁定。</p>
-        </div>
-        <div className="mj-health">
-          <span className="mj-badge">LIVE OFF</span>
-        </div>
-      </header>
-      {err ? <p className="mj-err">{err}</p> : null}
-      {!mk && !err ? <p className="mj-err">正在读取行情…</p> : null}
-      {fresh ? <FreshnessLine f={fresh} /> : null}
-      {mk && !current ? (
-        <>
-          <MarketList rows={mk.items} onOpen={open} quote={quote} />
-          <p className="ml-foot muted">
-            {mk.items.length} 个币（趋势策略币池）· 价格来源 {mk.tickers.source === "ticker" ? "交易所 24h 行情（批量，30 秒缓存）" : "本地 K 线库（每 5 分钟刷新）"} ·{" "}
-            {(mk.exchange || "—").toUpperCase()} · 30 天走势为日线收盘
-          </p>
-        </>
-      ) : null}
-      {mk && pick && !current ? <p className="mj-err">未知币种 {pick}，<button type="button" className="ms-back" onClick={back}>返回列表</button></p> : null}
-      {mk && current ? (
-        <section className="ms-panel">
-          <div className="mj-tools ms-detail-bar">
-            <button type="button" className="ms-back" onClick={back} aria-label="返回行情列表">
-              ← 行情
+  if (!current) {
+    return (
+      <div className="pro-page mainstream-page">
+        {err ? (
+          <div className="pro-alert">
+            行情读取失败：{err}
+            <button type="button" className="btn-ghost" onClick={() => setTick((n) => n + 1)}>
+              重试
             </button>
-            <CoinSwitcher rows={mk.items} current={current.symbol} onPick={open} quote={quote} />
-            <span className="ms-detail-px num">{fmtPx(current.price)}</span>
-            <span className="muted ms-detail-meta">
-              24h 成交额 {fmtVol(current.quoteVolume24h)} · 资金费 <em className={tone(current.funding)}>{fmtRate(current.funding)}</em> · 30 天{" "}
-              <em className={tone(current.change30d)}>{fmtPct(current.change30d)}</em>
-              {current.held ? ` · 策略持仓 ${((current.weight ?? 0) * 100).toFixed(1)}%` : ""}
+          </div>
+        ) : null}
+        {!mk && !err ? <OverviewSkeleton /> : null}
+        {mk?.tickers.error ? <div className="pro-alert is-warn">实时价格暂不可用，已改用本地 K 线收盘价（每 5 分钟刷新）。</div> : null}
+        {mk && pick ? (
+          <div className="pro-alert">
+            未知币种 {pick}
+            <button type="button" className="btn-ghost ms-back" onClick={back}>
+              返回列表
+            </button>
+          </div>
+        ) : null}
+        {mk ? (
+          <>
+            <Overview mk={mk} onOpen={open} now={now} />
+            <MarketList rows={mk.items} onOpen={open} quote={quote} />
+            <p className="ml-foot">
+              {mk.items.length} 个币 · 趋势策略币池 · 数据来源 {(mk.exchange || "—").toUpperCase()} 公开行情 · 30 天走势为日线收盘
+            </p>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="pro-page mainstream-page is-detail">
+      <section className="ms-panel">
+        <div className="tk">
+          <button type="button" className="ms-back" onClick={back} aria-label="返回行情列表">
+            ‹
+          </button>
+          <CoinSwitcher rows={mk!.items} current={current.symbol} onPick={open} quote={quote} />
+          <div className="tk-last">
+            <b className={`num ${tone(current.change24h)}`}>{fmtPx(current.price)}</b>
+            <em className={`num ${tone(current.change24h)}`}>{fmtPct(current.change24h)}</em>
+          </div>
+          <div className="tk-stats">
+            <span className="tk-st">
+              <small>24h 成交额</small>
+              <b className="num">{fmtVol(current.quoteVolume24h)}</b>
+            </span>
+            <span className="tk-st">
+              <small>7 天</small>
+              <b className={`num ${tone(current.change7d)}`}>{fmtPct(current.change7d)}</b>
+            </span>
+            <span className="tk-st">
+              <small>30 天</small>
+              <b className={`num ${tone(current.change30d)}`}>{fmtPct(current.change30d)}</b>
+            </span>
+            <span className="tk-st">
+              <small>资金费率 / 倒计时</small>
+              <b className="num">
+                <span className={tone(current.funding)}>{fmtRate(current.funding)}</span> <span className="dim">{countdown(current.nextFundingMs, now)}</span>
+              </b>
+            </span>
+            <span className="tk-st">
+              <small>策略持仓</small>
+              <b className="num">{current.held ? `${(current.weight ?? 0) < 0 ? "空" : "多"} ${(Math.abs(current.weight ?? 0) * 100).toFixed(1)}%` : "—"}</b>
             </span>
           </div>
-          <div className="mj-tools">
-            <div className="mk-tabs ms-tfs" role="tablist" aria-label="周期">
-              {CHART_TFS.map((t) => (
-                <button key={t.id} type="button" role="tab" aria-selected={tf === t.id} className={tf === t.id ? "is-on" : ""} onClick={() => pickTf(t.id)}>
-                  {t.label}
-                </button>
-              ))}
+        </div>
+        <div className="ms-trade-grid">
+          <div className="ms-trade-chart pane">
+            <div className="ph">
+              <div className="mk-tabs ms-tfs" role="tablist" aria-label="周期">
+                {CHART_TFS.map((t) => (
+                  <button key={t.id} type="button" role="tab" aria-selected={tf === t.id} className={tf === t.id ? "is-on" : ""} onClick={() => pickTf(t.id)}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <MainstreamChart symbol={current.symbol} tf={tf} />
           </div>
-          <div className="ms-trade-grid">
-            <div className="ms-trade-chart">
-              <MainstreamChart symbol={current.symbol} tf={tf} />
-            </div>
+          <div className="ms-trade-side pane">
             <PaperTradePanel symbol={current.symbol} price={current.price} />
           </div>
-          <div className="mj-tools ms-sub">
-            <b>{current.perp} 资金费率</b>
-            <span className="muted">最近 {funding.length} 期 · 绿=多头付费 红=空头付费</span>
+        </div>
+        <div className="ms-bottom pane">
+          <div className="ph ms-bottom-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={bottom === "held"} className={bottom === "held" ? "is-on" : ""} onClick={() => setBottom("held")}>
+              策略持仓 <span className="dim">{mk!.items.filter((r) => r.held).length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={bottom === "funding"} className={bottom === "funding" ? "is-on" : ""} onClick={() => setBottom("funding")}>
+              资金费率
+            </button>
+            {bottom === "funding" ? (
+              <span className="dim ms-legend">
+                {current.perp} · 最近 {funding.length} 期 · <i className="sw bg-up" /> 正 = 多头付费 <i className="sw bg-down" /> 负 = 空头付费
+              </span>
+            ) : (
+              <span className="dim ms-legend">趋势策略纸面持仓（每日 08:00 调仓）</span>
+            )}
           </div>
-          <FundingBars rows={funding} />
-        </section>
-      ) : null}
+          {bottom === "held" ? <HeldTable rows={mk!.items} onOpen={open} /> : <div className="ms-funding-wrap"><FundingBars rows={funding} /></div>}
+        </div>
+      </section>
     </div>
   );
 }

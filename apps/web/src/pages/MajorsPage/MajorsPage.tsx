@@ -1,3 +1,4 @@
+import { Empty, SkRows } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MajorsTicker, MajorsTickerBoard } from "@/types/contracts";
@@ -100,19 +101,19 @@ export function MajorsPage() {
   const items = board?.items ?? [];
 
   return (
-    <div className="majors-page mj-dense">
-      <header className="mj-top">
+    <div className="majors-page mj-dense pro-page">
+      <header className="mj-top pro-head">
         <div>
           <h1>大盘</h1>
-          <p>各所成交额前 100 的 USDT/USD 现货。只读，无密钥。单所不可用时其余继续。</p>
+          <p>各交易所成交额前 100 的现货交易对 · 公开行情</p>
         </div>
         <div className="mj-health" aria-label="交易所状态">
           {health.map((row) => (
             <span key={row.id} className={row.status === "ok" ? "is-ok" : "is-down"}>
+              <i aria-hidden="true" />
               {row.label} {row.status_label}
             </span>
           ))}
-          <span className="mj-badge">LIVE OFF</span>
         </div>
       </header>
 
@@ -196,8 +197,8 @@ export function MajorsPage() {
             )}
           </tbody>
         </table>
-        {!board && !err ? <p className="mj-err">正在读取公开行情…</p> : null}
-        {board && items.length === 0 && !down ? <p className="mj-err">没有匹配的交易对。</p> : null}
+        {!board && !err ? <SkRows rows={12} cols={7} h={36} /> : null}
+        {board && items.length === 0 && !down ? <Empty icon="search" title="没有匹配的交易对" hint="换个关键词或交易所试试" /> : null}
       </div>
     </div>
   );

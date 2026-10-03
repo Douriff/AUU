@@ -58,8 +58,6 @@ export function ForgotPasswordPage() {
       <section className="auth-card">
         <header>
           <h1>忘记密码</h1>
-          <span className="td-badge paper">PAPER</span>
-          <span className="td-badge live">LIVE OFF</span>
         </header>
         <p className="td-note">输入注册时使用的邮箱，获取验证码后设置新密码。重置后所有已登录的设备都需要重新登录。</p>
         {me && !enabled && <p className="td-note">当前未开启邮箱验证，无法通过邮箱重置密码。请联系管理员。</p>}

@@ -65,7 +65,7 @@ export function RegisterPage() {
         start_sol: start.value,
         ...(me?.email_verify ? { email: email.trim(), email_code: emailCode.trim() } : {}),
       });
-      navigate("/trade");
+      navigate("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "注册失败");
     } finally {
@@ -81,13 +81,11 @@ export function RegisterPage() {
       <section className="auth-card">
         <header>
           <h1>注册</h1>
-          <span className="td-badge paper">PAPER</span>
-          <span className="td-badge live">LIVE OFF</span>
         </header>
         <p className="td-note">自己的账户和密码，只用于纸面交易。密码不会显示给管理员。</p>
         {me && !authOn && (
           <p className="td-note">
-            当前是本地单用户模式，不需要注册。直接去 <Link to="/trade">交易</Link>。
+            当前是本地单用户模式，不需要注册。直接去 <Link to="/">行情</Link>。
           </p>
         )}
         {authOn && !open && <p className="td-note">注册已关闭。</p>}

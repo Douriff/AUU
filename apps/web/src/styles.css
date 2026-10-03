@@ -1943,6 +1943,7 @@ code.hl { color: var(--accent); }
 .recon-scroll table { min-width: 0; }
 @media (max-width: 520px) {
   .recon-scroll th, .recon-scroll td { padding: 0.24rem 0.18rem; font-size: 0.7rem; }
+}
 /* account security (2FA, login records) */
 .td-link { background: none; border: 0; color: #8ab4ff; cursor: pointer; padding: 0.2rem 0; font-size: 0.8rem; text-align: left; }
 .td-link.danger { color: #f6465d; }
@@ -1996,3 +1997,6 @@ code.hl { color: var(--accent); }
 .st-outages .down { color: var(--red); }
 .st-outages .warn { color: var(--warn); }
 .auth-screen .st-page { width: 100%; }
+/* strategy overlay toggle + legend (daily chart) */
+.msc-actions button.is-on { border-color: var(--accent); color: var(--accent); }
+.msc-sig { margin-top: 0.15rem; }

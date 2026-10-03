@@ -1,9 +1,12 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AUTH_REQUIRED_EVENT, marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import { useLegacyMode } from "@/hooks/useLegacyMode";
+import { Brand, ModeBadge } from "@/components/ui/Brand";
+import { ColorToggle } from "@/components/ui/ColorToggle";
+import type { MainstreamFreshness } from "@/types/mainstream";
 
 const primary = [
   { to: "/console", label: "控制台", icon: "term" },
@@ -26,13 +29,32 @@ const more = [
 ];
 
 /** Default (AUU_LEGACY_PUMP off): mainstream nav only; pump pages are archived. */
-const mainstreamPrimary = [
-  { to: "/", label: "主流行情", title: "BTC/ETH/SOL 价格与资金费率", end: true, icon: "bars" },
-  { to: "/console", label: "控制台", icon: "term" },
-  { to: "/majors", label: "大盘", icon: "globe" },
-  { to: "/leaderboard", label: "排行榜", icon: "rank" },
-  { to: "/settings", label: "设置", icon: "gear" },
-] as const;
+type NavItem = { to: string; label: string; icon: string; match: (path: string, search: string) => boolean };
+const LAST_SYMBOL_KEY = "auu.ms.last";
+const isTrade = (p: string, q: string) => p === "/" && /(?:^|[?&])symbol=/.test(q);
+const mainstreamNav: NavItem[] = [
+  { to: "/", label: "行情", icon: "bars", match: (p, q) => p === "/" && !isTrade(p, q) },
+  { to: "/?symbol=BTC", label: "交易", icon: "swap", match: isTrade },
+  { to: "/console", label: "策略", icon: "term", match: (p) => p.startsWith("/console") },
+  { to: "/performance", label: "绩效", icon: "rank", match: (p) => p.startsWith("/performance") },
+  { to: "/majors", label: "大盘", icon: "globe", match: (p) => p.startsWith("/majors") },
+];
+const mobileTabs: NavItem[] = [
+  mainstreamNav[0],
+  mainstreamNav[1],
+  mainstreamNav[2],
+  mainstreamNav[3],
+  { to: "/settings", label: "我的", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") },
+];
+
+function tradeHref(): string {
+  try {
+    const s = window.localStorage.getItem(LAST_SYMBOL_KEY);
+    return s && /^[A-Z0-9]{1,20}$/.test(s) ? `/?symbol=${s}` : "/?symbol=BTC";
+  } catch {
+    return "/?symbol=BTC";
+  }
+}
 
 function Icon({ name }: { name: string }) {
   const common = {
@@ -74,9 +96,9 @@ function Icon({ name }: { name: string }) {
         <path d="M4 7h16" />
         <path d="M4 12h16" />
         <path d="M4 17h16" />
-        <circle cx="8" cy="7" r="2" fill="#0c0d10" />
-        <circle cx="15" cy="12" r="2" fill="#0c0d10" />
-        <circle cx="11" cy="17" r="2" fill="#0c0d10" />
+        <circle cx="8" cy="7" r="2" fill="#0b0d10" />
+        <circle cx="15" cy="12" r="2" fill="#0b0d10" />
+        <circle cx="11" cy="17" r="2" fill="#0b0d10" />
       </>
     ),
     loop: (
@@ -114,6 +136,12 @@ function Icon({ name }: { name: string }) {
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M7 9l3 3-3 3" />
         <path d="M12 15h5" />
+      </>
+    ),
+    user: (
+      <>
+        <circle cx="12" cy="8.5" r="3.5" />
+        <path d="M5 20c1.2-3.6 4-5.2 7-5.2s5.8 1.6 7 5.2" />
       </>
     ),
     rank: (
@@ -171,16 +199,20 @@ export function AppShell() {
   }, [gate, location.pathname, navigate]);
 
   if (gate === "loading") {
-    return <div className="auth-screen" aria-busy="true" />;
+    return (
+      <div className="auth-screen" aria-busy="true">
+        <div className="auth-screen-brand">
+          <Brand />
+        </div>
+      </div>
+    );
   }
   if (gate === "anon") {
     return (
       <div className="auth-screen">
         <div className="auth-screen-brand">
-          <span className="side-mark" aria-hidden="true">
-            A
-          </span>
-          <span>AUU · 主流币量化（纸面）</span>
+          <Brand />
+          <ModeBadge />
         </div>
         <main className="auth-screen-body">{AUTH_PATHS.has(location.pathname) ? <Outlet /> : null}</main>
       </div>
@@ -202,6 +234,87 @@ export function AppShell() {
   );
 }
 
+function fmtClock(ms: number | null | undefined): string {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" });
+}
+
+/** Data-source dot: green = fresh, amber = stale/partially blocked. Details on hover / tap. */
+function DataDot({ f, provider }: { f: MainstreamFreshness | null; provider: string }) {
+  if (!f) return <span className="data-dot is-idle" title={provider ? `行情来源 ${provider}` : "行情状态读取中"} />;
+  const blocked = Object.keys(f.blocked || {});
+  const warn = f.stale;
+  const title = [
+    `行情来源 ${f.exchange ? f.exchange.toUpperCase() : "—"}`,
+    `上次刷新 ${fmtClock(f.lastRefreshMs)}`,
+    f.stale ? `数据过期${f.staleSeries.length ? `：${f.staleSeries.join(", ")}` : ""}` : "数据新鲜",
+    blocked.length ? `不可用（已自动切换）：${blocked.join(", ").toUpperCase()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return (
+    <span className={`data-dot${warn ? " is-warn" : ""}`} title={title}>
+      <i aria-hidden="true" />
+      <span className="data-dot-text">
+        {f.exchange ? f.exchange.toUpperCase() : "—"} {f.stale ? "数据过期" : fmtClock(f.lastRefreshMs)}
+      </span>
+    </span>
+  );
+}
+
+
+function UserMenu({ who, authOn, onLogout }: { who: string; authOn: boolean; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  useEffect(() => setOpen(false), [location.pathname, location.search]);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", off);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", off);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const initial = (who || "我").slice(0, 1).toUpperCase();
+  return (
+    <div className="um" ref={box}>
+      <button type="button" className="um-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={who || "账户与设置"}>
+        <span className="um-av">{initial}</span>
+        <span className="um-name">{who || "本机"}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div className="um-pop" role="menu">
+          <Link role="menuitem" to="/settings">设置与安全</Link>
+          <Link role="menuitem" to="/leaderboard">排行榜</Link>
+          <div className="um-sep" />
+          <div className="um-label">涨跌颜色</div>
+          <ColorToggle />
+          {authOn && who ? (
+            <>
+              <div className="um-sep" />
+              <button type="button" role="menuitem" className="um-out" onClick={onLogout}>
+                退出登录
+              </button>
+            </>
+          ) : null}
+          {authOn && !who ? (
+            <Link role="menuitem" to="/login">
+              登录
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ShellFrame({
   who,
   authOn,
@@ -214,110 +327,96 @@ function ShellFrame({
   onLogout: () => void;
 }) {
   const legacy = useLegacyMode();
+  const location = useLocation();
   const [healthState, setHealthState] = useState("");
-  const [provider, setProvider] = useState("…");
+  const [provider, setProvider] = useState("");
   const [marketData, setMarketData] = useState("");
   const [liveOff, setLiveOff] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
+  const [fresh, setFresh] = useState<MainstreamFreshness | null>(null);
 
   useEffect(() => {
-    marketProvider
-      .getHealth()
-      .then((h) => {
-        setProvider(h.provider);
-        setHealthState(h.trading_state || "");
-        setMarketData(h.marketData || "");
-        setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
-      })
-      .catch(() => undefined);
+    let alive = true;
+    const load = () =>
+      marketProvider
+        .getHealth()
+        .then((h) => {
+          if (!alive) return;
+          setProvider(h.provider);
+          setHealthState(h.trading_state || "");
+          setMarketData(h.marketData || "");
+          setLiveOff(h.liveDisabled !== false || h.liveEnabled === false);
+          const m = (h as { mainstream?: MainstreamFreshness }).mainstream;
+          if (m && typeof m === "object") setFresh(m);
+        })
+        .catch(() => undefined);
+    void load();
+    const t = window.setInterval(() => !document.hidden && void load(), 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
   }, []);
+
+  // Remember the last opened coin so the 交易 tab returns to it.
+  const sym = new URLSearchParams(location.search).get("symbol");
+  useEffect(() => {
+    if (sym && /^[A-Za-z0-9]{1,20}$/.test(sym)) window.localStorage.setItem(LAST_SYMBOL_KEY, sym.toUpperCase());
+  }, [sym]);
+
+  const halted = healthState && !["ACTIVE", "active"].includes(healthState);
+  const nav = legacy
+    ? primary.map((i) => ({ to: i.to, label: i.label, icon: i.icon, match: (p: string) => ("end" in i && i.end ? p === i.to : p.startsWith(i.to)) }))
+    : mainstreamNav;
+  const href = (i: NavItem) => (i.label === "交易" && !legacy ? tradeHref() : i.to);
+
   return (
-    <div className={`app-shell${collapsed ? " is-collapsed" : ""}`}>
-      <aside className="sidebar" aria-label="主导航">
-        <div className="side-brand">
-          <span className="side-mark" aria-hidden="true">
-            A
-          </span>
-          <span className="side-word">AUU</span>
-        </div>
-        <nav className="side-nav">
-          {(legacy ? primary : mainstreamPrimary).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={"end" in item ? item.end : false}
-              title={"title" in item ? item.title : item.label}
-              className={({ isActive }) => (isActive ? "is-active" : "")}
-            >
-              <Icon name={item.icon} />
-              <span className="side-label">{item.label}</span>
-            </NavLink>
+    <div className={`pro-shell${legacy ? " is-legacy" : ""}`}>
+      <header className="topnav">
+        <Link to="/" className="topnav-brand" aria-label="AUUTRADE 首页">
+          <Brand />
+        </Link>
+        <nav className="topnav-links" aria-label="主导航">
+          {nav.map((i) => (
+            <Link key={i.to + i.label} to={href(i)} className={i.match(location.pathname, location.search) ? "is-active" : ""} aria-current={i.match(location.pathname, location.search) ? "page" : undefined}>
+              {i.label}
+            </Link>
           ))}
+          {legacy
+            ? more.map((i) => (
+                <NavLink key={i.to} to={i.to} className={({ isActive }) => (isActive ? "is-active" : "")}>
+                  {i.label}
+                </NavLink>
+              ))
+            : null}
         </nav>
-        <div className="side-more">
-          {(legacy ? more : []).map((item) => (
-            <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? "is-active" : "")}>
-              <span className="side-label">{item.label}</span>
-            </NavLink>
-          ))}
+        <div className="topnav-right">
+          {legacy ? <LegacyControls isAdmin={isAdmin} provider={provider} marketData={marketData} /> : null}
+          {halted ? (
+            <span className="risk-pill" title="风控状态（RiskGate）">
+              风控 {healthState}
+            </span>
+          ) : null}
+          <DataDot f={fresh} provider={provider} />
+          <ModeBadge liveOff={liveOff} />
+          <UserMenu who={who} authOn={authOn} onLogout={onLogout} />
         </div>
-        <button
-          type="button"
-          className="side-collapse"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-pressed={collapsed}
-        >
-          {collapsed ? "»" : "«"}
-        </button>
-      </aside>
-      <div className="shell-body">
-        <header className={`shell-status${statusOpen ? " is-open" : ""}`}>
-          <button
-            type="button"
-            className="status-more"
-            aria-expanded={statusOpen}
-            aria-label="状态详情"
-            onClick={() => setStatusOpen((v) => !v)}
-          >
-            {statusOpen ? "收起" : "状态"}
-          </button>
-          {legacy ? (
-            <LegacyControls isAdmin={isAdmin} provider={provider} marketData={marketData} />
-          ) : (
-            <>
-              <span className="trading-state" data-state={healthState} title="RiskGate trading_state">
-                {healthState || "…"}
-              </span>
-              <span className="muted topbar-provider status-extra" title="行情来源">
-                {provider}
-                {marketData ? ` · ${marketData}` : ""}
-              </span>
-              <div className="mode-badge status-extra">PAPER · 主流币</div>
-            </>
-          )}
-          <div className="mode-badge live-off" title="liveEnabled=false · LIVE_DISABLED">
-            {liveOff ? "LIVE OFF" : "LIVE CHECKLIST"}
-          </div>
-          {authOn && who && (
-            <button
-              type="button"
-              className="mode-badge auth-chip"
-              onClick={onLogout}
-            >
-              {who} · 退出
-            </button>
-          )}
-          {authOn && !who && (
-            <NavLink to="/login" className="mode-badge auth-chip">
-              登录
-            </NavLink>
-          )}
-        </header>
-        <main className="main">
-          <Outlet />
-        </main>
-      </div>
+      </header>
+      <main className="main pro-main">
+        <Outlet />
+      </main>
+      {legacy ? null : (
+        <nav className="tabbar" aria-label="底部导航">
+          {mobileTabs.map((i) => {
+            const on = i.match(location.pathname, location.search);
+            return (
+              <Link key={i.label} to={href(i)} className={on ? "is-active" : ""} aria-current={on ? "page" : undefined}>
+                <Icon name={i.icon} />
+                <span>{i.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }
@@ -327,12 +426,8 @@ function LegacyControls({ isAdmin, provider, marketData }: { isAdmin: boolean; p
   const { tradingState, autoPaperOrders, setAutoPaperOrders } = useStrategyConfig();
   return (
     <>
-      <span className="trading-state" data-state={tradingState} title="RiskGate trading_state">
-        {tradingState}
-      </span>
-      <span className="muted topbar-provider status-extra" title="DATA_PROVIDER">
+      <span className="muted topbar-provider" title={`行情来源 ${provider}${marketData ? ` · ${marketData}` : ""} · 风控 ${tradingState}`}>
         {provider}
-        {marketData ? ` · ${marketData}` : ""}
       </span>
       <AutoPaperToggle
         compact
@@ -342,7 +437,6 @@ function LegacyControls({ isAdmin, provider, marketData }: { isAdmin: boolean; p
         title={isAdmin ? undefined : "只有管理员可以切换系统自动纸面"}
         onChange={(v) => void setAutoPaperOrders(v).catch(() => undefined)}
       />
-      <div className="mode-badge status-extra">PAPER · PUMP.FUN</div>
     </>
   );
 }

@@ -16,6 +16,10 @@ import { AccountSection } from "@/pages/SettingsPage/AccountSection";
 import { WalletSection } from "@/pages/SettingsPage/WalletSection";
 import { useLegacyMode } from "@/hooks/useLegacyMode";
 import type { MainstreamFreshness } from "@/types/mainstream";
+import { Link } from "react-router-dom";
+import { ColorToggle } from "@/components/ui/ColorToggle";
+import { ModeBadge } from "@/components/ui/Brand";
+import { Sk } from "@/components/ui/Skeleton";
 
 export function SettingsPage() {
   const legacy = useLegacyMode();
@@ -38,32 +42,68 @@ function MainstreamSettingsPage() {
       .then((st) => setLive(st))
       .catch(() => undefined);
   }, []);
+  const blocked = md ? Object.keys(md.blocked || {}) : [];
   return (
-    <div className="shell-page">
-      <h1>设置 / Settings</h1>
-      <p className="muted">纸面模式。行情来自交易所公开接口（无 API key、不下单）。实盘锁定，网页无法开启。</p>
+    <div className="shell-page settings-page pro-page">
+      <header className="pro-head">
+        <h1>设置与安全</h1>
+        <p>账户、两步验证、显示偏好</p>
+      </header>
+      <nav className="set-links" aria-label="更多">
+        <Link to="/majors">大盘 ›</Link>
+        <Link to="/leaderboard">排行榜 ›</Link>
+      </nav>
+      <section className="settings-section">
+        <h2>显示偏好</h2>
+        <div className="set-row">
+          <div>
+            <b>涨跌颜色</b>
+            <p className="muted">影响全站数字与 K 线颜色，只保存在本机浏览器</p>
+          </div>
+          <ColorToggle />
+        </div>
+      </section>
       <AccountSection />
       <section className="settings-section">
-        <h2>主流行情数据</h2>
-        {err ? <p className="error">{err}</p> : null}
-        <p className="muted">
-          只读（服务端环境变量 <code>AUU_MAINSTREAM_*</code>）。币种 <code>{md?.symbols?.join(", ") || "…"}</code> · 交易所顺序{" "}
-          <code>{md?.exchanges?.join(" → ") || "…"}</code> · 当前 <code>{md?.exchange || "—"}</code>
-          {md && Object.keys(md.blocked || {}).length ? <> · 不可用 <code>{Object.keys(md.blocked).join(", ")}</code></> : null} ·{" "}
-          {md?.stale ? "数据过期" : "数据新鲜"}
-        </p>
-      </section>
-      <section className="settings-section">
-        <h2>实盘</h2>
-        <p className="muted">
-          liveEnabled=<code>{String(Boolean(live?.liveEnabled))}</code> · LIVE_API_LOCKED：HTTP 无法打开实盘。旧版 pump.fun 钱包 / 行情源 / 发现设置在{" "}
-          <code>AUU_LEGACY_PUMP=on</code> 时显示。
-        </p>
+        <h2>交易模式与数据</h2>
+        {err ? <div className="pro-alert">{err}</div> : null}
+        <dl className="set-dl">
+          <div>
+            <dt>交易模式</dt>
+            <dd>
+              <ModeBadge liveOff={!live?.liveEnabled} />
+              <span className="muted">所有成交均为纸面模拟，网页端无法开启实盘</span>
+            </dd>
+          </div>
+          <div>
+            <dt>行情来源</dt>
+            <dd>
+              {md ? (
+                <>
+                  <b>{(md.exchange || "—").toUpperCase()}</b>
+                  <span className="muted">
+                    备用顺序 {md.exchanges?.map((x) => x.toUpperCase()).join(" → ") || "—"}
+                    {blocked.length ? ` · 暂不可用 ${blocked.join(", ").toUpperCase()}` : ""}
+                  </span>
+                </>
+              ) : (
+                <Sk w={180} h={12} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>数据状态</dt>
+            <dd>{md ? <span className={md.stale ? "warn" : "up"}>{md.stale ? "数据过期" : "数据新鲜"}</span> : <Sk w={80} h={12} />}</dd>
+          </div>
+          <div>
+            <dt>币种</dt>
+            <dd className="muted">{md ? `${md.symbols?.length ?? 0} 个：${md.symbols?.join(" ")}` : <Sk w={240} h={12} />}</dd>
+          </div>
+        </dl>
       </section>
     </div>
   );
 }
-
 
 function LegacySettingsPage() {
   const [provider, setProvider] = useState<string>("…");

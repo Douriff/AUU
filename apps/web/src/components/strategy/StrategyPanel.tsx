@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
+import { SkCards } from "@/components/ui/Skeleton";
+import { CHART_CHROME, chartColors, onColorPref } from "@/theme/colorPref";
 import type { ExecShadowSummary, ExpectedBand, RunVersion, StrategyRisk, StrategySummary } from "@/types/mainstream";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
 const POLL_MS = 60_000;
-const COL = { strat: "#4cc9f0", btc: "#f7931a", tbill: "#8d8d96", up: "#3ee08f", down: "#ff5d5d" };
+const COL = { strat: "#f0a531", btc: "#7d8fb3", tbill: "#5f6672" };
 
 const pct = (v: number | null | undefined, d = 2) =>
   v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
@@ -42,10 +44,10 @@ export function StrategyPanel() {
     if (!host.current) return;
     const c = createChart(host.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8d8d96", fontSize: 11 },
-      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.08, bottom: 0.3 } },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", rightOffset: 2 },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: CHART_CHROME.text, fontSize: 11, fontFamily: CHART_CHROME.font },
+      grid: { vertLines: { color: CHART_CHROME.grid }, horzLines: { color: CHART_CHROME.grid } },
+      rightPriceScale: { borderColor: CHART_CHROME.border, scaleMargins: { top: 0.08, bottom: 0.3 } },
+      timeScale: { borderColor: CHART_CHROME.border, rightOffset: 2 },
       handleScroll: { vertTouchDrag: false },
     });
     const fmt = { type: "custom" as const, formatter: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%` };
@@ -63,21 +65,32 @@ export function StrategyPanel() {
     };
   }, []);
 
+  // Daily-return bars follow the 红涨绿跌 toggle (canvas colours are set from JS).
+  const [colorRev, setColorRev] = useState(0);
+  useEffect(() => onColorPref(() => setColorRev((n) => n + 1)), []);
+
   useEffect(() => {
     if (!data || !chart.current) return;
     const t = (ts: number) => (ts / 1000) as UTCTimestamp;
     const { s, b, t: tb, r } = series.current;
+    const COLR = chartColors();
     s?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.strategy - 1) * 100 })));
     b?.setData(data.curve.filter((p) => p.btc != null).map((p) => ({ time: t(p.ts), value: ((p.btc as number) - 1) * 100 })));
     tb?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.tbill - 1) * 100 })));
-    r?.setData(data.curve.map((p) => ({ time: t(p.ts), value: p.ret * 100, color: p.ret >= 0 ? COL.up : COL.down })));
+    r?.setData(data.curve.map((p) => ({ time: t(p.ts), value: p.ret * 100, color: p.ret >= 0 ? COLR.up : COLR.down })));
     const ts = chart.current.timeScale();
     if (data.curve.length >= 30) ts.fitContent();
     else {
       ts.applyOptions({ barSpacing: 24 });
       ts.scrollToRealTime();
     }
-  }, [data]);
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!colorRev || !data) return;
+    const COLR = chartColors();
+    series.current.r?.setData(data.curve.map((p) => ({ time: (p.ts / 1000) as UTCTimestamp, value: p.ret * 100, color: p.ret >= 0 ? COLR.up : COLR.down })));
+  }, [colorRev]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const g = data?.goNoGo;
   const st = data?.status;
@@ -86,8 +99,7 @@ export function StrategyPanel() {
     <section className="console-card strat" aria-label="趋势策略纸面">
       <header className="console-card-bar strat-head">
         <div className="console-title">趋势策略 · {data?.strategy.name || "trend_tsmom_v1"}</div>
-        <span className="console-badge">PAPER · 每日 08:00 调仓</span>
-        <span className="console-badge live-off">🔒 实盘未开启</span>
+        <span className="strat-sub">每日 08:00 调仓</span>
         <Link to="/performance" className="console-badge strat-report-link">绩效报告 →</Link>
         {g ? (
           <span className={`console-go lamp-${g.lamp}`} title={g.message}>
@@ -96,13 +108,8 @@ export function StrategyPanel() {
         ) : null}
       </header>
       {err ? <p className="console-err">{err}</p> : null}
-      {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
-      {data ? <UniverseNote data={data} /> : null}
-      {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
-      <BandBox b={data?.expectedBand ?? null} />
-      <ExecShadowBox s={data?.execShadow ?? null} />
-      {data?.version ? <VersionLine v={data.version} /> : null}
-      <div className="strat-kpis">
+      {!data && !err ? <SkCards n={8} h={62} /> : null}
+      <div className="strat-kpis" hidden={!data}>
         <Kpi label="权益 USDT" value={num(data?.nav)} />
         <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
         <Kpi label="BTC 买入持有" value={pct(data?.totals.btc)} tone={tone(data?.totals.btc ?? 0)} />
@@ -117,10 +124,16 @@ export function StrategyPanel() {
         <Kpi
           label="调仓状态"
           value={st ? (st.stalled ? `停滞 ${st.hoursSinceRebalance.toFixed(1)}h` : `正常 · ${st.hoursSinceRebalance.toFixed(1)}h 前`) : "—"}
-          tone={st?.stalled ? "down" : "up"}
+          tone={st?.stalled ? "bad" : "ok"}
           sub={st ? `已运行 ${st.days} 天 · 超过 ${st.stallHours}h 报警` : ""}
         />
       </div>
+      {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
+      {data ? <UniverseNote data={data} /> : null}
+      {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
+      <BandBox b={data?.expectedBand ?? null} />
+      <ExecShadowBox s={data?.execShadow ?? null} />
+      {data?.version ? <VersionLine v={data.version} /> : null}
       <div className="strat-legend">
         <i style={{ background: COL.strat }} />策略 <i style={{ background: COL.btc }} />BTC 买入持有 <i style={{ background: COL.tbill }} />国债 <i className="bar" />日收益
       </div>
