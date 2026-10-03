@@ -1943,4 +1943,24 @@ code.hl { color: var(--accent); }
 .recon-scroll table { min-width: 0; }
 @media (max-width: 520px) {
   .recon-scroll th, .recon-scroll td { padding: 0.24rem 0.18rem; font-size: 0.7rem; }
+/* account security (2FA, login records) */
+.td-link { background: none; border: 0; color: #8ab4ff; cursor: pointer; padding: 0.2rem 0; font-size: 0.8rem; text-align: left; }
+.td-link.danger { color: #f6465d; }
+.td-link:disabled { opacity: 0.5; cursor: default; }
+.sec-wrap { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 1.2rem; max-width: 100%; }
+.sec-card { max-width: 640px; width: 100%; box-sizing: border-box; }
+.sec-card h3 { margin: 0; font-size: 0.95rem; }
+.sec-qr { background: #fff; border-radius: 8px; padding: 6px; width: fit-content; max-width: 100%; }
+.sec-qr svg { display: block; width: 200px; height: 200px; max-width: 100%; }
+.sec-secret { font-size: 0.82rem; word-break: break-all; color: #e7e7ea; }
+.sec-codes ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.25rem 1rem; margin: 0.3rem 0; padding-left: 1.3rem; }
+.sec-codes code { font-size: 0.85rem; }
+.sec-actions { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; }
+.sec-log { overflow-x: auto; max-width: 100%; }
+.sec-log table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.sec-log th, .sec-log td { text-align: left; padding: 0.25rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; }
+.sec-log th { color: #8d8d96; font-weight: 500; }
+.sec-log tr.down td { color: #f6465d; }
+@media (max-width: 520px) {
+  .sec-log th:nth-child(4), .sec-log td:nth-child(4) { display: none; }
 }
