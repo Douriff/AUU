@@ -20,7 +20,8 @@ loop() {
     if [[ "$hm" > "$AT" || "$hm" == "$AT" ]] && [[ "$(cat "$STAMP" 2>/dev/null)" != "$day" ]]; then
       if now 9>&-; then echo "$day" > "$STAMP"; else echo "$(TZ=Asia/Shanghai date '+%F %T') backup FAILED (retry in 30 min)" >>"$LOG"; sleep 1740; fi
     fi
-    tail -n 3000 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG"
+    # rotate in place (same inode: a concurrent `now` keeps appending to the live file)
+    if [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 3000 ]; then tail -n 2000 "$LOG" > "$LOG.tmp" && cat "$LOG.tmp" > "$LOG"; rm -f "$LOG.tmp"; fi
     sleep 60
   done
 }
