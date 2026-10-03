@@ -15,7 +15,7 @@ const SORT_KEY = "auu.ms.sort";
 
 export function fmtPx(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  const d = n >= 1000 ? 2 : n >= 100 ? 2 : n >= 1 ? 4 : n >= 0.01 ? 5 : 7;
+  const d = n >= 1000 ? 2 : n >= 100 ? 2 : n >= 1 ? 4 : n >= 0.01 ? 5 : Math.min(10, Math.max(7, Math.ceil(-Math.log10(Math.abs(n) || 1e-10)) + 3));
   return n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 export function fmtPct(n: number | null | undefined, digits = 2): string {

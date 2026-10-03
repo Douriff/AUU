@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
+import { AuthHead } from "./AuthHead";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -63,10 +64,7 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <header>
-          <h1>登录</h1>
-        </header>
-        <p className="td-note">使用你自己的用户名和密码。没有充值、没有提现、没有实盘下单。</p>
+        <AuthHead title="登录" sub="用邮箱或用户名登录。纸面交易：没有充值、没有提现、没有实盘下单。" />
         {me && !authOn && (
           <p className="td-note">
             当前是本地单用户模式，不需要登录。直接去 <Link to="/">行情</Link> 或 <Link to="/?symbol=BTC">交易</Link>。
@@ -99,8 +97,8 @@ export function LoginPage() {
         {authOn && !ticket && (
           <form onSubmit={(event) => void submit(event)}>
             <label>
-              用户名
-              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required />
+              邮箱或用户名
+              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} required />
             </label>
             <label>
               密码

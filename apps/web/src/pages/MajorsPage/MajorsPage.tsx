@@ -1,5 +1,6 @@
 import { Empty, SkRows } from "@/components/ui/Skeleton";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MajorsTicker, MajorsTickerBoard } from "@/types/contracts";
 
@@ -54,6 +55,13 @@ export function MajorsPage() {
   const [debounced, setDebounced] = useState("");
   const [board, setBoard] = useState<MajorsTickerBoard | null>(null);
   const [err, setErr] = useState("");
+  const navigate = useNavigate();
+  // a row opens the coin's trade view (K 线 + 订单簿 + 纸面交易), carrying the venue tab
+  const openCoin = (base: string) => {
+    const q = new URLSearchParams({ symbol: base });
+    if (venue !== "cross") q.set("venue", venue);
+    navigate(`/?${q}`);
+  };
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebounced(query.trim()), 200);
@@ -105,7 +113,7 @@ export function MajorsPage() {
       <header className="mj-top pro-head">
         <div>
           <h1>大盘</h1>
-          <p>各交易所成交额前 100 的现货交易对 · 公开行情</p>
+          <p>各交易所成交额前 100 的现货交易对 · 公开行情 · 点击任一币查看 K 线 / 订单簿 / 纸面交易</p>
         </div>
         <div className="mj-health" aria-label="交易所状态">
           {health.map((row) => (
@@ -190,9 +198,9 @@ export function MajorsPage() {
           <tbody>
             {items.map((row, index) =>
               venue === "cross" ? (
-                <CrossRow key={row.base} row={row} rank={index + 1} />
+                <CrossRow key={row.base} row={row} rank={index + 1} onOpen={openCoin} />
               ) : (
-                <TickerRow key={row.symbol} row={row} rank={index + 1} />
+                <TickerRow key={row.symbol} row={row} rank={index + 1} onOpen={openCoin} />
               ),
             )}
           </tbody>
@@ -204,9 +212,25 @@ export function MajorsPage() {
   );
 }
 
-function TickerRow({ row, rank }: { row: MajorsTicker; rank: number }) {
+function rowProps(base: string, onOpen: (base: string) => void) {
+  return {
+    className: "mj-row-link",
+    tabIndex: 0,
+    role: "link",
+    title: `查看 ${base} K 线 · 订单簿 · 纸面交易`,
+    onClick: () => onOpen(base),
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onOpen(base);
+      }
+    },
+  };
+}
+
+function TickerRow({ row, rank, onOpen }: { row: MajorsTicker; rank: number; onOpen: (base: string) => void }) {
   return (
-    <tr>
+    <tr {...rowProps(row.base, onOpen)}>
       <td className="mj-rank">{rank}</td>
       <td className="mj-base">{row.base}</td>
       <td className="num">{formatPx(row.last)}</td>
@@ -218,9 +242,9 @@ function TickerRow({ row, rank }: { row: MajorsTicker; rank: number }) {
   );
 }
 
-function CrossRow({ row, rank }: { row: MajorsTicker; rank: number }) {
+function CrossRow({ row, rank, onOpen }: { row: MajorsTicker; rank: number; onOpen: (base: string) => void }) {
   return (
-    <tr>
+    <tr {...rowProps(row.base, onOpen)}>
       <td className="mj-rank">{rank}</td>
       <td className="mj-base">{row.base}</td>
       <td>{row.bid_venue || "—"}</td>

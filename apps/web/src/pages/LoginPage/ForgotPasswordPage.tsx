@@ -4,6 +4,7 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
 import { PASSWORD_RULE, codeProblem, emailProblem, passwordProblem } from "@/lib/authRules";
 import { EmailCodeField } from "./EmailCodeField";
+import { AuthHead } from "./AuthHead";
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -56,10 +57,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <header>
-          <h1>忘记密码</h1>
-        </header>
-        <p className="td-note">输入注册时使用的邮箱，获取验证码后设置新密码。重置后所有已登录的设备都需要重新登录。</p>
+        <AuthHead title="忘记密码" sub="输入注册时使用的邮箱，获取验证码后设置新密码。重置后所有已登录的设备都需要重新登录。" />
         {me && !enabled && <p className="td-note">当前未开启邮箱验证，无法通过邮箱重置密码。请联系管理员。</p>}
         {enabled && (
           <form onSubmit={(event) => void submit(event)}>

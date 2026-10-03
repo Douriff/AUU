@@ -104,7 +104,7 @@ export function StatusPage() {
               <span className="muted">{dur(o.minutes)}</span>
             </li>
           ))}
-          {u && u.outages.length === 0 ? <li className="muted">记录期内没有 ≥5 分钟的异常</li> : null}
+          {u && u.outages.length === 0 ? <li className="muted st-empty">记录期内没有 ≥5 分钟的异常</li> : null}
         </ul>
       </section>
       <p className="muted st-note">

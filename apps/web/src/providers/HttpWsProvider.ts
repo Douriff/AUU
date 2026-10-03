@@ -3,6 +3,7 @@ import type {
   MainstreamFreshness,
   MainstreamFunding,
   MainstreamOrderbook,
+  MainstreamCoin,
   MainstreamOverview,
   MainstreamTf,
   PaperAccount,
@@ -308,9 +309,10 @@ export class HttpWsProvider {
     return getJson("/api/v1/mainstream/overview");
   }
 
-  getMainstreamCandles(symbol: string, tf: MainstreamTf, limit = 200, before?: number): Promise<MainstreamCandles> {
+  getMainstreamCandles(symbol: string, tf: MainstreamTf, limit = 200, before?: number, venue?: string | null): Promise<MainstreamCandles> {
     const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
     if (before != null) q.set("before", String(before));
+    if (venue) q.set("venue", venue);
     return getJson(`/api/v1/mainstream/candles?${q}`);
   }
 
@@ -357,9 +359,17 @@ export class HttpWsProvider {
   }
 
   /** Display-only order book; served from a short server-side cache. */
-  getMainstreamOrderbook(symbol: string, depth = 12): Promise<MainstreamOrderbook> {
+  getMainstreamOrderbook(symbol: string, depth = 12, venue?: string | null): Promise<MainstreamOrderbook> {
     const q = new URLSearchParams({ symbol, depth: String(depth) });
+    if (venue) q.set("venue", venue);
     return getJson(`/api/v1/mainstream/orderbook?${q}`);
+  }
+
+  /** Coin opened from the 大盘 board (may be outside the strategy pool). */
+  getMainstreamCoin(symbol: string, venue?: string | null): Promise<MainstreamCoin> {
+    const q = new URLSearchParams({ symbol });
+    if (venue) q.set("venue", venue);
+    return getJson(`/api/v1/mainstream/coin?${q}`);
   }
 
   getMajors(): Promise<MajorsBoard> {

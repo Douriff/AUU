@@ -13,7 +13,7 @@ function n(v: number, d = 2) {
   return Number.isFinite(v) ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—";
 }
 function pxDigits(px: number) {
-  return px >= 1000 ? 2 : px >= 10 ? 2 : px >= 1 ? 3 : 5;
+  return px >= 1000 ? 2 : px >= 10 ? 2 : px >= 1 ? 3 : px >= 0.01 ? 5 : Math.min(10, Math.ceil(-Math.log10(px)) + 3); // display only; sub-cent 大盘 coins
 }
 function signed(v: number, d = 2) {
   return `${v > 0 ? "+" : ""}${n(v, d)}`;

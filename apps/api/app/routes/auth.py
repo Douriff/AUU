@@ -36,6 +36,7 @@ from app.auth.accounts import (
     email_taken,
     scrub_secrets,
     signup_allowed,
+    user_by_email,
     user_by_id,
     user_from_token,
 )
@@ -309,6 +310,9 @@ async def auth_login(request: Request):
     if not isinstance(raw, dict):
         return raw
     name = _text(raw, "name")
+    if "@" in name and find_user(name) is None:  # username first; else an email -> its account name
+        hit = user_by_email(name)
+        name = str(hit["name"]) if hit is not None else name
     if not allow_attempt(f"login:{name.strip().lower()}:{_ip(request)}"):
         return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
     if not auth_enabled():

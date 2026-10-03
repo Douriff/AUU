@@ -133,6 +133,17 @@ class EmailVerifyTests(unittest.TestCase):
         reused = self._register("alice2", "alice@qq.com", code)
         self.assertEqual(reused.json()["error"]["code"], "EMAIL_TAKEN")
 
+    def test_login_with_email_or_username(self):
+        self._code("bob@qq.com")
+        self.assertEqual(self._register("bob", "bob@qq.com", self.mail.last_code()).status_code, 200)
+        fresh = lambda: self.TestClient(self.app)  # noqa: E731
+        self.assertEqual(fresh().post("/api/v1/auth/login", json={"name": "bob", "password": PW}).status_code, 200)
+        by_mail = fresh().post("/api/v1/auth/login", json={"name": " BOB@qq.com ", "password": PW})
+        self.assertEqual(by_mail.status_code, 200, by_mail.text)
+        self.assertEqual(by_mail.json()["data"]["user"]["name"], "bob")
+        self.assertEqual(fresh().post("/api/v1/auth/login", json={"name": "bob@qq.com", "password": "wrong-pass-1"}).status_code, 401)
+        self.assertEqual(fresh().post("/api/v1/auth/login", json={"name": "nobody@qq.com", "password": PW}).status_code, 401)
+
     def test_register_requires_email_and_valid_code(self):
         missing = self._register("bob", "", "")
         self.assertEqual(missing.json()["error"]["code"], "EMAIL_REQUIRED")
