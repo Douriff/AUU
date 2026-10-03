@@ -16,6 +16,7 @@ only depends on data up to that day. Paper only: nothing here can reach an excha
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -116,6 +117,9 @@ class StrategyLedger:
             self._db.execute("ALTER TABLE runs ADD COLUMN universe TEXT")
         if "risk_targets" not in cols:  # targets after the risk caps (NULL = caps did not change them)
             self._db.execute("ALTER TABLE runs ADD COLUMN risk_targets TEXT")
+        for c in ("git_commit", "params_sha", "cost_model_sha"):  # run provenance (report P0-4); older rows stay NULL
+            if c not in cols:
+                self._db.execute(f"ALTER TABLE runs ADD COLUMN {c} TEXT")
         self._lock = threading.RLock()
         # First time this ledger was ever opened: the stall clock starts here (survives restarts).
         self._db.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('created_at', ?)", (str(now_ms()),))
@@ -446,6 +450,7 @@ class StrategyRunner:
             "closes": json.dumps({c: close(c, i) for c in coins}),
             "universe": json.dumps(universe),
             "risk_targets": json.dumps({c: t for c, t in zip(coins, tg_used)}) if tg_used != tg else None,
+            **self.provenance(),  # metadata only: which code / parameters / cost model produced this row
         }
         meta = {"strategy": self.strategy.name, "params": json.dumps(self.strategy.describe()),
                 "start_day": str(day), "start_nav": str(self.start_nav)}
@@ -463,6 +468,25 @@ class StrategyRunner:
                 except Exception:
                     log.exception("on_commit observer failed (ledger unaffected)")
         return ok
+
+    # ---- provenance (report P0-4) ---------------------------------------------------
+    def provenance(self) -> dict:
+        from app.version import git_commit
+
+        params = {"strategy": self.strategy.describe(), "band": BAND, "min_trade": MIN_TRADE, "start_nav": self.start_nav,
+                  "risk": self.risk.describe() if self.risk is not None else None}
+        return {"git_commit": git_commit(), "params_sha": _sha(params), "cost_model_sha": _sha(_cost_doc(self.cost))}
+
+    def version_summary(self) -> dict:
+        last = self.ledger.last_run()
+        cur = self.provenance()
+        prev = {k: (last[k] if last is not None and k in last.keys() else None) for k in cur}
+        with self.ledger._lock:
+            n = {k: self.ledger._db.execute(f"SELECT COUNT(DISTINCT {k}) FROM runs WHERE {k} IS NOT NULL").fetchone()[0] for k in cur}
+            unversioned = self.ledger._db.execute("SELECT COUNT(*) FROM runs WHERE git_commit IS NULL").fetchone()[0]
+        return {"current": cur, "lastRun": prev, "distinct": n, "unversionedRuns": unversioned,
+                "changedSinceLastRun": bool(last is not None and prev["git_commit"] is not None and
+                                            (prev["params_sha"] != cur["params_sha"] or prev["cost_model_sha"] != cur["cost_model_sha"]))}
 
     # ---- risk caps -----------------------------------------------------------------
     def _hard_cap(self, st, coins, cps, events):
@@ -786,7 +810,31 @@ class StrategyRunner:
             "status": self.status(),
             "risk": self.risk_summary(),
             "execShadow": _exec_shadow_summary(),
+            "expectedBand": _expected_band(self.ledger),
+            "version": self.version_summary(),
         }
+
+
+def _sha(doc) -> str:
+    return hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def _cost_doc(cost) -> dict:
+    try:
+        from dataclasses import asdict
+
+        return asdict(cost)
+    except TypeError:
+        return dict(vars(cost))
+
+
+def _expected_band(ledger) -> Optional[dict]:
+    try:
+        from app.paper.expected_band import from_ledger
+
+        return from_ledger(ledger)
+    except Exception as exc:
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
 def _exec_shadow_summary() -> Optional[dict]:
