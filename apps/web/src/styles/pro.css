@@ -697,3 +697,5 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 }
 .st-page .down:not(#_) { color: var(--bad); }
 .st-page .up:not(#_) { color: var(--ok); }
+.msc-sig { padding: 0 12px 2px; margin-top: 0; font-size: 11.5px; }
+@media (max-width: 760px) { .msc-sig { font-size: 12.5px; } }
