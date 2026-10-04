@@ -13,6 +13,16 @@ The result is written to the system mainstream paper ledger
 restart, a second process, or a re-run of a day can never trade twice. Missed days
 (downtime) are replayed in order on the next tick (flagged ``catchup``) because every day
 only depends on data up to that day. Paper only: nothing here can reach an exchange order API.
+
+Outages (production wiring, ``exec_px_fn`` set): the runner re-checks every minute until the data
+is final. A rebalance booked more than ``AUU_STRATEGY_ON_TIME_MIN`` (15) minutes after the close is
+a **late rebalance (延迟补做)**: it is decided on day D's close as always, but marked and traded at
+the prices of the moment it is booked (newest market refresh, which must itself be fresh), with the
+funding settled in between charged on the weights that were held. Past the cutoff
+(``AUU_STRATEGY_LATE_CUTOFF_BJ``, default 23:00 Beijing on the day of the close) the day is booked
+as **missed**: marked to its close, no trade, the book is held. Both are recorded in ``run_exec``
+(on-time days have no row there). Without ``exec_px_fn`` (backtest equivalence tests) missed days
+are replayed at their closes as before.
 """
 from __future__ import annotations
 
@@ -39,6 +49,7 @@ from app.strategies.trend_tsmom import TrendTSMOM
 log = logging.getLogger("auu.strategy")
 
 STALL_HOURS = 26.0
+EXEC_LABEL = {"late": "延迟补做（按执行时价格）", "missed": "错过截止时间：未调仓，保持原仓位", "close": "按时（收盘价）"}
 GO_MIN_DAYS = 250
 FUNDING_READY_MS = 16 * 3_600_000  # last 8h settlement of day D is at D 16:00 UTC
 BAND = 0.2
@@ -88,7 +99,49 @@ CREATE TABLE IF NOT EXISTS risk_fills (
   PRIMARY KEY (ts, coin)
 );
 CREATE TABLE IF NOT EXISTS risk_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- off-schedule days only (outage): late = 延迟补做 at execution-time prices; missed = past the cutoff, held, marked at the close
+CREATE TABLE IF NOT EXISTS run_exec (
+  day INTEGER PRIMARY KEY,           -- runs.day this annotates
+  mode TEXT NOT NULL,                -- late | missed
+  close_ts INTEGER NOT NULL,         -- scheduled execution: the UTC close (08:00 Beijing)
+  exec_ts INTEGER NOT NULL,          -- when it was booked (wall clock, ms)
+  price_ts INTEGER,                  -- late: time of the market refresh the prices come from
+  delay_min REAL NOT NULL,
+  exchange TEXT,
+  prices TEXT,                       -- late: execution price per coin (fills use these)
+  drift_funding TEXT,                -- late: funding settled between the close and execution, on the held weights
+  reason TEXT                        -- what the runner was waiting for before it could book
+);
 """
+
+ON_TIME_MIN_DEFAULT = 15
+LATE_CUTOFF_BJ_DEFAULT = "23:00"
+BJ_OFFSET_MS = 8 * 3_600_000
+
+
+def on_time_ms() -> int:
+    return int(max(1.0, _env_float("AUU_STRATEGY_ON_TIME_MIN", ON_TIME_MIN_DEFAULT)) * 60_000)
+
+
+def late_cutoff_ms(on_time: Optional[int] = None) -> int:
+    """Cutoff as an offset from the UTC close (00:00 UTC = 08:00 Beijing). Default 23:00 Beijing = close + 15h."""
+    on_time = on_time_ms() if on_time is None else on_time
+    raw = (os.getenv("AUU_STRATEGY_LATE_CUTOFF_BJ") or LATE_CUTOFF_BJ_DEFAULT).strip()
+    try:
+        h, m = (int(x) for x in raw.split(":"))
+        off = ((h * 60 + m) * 60_000 - BJ_OFFSET_MS) % DAY_MS
+    except ValueError:
+        off = -1
+    if off <= on_time:
+        h, m = (int(x) for x in LATE_CUTOFF_BJ_DEFAULT.split(":"))
+        off = (h * 60 + m) * 60_000 - BJ_OFFSET_MS
+    return int(off)
+
+
+def bj_hm(ms: int) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return datetime.fromtimestamp(ms / 1000, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
 
 
 def _env_float(name: str, default: float) -> float:
@@ -96,6 +149,11 @@ def _env_float(name: str, default: float) -> float:
         return float(os.getenv(name, "") or default)
     except ValueError:
         return default
+
+
+def late_rebalance_enabled() -> bool:
+    """AUU_STRATEGY_LATE_REBALANCE=off restores the replay-at-the-close behaviour for missed days."""
+    return os.getenv("AUU_STRATEGY_LATE_REBALANCE", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 
 def runner_enabled() -> bool:
@@ -143,6 +201,14 @@ class StrategyLedger:
     def fills(self, limit: int = 50) -> list[sqlite3.Row]:
         with self._lock:
             return self._db.execute("SELECT * FROM fills ORDER BY day DESC, coin LIMIT ?", (limit,)).fetchall()
+
+    def exec_row(self, day: int) -> Optional[sqlite3.Row]:
+        with self._lock:
+            return self._db.execute("SELECT * FROM run_exec WHERE day=?", (int(day),)).fetchone()
+
+    def exec_rows(self, limit: int = 1000) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._db.execute("SELECT * FROM run_exec ORDER BY day DESC LIMIT ?", (limit,)).fetchall()
 
     def universe_changes(self) -> list[sqlite3.Row]:
         with self._lock:
@@ -215,7 +281,7 @@ class StrategyLedger:
 
     def commit_day(self, run: dict, fills: list[dict], *, expect_prev: Optional[int], meta: dict[str, str],
                    universe_change: Optional[dict] = None, risk_events: Optional[list[dict]] = None,
-                   risk_state: Optional[dict] = None) -> bool:
+                   risk_state: Optional[dict] = None, exec_row: Optional[dict] = None) -> bool:
         """Write one day atomically. False (nothing written) if the day exists or the ledger moved on."""
         with self._lock:
             db = self._db
@@ -235,6 +301,9 @@ class StrategyLedger:
                     db.execute("INSERT INTO universe_changes(day, coins, prev, recorded_at, note) VALUES (?,?,?,?,?)",
                                (universe_change["day"], universe_change["coins"], universe_change["prev"],
                                 universe_change["recorded_at"], universe_change.get("note")))
+                if exec_row:
+                    db.execute(f"INSERT INTO run_exec({','.join(exec_row)}) VALUES ({','.join('?' * len(exec_row))})",
+                               tuple(exec_row.values()))
                 self._write_risk(db, risk_events or [], risk_state or {})
                 db.execute("COMMIT")
                 return True
@@ -284,9 +353,18 @@ class StrategyRunner:
         marks_fn: Optional[Callable[[list[str], int], dict]] = None,
         funding_fn: Optional[Callable[[str, int, int], list[tuple[int, float]]]] = None,
         on_commit: Optional[Callable[[int, list[dict], bool], None]] = None,
+        exec_px_fn: Optional[Callable[[list[str]], dict]] = None,
+        on_time: Optional[int] = None,
+        cutoff: Optional[int] = None,
     ):
         """``risk_limits`` None = caps off. ``marks_fn(coins, bar_ts)`` -> {"prices": {coin: (bar_ts, close)}, "ok", "reason"}
-        gives 1h closes for the intraday monitor; ``funding_fn(coin, lo, hi)`` -> settlements with lo <= ts < hi."""
+        gives 1h closes for the intraday monitor; ``funding_fn(coin, lo, hi)`` -> settlements with lo <= ts < hi.
+        ``exec_px_fn(coins)`` -> {"ok", "prices": {coin: px}, "ts", "exchange", "reason"}: fresh market prices for a
+        late rebalance (None = backtest-replay mode: every day is booked at its close)."""
+        self.exec_px_fn = exec_px_fn
+        self.on_time_ms = int(on_time if on_time is not None else on_time_ms())
+        self.cutoff_ms = int(cutoff if cutoff is not None else late_cutoff_ms(self.on_time_ms))
+        self._wait_reason = ""
         self.risk = risk_limits
         self.marks_fn, self.funding_fn = marks_fn, funding_fn
         self.on_commit = on_commit  # observers only (exec-price shadow); never feeds back into the ledger
@@ -347,26 +425,77 @@ class StrategyRunner:
             return []
         ok, reason = self.ready_fn(due)
         if not ok:
-            self.waiting = f"waiting for {ms_day(due)} data: {reason}"
+            self._wait(f"waiting for {ms_day(due)} data: {reason}" + self._late_hint(days[0]))
             return []
         panel = self.panel_fn(due)
         if panel is None or not len(panel) or panel.days[-1] != due:
-            self.waiting = f"panel for {ms_day(due)} not available"
+            self._wait(f"panel for {ms_day(due)} not available" + self._late_hint(days[0]))
             return []
-        written = []
+        written, waiting = [], ""
         for d in days:
             if d not in panel.days:
-                self.waiting = f"panel has no row for {ms_day(d)}"
+                waiting = f"panel has no row for {ms_day(d)}"
                 break
-            if not self._run_day(panel, panel.days.index(d), catchup=d != due):
+            mode = self.exec_mode(d)
+            px = None
+            if mode == "late":
+                px = self._exec_prices(panel, panel.days.index(d))
+                if px is None:
+                    waiting = self.waiting
+                    break  # no fresh price yet: never trade on an old one; retry next tick (until the cutoff)
+            if not self._run_day(panel, panel.days.index(d), catchup=d != due, mode=mode, exec_px=px):
                 break  # someone else wrote it; re-read on the next tick
             written.append(d)
-        self.waiting = ""
+        self.waiting = waiting
+        if not waiting:
+            self._wait_reason = ""
         self.last_error = ""
         return written
 
+    # ---- outage handling -------------------------------------------------------------
+    def _wait(self, msg: str) -> None:
+        self.waiting = msg
+        self._wait_reason = msg[:300]
+
+    def exec_mode(self, day: int) -> str:
+        """close (on time: booked at the close) | late (延迟补做 at execution prices) | missed (past the cutoff: hold)."""
+        if self.exec_px_fn is None:
+            return "close"
+        lag = self.now_ms() - (day + DAY_MS)
+        if lag <= self.on_time_ms:
+            return "close"
+        return "late" if lag <= self.cutoff_ms else "missed"
+
+    def _late_hint(self, day: int) -> str:
+        if self.exec_px_fn is None:
+            return ""
+        cut = day + DAY_MS + self.cutoff_ms
+        if self.now_ms() <= cut:
+            return f"; 恢复后自动延迟补做（按执行时价格），截止北京时间 {bj_hm(cut)}，之后当日不再调仓、保持原仓位"
+        return "; 已过当日截止时间：恢复后该日按收盘价估值、不调仓（保持原仓位）"
+
+    def _exec_prices(self, panel: Panel, i: int) -> Optional[dict]:
+        need = [c for c in panel.coins if (panel.perp_close.get(c) or [None] * (i + 1))[i] is not None]
+        try:
+            m = self.exec_px_fn(need) or {}
+        except Exception as exc:
+            m = {"ok": False, "reason": f"{type(exc).__name__}: {exc}"[:200]}
+        cut = panel.days[i] + DAY_MS + self.cutoff_ms
+        if not m.get("ok"):
+            self._wait(f"延迟补做 {ms_day(panel.days[i])}：等待最新行情（{m.get('reason') or '无可用价格'}），截止北京时间 {bj_hm(cut)}")
+            return None
+        if m.get("exchange") and str(panel.source).startswith("store:") and panel.source != f"store:{m['exchange']}":
+            self._wait(f"延迟补做 {ms_day(panel.days[i])}：价格来源 {m['exchange']} 与日线 {panel.source} 不一致，等待")
+            return None
+        prices = {c: float(v) for c, v in (m.get("prices") or {}).items() if v and float(v) > 0}
+        missing = [c for c in need if c not in prices]
+        if missing:
+            self._wait(f"延迟补做 {ms_day(panel.days[i])}：{','.join(missing)} 没有新鲜价格，等待，截止北京时间 {bj_hm(cut)}")
+            return None
+        return {"prices": prices, "ts": int(m.get("ts") or self.now_ms()), "exchange": m.get("exchange")}
+
     # ---- one day -----------------------------------------------------------------
-    def _run_day(self, panel: Panel, i: int, *, catchup: bool) -> bool:
+    def _run_day(self, panel: Panel, i: int, *, catchup: bool, mode: str = "close", exec_px: Optional[dict] = None) -> bool:
         day = panel.days[i]
         last = self.ledger.last_run()
         coins = list(panel.coins)
@@ -384,28 +513,45 @@ class StrategyRunner:
         # An intraday risk adjustment since the last close splits the day: the last segment starts
         # at the adjustment's NAV/weights/prices; earlier segments are already booked in `adjustments`.
         adj = self.ledger.last_adjustment(int(last["day"])) if (last is not None and self.risk is not None) else None
+        # Yesterday was a late rebalance: its book was struck at the execution prices / time, not at the close.
+        prev_x = self.ledger.exec_row(int(last["day"])) if (last is not None and not adj) else None
+        late_ref = prev_x if (prev_x is not None and prev_x["mode"] == "late") else None
         nav_seg = float(adj["nav_after"]) if adj else nav_open
-        ref_px = json.loads(adj["prices"]) if adj else {}
+        ref_px = json.loads(adj["prices"]) if adj else (json.loads(late_ref["prices"] or "{}") if late_ref else {})
+        f_from = int(adj["ts"]) + 1 if adj else (int(late_ref["exec_ts"]) + 1 if late_ref else None)
         if adj:
             prev_w = json.loads(adj["weights_after"])
-        r, f = [], []
+        px_exec = dict((exec_px or {}).get("prices") or {}) if mode == "late" else {}
+        exec_ts = self.now_ms()
+        r, f, f_drift = [], [], {}
         for c in coins:
-            p1, p0 = close(c, i), (ref_px.get(c) if adj else close(c, i - 1))
+            p1 = px_exec.get(c, close(c, i)) if mode == "late" else close(c, i)
+            p0 = (ref_px.get(c) or (close(c, i - 1) if late_ref else None)) if f_from is not None else close(c, i - 1)
             r.append(p1 / p0 - 1.0 if (p1 is not None and p0 not in (None, 0)) else 0.0)
-            if adj and self.funding_fn is not None:
-                f.append(sum(x for _, x in self.funding_fn(c, int(adj["ts"]) + 1, day + DAY_MS)))
+            if f_from is not None and self.funding_fn is not None:
+                fc = sum(x for _, x in self.funding_fn(c, f_from, day + DAY_MS))
             else:
                 fs = panel.funding.get(c)
-                f.append(float(fs[i]) if fs is not None else 0.0)
+                fc = float(fs[i]) if fs is not None else 0.0
+            if mode == "late" and self.funding_fn is not None:  # settlements between the close and execution, on the held book
+                fx = sum(x for _, x in self.funding_fn(c, day + DAY_MS, exec_ts + 1))
+                if fx:
+                    f_drift[c] = fx
+                fc += fx
+            f.append(fc)
         targets = self.strategy.decide(panel.truncate(i + 1))
         tg = [float(targets.get(c, 0.0) or 0.0) for c in coins]
         w0 = [float(prev_w.get(c, 0.0)) for c in coins]
         cps = [self.cost.per_side(c) for c in coins]
         tg_used, r_events, r_state = tg, [], {}
-        if self.risk is not None:
-            tg_used, r_events, r_state = self._risk_targets(coins, tg, w0, r, f, nav_seg, nav_open, day)
+        if mode == "missed":
+            # Past the cutoff: no trade at a price that is gone. Mark the held book to the close and keep it.
+            g = 1.0 + (sum(wi * ri for wi, ri in zip(w0, r)) - sum(wi * fi for wi, fi in zip(w0, f)))  # as engine.step
+            tg_used = [wi * (1.0 + ri) / g for wi, ri in zip(w0, r)] if g > 0 else [0.0] * len(w0)
+        elif self.risk is not None:
+            tg_used, r_events, r_state = self._risk_targets(coins, tg, w0, r, f, nav_seg, nav_open, day, fresh=mode == "late")
         st = step(w0, r, f, tg_used, cps, band=BAND, min_trade=MIN_TRADE)
-        if self.risk is not None:
+        if self.risk is not None and mode != "missed":
             st = self._hard_cap(st, coins, cps, r_events)
         nav_trade = nav_seg * (1.0 + st.pnl)
         nav_close = nav_seg * (1.0 + st.ret)
@@ -421,7 +567,7 @@ class StrategyRunner:
         fills = []
         for k, w_from, w_to in st.trades:
             c = coins[k]
-            px = close(c, i)
+            px = px_exec.get(c, close(c, i)) if mode == "late" else close(c, i)
             if px is None:
                 continue
             notional = abs(w_to - w_from) * nav_trade
@@ -456,15 +602,27 @@ class StrategyRunner:
                 "start_day": str(day), "start_nav": str(self.start_nav)}
         for e in r_events:
             e.update(ts=day + DAY_MS, day=day, at="close")
+        xrow = None
+        if mode in ("late", "missed"):
+            xrow = {"day": day, "mode": mode, "close_ts": day + DAY_MS, "exec_ts": exec_ts,
+                    "price_ts": int(exec_px["ts"]) if (mode == "late" and exec_px) else None,
+                    "delay_min": round((exec_ts - (day + DAY_MS)) / 60_000, 1),
+                    "exchange": (exec_px or {}).get("exchange") if mode == "late" else None,
+                    "prices": json.dumps(px_exec) if mode == "late" else None,
+                    "drift_funding": json.dumps(f_drift) if mode == "late" else None,
+                    "reason": self._wait_reason or None}
         ok = self.ledger.commit_day(run, fills, expect_prev=int(last["day"]) if last else None, meta=meta, universe_change=change,
-                                    risk_events=r_events, risk_state=r_state)
+                                    risk_events=r_events, risk_state=r_state, exec_row=xrow)
         if ok:
-            log.info("strategy %s rebalanced %s nav=%.2f ret=%.5f fills=%d%s", self.strategy.name, ms_day(day), nav_close, ret, len(fills), " (catch-up)" if catchup else "")
+            tag = {"late": " (延迟补做 at execution prices, %.0f min late)" % xrow["delay_min"] if xrow else "",
+                   "missed": " (missed: past the cutoff, held, no trade)"}.get(mode, " (catch-up)" if catchup else "")
+            log.info("strategy %s rebalanced %s nav=%.2f ret=%.5f fills=%d%s", self.strategy.name, ms_day(day), nav_close, ret, len(fills), tag)
             for e in r_events:
                 log.warning("RISK %s %s at %s close: value=%s threshold=%s %s", e["kind"], e["action"], ms_day(day), e.get("value"), e.get("threshold"), e.get("detail"))
             if self.on_commit is not None:
                 try:
-                    self.on_commit(day, [dict(f) for f in fills], catchup)
+                    # a late rebalance traded at the book of its execution time: the exec-price shadow measures it
+                    self.on_commit(day, [dict(f) for f in fills], catchup and mode != "late")
                 except Exception:
                     log.exception("on_commit observer failed (ledger unaffected)")
         return ok
@@ -516,7 +674,9 @@ class StrategyRunner:
         lk = self.ledger.risk_get("lock")
         return bool(lk) and (lk.get("kind") == "review" or int(lk.get("until", 0)) > at)
 
-    def _risk_targets(self, coins, tg, w0, r, f, nav_seg, nav_open, day):
+    def _risk_targets(self, coins, tg, w0, r, f, nav_seg, nav_open, day, *, fresh: bool = False):
+        """``fresh``: a late rebalance whose execution prices were just verified fresh, so a data breaker
+        left over from the outage no longer applies (it is cleared with an event)."""
         fund = sum(wi * fi for wi, fi in zip(w0, f))
         pnl = sum(wi * ri for wi, ri in zip(w0, r)) - fund
         g = 1.0 + pnl
@@ -526,10 +686,15 @@ class StrategyRunner:
         peak = self.ledger.peak_nav(self.start_nav)
         f8 = {c: (x[1] if x else None) for c in coins for x in [self._f8(c, close_ts - 1)]}  # settlements of day D
         flags = self.ledger.risk_get(f"day:{day}", {}) or {}
+        was_bad = self.ledger.risk_get("data_bad")
         out, ev, st = risk.rebalance_targets(
             coins, tg, drifted, lim=self.risk, locked=self._locked(close_ts), day_ret=nav_pre / nav_open - 1.0,
-            dd=nav_pre / peak - 1.0, day_flags=flags, data_bad=bool(self.ledger.risk_get("data_bad")), f8=f8)
+            dd=nav_pre / peak - 1.0, day_flags=flags, data_bad=bool(was_bad) and not fresh, f8=f8)
         state: dict = {}
+        if fresh and was_bad:
+            ev.insert(0, {"kind": "data_breaker", "action": "cleared",
+                          "detail": {"since": was_bad.get("since"), "by": "late rebalance: fresh execution prices"}})
+            state["data_bad"] = None
         if st.get("lock") == "review":
             state["lock"] = {"kind": "review", "since": close_ts, "reason": "drawdown <= %.0f%%" % (self.risk.dd_flat * 100)}
         elif st.get("lock") == "24h":
@@ -542,6 +707,10 @@ class StrategyRunner:
         adj = self.ledger.last_adjustment(int(last["day"]))
         if adj:
             return float(adj["nav_after"]), json.loads(adj["weights_after"]), json.loads(adj["prices"]), int(adj["ts"]) + 1
+        x = self.ledger.exec_row(int(last["day"]))
+        if x is not None and x["mode"] == "late":  # the book was struck at the execution prices / time
+            px = {**json.loads(last["closes"]), **json.loads(x["prices"] or "{}")}
+            return float(last["nav_close"]), json.loads(last["weights"]), px, int(x["exec_ts"]) + 1
         return float(last["nav_close"]), json.loads(last["weights"]), json.loads(last["closes"]), int(last["day"]) + DAY_MS
 
     def monitor(self) -> Optional[dict]:
@@ -560,6 +729,8 @@ class StrategyRunner:
             return None
         day_key = int(last["day"]) + DAY_MS  # the UTC day being marked
         nav_ref, w_ref, px_ref, f_from = self._ref_state(last)
+        if mark_ts < f_from:  # this bar closed before a late rebalance was struck: nothing to mark yet
+            return None
         coins = [c for c, w in w_ref.items() if w]
         if not coins:  # flat book (e.g. locked): nothing to mark or reduce
             mark = {"ts": mark_ts, "nav": nav_ref, "dayRet": nav_ref / float(last["nav_close"]) - 1.0,
@@ -609,6 +780,10 @@ class StrategyRunner:
             last_targets=[abs(float(last_t.get(c, 0.0) or 0.0)) for c in coins])
         if self._locked(mark_ts) and any(new_w):
             new_w = [0.0] * len(coins)  # a lock keeps the book flat
+        if m.get("ok") is False:
+            # Exchange unreachable (outage): its prices are old, and no real order could be placed either.
+            # Mark only; the caps are evaluated again on the first fresh mark.
+            new_w, ev, up = list(drifted), [], {}
         events += ev
         for k in ("stop_new", "halve", "flat"):
             if up.get(k):
@@ -722,7 +897,37 @@ class StrategyRunner:
             "lastError": self.last_error,
             "lastTickAt": self.last_tick_ms or None,
             "days": self._count(),
+            "outage": self.outage_policy(),
+            "lastExec": self._exec_brief(self.ledger.exec_row(int(last["day"]))) if last else None,
         }
+
+    def outage_policy(self) -> dict:
+        return {"lateMode": self.exec_px_fn is not None, "onTimeMin": round(self.on_time_ms / 60_000, 1),
+                "cutoffBJ": bj_hm(self.cutoff_ms)[-5:] if self.exec_px_fn is not None else None,
+                "rule": ("收盘后 %d 分钟内按收盘价调仓；之后到北京时间 %s 前为“延迟补做”，按执行时的最新价格记账；"
+                         "过截止时间当日不调仓、保持原仓位（按收盘价估值）。断网期间每分钟重查，不会用旧价下单，也不会重复调仓。")
+                        % (round(self.on_time_ms / 60_000), bj_hm(self.cutoff_ms)[-5:]) if self.exec_px_fn is not None else
+                        "回放模式：错过的日子按各自收盘价补记"}
+
+    @staticmethod
+    def _exec_doc(x) -> Optional[dict]:
+        if x is None:
+            return None
+        return {"day": ms_day(int(x["day"])), "mode": x["mode"], "label": EXEC_LABEL.get(x["mode"], x["mode"]),
+                "closeTs": int(x["close_ts"]), "execTs": int(x["exec_ts"]), "priceTs": x["price_ts"], "delayMin": x["delay_min"],
+                "exchange": x["exchange"], "prices": json.loads(x["prices"]) if x["prices"] else None,
+                "driftFunding": json.loads(x["drift_funding"]) if x["drift_funding"] else None, "reason": x["reason"]}
+
+    @staticmethod
+    def _exec_brief(x) -> Optional[dict]:
+        """Health-sized: how the last rebalance was booked (no prices)."""
+        if x is None:
+            return None
+        return {"day": ms_day(int(x["day"])), "mode": x["mode"], "label": EXEC_LABEL.get(x["mode"], x["mode"]),
+                "execTs": int(x["exec_ts"]), "delayMin": x["delay_min"]}
+
+    def exec_log(self, limit: int = 50) -> list[dict]:
+        return [self._exec_doc(x) for x in self.ledger.exec_rows(limit)]
 
     def _count(self) -> int:
         with self.ledger._lock:
@@ -756,6 +961,7 @@ class StrategyRunner:
         runs = self.ledger.runs()
         start_nav = float(self.ledger.meta("start_nav") or self.start_nav)
         curve, btc0 = [], None
+        xmodes = {int(x["day"]): x["mode"] for x in self.ledger.exec_rows(100_000)}
         for j, x in enumerate(runs):
             closes = json.loads(x["closes"])
             btc = closes.get("BTC")
@@ -767,6 +973,7 @@ class StrategyRunner:
                 "cost": float(x["cost"]), "funding": float(x["funding"]), "gross": float(x["gross_after"]),
                 "btc": (btc / btc0) if (btc and btc0) else None,
                 "tbill": (1 + stats.TBILL) ** (j / 365), "catchup": bool(x["catchup"]),
+                "exec": xmodes.get(int(x["day"]), "close"),
             })
         positions = []
         if runs:
@@ -812,6 +1019,7 @@ class StrategyRunner:
             "execShadow": _exec_shadow_summary(),
             "expectedBand": _expected_band(self.ledger),
             "version": self.version_summary(),
+            "execLog": self.exec_log(30),
         }
 
 
@@ -943,6 +1151,33 @@ def _store_funding(coin: str, lo: int, hi: int) -> list[tuple[int, float]]:
     return [(int(x["ts"]), float(x["rate"])) for x in svc.store.funding(ex, coin, since=lo, limit=100_000) if int(x["ts"]) < hi]
 
 
+def _store_exec_prices(coins: list[str]) -> dict:
+    """Prices for a late rebalance: newest 1h close per coin from the market store, only if this
+    process refreshed that coin within ~2 refresh intervals (otherwise the price is old: wait)."""
+    from app.marketdata.mainstream import get_service
+
+    svc = get_service()
+    ex = svc.exchange_for_read()
+    if not ex:
+        return {"ok": False, "reason": "no exchange"}
+    now = int(time.time() * 1000)
+    fresh_ms = 2 * max(60, svc.cfg.refresh_sec) * 1000 + 60_000
+    last = svc.last_refresh_ms
+    if last is None or now - last > fresh_ms:
+        mins = f"{(now - last) / 60_000:.0f} min" if last else "never in this process"
+        return {"ok": False, "reason": f"no successful market refresh ({mins}): {svc.last_error or ''}"[:200]}
+    flog = svc.store.fetch_log(ex)
+    prices, oldest = {}, now
+    for c in coins:
+        ok_ms = (flog.get((c, "1h")) or {}).get("last_ok_ms")
+        rows = svc.store.candles(ex, c, "1h", until=now, limit=1)
+        if not rows or ok_ms is None or now - int(ok_ms) > fresh_ms or int(rows[-1]["ts"]) < now - 2 * HOUR_MS:
+            continue
+        prices[c] = float(rows[-1]["close"])  # the forming bar's close = last trade at that refresh
+        oldest = min(oldest, int(ok_ms))
+    return {"ok": True, "prices": prices, "ts": oldest, "exchange": ex}
+
+
 def _exec_shadow_hook():
     if os.getenv("AUU_EXEC_SHADOW", "on").strip().lower() in {"0", "false", "off", "no"}:
         return None
@@ -987,7 +1222,8 @@ def get_runner() -> StrategyRunner:
             _runner = StrategyRunner(StrategyLedger(), panel_fn=_store_panel, ready_fn=_store_ready,
                                      exchange_fn=_store_exchange, universe_fn=_store_universe,
                                      risk_limits=RiskLimits() if risk.risk_enabled() else None,
-                                     marks_fn=_store_marks, funding_fn=_store_funding, on_commit=_exec_shadow_hook())
+                                     marks_fn=_store_marks, funding_fn=_store_funding, on_commit=_exec_shadow_hook(),
+                                     exec_px_fn=_store_exec_prices if late_rebalance_enabled() else None)
         return _runner
 
 
