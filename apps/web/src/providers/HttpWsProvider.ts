@@ -8,7 +8,7 @@ import type {
   MainstreamTf,
   PaperAccount,
   StrategySummary,
-  ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
+  ShadowH2Summary, ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
   PaperOrder,
   PaperOrderRequest,
 } from "@/types/mainstream";
@@ -347,6 +347,10 @@ export class HttpWsProvider {
 
   getRecon(): Promise<ReconSummary> {
     return getJson("/api/v1/mainstream/recon");
+  }
+
+  getShadowH2(): Promise<ShadowH2Summary> {
+    return getJson("/api/v1/mainstream/shadow/h2");
   }
 
   getShadowS3(): Promise<ShadowS3Summary> {

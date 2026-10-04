@@ -174,6 +174,23 @@ class BookingTests(_Base):
                                + rows[0]["nav"] - 10000 - rows[0]["pnl_trend"] - rows[0]["pnl_carry"] - rows[0]["pnl_idle"], places=6)
         self.assertIn("进度 35/180", self.sh.digest_line())
 
+    def test_summary_carries_every_field_the_performance_page_reads(self):
+        for k in range(0, 4):
+            self.run_to(INC + k * DAY_MS)
+        s = self.sh.summary(rows=5)
+        last, cum = s["last"], s["cumulative"]
+        for key in ("dayStr", "ret", "nav", "pnl_trend", "pnl_carry", "pnl_idle", "cost_sleeve", "w_trend", "w_carry", "drawdown"):
+            self.assertIn(key, last)
+        for key in ("ret", "tbill", "excess", "pnlTrend", "pnlCarry", "pnlIdle", "costSleeve", "maxDrawdown"):
+            self.assertTrue(math.isfinite(cum[key]), key)
+        self.assertEqual(last["dayStr"], ms_day(INC + 3 * DAY_MS))
+        self.assertEqual((s["progress"], s["forwardDays"], s["gate"]["forward_days"]), (3, 3, 180))
+        self.assertAlmostEqual(cum["excess"], cum["ret"] - cum["tbill"], places=12)
+        self.assertAlmostEqual(cum["tbill"], (1 + 0.0399 / 365) ** 3 - 1, places=12)
+        self.assertEqual(s["abort"]["max_drawdown"], -0.05)
+        self.assertIn("ci", s["gate"])
+        json.dumps(s)  # the route serialises it as is
+
     def test_idempotent_and_waits_for_close_paper_and_data(self):
         self.clock.t = INC + DAY_MS + 5 * 60_000  # 08:05 BJ: bar closed < 15 min ago
         self.assertEqual(self.sh.tick(), [])
@@ -376,6 +393,35 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(d["capital"], 0)
         self.assertTrue(d["paramsFrozen"])
         self.assertEqual(d["inceptionDay"], "2026-10-04")
+
+    def _login(self):
+        pw = "paperPass123"
+        self.assertEqual(self.c.post("/api/v1/auth/register", json={"name": "vin", "password": pw, "password_confirm": pw}).status_code, 200)
+
+    def test_no_ledger_yet_returns_registration_for_the_performance_page(self):
+        empty = Path(self.tmp.name) / "empty"
+        empty.mkdir()
+        h2.reset_shadow(None)
+        self._login()
+        with patch.object(h2, "data_dir", lambda: empty):
+            d = self.c.get("/api/v1/mainstream/shadow/h2").json()["data"]
+        self.assertFalse((empty / h2.LEDGER_NAME).exists())  # reading never creates the ledger
+        self.assertIsNone(d["ledger"])
+        self.assertIsNone(d["last"])
+        self.assertIsNone(d["cumulative"])
+        self.assertEqual((d["inceptionDay"], d["progress"], d["capital"]), ("2026-10-04", 0, 0))
+        self.assertEqual(d["gate"]["forward_days"], 180)
+        self.assertEqual(d["abort"]["max_drawdown"], -0.05)
+        self.assertEqual(d["paramsSha256"], h2.FROZEN_SHA256)
+        self.assertEqual(h2.params_hash(h2.PARAMS), h2.FROZEN_SHA256)  # stub only reads the frozen params
+
+    def test_empty_ledger_shows_registered_without_numbers(self):
+        self._login()
+        d = self.c.get("/api/v1/mainstream/shadow/h2").json()["data"]
+        self.assertIsNone(d["last"])
+        self.assertIsNone(d["cumulative"])
+        self.assertEqual(d["progress"], 0)
+        self.assertEqual(d["refused"], "")
 
 
 if __name__ == "__main__":

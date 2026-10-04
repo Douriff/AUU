@@ -326,6 +326,48 @@ export interface ShadowS3Summary {
   lastError: string;
 }
 
+/** /api/v1/mainstream/shadow/h2 (pre-registered forward shadow, no capital). */
+export interface ShadowH2Row {
+  day: number;
+  dayStr?: string;
+  inception: number;
+  nav: number;
+  ret: number;
+  w_trend: number;
+  w_carry: number;
+  pnl_trend: number;
+  pnl_carry: number;
+  pnl_idle: number;
+  cost_sleeve: number;
+  drawdown: number;
+  tbill_ret?: number;
+}
+
+export interface ShadowH2Summary {
+  label: string;
+  capital: number;
+  ledger: string | null;
+  hypothesis?: string;
+  paramsSha256?: string;
+  paramsFrozen?: boolean;
+  refused?: string | null;
+  inceptionDay?: string;
+  gate?: { forward_days: number; statistic?: string; ci?: string; pass?: string; sample?: string };
+  abort?: { max_drawdown: number; carry_liquidation?: boolean; lag_days_pause?: number; lag_days_void?: number };
+  aborted?: string | null;
+  progress?: number;
+  forwardDays?: number;
+  lagDays?: number | null;
+  paused?: boolean;
+  last?: ShadowH2Row | null;
+  cumulative?: {
+    ret: number; tbill: number; excess: number; pnlTrend: number; pnlCarry: number; pnlIdle: number; costSleeve: number; maxDrawdown: number;
+  } | null;
+  evaluations?: { milestone: number; ts: number; verdict: string }[];
+  waiting?: string | null;
+  lastError?: string | null;
+}
+
 export interface PerfMetrics {
   days: number;
   totalReturn?: number;
@@ -466,6 +508,9 @@ export type MainstreamOrderbook = {
   ageMs: number | null;
   stale: boolean;
   pending: boolean;
+  /** A refresh is still in flight (after the server's bounded wait for stale snapshots). */
+  refreshing?: boolean;
+  waitedMs?: number | null;
   error: string | null;
   ttlSec: number;
   note: string;

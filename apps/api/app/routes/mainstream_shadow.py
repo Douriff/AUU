@@ -28,5 +28,17 @@ def shadow_h2(request: Request):
 
     s = peek_shadow()
     if s is None:
-        return ok({"label": "H2 影子盘尚未开始记录", "ledger": None})
+        return ok(_h2_registered_stub())
     return ok(s.summary())
+
+
+def _h2_registered_stub() -> dict:
+    """Ledger file not created yet: echo the registration (read-only copy of the frozen params, nothing written)."""
+    from app.paper.shadow_h2 import FROZEN_SHA256, LABEL, PARAMS
+
+    return {
+        "label": LABEL, "capital": 0, "ledger": None, "hypothesis": "H2", "paramsSha256": FROZEN_SHA256,
+        "inceptionDay": PARAMS["start"]["inception_day"], "gate": PARAMS["gate"], "abort": PARAMS["abort"],
+        "progress": 0, "forwardDays": 0, "last": None, "cumulative": None, "refused": "", "aborted": None,
+        "paused": False, "rows": [], "evaluations": [], "waiting": None, "lastError": None,
+    }
