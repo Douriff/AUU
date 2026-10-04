@@ -499,6 +499,14 @@ def _extra() -> dict:
         out["S3 影子假设（非证据）"] = f"已平 {s['counts']['closed']}/{s['evalAt']} 笔，持有 {s['counts']['open']}，待入场 {s['counts']['pending']}"
     except Exception:
         pass
+    try:
+        from app.paper.shadow_h2 import peek_shadow, shadow_enabled
+
+        h2 = peek_shadow() if shadow_enabled() else None
+        if h2 is not None:
+            out["H2 影子盘（不投钱、不下单，未满 180 天不是证据）"] = h2.digest_line()
+    except Exception:
+        pass
     return out
 
 
