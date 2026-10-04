@@ -89,6 +89,10 @@ def _make_lifespan(legacy: bool):
 
             if shadow_enabled():
                 tasks.append(asyncio.create_task(shadow_loop(), name="shadow-s3"))
+            from app.paper.shadow_h2 import run_loop as h2_loop, shadow_enabled as h2_enabled
+
+            if h2_enabled():
+                tasks.append(asyncio.create_task(h2_loop(), name="shadow-h2"))
             from app.alerts import alerts_enabled, run_loop as alerts_loop
 
             if alerts_enabled():
@@ -188,6 +192,7 @@ def root(legacy: bool = False):
                     "paperOrder": "POST /api/v1/mainstream/paper/orders (paper only; login required)",
                     "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go, risk caps)",
                     "shadowS3": "GET /api/v1/mainstream/shadow/s3 (shadow hypothesis, no capital, not evidence)",
+                    "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",
