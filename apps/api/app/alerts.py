@@ -3,7 +3,10 @@
 Immediate alerts: strategy stall, runner errors, every new ``risk_events`` row, market data
 stale / no exchange / risk data breaker. Each alert has a dedup key (same key is not resent within
 the cooldown) and a global rate limit (per hour / per day); suppressed alerts are counted in the
-digest. Failed sends are retried with backoff. The daily digest goes out at 08:30 Beijing time.
+digest. Failed sends stay queued and are retried (backoff 2, 4, 8 min, then every 10 min) for 24h,
+so mail raised while the network or SMTP is down goes out once it is back; a queued digest is
+rebuilt with the current ledger right before each retry. The daily digest goes out at 08:30 Beijing
+time. A late rebalance (延迟补做) or a missed one sends its own notice.
 
 Paper data only: no credentials, no full addresses in logs (masked). Recipient from
 ``AUU_ALERT_TO`` (default olesaruga00@gmail.com).
@@ -27,7 +30,10 @@ log = logging.getLogger("auu.alerts")
 
 BJ = timezone(timedelta(hours=8))
 DEFAULT_TO = "olesaruga00@gmail.com"
-MAX_ATTEMPTS = 5
+MAX_ATTEMPTS = 200          # with the 10 min cap this covers the whole 24h queue window
+RETRY_MAX_MS = 10 * 60_000  # retry interval cap while SMTP / the network is down
+QUEUE_MS = 86_400_000       # a failed mail is retried for this long, then left as failed
+QUEUED_NOTE_MS = 10 * 60_000  # sent this long after it was raised: say so in the mail
 STALE_CONSECUTIVE = 2  # a data problem must be seen on 2 consecutive checks before it alerts
 BAND_REPEAT_MS = 7 * 86_400_000  # while paper stays outside the expected band, repeat the alert weekly
 
@@ -205,11 +211,16 @@ class AlertCenter:
             log.warning("ALERT not sent (SMTP not configured) %s: %s", row["kind"], row["subject"])
             return "unconfigured"
         attempts = int(row["attempts"]) + 1
+        subject, body = row["subject"], row["body"]
+        if now - int(row["created_at"]) > QUEUED_NOTE_MS:  # queued through an outage: tell the reader
+            subject = f"{subject}（排队重发，原定 {bj(int(row['created_at']))[-5:]}）"
+            body = (f"【排队重发】这封邮件原定北京时间 {bj(int(row['created_at']))} 发出，当时网络或邮件服务不可用"
+                    f"（已尝试 {attempts - 1} 次），现在补发。\n\n{body}")
         try:
-            info = self.send(self.to, row["subject"], row["body"])
+            info = self.send(self.to, subject, body)
         except Exception as exc:  # never store exc text: SMTP errors can echo addresses
             self._update(aid, status="failed", attempts=attempts, error=type(exc).__name__,
-                         next_try=now + 60_000 * (2 ** attempts))
+                         next_try=now + min(60_000 * (2 ** min(attempts, 10)), RETRY_MAX_MS))
             log.warning("ALERT send failed (%s, attempt %d) %s: %s", type(exc).__name__, attempts, row["kind"], row["subject"])
             return "failed"
         info = info if isinstance(info, dict) else {}
@@ -224,12 +235,34 @@ class AlertCenter:
             self._db.execute(f"UPDATE alerts SET {cols} WHERE id=?", (*kv.values(), aid))
 
     def retry_failed(self) -> int:
+        """Resend queued mail in order; stop this pass at the first failure (SMTP still unreachable)."""
         now = self.now_ms()
         with self._lock:
             ids = [r["id"] for r in self._db.execute(
-                "SELECT id FROM alerts WHERE status='failed' AND attempts<? AND next_try<=? AND created_at>?",
-                (MAX_ATTEMPTS, now, now - 86_400_000))]
-        return sum(1 for i in ids if self._deliver(i) == "sent")
+                "SELECT id FROM alerts WHERE status='failed' AND attempts<? AND next_try<=? AND created_at>? ORDER BY id",
+                (MAX_ATTEMPTS, now, now - QUEUE_MS))]
+        n = 0
+        for i in ids:
+            res = self._deliver(i)
+            if res == "sent":
+                n += 1
+            elif res == "failed":
+                break
+        return n
+
+    def queued(self, kind: Optional[str] = None) -> list[sqlite3.Row]:
+        """Failed mail still inside the retry window (oldest first)."""
+        now = self.now_ms()
+        q = "SELECT * FROM alerts WHERE status='failed' AND attempts<? AND created_at>?"
+        args: list = [MAX_ATTEMPTS, now - QUEUE_MS]
+        if kind:
+            q += " AND kind=?"
+            args.append(kind)
+        with self._lock:
+            return self._db.execute(q + " ORDER BY id", args).fetchall()
+
+    def rewrite(self, aid: int, subject: str, body: str) -> None:
+        self._update(aid, subject=subject, body=body)
 
     def status(self) -> dict:
         now = self.now_ms()
@@ -243,7 +276,7 @@ class AlertCenter:
                 "lastSentAt": int(last["sent_at"]) if last else None, "lastSentKind": last["kind"] if last else None,
                 "last24h": cnt, "lastError": err["error"] if err else None,
                 "digestTimeBJ": "%02d:%02d" % digest_time(), "lastDigestDay": self.get("digest_day"),
-                "selfSend": self.is_self_send()}
+                "queued": len(self.queued()), "selfSend": self.is_self_send()}
 
     def is_self_send(self) -> bool:
         try:
@@ -283,6 +316,9 @@ class AlertMonitor:
             out += self._runner(r)
             out += self._band(r)
         out += self._data(r)
+        if r is not None:
+            out += self._exec_notices(r)
+            self._refresh_queued_digest(r)
         self.c.retry_failed()
         d = self._digest(r)
         if d:
@@ -320,6 +356,43 @@ class AlertMonitor:
                                           "风控事件（北京时间）：\n" + "\n".join(lines) + "\n\n纸面账本，实盘锁定。"))
             self.c.set("risk_event_id", mx)
         return out
+
+    def _exec_notices(self, r) -> list[str]:
+        """One mail per off-schedule rebalance (延迟补做 / missed), from the ledger's run_exec rows."""
+        if not hasattr(r.ledger, "exec_rows"):
+            return []
+        rows = list(reversed(r.ledger.exec_rows(20)))
+        mx = max((int(x["day"]) for x in rows), default=0)
+        cur = self.c.get("exec_notice_day")
+        if cur is None:  # first run: start after what already exists
+            self.c.set("exec_notice_day", mx)
+            return []
+        out = []
+        for x in rows:
+            if int(x["day"]) <= int(cur):
+                continue
+            subject, body = build_exec_notice(r, x)
+            out.append(self.c.raise_alert(f"exec:{x['mode']}:{x['day']}", "rebalance", subject, body, bypass_limits=True))
+        if mx > int(cur):
+            self.c.set("exec_notice_day", mx)
+        return out
+
+    def _refresh_queued_digest(self, r) -> None:
+        """A digest queued by an outage is rebuilt before its retry, so it shows the ledger as it is now
+        (e.g. the late rebalance that ran after the network came back)."""
+        now = self.now_ms()
+        for row in self.c.queued("digest"):
+            if row["next_try"] is not None and int(row["next_try"]) > now:
+                continue
+            try:
+                subject, body = build_digest(r, self.c, now, extra=self.extra_fn())
+            except Exception:
+                log.exception("digest rebuild failed (queued copy kept)")
+                continue
+            day = str(row["key"]).split(":", 1)[-1]
+            subject = subject.replace(datetime.fromtimestamp(now / 1000, BJ).strftime("%Y-%m-%d"), day, 1)
+            body = f"（内容已按北京时间 {bj(now)} 的账本更新）\n" + body
+            self.c.rewrite(int(row["id"]), subject, body)
 
     def _band(self, r) -> list[str]:
         """Paper outside the pre-registered backtest band: alert on entering a new outside state, then weekly while it lasts."""
@@ -412,6 +485,37 @@ def _fmt(v) -> str:
         return str(v)
 
 
+def build_exec_notice(r, x) -> tuple[str, str]:
+    """Mail for one run_exec row: a late rebalance (延迟补做) or a day missed past the cutoff."""
+    from app.backtest.panel import ms_day
+
+    day = ms_day(int(x["day"]))
+    run = next((dict(k) for k in r.ledger.runs() if int(k["day"]) == int(x["day"])), None)
+    fills = [dict(f) for f in r.ledger.fills(500) if int(f["day"]) == int(x["day"])]
+    close_bj, exec_bj = bj(int(x["close_ts"])), bj(int(x["exec_ts"]))
+    lines = []
+    if x["mode"] == "late":
+        subject = f"AUUTRADE 通知：{day} 收盘调仓延迟补做（晚 {float(x['delay_min']):.0f} 分钟）"
+        lines += [f"原定执行：北京时间 {close_bj}（{day} 收盘）", f"实际执行：北京时间 {exec_bj}（延迟补做）",
+                  f"价格：按执行时的最新行情记账（{x['exchange'] or '—'}，行情时间 {bj(int(x['price_ts'])) if x['price_ts'] else '—'}），不是收盘价",
+                  f"延迟原因：{x['reason'] or '—'}", "", f"成交 {len(fills)} 笔："]
+        lines += [f"  {f['coin']:<5} {'买' if f['side'] == 'buy' else '卖'} {f['notional']:>10,.2f} USDT @ {f['fill_price']:.6g}"
+                  f"（执行价 {f['price']:.6g}）" for f in sorted(fills, key=lambda k: k["coin"])] or ["  无（仓位在区间内，不需要调整）"]
+        df = json.loads(x["drift_funding"] or "{}")
+        if df:
+            lines.append("收盘到执行之间结算的资金费（按原持仓计）：" + "，".join(f"{c} {v * 100:+.4f}%" for c, v in sorted(df.items())))
+    else:
+        subject = f"AUUTRADE 告警：{day} 收盘调仓已错过（超过当日截止时间）"
+        lines += [f"原定执行：北京时间 {close_bj}（{day} 收盘）", f"记账时间：北京时间 {exec_bj}",
+                  "处理：超过当日截止时间，不用已经过去的价格下单。当日不调仓、保持原仓位，持仓按收盘价估值。",
+                  f"原因：{x['reason'] or '—'}"]
+    if run is not None:
+        lines += ["", f"NAV：{float(run['nav_close']):,.2f} USDT · 当日 {float(run['ret']) * 100:+.3f}% · 成本 {float(run['cost']) * 100:.4f}%",
+                  f"账本记录哈希（runs 行 + 当日 fills，SHA-256）：{record_hash(run, fills)}"]
+    lines += ["", "纸面账本，实盘锁定。"]
+    return subject, "\n".join(lines)
+
+
 def build_digest(r, center: AlertCenter, now: int, *, extra: Optional[dict] = None) -> tuple[str, str]:
     from app.version import git_commit
 
@@ -429,17 +533,25 @@ def build_digest(r, center: AlertCenter, now: int, *, extra: Optional[dict] = No
         if last is not None:
             nav = float(last["nav_close"])
             subject += f"：NAV {nav:,.2f}（{float(last['ret']) * 100:+.2f}%）"
-            lines += [f"策略：{s['strategy'].get('name')} · 上次调仓 {st.get('lastDay')} 收盘（执行于 {bj(int(last['ran_at']))}）",
+            x = r.ledger.exec_row(int(last["day"])) if hasattr(r.ledger, "exec_row") else None
+            tag = ""
+            if x is not None and x["mode"] == "late":
+                tag = f" · ⚠ 延迟补做：晚 {float(x['delay_min']):.0f} 分钟，按执行时价格记账"
+            elif x is not None and x["mode"] == "missed":
+                tag = " · ⚠ 错过截止时间：当日未调仓，保持原仓位（按收盘价估值）"
+            lines += [f"策略：{s['strategy'].get('name')} · 上次调仓 {st.get('lastDay')} 收盘（执行于 {bj(int(last['ran_at']))}）{tag}",
                       f"NAV：{nav:,.2f} USDT · 当日 {float(last['ret']) * 100:+.3f}% · 累计 {(nav / float(s['startNav']) - 1) * 100:+.2f}%",
                       f"当日成本 {float(last['cost']) * 100:.4f}% · 资金费 {float(last['funding']) * 100:+.4f}% · 换手 {float(last['turnover']):.3f}"
                       f" · 总敞口 {float(last['gross_after']) * 100:.1f}%",
                       f"Go/No-Go：{g.get('message')}"]
             if st.get("stalled"):
                 lines.append(f"⚠ 停滞：{st.get('reason')}")
+            if int(last["day"]) < r.due_day():
+                lines.append(f"⚠ 今日调仓尚未完成：{st.get('waiting') or '等待数据'}")
             lines += ["", "持仓："]
             lines += [f"  {p['coin']:<5} {p['weight'] * 100:6.2f}%  {p['notional']:>10,.2f} USDT" for p in s["positions"]] or ["  空仓"]
             fills = [dict(f) for f in r.ledger.fills(200) if int(f["day"]) == int(last["day"])]
-            lines += ["", f"当日调仓（{st.get('lastDay')} 收盘）：{len(fills)} 笔"]
+            lines += ["", f"当日调仓（{st.get('lastDay')} 收盘{'，延迟补做 @ 执行时价格' if tag and x['mode'] == 'late' else ''}）：{len(fills)} 笔"]
             lines += [f"  {f['coin']:<5} {'买' if f['side'] == 'buy' else '卖'} {f['notional']:>10,.2f} USDT @ {f['fill_price']:.6g}"
                       f"  费+滑点 {f['fee'] + f['slippage']:.3f}" for f in sorted(fills, key=lambda x: x["coin"])]
             lines += ["", f"账本记录哈希（{st.get('lastDay')}，runs 行 + 当日 fills，SHA-256）：", f"  {record_hash(dict(last), fills)}"]
