@@ -61,7 +61,8 @@ export function OrderBook({ symbol, venue = null }: { symbol: string; venue?: st
         if (!alive) return;
         setBook(b);
         setErr("");
-        if (b.pending) next = 800;
+        // Still refreshing a stale snapshot after the server's bounded wait: ask again soon.
+        if (b.pending || (b.stale && b.refreshing)) next = 800;
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : String(e));
@@ -163,7 +164,7 @@ export function OrderBook({ symbol, venue = null }: { symbol: string; venue?: st
         <span className="tag ob-tag">仅展示</span>
         <span className={`ob-age num ${book?.stale && ready ? "warn" : "dim"}`}>
           {book?.exchange ? `${book.exchange.toUpperCase()} · ` : ""}
-          {age != null ? `${age}s` : "—"}
+          {book?.stale && book.refreshing && ready ? "刷新中" : age != null ? `${age}s` : "—"}
         </span>
       </div>
       <div className="ob-body">{body}</div>

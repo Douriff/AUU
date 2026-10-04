@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { StrategyReport } from "@/types/mainstream";
 import { Empty, Sk, SkCards } from "@/components/ui/Skeleton";
+import { H2ShadowCard } from "./H2ShadowCard";
 
 /** P1-1/P1-2: strategy performance report (paper ledger). Login is enforced by AppShell + the API (401). */
 
@@ -96,6 +97,8 @@ export function PerformancePage() {
       ) : rep ? (
         <Empty icon="chart" title="尚无纸面记录" hint="策略完成第一次调仓（北京时间 08:00）后开始生成绩效" />
       ) : null}
+
+      <H2ShadowCard />
 
       {years.length ? (
         <section className="perf-card">

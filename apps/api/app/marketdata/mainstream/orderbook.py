@@ -3,8 +3,11 @@
 Outbound pressure and memory are bounded on purpose:
 - only coins in the configured universe (``cfg.all_symbols()``) are ever fetched or cached;
 - one cached snapshot per coin (``FETCH_LEVELS`` levels per side, a few KB total);
-- a request never waits on the exchange: it gets the cached snapshot and, if that is older
-  than the TTL, starts at most one background refresh for that coin (no viewer = no requests);
+- a request gets the cached snapshot and, if that is older than the TTL, starts at most one
+  background refresh for that coin (no viewer = no requests). Only when the snapshot is *stale*
+  (none yet, other venue, or older than 4 x TTL, e.g. the first view after switching coins or
+  returning to the tab) does the request wait for that refresh, bounded by
+  ``AUU_MAINSTREAM_BOOK_WAIT_MS`` (default 1500 ms, 0 = never wait); otherwise it never waits;
 - a global budget caps refreshes per minute across all coins, and a failing coin backs off;
 - refreshes reuse the on-demand ccxt client (markets already loaded, no extra client in memory;
   ccxt's per-client rate limiter is shared with chart requests) but take their own lock, so a
@@ -15,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections import deque
 from typing import Any, Optional
 
@@ -35,6 +39,11 @@ def _env_int(name: str, default: int, lo: int, hi: int) -> int:
 
 def book_ttl_ms() -> int:
     return _env_int("AUU_MAINSTREAM_BOOK_SEC", 3, 2, 60) * 1000
+
+
+def book_wait_ms() -> int:
+    """Longest a request waits for a refresh of a stale snapshot (0 = serve the stale snapshot at once)."""
+    return _env_int("AUU_MAINSTREAM_BOOK_WAIT_MS", 1500, 0, 5000)
 
 
 def book_budget_per_min() -> int:
@@ -75,7 +84,7 @@ class BookCache:
                 if idle:
                     self._books.pop(min(idle, key=lambda k: self._books[k]["at"]), None)
             b = self._books[base] = {"at": 0, "ex": None, "bids": [], "asks": [], "ts": None,
-                                     "error": None, "try_at": 0, "busy": False}
+                                     "error": None, "try_at": 0, "busy": False, "done": None}
         return b
 
     def _budget_ok(self, now: int) -> bool:
@@ -96,18 +105,34 @@ class BookCache:
             key = f"{ex}:{base}"
         now = svc.now_ms()
         start = False
+        done: Optional[threading.Event] = None
         with self._lock:
             b = self._slot(key)
+            stale_before = b["ex"] != ex or not b["at"] or now - int(b["at"]) > 4 * book_ttl_ms()
             if ex and books_enabled():
                 due = (b["ex"] != ex or now - int(b["at"]) >= book_ttl_ms()) and now >= int(b["try_at"]) and not b["busy"]
                 if due and self._budget_ok(now):
                     b["busy"] = True
+                    b["done"] = threading.Event()
                     self._starts.append(now)
                     start = True
+            if stale_before and b["busy"]:
+                done = b["done"]
             snap = {k: b[k] for k in ("at", "ex", "ts", "error", "busy")}
             bids, asks = b["bids"][:depth], b["asks"][:depth]
         if start:
             threading.Thread(target=self._refresh, args=(base, ex, key), name=f"mainstream-book-{base}", daemon=True).start()
+        waited = None
+        wait_ms = book_wait_ms()
+        if done is not None and wait_ms > 0:
+            t0 = time.monotonic()
+            done.wait(wait_ms / 1000)
+            waited = int((time.monotonic() - t0) * 1000)
+            now = svc.now_ms()
+            with self._lock:
+                b = self._slot(key)
+                snap = {k: b[k] for k in ("at", "ex", "ts", "error", "busy")}
+                bids, asks = b["bids"][:depth], b["asks"][:depth]
         same = snap["ex"] == ex
         if not same:
             bids, asks = [], []
@@ -130,7 +155,10 @@ class BookCache:
             "fetchedAt": snap["at"] if same and snap["at"] else None,
             "ageMs": age,
             "stale": age is None or age > 4 * book_ttl_ms(),
-            "pending": bool(snap["busy"] or start) and not bids,
+            "pending": bool(snap["busy"]) and not bids,
+            # a refresh is still in flight after the (bounded) wait: the client may re-poll sooner
+            "refreshing": bool(snap["busy"]),
+            "waitedMs": waited,
             "error": snap["error"],
             "ttlSec": book_ttl_ms() // 1000,
             "note": "display_only",
@@ -147,11 +175,17 @@ class BookCache:
             asks = _levels(raw.get("asks"), MAX_DEPTH)
             ts = raw.get("timestamp")
             with self._lock:
-                self._slot(key).update(at=svc.now_ms(), ex=ex, bids=bids, asks=asks, ts=int(ts) if ts else None,
-                                        error=None, try_at=0, busy=False)
+                b = self._slot(key)
+                b.update(at=svc.now_ms(), ex=ex, bids=bids, asks=asks, ts=int(ts) if ts else None,
+                         error=None, try_at=0, busy=False)
+                if b.get("done") is not None:
+                    b["done"].set()
         except Exception as exc:  # keep serving the last snapshot; back off this coin
             with self._lock:
-                self._slot(key).update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=svc.now_ms() + BACKOFF_MS, busy=False)
+                b = self._slot(key)
+                b.update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=svc.now_ms() + BACKOFF_MS, busy=False)
+                if b.get("done") is not None:
+                    b["done"].set()
             log.warning("mainstream book %s/%s failed: %s", ex, base, exc)
 
 

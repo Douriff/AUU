@@ -183,7 +183,8 @@ class BookExtraTests(unittest.TestCase):
 
         svc = FakeSvc()
         bc = OB.BookCache(svc)
-        out = bc.get("PEPE", 12, ex="binance")
+        with patch.dict(os.environ, {"AUU_MAINSTREAM_BOOK_WAIT_MS": "0"}):  # answer before the fetch lands
+            out = bc.get("PEPE", 12, ex="binance")
         self.assertTrue(out["pending"])
         self.assertEqual(out["pair"], "PEPE/USDT")
         with self.assertRaises(KeyError):
