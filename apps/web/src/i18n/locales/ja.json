@@ -989,5 +989,82 @@
     "title": "このページは使用されなくなりました",
     "body": "AUUTRADE は主要銘柄のクオンツプラットフォームになり、旧機能はアーカイブされました。",
     "go": "マーケットへ"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "システム",
+        "discovery": "検出",
+        "manual": "手動操作",
+        "entry": "エントリー",
+        "reject": "却下",
+        "shadow": "シャドー",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "時間切れ",
+        "weakTape": "売り圧",
+        "graduation": "卒業",
+        "orphan": "孤立",
+        "close": "決済"
+      },
+      "restart": "API を再起動しました",
+      "autoOn": "自動ペーパー オン",
+      "autoOff": "自動ペーパー オフ",
+      "discOffline": "検出オフライン",
+      "discConnecting": "検出 接続中",
+      "discOnline": "検出オンライン {{active}}",
+      "newCoin": "新規コイン {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} 手動エントリー {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} ペーパーエントリー {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} 手動決済 純 {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} 純 {{bps}} bps",
+      "impact": "インパクト",
+      "gross": "グロス {{v}} bps",
+      "cap": "> 上限 {{v}}",
+      "limit": "リミット",
+      "shadow": "シャドー",
+      "vEnter": "仮想エントリー",
+      "vSkip": "仮想スキップ",
+      "shadowClose": "シャドー {{set}} {{base}} 仮想決済 {{pill}}"
+    },
+    "nogo": {
+      "ledger": "トレンド戦略ペーパー台帳：{{msg}}",
+      "readFailed": "戦略台帳を読み込めません：{{err}}"
+    },
+    "risk": {
+      "drawdown": "ドローダウン <= {{pct}}%",
+      "dayLoss": "日次損失 <= {{pct}}%",
+      "stale": "1時間足が古い：{{coins}}",
+      "noExchange": "取引所なし",
+      "healthFailed": "取引所ヘルスチェック失敗",
+      "noRefresh": "市場データ更新の成功なし（{{min}} 分）：{{err}}",
+      "noRefreshStart": "市場データ更新の成功なし（起動から {{min}} 分）：{{err}}",
+      "noRefreshNever": "市場データ更新の成功なし（このプロセスでは未実行）：{{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "パラメータハッシュ {{h}} ≠ 凍結値 {{f}}",
+        "costModel": "有効なコストモデル {{cm}} ≠ 凍結されたトレンドコスト {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ 凍結値 {{f}}",
+        "registryUnreadable": "登録ファイル {{path}} を読めません：{{err}}",
+        "registryMismatch": "登録 {{name}}：保存値 {{stored}}、パラメータハッシュ {{h}}、凍結値 {{f}}",
+        "ledgerHash": "台帳の保存ハッシュ {{h}} ≠ 凍結値 {{f}}"
+      },
+      "wait": {
+        "nextDay": "翌日 {{day}} はまだ確定していません",
+        "settling": "{{day}} の確定から {{min}} 分未満",
+        "behind": "{{n}} 日遅れ（> {{max}}）。手動確認が必要",
+        "paper": "{{day}} のペーパーリバランス待ち",
+        "data": "{{day}} のデータ待ち：{{why}}",
+        "noPanel": "{{day}} のパネルがありません",
+        "noPerp": "{{day}} の無期限先物日足がありません"
+      },
+      "abortDrawdown": "{{day}}：ドローダウン {{dd}} が中止条件に到達",
+      "abortCarry": "{{day}}：キャリーレッグが清算（中止）"
+    },
+    "board": {
+      "noteLocal": "ローカル単一ユーザーモードではアカウントがありません。AUU_AUTH=on にするとペーパー損益のランキングを表示します。システムのペーパーエンジンは含みません。",
+      "noteAuth": "ユーザーのペーパー口座のみ。システムのペーパーエンジンは含みません。入金・出金・実取引はありません。"
+    }
   }
 }

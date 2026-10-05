@@ -989,5 +989,82 @@
     "title": "Bu sayfa kullanımdan kaldırıldı",
     "body": "AUUTRADE artık büyük coinler için bir kantitatif platform; eski modüller arşivlendi.",
     "go": "Piyasalara git"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "Sistem",
+        "discovery": "Keşif",
+        "manual": "Manuel",
+        "entry": "Giriş",
+        "reject": "Ret",
+        "shadow": "Gölge",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "Süre doldu",
+        "weakTape": "Zayıf akış",
+        "graduation": "Mezuniyet",
+        "orphan": "Sahipsiz",
+        "close": "Çıkış"
+      },
+      "restart": "API yeniden başlatıldı",
+      "autoOn": "Otomatik kâğıt açık",
+      "autoOff": "Otomatik kâğıt kapalı",
+      "discOffline": "Keşif çevrimdışı",
+      "discConnecting": "Keşif bağlanıyor",
+      "discOnline": "Keşif çevrimiçi {{active}}",
+      "newCoin": "Yeni coin {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} manuel giriş {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} kâğıt giriş {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} manuel çıkış net {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} net {{bps}} bps",
+      "impact": "etki",
+      "gross": "brüt {{v}} bps",
+      "cap": "> üst sınır {{v}}",
+      "limit": "limit",
+      "shadow": "Gölge",
+      "vEnter": "sanal giriş",
+      "vSkip": "sanal atlama",
+      "shadowClose": "Gölge {{set}} {{base}} sanal çıkış {{pill}}"
+    },
+    "nogo": {
+      "ledger": "Trend stratejisi kâğıt defteri: {{msg}}",
+      "readFailed": "Strateji defteri okunamadı: {{err}}"
+    },
+    "risk": {
+      "drawdown": "düşüş <= %{{pct}}",
+      "dayLoss": "günlük kayıp <= %{{pct}}",
+      "stale": "1s verisi eski: {{coins}}",
+      "noExchange": "borsa yok",
+      "healthFailed": "borsa sağlık kontrolü başarısız",
+      "noRefresh": "başarılı piyasa güncellemesi yok ({{min}} dk): {{err}}",
+      "noRefreshStart": "başarılı piyasa güncellemesi yok (başlangıçtan beri {{min}} dk): {{err}}",
+      "noRefreshNever": "başarılı piyasa güncellemesi yok (bu süreçte hiç): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "parametre hash'i {{h}} ≠ dondurulmuş {{f}}",
+        "costModel": "etkin maliyet modeli {{cm}} ≠ dondurulmuş trend maliyeti {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ dondurulmuş {{f}}",
+        "registryUnreadable": "kayıt {{path}} okunamıyor: {{err}}",
+        "registryMismatch": "kayıt {{name}}: saklanan {{stored}}, parametre hash'i {{h}}, dondurulmuş {{f}}",
+        "ledgerHash": "defterde saklanan hash {{h}} ≠ dondurulmuş {{f}}"
+      },
+      "wait": {
+        "nextDay": "sonraki gün {{day}} henüz kapanmadı",
+        "settling": "{{day}} {{min}} dakikadan kısa süre önce kapandı",
+        "behind": "{{n}} gün geride (> {{max}}); manuel inceleme",
+        "paper": "{{day}} kâğıt yeniden dengelemesi bekleniyor",
+        "data": "{{day}} verisi bekleniyor: {{why}}",
+        "noPanel": "{{day}} paneli mevcut değil",
+        "noPerp": "{{day}} perp günlük mumu eksik"
+      },
+      "abortDrawdown": "{{day}}: düşüş {{dd}} iptal sınırına ulaştı",
+      "abortCarry": "{{day}}: carry bacağı tasfiye edildi (iptal)"
+    },
+    "board": {
+      "noteLocal": "Yerel tek kullanıcı modunda hesap yok. AUU_AUTH=on ayarlanınca burada kâğıt K/Z sıralaması görünür. Sistem kâğıt motoru dahil değildir.",
+      "noteAuth": "Yalnızca kullanıcı kâğıt hesapları. Sistem kâğıt motoru dahil değildir. Para yatırma, çekme ve gerçek işlem yok."
+    }
   }
 }

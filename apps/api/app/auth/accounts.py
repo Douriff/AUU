@@ -607,10 +607,12 @@ def leaderboard(sort: str = "pnl") -> dict[str, Any]:
     if not auth_enabled():
         rows: list[dict[str, Any]] = []
         note = "本地单用户模式未开启账户。设置 AUU_AUTH=on 后，这里按纸面盈亏排名。系统纸面引擎不计入。"
+        note_key = "srv.board.noteLocal"
     else:
         rows = [account_row(user) for user in _load()]
         rows.sort(key=lambda row: float(row.get(key) or 0.0), reverse=True)
         note = "仅用户纸面账户。系统纸面引擎不计入。无充值、无提现、无实盘。"
+        note_key = "srv.board.noteAuth"
     return {
         "mode": "paper",
         "liveEnabled": False,
@@ -618,5 +620,6 @@ def leaderboard(sort: str = "pnl") -> dict[str, Any]:
         "auth_enabled": auth_enabled(),
         "sort": key,
         "note": note,
+        "noteMsg": {"k": note_key},  # same text, translatable (web: srv.board.*)
         "items": rows,
     }

@@ -1,3 +1,4 @@
+import { msgText } from "@/i18n/msg";
 import { useEffect, useRef, useState } from "react";
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { Link } from "react-router-dom";
@@ -263,10 +264,10 @@ function RiskBox({ risk }: { risk: StrategyRisk }) {
         <span className={`strat-risk-state ${lock || risk.dataBad ? "down" : "up"}`}>
           {lock
             ? risk.lock?.kind === "review"
-              ? `🔒 ${t("strat.risk.lockReview", { why: risk.lock?.reason })}`
-              : `🔒 ${t("strat.risk.lockUntil", { time: SH.format(new Date(risk.lock?.until || 0)), why: risk.lock?.reason })}`
+              ? `🔒 ${t("strat.risk.lockReview", { why: msgText(risk.lock?.reasonMsg, risk.lock?.reason || "") })}`
+              : `🔒 ${t("strat.risk.lockUntil", { time: SH.format(new Date(risk.lock?.until || 0)), why: msgText(risk.lock?.reasonMsg, risk.lock?.reason || "") })}`
             : risk.dataBad
-              ? `⚠ ${t("strat.risk.dataBad", { why: risk.dataBad.reason })}`
+              ? `⚠ ${t("strat.risk.dataBad", { why: msgText(risk.dataBad.reasonMsg, risk.dataBad.reason) })}`
               : t("strat.risk.ok")}
         </span>
         {m ? (

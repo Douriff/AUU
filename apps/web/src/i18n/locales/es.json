@@ -989,5 +989,82 @@
     "title": "Esta página se ha retirado",
     "body": "AUUTRADE es ahora una plataforma cuantitativa de monedas principales; los módulos antiguos se han archivado.",
     "go": "Ir a Mercados"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "Sistema",
+        "discovery": "Descubrimiento",
+        "manual": "Manual",
+        "entry": "Entrada",
+        "reject": "Rechazo",
+        "shadow": "Sombra",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "Tiempo límite",
+        "weakTape": "Flujo débil",
+        "graduation": "Graduación",
+        "orphan": "Huérfana",
+        "close": "Salida"
+      },
+      "restart": "API reiniciada",
+      "autoOn": "Papel automático activado",
+      "autoOff": "Papel automático desactivado",
+      "discOffline": "Descubrimiento sin conexión",
+      "discConnecting": "Descubrimiento conectando",
+      "discOnline": "Descubrimiento en línea {{active}}",
+      "newCoin": "Nueva moneda {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} entrada manual {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} entrada en papel {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} salida manual neto {{bps}} pb",
+      "exitAuto": "{{base}} {{pill}} neto {{bps}} pb",
+      "impact": "impacto",
+      "gross": "bruto {{v}} pb",
+      "cap": "> tope {{v}}",
+      "limit": "límite",
+      "shadow": "Sombra",
+      "vEnter": "entrada virtual",
+      "vSkip": "omitida (virtual)",
+      "shadowClose": "Sombra {{set}} {{base}} salida virtual {{pill}}"
+    },
+    "nogo": {
+      "ledger": "Libro en papel de la estrategia de tendencia: {{msg}}",
+      "readFailed": "No se pudo leer el libro de la estrategia: {{err}}"
+    },
+    "risk": {
+      "drawdown": "drawdown <= {{pct}} %",
+      "dayLoss": "pérdida diaria <= {{pct}} %",
+      "stale": "datos 1h desactualizados: {{coins}}",
+      "noExchange": "sin exchange",
+      "healthFailed": "falló la comprobación del exchange",
+      "noRefresh": "ninguna actualización de mercado correcta ({{min}} min): {{err}}",
+      "noRefreshStart": "ninguna actualización de mercado correcta ({{min}} min desde el inicio): {{err}}",
+      "noRefreshNever": "ninguna actualización de mercado correcta (nunca en este proceso): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "hash de parámetros {{h}} ≠ congelado {{f}}",
+        "costModel": "modelo de costes efectivo {{cm}} ≠ costes de tendencia congelados {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ congelado {{f}}",
+        "registryUnreadable": "registro {{path}} ilegible: {{err}}",
+        "registryMismatch": "registro {{name}}: guardado {{stored}}, hash de parámetros {{h}}, congelado {{f}}",
+        "ledgerHash": "hash guardado en el libro {{h}} ≠ congelado {{f}}"
+      },
+      "wait": {
+        "nextDay": "el día siguiente {{day}} aún no ha cerrado",
+        "settling": "{{day}} cerró hace menos de {{min}} min",
+        "behind": "{{n}} días de retraso (> {{max}}); revisión manual",
+        "paper": "esperando el rebalanceo en papel del {{day}}",
+        "data": "esperando datos del {{day}}: {{why}}",
+        "noPanel": "panel del {{day}} no disponible",
+        "noPerp": "falta la vela diaria perp del {{day}}"
+      },
+      "abortDrawdown": "{{day}}: drawdown {{dd}} alcanzó el límite de cancelación",
+      "abortCarry": "{{day}}: pata de carry liquidada (cancelación)"
+    },
+    "board": {
+      "noteLocal": "El modo local de un solo usuario no tiene cuentas. Con AUU_AUTH=on aquí se clasifica por P&L en papel. El motor en papel del sistema no cuenta.",
+      "noteAuth": "Solo cuentas en papel de usuarios. El motor en papel del sistema no cuenta. Sin depósitos, sin retiros, sin trading real."
+    }
   }
 }

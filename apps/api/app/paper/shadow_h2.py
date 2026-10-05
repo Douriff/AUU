@@ -26,6 +26,7 @@ import json
 import logging
 import math
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -39,6 +40,7 @@ from app.backtest.costs import CostModel
 from app.backtest.engine import step as engine_step
 from app.backtest.panel import DAY_MS, Panel, day_ms, ms_day
 from app.data_paths import data_dir
+from app.i18n_msg import m, raw
 from app.strategies import trend_b058
 
 log = logging.getLogger("auu.shadow_h2")
@@ -109,7 +111,30 @@ REGISTRY = Path(__file__).resolve().parents[4] / "docs" / "hypotheses" / "H2_tre
 
 
 class FrozenParamsError(RuntimeError):
-    """The H2 parameters differ from the registered, hash-frozen set: refuse to run."""
+    """The H2 parameters differ from the registered, hash-frozen set: refuse to run.
+
+    ``msg`` is the same text as a translatable node (app.i18n_msg; web keys srv.h2.refusedWhy.*)."""
+
+    def __init__(self, text: str, msg: Optional[dict] = None):
+        super().__init__(text)
+        self.msg = msg if msg is not None else raw(text)
+
+
+_ABORT_DD = re.compile(r"^(\S+) abort:drawdown: drawdown (-?\d+\.\d+)$")
+_ABORT_CARRY = re.compile(r"^(\S+) abort:carry_liquidation: carry leg liquidated$")
+
+
+def aborted_msg(text: Optional[str]) -> Optional[dict]:
+    """Translatable node for the stored meta 'aborted' line ("{day} {kind}: {info}"); storage unchanged."""
+    if not text:
+        return None
+    hit = _ABORT_DD.match(text)
+    if hit:
+        return m("srv.h2.abortDrawdown", day=hit.group(1), dd=hit.group(2))
+    hit = _ABORT_CARRY.match(text)
+    if hit:
+        return m("srv.h2.abortCarry", day=hit.group(1))
+    return raw(text)
 
 
 def registry_path() -> Path:
@@ -121,22 +146,29 @@ def verify_frozen(params: Optional[dict] = None, *, registry: Optional[Path] = N
     p = PARAMS if params is None else params
     h = params_hash(p)
     if h != FROZEN_SHA256:
-        raise FrozenParamsError(f"params hash {h[:16]} != frozen {FROZEN_SHA256[:16]}")
+        raise FrozenParamsError(f"params hash {h[:16]} != frozen {FROZEN_SHA256[:16]}",
+                                m("srv.h2.refusedWhy.paramsHash", h=h[:16], f=FROZEN_SHA256[:16]))
     cm = asdict(CostModel())
     if cm != p["trend"]["cost"]:
-        raise FrozenParamsError(f"effective CostModel {cm} != frozen trend cost {p['trend']['cost']}")
+        raise FrozenParamsError(f"effective CostModel {cm} != frozen trend cost {p['trend']['cost']}",
+                                m("srv.h2.refusedWhy.costModel", cm=str(cm), fc=str(p["trend"]["cost"])))
     if stats.TBILL != p["benchmark"]["tbill"]:
-        raise FrozenParamsError(f"stats.TBILL {stats.TBILL} != frozen {p['benchmark']['tbill']}")
+        raise FrozenParamsError(f"stats.TBILL {stats.TBILL} != frozen {p['benchmark']['tbill']}",
+                                m("srv.h2.refusedWhy.tbill", v=str(stats.TBILL), f=str(p["benchmark"]["tbill"])))
     path = registry or registry_path()
     try:
         reg = json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception as exc:
-        raise FrozenParamsError(f"registry {path} unreadable: {type(exc).__name__}: {exc}") from exc
+        raise FrozenParamsError(f"registry {path} unreadable: {type(exc).__name__}: {exc}",
+                                m("srv.h2.refusedWhy.registryUnreadable", path=str(path), err=f"{type(exc).__name__}: {exc}")) from exc
     if reg.get("params_sha256") != FROZEN_SHA256 or params_hash(reg.get("params") or {}) != FROZEN_SHA256:
         raise FrozenParamsError(f"registry {Path(path).name}: stored {str(reg.get('params_sha256'))[:16]}, params hash "
-                                f"{params_hash(reg.get('params') or {})[:16]}, frozen {FROZEN_SHA256[:16]}")
+                                f"{params_hash(reg.get('params') or {})[:16]}, frozen {FROZEN_SHA256[:16]}",
+                                m("srv.h2.refusedWhy.registryMismatch", name=Path(path).name, stored=str(reg.get("params_sha256"))[:16],
+                                  h=params_hash(reg.get("params") or {})[:16], f=FROZEN_SHA256[:16]))
     if stored is not None and stored != FROZEN_SHA256:
-        raise FrozenParamsError(f"ledger stored hash {stored[:16]} != frozen {FROZEN_SHA256[:16]}")
+        raise FrozenParamsError(f"ledger stored hash {stored[:16]} != frozen {FROZEN_SHA256[:16]}",
+                                m("srv.h2.refusedWhy.ledgerHash", h=stored[:16], f=FROZEN_SHA256[:16]))
     return h
 
 
@@ -354,8 +386,10 @@ class ShadowH2:
         self.inception = int(inception_day if inception_day is not None else day_ms(self.p["start"]["inception_day"]))
         self.settle_ms, self.max_catchup = settle_ms, max_catchup
         self.waiting = ""
+        self.waiting_msg: Optional[dict] = None
         self.last_error = ""
         self.refused = ""
+        self.refused_msg: Optional[dict] = None
         self._tick_lock = threading.Lock()
 
     # ---- frozen check ----------------------------------------------------------------
@@ -376,8 +410,10 @@ class ShadowH2:
             try:
                 self.check_frozen()
                 self.refused = ""
+                self.refused_msg = None
             except FrozenParamsError as exc:
                 self.refused = str(exc)[:300]
+                self.refused_msg = exc.msg if len(str(exc)) <= 300 else raw(self.refused)
                 self.last_error = f"FROZEN PARAMS MISMATCH: {exc}"[:300]
                 log.error("H2 shadow refuses to run: %s", exc)
                 return []
@@ -391,44 +427,51 @@ class ShadowH2:
         finally:
             self._tick_lock.release()
 
+    def _wait(self, text: str, msg: Optional[dict]) -> None:
+        """Set the English status line plus its translatable node (raw text when truncated)."""
+        self.waiting = text
+        self.waiting_msg = None if not text else (msg if msg is not None and len(text) < 300 else raw(text))
+
     def _tick(self) -> list[int]:
         due = self.due_day()
         last = self.ledger.last()
         start = self.inception if last is None else int(last["day"]) + DAY_MS
         if due < start:
-            self.waiting = f"next day {ms_day(start)} not closed yet"
+            self._wait(f"next day {ms_day(start)} not closed yet", m("srv.h2.wait.nextDay", day=ms_day(start)))
             return []
         if self.now_ms() < due + DAY_MS + self.settle_ms:
             due -= DAY_MS  # newest bar closed < settle_ms ago: leave it for the next tick
             if due < start:
-                self.waiting = f"{ms_day(start)} closed < {self.settle_ms // 60_000} min ago"
+                self._wait(f"{ms_day(start)} closed < {self.settle_ms // 60_000} min ago",
+                           m("srv.h2.wait.settling", day=ms_day(start), min=self.settle_ms // 60_000))
                 return []
         days = list(range(start, due + 1, DAY_MS))
         if len(days) > self.max_catchup:
-            self.waiting = f"behind {len(days)} days (> {self.max_catchup}); manual review"
+            self._wait(f"behind {len(days)} days (> {self.max_catchup}); manual review",
+                       m("srv.h2.wait.behind", n=len(days), max=self.max_catchup))
             return []
         if not self.after_fn(due):
-            self.waiting = f"waiting for the paper rebalance of {ms_day(due)}"
+            self._wait(f"waiting for the paper rebalance of {ms_day(due)}", m("srv.h2.wait.paper", day=ms_day(due)))
             return []
         ok, why = self.ready_fn(due)
         if not ok:
-            self.waiting = f"waiting for {ms_day(due)} data: {why}"[:300]
+            self._wait(f"waiting for {ms_day(due)} data: {why}"[:300], m("srv.h2.wait.data", day=ms_day(due), why=str(why)))
             return []
         panel = self.panel_fn(due)
         if panel is None or not len(panel) or panel.days[-1] != due:
-            self.waiting = f"panel for {ms_day(due)} not available"
+            self._wait(f"panel for {ms_day(due)} not available", m("srv.h2.wait.noPanel", day=ms_day(due)))
             return []
         ex = self.exchange_fn() or "?"
         perp = self._perp(ex, min(days) - 160 * DAY_MS if last is None else min(days) - DAY_MS, due)
         written = []
         for d in days:
             if any(d not in perp[c] for c in self.p["carry"]["coins"]):
-                self.waiting = f"perp 1d kline for {ms_day(d)} missing"
+                self._wait(f"perp 1d kline for {ms_day(d)} missing", m("srv.h2.wait.noPerp", day=ms_day(d)))
                 break
             self._run_day(panel, panel.days.index(d), perp, ex)
             written.append(d)
         else:
-            self.waiting = ""
+            self._wait("", None)
         if written:
             self._maybe_evaluate()
         return written
@@ -608,9 +651,10 @@ class ShadowH2:
         return {
             "label": LABEL, "capital": 0, "ledger": f"{LEDGER_NAME} (separate from every paper ledger)",
             "hypothesis": "H2", "paramsSha256": FROZEN_SHA256, "storedParamsSha256": stored, "paramsFrozen": frozen_ok,
-            "refused": self.refused, "registry": "docs/hypotheses/H2_trend_carry_idle.{md,json}",
+            "refused": self.refused, "refusedMsg": (self.refused_msg or raw(self.refused)) if self.refused else None,
+            "registry": "docs/hypotheses/H2_trend_carry_idle.{md,json}",
             "inceptionDay": ms_day(self.inception), "gate": self.p["gate"], "abort": self.p["abort"],
-            "aborted": self.ledger.meta("aborted"), "progress": min(n_fw, self.p["gate"]["forward_days"]),
+            "aborted": self.ledger.meta("aborted"), "abortedMsg": aborted_msg(self.ledger.meta("aborted")), "progress": min(n_fw, self.p["gate"]["forward_days"]),
             "forwardDays": n_fw, "lagDays": lag,
             "paused": bool(lag is not None and lag > self.p["abort"]["lag_days_pause"]),
             "voidByLag": bool(lag is not None and lag > self.p["abort"]["lag_days_void"]),
@@ -621,7 +665,8 @@ class ShadowH2:
                             for e in self.ledger.q("SELECT * FROM evaluations ORDER BY milestone")],
             "events": [dict(e) for e in self.ledger.q("SELECT * FROM events ORDER BY id DESC LIMIT 50")],
             "rows": [{k: r[k] for k in r.keys() if k not in ("state", "detail", "targets")} for r in rs[-rows:]],
-            "waiting": self.waiting, "lastError": self.last_error,
+            "waiting": self.waiting, "waitingMsg": (self.waiting_msg or raw(self.waiting)) if self.waiting else None,
+            "lastError": self.last_error,
         }
 
     def digest_line(self) -> str:

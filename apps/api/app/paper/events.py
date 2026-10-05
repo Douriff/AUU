@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
+from app.i18n_msg import Node, go_msg, join, m, raw
 from app.legacy.pump.paper.postmortem import exit_reason_of
 
 RING_CAP = 2_000
@@ -27,6 +28,17 @@ _EXIT_PILL = {
     "orphan": "orphan",
     "other": "平仓",
 }
+# Catalog ids for the pills (web: srv.ev.pill.*); zh-CN renders the same text as above.
+_PILL_KEY = {
+    "系统": "system", "发现": "discovery", "手动": "manual", "开仓": "entry", "拒绝": "reject", "影子": "shadow",
+    "TP": "TP", "SL": "SL", "timeout": "timeout", "weak-tape": "weakTape", "graduation": "graduation",
+    "orphan": "orphan", "平仓": "close",
+}
+
+
+def _pill_msg(pill: str) -> Node:
+    key = _PILL_KEY.get(pill)
+    return m(f"srv.ev.pill.{key}") if key else raw(pill)
 
 _LOCK = threading.Lock()
 _events: list[dict[str, Any]] = []
@@ -73,6 +85,7 @@ def _push(
     net_bps: Optional[float] = None,
     symbol: str = "",
     mint: str = "",
+    msg: Optional[Node] = None,
 ) -> None:
     global _seq
     if type not in EVENT_TYPES:
@@ -90,6 +103,9 @@ def _push(
                 "type": type,
                 "pill": pill,
                 "message": message,
+                # language-neutral copies of pill / message for the web UI (srv.ev.* keys)
+                "pill_msg": _pill_msg(pill),
+                "msg": msg if msg is not None else raw(message),
                 "pnl": None if pnl is None else float(pnl),
                 "net_bps": None if net_bps is None else float(net_bps),
                 "symbol": symbol or "",
@@ -143,6 +159,7 @@ def note_api_start() -> None:
         type="system",
         pill="系统",
         message="API 已重启",
+        msg=m("srv.ev.restart"),
     )
 
 
@@ -157,6 +174,7 @@ def note_autopaper(on: bool) -> None:
         type="system",
         pill="系统",
         message="自动纸面 开" if flag else "自动纸面 关",
+        msg=m("srv.ev.autoOn" if flag else "srv.ev.autoOff"),
     )
 
 
@@ -171,6 +189,7 @@ def note_discovery_status(active: str, reason: str) -> None:
         type="system",
         pill="系统",
         message=_discovery_message(key[0], key[1]),
+        msg=_discovery_msg(key[0], key[1]),
     )
 
 
@@ -186,6 +205,19 @@ def _discovery_message(active: str, reason: str) -> str:
     return "发现离线"
 
 
+def _discovery_msg(active: str, reason: str) -> Node:
+    """Node twin of _discovery_message (same branches)."""
+    if "reject" in reason or reason == "portal_auth_rejected":
+        return m("srv.ev.discOffline")
+    if reason == "connecting":
+        return join([m("srv.ev.discConnecting"), raw(active)], trim=True)
+    if active and active not in {"off", "idle"} and reason not in {"off", "idle"}:
+        return m("srv.ev.discOnline", active=active)
+    if active and active not in {"off", "idle"} and reason in {"", "ok", "live", "online"}:
+        return m("srv.ev.discOnline", active=active)
+    return m("srv.ev.discOffline")
+
+
 def note_discovery(*, mint: str, symbol: str, ts: int, creator: str = "") -> None:
     mint_s = str(mint or "").strip()
     if not mint_s:
@@ -199,6 +231,7 @@ def note_discovery(*, mint: str, symbol: str, ts: int, creator: str = "") -> Non
         type="discovery",
         pill="发现",
         message=f"新币 {base} {short}{who}".strip(),
+        msg=join([m("srv.ev.newCoin", base=base, short=short, who=who)], trim=True),
         symbol=base,
         mint=mint_s,
     )
@@ -236,6 +269,8 @@ def note_journal_fill(
             ),
             symbol=symbol,
             mint=str(getattr(opened, "mint", "") or mint_s),
+            msg=m("srv.ev.entryManual" if manual else "srv.ev.entryPaper",
+                  base=_base(symbol), qty=_qty(lot_qty), px=_px(lot_px)),
         )
     for trade in closed or []:
         dumped = trade.as_dict() if hasattr(trade, "as_dict") else dict(trade)
@@ -265,6 +300,11 @@ def note_journal_fill(
             net_bps=net_bps,
             symbol=str(getattr(trade, "symbol", symbol) or symbol),
             mint=str(getattr(trade, "mint", "") or mint_s),
+            msg=(
+                m("srv.ev.exitManual", base=_base(symbol), bps=f"{sign}{net_bps:.0f}")
+                if manual
+                else m("srv.ev.exitAuto", base=_base(symbol), pill=_pill_msg(pill), bps=f"{sign}{net_bps:.0f}")
+            ),
         )
 
 
@@ -286,6 +326,7 @@ def note_decision(row: Any) -> None:
         message=_reject_message(row, bucket, reason, tags),
         symbol=symbol,
         mint=str(getattr(row, "mint", "") or ""),
+        msg=_reject_msg(row, bucket, reason, tags),
     )
 
 
@@ -314,6 +355,32 @@ def _reject_message(row: Any, bucket: str, reason: str, tags: list[str]) -> str:
     return " ".join(parts)
 
 
+def _reject_msg(row: Any, bucket: str, reason: str, tags: list[str]) -> Node:
+    """Node twin of _reject_message (same parts, joined by spaces)."""
+    base = _base(str(getattr(row, "symbol", "") or "")) or "—"
+    if bucket == "impact":
+        parts = [raw(base), m("srv.ev.impact")]
+        gross = getattr(row, "impact_gross_bps", None)
+        if gross is None:
+            gross = getattr(row, "impact_bps_est", None)
+        if gross is None:
+            gross = getattr(row, "estimated_impact_bps", None)
+        if gross is not None:
+            parts.append(m("srv.ev.gross", v=f"{float(gross):.0f}"))
+        cap = getattr(row, "impact_bps_cap", None)
+        if cap is not None:
+            parts.append(m("srv.ev.cap", v=f"{float(cap):.0f}"))
+        elif reason:
+            parts.append(raw(reason))
+        return join(parts)
+    parts = [raw(base), m("srv.ev.limit")]
+    if reason:
+        parts.append(raw(reason))
+    elif tags:
+        parts.append(raw(",".join(tags[:3])))
+    return join(parts)
+
+
 def note_shadow_decision(row: dict[str, Any]) -> None:
     action = str(row.get("action") or "")
     if action not in {"enter", "skip"}:
@@ -329,6 +396,8 @@ def note_shadow_decision(row: dict[str, Any]) -> None:
         type="shadow",
         pill="影子",
         message=f"影子 {set_id} {_base(symbol)} {verb} {reason}".strip(),
+        msg=join([m("srv.ev.shadow"), raw(set_id), raw(_base(symbol)),
+                  m("srv.ev.vEnter" if action == "enter" else "srv.ev.vSkip"), raw(reason)], trim=True),
         symbol=symbol,
         mint=str(row.get("mint") or ""),
     )
@@ -356,6 +425,7 @@ def note_shadow_close(row: dict[str, Any]) -> None:
         type="shadow",
         pill="影子",
         message=f"影子 {set_id} {_base(symbol)} 虚拟平仓 {pill}",
+        msg=m("srv.ev.shadowClose", set=set_id, base=_base(symbol), pill=_pill_msg(pill)),
         pnl=pnl_f,
         net_bps=net_f,
         symbol=symbol,
@@ -516,12 +586,15 @@ def console_stats() -> dict[str, Any]:
             from app.paper.strategy_runner import GO_MIN_DAYS, peek_runner
 
             r = peek_runner()
-            g = r.go_no_go() if r else {"verdict": "pending", "lamp": "gray", "message": f"数据积累中，未证明优势（日收益 0/{GO_MIN_DAYS} 天）"}
+            g = r.go_no_go() if r else {"verdict": "pending", "lamp": "gray", "days": 0, "minDays": GO_MIN_DAYS,
+                                        "message": f"数据积累中，未证明优势（日收益 0/{GO_MIN_DAYS} 天）"}
             last = r.ledger.last_run() if r else None
             n_pos = len(json.loads(last["weights"])) if last else 0
-            exe = {"verdict": g["verdict"], "lamp": g["lamp"], "nogo_reason": "趋势策略纸面账本：" + g["message"], "open_positions": n_pos}
+            exe = {"verdict": g["verdict"], "lamp": g["lamp"], "nogo_reason": "趋势策略纸面账本：" + g["message"],
+                   "nogo_msg": m("srv.nogo.ledger", msg=go_msg(g)), "open_positions": n_pos}
         except Exception as exc:
-            exe = {"verdict": "pending", "lamp": "gray", "nogo_reason": f"策略账本读取失败：{type(exc).__name__}"}
+            exe = {"verdict": "pending", "lamp": "gray", "nogo_reason": f"策略账本读取失败：{type(exc).__name__}",
+                   "nogo_msg": m("srv.nogo.readFailed", err=type(exc).__name__)}
     return {
         "open_positions": exe["open_positions"] if "open_positions" in exe else _open_positions(),
         "closed_today": n,
@@ -531,6 +604,7 @@ def console_stats() -> dict[str, Any]:
         "verdict": exe.get("verdict") or "no-go",
         "lamp": exe.get("lamp") or "gray",
         "nogo_reason": exe.get("nogo_reason") or "",
+        "nogo_msg": exe.get("nogo_msg") or raw(exe.get("nogo_reason") or ""),
         "go_window_label": "round8b" if legacy else "mainstream",
         "mode": "paper",
         "liveEnabled": False,

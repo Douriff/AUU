@@ -42,6 +42,7 @@ from app.backtest.costs import CostModel
 from app.backtest.engine import step
 from app.backtest.panel import DAY_MS, Panel, ms_day
 from app.data_paths import data_dir
+from app.i18n_msg import data_bad_msg, lock_reason_msg
 from app.paper import strategy_risk as risk
 from app.paper.strategy_risk import HOUR_MS, RiskLimits
 from app.strategies.trend_tsmom import TrendTSMOM
@@ -862,8 +863,8 @@ class StrategyRunner:
         return {
             "enabled": True,
             "limits": self.risk.describe(),
-            "locked": self._locked(now), "lock": lk,
-            "dataBad": self.ledger.risk_get("data_bad"),
+            "locked": self._locked(now), "lock": _with_msg(lk, lock_reason_msg),
+            "dataBad": _with_msg(self.ledger.risk_get("data_bad"), data_bad_msg),
             "todayFlags": self.ledger.risk_get(f"day:{today}", {}) or {},
             "lastMark": self.ledger.risk_get("last_mark"),
             "events": ev, "eventCount": self._risk_count(), "adjustments": adj,
@@ -1118,6 +1119,13 @@ def _store_ready(day: int) -> tuple[bool, str]:
         if flast is None or int(flast) < day + FUNDING_READY_MS:
             missing.append(f"{c}:funding")
     return (not missing), ",".join(missing)
+
+
+def _with_msg(state: Any, fn: Callable[[Any], dict]) -> Any:
+    """Read-side copy of a stored lock / data-breaker state plus a translatable ``reasonMsg``."""
+    if not isinstance(state, dict):
+        return state
+    return {**state, "reasonMsg": fn(state.get("reason"))}
 
 
 def _store_marks(coins: list[str], bar: int) -> dict:

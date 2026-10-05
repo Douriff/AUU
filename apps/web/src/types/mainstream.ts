@@ -1,3 +1,4 @@
+import type { MsgNode } from "@/i18n/msg";
 /** /api/v1/mainstream/* (read-only CEX public data). */
 export type MainstreamSeries = { lastTs: number | null; count: number; ageMin: number | null; stale: boolean };
 
@@ -278,8 +279,8 @@ export interface StrategyRisk {
   enabled: boolean;
   limits?: Record<string, number>;
   locked?: boolean;
-  lock?: { kind: "24h" | "review"; since: number; until?: number; reason: string } | null;
-  dataBad?: { since: number; reason: string } | null;
+  lock?: { kind: "24h" | "review"; since: number; until?: number; reason: string; reasonMsg?: MsgNode } | null;
+  dataBad?: { since: number; reason: string; reasonMsg?: MsgNode } | null;
   todayFlags?: { stop_new?: boolean; halve?: boolean; flat?: boolean };
   lastMark?: { ts: number; nav: number; dayRet: number; drawdown: number; dataBad: boolean; reason: string } | null;
   events?: StrategyRiskEvent[];
@@ -353,10 +354,12 @@ export interface ShadowH2Summary {
   paramsSha256?: string;
   paramsFrozen?: boolean;
   refused?: string | null;
+  refusedMsg?: MsgNode | null;
   inceptionDay?: string;
   gate?: { forward_days: number; statistic?: string; ci?: string; pass?: string; sample?: string };
   abort?: { max_drawdown: number; carry_liquidation?: boolean; lag_days_pause?: number; lag_days_void?: number };
   aborted?: string | null;
+  abortedMsg?: MsgNode | null;
   progress?: number;
   forwardDays?: number;
   lagDays?: number | null;
@@ -367,6 +370,7 @@ export interface ShadowH2Summary {
   } | null;
   evaluations?: { milestone: number; ts: number; verdict: string }[];
   waiting?: string | null;
+  waitingMsg?: MsgNode | null;
   lastError?: string | null;
 }
 

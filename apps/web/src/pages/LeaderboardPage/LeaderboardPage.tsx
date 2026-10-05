@@ -1,3 +1,4 @@
+import { msgText } from "@/i18n/msg";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -59,7 +60,7 @@ export function LeaderboardPage() {
           </button>
         </div>
       </header>
-      {board?.note && board.auth_enabled ? <p className="td-note">{board.note}</p> : null}
+      {board?.note && board.auth_enabled ? <p className="td-note">{msgText(board.noteMsg, board.note)}</p> : null}
       {error && <div className="pro-alert">{error}</div>}
       <div className="lb-scroll">
         <table className="lb-table">

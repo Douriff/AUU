@@ -989,5 +989,82 @@
     "title": "Diese Seite wurde eingestellt",
     "body": "AUUTRADE ist jetzt eine Quant-Plattform für Major-Coins; die alten Module wurden archiviert.",
     "go": "Zu den Märkten"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "System",
+        "discovery": "Entdeckung",
+        "manual": "Manuell",
+        "entry": "Einstieg",
+        "reject": "Abgelehnt",
+        "shadow": "Schatten",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "Zeitlimit",
+        "weakTape": "Schwacher Markt",
+        "graduation": "Graduierung",
+        "orphan": "Verwaist",
+        "close": "Ausstieg"
+      },
+      "restart": "API neu gestartet",
+      "autoOn": "Auto-Paper an",
+      "autoOff": "Auto-Paper aus",
+      "discOffline": "Entdeckung offline",
+      "discConnecting": "Entdeckung verbindet",
+      "discOnline": "Entdeckung online {{active}}",
+      "newCoin": "Neuer Coin {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} manueller Einstieg {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} Paper-Einstieg {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} manueller Ausstieg netto {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} netto {{bps}} bps",
+      "impact": "Marktwirkung",
+      "gross": "brutto {{v}} bps",
+      "cap": "> Limit {{v}}",
+      "limit": "Limit",
+      "shadow": "Schatten",
+      "vEnter": "virtueller Einstieg",
+      "vSkip": "virtuell übersprungen",
+      "shadowClose": "Schatten {{set}} {{base}} virtueller Ausstieg {{pill}}"
+    },
+    "nogo": {
+      "ledger": "Paper-Journal der Trendstrategie: {{msg}}",
+      "readFailed": "Strategie-Journal nicht lesbar: {{err}}"
+    },
+    "risk": {
+      "drawdown": "Drawdown <= {{pct}} %",
+      "dayLoss": "Tagesverlust <= {{pct}} %",
+      "stale": "1h-Daten veraltet: {{coins}}",
+      "noExchange": "keine Börse",
+      "healthFailed": "Börsen-Healthcheck fehlgeschlagen",
+      "noRefresh": "keine erfolgreiche Marktaktualisierung ({{min}} Min.): {{err}}",
+      "noRefreshStart": "keine erfolgreiche Marktaktualisierung ({{min}} Min. seit Start): {{err}}",
+      "noRefreshNever": "keine erfolgreiche Marktaktualisierung (noch nie in diesem Prozess): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "Parameter-Hash {{h}} ≠ eingefroren {{f}}",
+        "costModel": "wirksames Kostenmodell {{cm}} ≠ eingefrorene Trendkosten {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ eingefroren {{f}}",
+        "registryUnreadable": "Registrierung {{path}} nicht lesbar: {{err}}",
+        "registryMismatch": "Registrierung {{name}}: gespeichert {{stored}}, Parameter-Hash {{h}}, eingefroren {{f}}",
+        "ledgerHash": "im Journal gespeicherter Hash {{h}} ≠ eingefroren {{f}}"
+      },
+      "wait": {
+        "nextDay": "nächster Tag {{day}} noch nicht geschlossen",
+        "settling": "{{day}} vor weniger als {{min}} Min. geschlossen",
+        "behind": "{{n}} Tage im Rückstand (> {{max}}); manuelle Prüfung",
+        "paper": "wartet auf das Paper-Rebalancing vom {{day}}",
+        "data": "wartet auf Daten vom {{day}}: {{why}}",
+        "noPanel": "Panel für {{day}} nicht verfügbar",
+        "noPerp": "Perp-Tageskerze für {{day}} fehlt"
+      },
+      "abortDrawdown": "{{day}}: Drawdown {{dd}} hat die Abbruchgrenze erreicht",
+      "abortCarry": "{{day}}: Carry-Leg liquidiert (Abbruch)"
+    },
+    "board": {
+      "noteLocal": "Im lokalen Einzelnutzermodus gibt es keine Konten. Mit AUU_AUTH=on wird hier nach Paper-G&V gerankt. Die System-Paper-Engine zählt nicht mit.",
+      "noteAuth": "Nur Paper-Konten der Nutzer. Die System-Paper-Engine zählt nicht mit. Keine Einzahlungen, keine Auszahlungen, kein Live-Handel."
+    }
   }
 }
