@@ -89,9 +89,15 @@ class Limits:
 
 
 class OrderError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
+    """`key`/`params` let the web UI show the message in the user's language (message stays zh)."""
+
+    def __init__(self, code: str, message: str, status: int = 400, key: Optional[str] = None, params: Optional[dict] = None):
         super().__init__(message)
         self.code, self.message, self.status = code, message, status
+        self.key, self.params = key, params or {}
+
+    def extra(self) -> Optional[dict]:
+        return {"key": self.key, "params": self.params} if self.key else None
 
 
 # price_fn(symbol) -> (price, ts_ms) or None ; candles_fn(symbol, since_ms) -> [{ts, high, low, open, close}]
@@ -317,14 +323,14 @@ class PaperAccounts:
         lim = self.limits
         sym = "".join(ch for ch in str(body.get("symbol", "")).split("/")[0].upper() if ch.isalnum())
         if sym not in self.symbols():
-            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404)
+            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404, key="unknownSymbol", params={"s": str(body.get('symbol'))[:20]})
         side, otype = body.get("side"), body.get("type", "market")
         if otype in TRIGGER_TYPES:
             return self.place_tpsl(uid, {**body, otype: body.get("trigger_price")}, only=otype)
         if otype == "oco":
             return self.place_tpsl(uid, {**body, "take_profit": body.get("take_profit_price"), "stop_loss": body.get("stop_loss_price")})
         if side not in ("buy", "sell") or otype not in ("market", "limit"):
-            raise OrderError("BAD_ORDER", "side 必须是 buy/sell，type 必须是 market/limit/take_profit/stop_loss")
+            raise OrderError("BAD_ORDER", "side 必须是 buy/sell，type 必须是 market/limit/take_profit/stop_loss", key="badSideType")
         cid = str(body.get("client_order_id") or "").strip()
         if not (8 <= len(cid) <= 64) or not all(ch.isalnum() or ch in "-_" for ch in cid):
             raise OrderError("BAD_CLIENT_ID", "缺少有效的 client_order_id（防重复提交）")
@@ -343,9 +349,9 @@ class PaperAccounts:
                 try:
                     limit_px = float(body.get("limit_price"))
                 except (TypeError, ValueError):
-                    raise OrderError("BAD_PRICE", "限价单需要有效的限价")
+                    raise OrderError("BAD_PRICE", "限价单需要有效的限价", key="limitRequired")
                 if not (limit_px > 0) or abs(limit_px / px - 1) > lim.limit_band:
-                    raise OrderError("BAD_PRICE", "限价偏离现价太多（±50% 以内）")
+                    raise OrderError("BAD_PRICE", "限价偏离现价太多（±50% 以内）", key="limitTooFar")
             ref = limit_px or px
             qty = body.get("qty")
             notional_in = body.get("notional")
@@ -355,17 +361,17 @@ class PaperAccounts:
                 elif notional_in not in (None, ""):
                     qty = float(notional_in) / ref
                 else:
-                    raise OrderError("BAD_QTY", "请填写数量或金额")
+                    raise OrderError("BAD_QTY", "请填写数量或金额", key="qtyRequired")
             except ValueError:
-                raise OrderError("BAD_QTY", "数量或金额格式不正确")
+                raise OrderError("BAD_QTY", "数量或金额格式不正确", key="qtyFormat")
             qty = round(qty, 8)
             if not (qty > 0):
-                raise OrderError("BAD_QTY", "数量必须大于 0")
+                raise OrderError("BAD_QTY", "数量必须大于 0", key="qtyPositive")
             notional = qty * ref
             if notional < lim.min_order_usdt:
-                raise OrderError("ORDER_TOO_SMALL", f"单笔至少 {lim.min_order_usdt:g} USDT")
+                raise OrderError("ORDER_TOO_SMALL", f"单笔至少 {lim.min_order_usdt:g} USDT", key="orderMin", params={"v": f"{lim.min_order_usdt:g}"})
             if notional > lim.max_order_usdt + 1e-9:
-                raise OrderError("ORDER_CAP", f"单笔上限 {lim.max_order_usdt:g} USDT", 422)
+                raise OrderError("ORDER_CAP", f"单笔上限 {lim.max_order_usdt:g} USDT", 422, key="orderMax", params={"v": f"{lim.max_order_usdt:g}"})
             dup = self._db.execute(
                 "SELECT id FROM orders WHERE user_id=? AND symbol=? AND side=? AND type=? AND ABS(qty-?)<1e-9 AND ts>? AND status!='rejected'",
                 (uid, sym, side, otype, qty, now - lim.dup_window_ms),
@@ -388,14 +394,14 @@ class PaperAccounts:
                         "SELECT qty, limit_px FROM orders WHERE user_id=? AND symbol=? AND side='buy' AND status='open'", (uid, sym))
                 )
                 if (pos["qty"] * px) + pending_buy + qty * exec_px > lim.max_position_usdt + 1e-9:
-                    raise OrderError("POSITION_CAP", f"单币持仓上限 {lim.max_position_usdt:g} USDT", 422)
+                    raise OrderError("POSITION_CAP", f"单币持仓上限 {lim.max_position_usdt:g} USDT", 422, key="positionCap", params={"v": f"{lim.max_position_usdt:g}"})
             else:
                 if qty > pos["qty"] - res_qty.get(sym, 0.0) + 1e-12:
-                    raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（只做现货多头，不能做空）", 422)
+                    raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（只做现货多头，不能做空）", 422, key="noShort")
             if otype == "limit":
                 open_n = self._db.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='open'", (uid,)).fetchone()[0]
                 if open_n >= lim.max_open_orders:
-                    raise OrderError("TOO_MANY_OPEN", f"挂单最多 {lim.max_open_orders} 个", 422)
+                    raise OrderError("TOO_MANY_OPEN", f"挂单最多 {lim.max_open_orders} 个", 422, key="tooManyOpen", params={"n": lim.max_open_orders})
             order = {
                 "id": uuid.uuid4().hex[:16], "user_id": uid, "client_id": cid, "ts": now, "symbol": sym, "side": side,
                 "type": otype, "qty": qty, "limit_px": limit_px, "status": "open", "ref_px": px,
@@ -438,9 +444,9 @@ class PaperAccounts:
         lim = self.limits
         sym = "".join(ch for ch in str(body.get("symbol", "")).split("/")[0].upper() if ch.isalnum())
         if sym not in self.symbols():
-            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404)
+            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{body.get('symbol')}", 404, key="unknownSymbol", params={"s": str(body.get('symbol'))[:20]})
         if body.get("side", "sell") != "sell":
-            raise OrderError("BAD_ORDER", "止盈止损只用于卖出已有持仓（只做现货多头）")
+            raise OrderError("BAD_ORDER", "止盈止损只用于卖出已有持仓（只做现货多头）", key="tpslSellOnly")
         cid = str(body.get("client_order_id") or "").strip()
         if not (8 <= len(cid) <= 60) or not all(ch.isalnum() or ch in "-_" for ch in cid):
             raise OrderError("BAD_CLIENT_ID", "缺少有效的 client_order_id（防重复提交）")
@@ -452,11 +458,11 @@ class PaperAccounts:
             try:
                 legs[k] = float(v)
             except (TypeError, ValueError):
-                raise OrderError("BAD_PRICE", "触发价格式不正确")
+                raise OrderError("BAD_PRICE", "触发价格式不正确", key="triggerFormat")
             if not (legs[k] > 0):
-                raise OrderError("BAD_PRICE", "触发价必须大于 0")
+                raise OrderError("BAD_PRICE", "触发价必须大于 0", key="triggerPositive")
         if not legs or (not only and len(legs) != 2):
-            raise OrderError("BAD_PRICE", "请填写触发价" if only else "OCO 需要同时填写止盈价和止损价")
+            raise OrderError("BAD_PRICE", "请填写触发价" if only else "OCO 需要同时填写止盈价和止损价", key="triggerRequired" if only else "ocoBoth")
         now = self.now_ms()
         with self._lock:
             prev = [dict(r) for r in self._db.execute("SELECT * FROM orders WHERE user_id=? AND client_id IN (?,?)",
@@ -471,35 +477,35 @@ class PaperAccounts:
             px, _ = self._price(sym)
             tp, sl = legs.get("take_profit"), legs.get("stop_loss")
             if tp is not None and not (tp > px):
-                raise OrderError("BAD_PRICE", "止盈价必须高于现价（否则会立即触发）")
+                raise OrderError("BAD_PRICE", "止盈价必须高于现价（否则会立即触发）", key="tpAbove")
             if sl is not None and not (sl < px):
-                raise OrderError("BAD_PRICE", "止损价必须低于现价（否则会立即触发）")
+                raise OrderError("BAD_PRICE", "止损价必须低于现价（否则会立即触发）", key="slBelow")
             if any(abs(v / px - 1) > lim.limit_band for v in legs.values()):
-                raise OrderError("BAD_PRICE", "触发价偏离现价太多（±50% 以内）")
+                raise OrderError("BAD_PRICE", "触发价偏离现价太多（±50% 以内）", key="triggerTooFar")
             try:
                 if body.get("qty") not in (None, ""):
                     qty = float(body["qty"])
                 elif body.get("notional") not in (None, ""):
                     qty = float(body["notional"]) / px
                 else:
-                    raise OrderError("BAD_QTY", "请填写数量或金额")
+                    raise OrderError("BAD_QTY", "请填写数量或金额", key="qtyRequired")
             except ValueError:
-                raise OrderError("BAD_QTY", "数量或金额格式不正确")
+                raise OrderError("BAD_QTY", "数量或金额格式不正确", key="qtyFormat")
             qty = round(qty, 8)
             if not (qty > 0):
-                raise OrderError("BAD_QTY", "数量必须大于 0")
+                raise OrderError("BAD_QTY", "数量必须大于 0", key="qtyPositive")
             for v in legs.values():  # same per-order caps as every other order, at each trigger price
                 if qty * v < lim.min_order_usdt:
-                    raise OrderError("ORDER_TOO_SMALL", f"单笔至少 {lim.min_order_usdt:g} USDT")
+                    raise OrderError("ORDER_TOO_SMALL", f"单笔至少 {lim.min_order_usdt:g} USDT", key="orderMin", params={"v": f"{lim.min_order_usdt:g}"})
                 if qty * v > lim.max_order_usdt + 1e-9:
-                    raise OrderError("ORDER_CAP", f"单笔上限 {lim.max_order_usdt:g} USDT", 422)
+                    raise OrderError("ORDER_CAP", f"单笔上限 {lim.max_order_usdt:g} USDT", 422, key="orderMax", params={"v": f"{lim.max_order_usdt:g}"})
             _, res_qty = self._reserved(uid)
             pos = self._position(uid, sym)
             if qty > pos["qty"] - res_qty.get(sym, 0.0) + 1e-12:
-                raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（止盈止损只能保护已有持仓）", 422)
+                raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（止盈止损只能保护已有持仓）", 422, key="tpslHeldOnly")
             open_n = self._db.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='open'", (uid,)).fetchone()[0]
             if open_n + len(legs) > lim.max_open_orders:
-                raise OrderError("TOO_MANY_OPEN", f"挂单最多 {lim.max_open_orders} 个", 422)
+                raise OrderError("TOO_MANY_OPEN", f"挂单最多 {lim.max_open_orders} 个", 422, key="tooManyOpen", params={"n": lim.max_open_orders})
             group = uuid.uuid4().hex[:12] if len(legs) == 2 else None
             ids = []
             for k, v in legs.items():

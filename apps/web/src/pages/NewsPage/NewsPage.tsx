@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { Empty, SkCards } from "@/components/ui/Skeleton";
 import type { NewsItem, NewsPage as NewsData, NewsQuery } from "@/types/mainstream";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { errText } from "@/i18n/errors";
+import { fmtDate, fmtRelative } from "@/i18n/format";
 
+/** 行业动态 (news): headlines/summaries stay in the original language (not translated); UI chrome is i18n. */
 /** 行业动态: crypto headlines from public RSS (title + summary + original link, source named). Login required. */
 
 const POLL_MS = 120_000;
@@ -10,47 +15,45 @@ const PAGE_SIZE = 20;
 const TOP = ["BTC", "ETH", "SOL"];
 type Mode = "all" | "focus" | "important";
 
+/** Beijing time, formatted for the UI language. */
 function bj(ms: number | null | undefined, withDate = true) {
   if (!ms) return "—";
-  const t = new Date(ms + 8 * 3_600_000);
-  const p = (x: number) => String(x).padStart(2, "0");
-  const hm = `${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
-  return withDate ? `${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} ${hm}` : hm;
+  const hm = { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false } as const;
+  return fmtDate(ms, withDate ? { ...hm, month: "2-digit", day: "2-digit" } : hm);
 }
 
 function ago(ms: number, now: number) {
   const m = Math.max(0, Math.round((now - ms) / 60_000));
-  if (m < 1) return "刚刚";
-  if (m < 60) return `${m} 分钟前`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} 小时前`;
+  if (m < 1) return i18n.t("news.justNow");
+  if (m < 60 * 24) return fmtRelative(ms, now);
   return bj(ms);
 }
 
 function Item({ it, now, onCoin }: { it: NewsItem; now: number; onCoin: (c: string) => void }) {
+  const { t } = useTranslation();
   return (
     <article className={`news-item${it.important ? " is-important" : ""}`}>
       <div className="news-meta">
         <span className="news-src">{it.sourceName}</span>
-        <time dateTime={new Date(it.publishedAt).toISOString()} title={`${bj(it.publishedAt)}（北京时间）`}>
+        <time dateTime={new Date(it.publishedAt).toISOString()} title={t("news.bjTime", { time: bj(it.publishedAt) })}>
           {ago(it.publishedAt, now)}
         </time>
-        {it.important ? <span className="news-hot">要闻</span> : null}
+        {it.important ? <span className="news-hot">{t("news.important")}</span> : null}
       </div>
-      <h2 className="news-title">
+      <h2 className="news-title" lang="en" dir="ltr">
         <a href={it.url} target="_blank" rel="noopener noreferrer nofollow">
           {it.title}
         </a>
       </h2>
-      {it.summary ? <p className="news-sum">{it.summary}</p> : null}
+      {it.summary ? <p className="news-sum" lang="en" dir="ltr">{it.summary}</p> : null}
       <div className="news-foot">
         {it.coins.map((c) => (
-          <button key={c} type="button" className={`news-coin${TOP.includes(c) ? " is-top" : ""}`} onClick={() => onCoin(c)} title={`只看 ${c}`}>
+          <button key={c} type="button" className={`news-coin${TOP.includes(c) ? " is-top" : ""}`} onClick={() => onCoin(c)} title={t("news.onlyCoin", { c })}>
             {c}
           </button>
         ))}
         <a className="news-link" href={it.url} target="_blank" rel="noopener noreferrer nofollow">
-          阅读原文 · {it.sourceName} ›
+          {t("news.readOriginal")} · {it.sourceName} ›
         </a>
       </div>
     </article>
@@ -58,6 +61,7 @@ function Item({ it, now, onCoin }: { it: NewsItem; now: number; onCoin: (c: stri
 }
 
 export function NewsPage() {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("all");
   const [coin, setCoin] = useState("");
   const [source, setSource] = useState("");
@@ -80,7 +84,7 @@ export function NewsPage() {
           setErr("");
           setCheckedAt(Date.now());
         })
-        .catch((e: unknown) => setErr(e instanceof Error ? e.message : "无法连接"))
+        .catch((e: unknown) => setErr(errText(e, "news.cantConnect")))
         .finally(() => {
           setLoading(false);
           setNow(Date.now());
@@ -95,7 +99,7 @@ export function NewsPage() {
 
   // auto refresh (only while the tab is visible); the server fetches its feeds every ~12 min
   useEffect(() => {
-    const t = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       if (!document.hidden) void load(true);
     }, POLL_MS);
     const onVis = () => {
@@ -103,7 +107,7 @@ export function NewsPage() {
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
-      window.clearInterval(t);
+      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [load]);
@@ -124,21 +128,21 @@ export function NewsPage() {
     <div className="pro-page news-page" ref={topRef}>
       <header className="pro-head">
         <div>
-          <h1>行业动态</h1>
-          <p>主流币与加密行业新闻、重要公告 · 优先 BTC / ETH / SOL 及策略 19 币</p>
+          <h1>{t("news.title")}</h1>
+          <p>{t("news.sub")}</p>
         </div>
-        <span className="news-upd muted" title="页面每 2 分钟自动刷新；服务器约每 12 分钟抓取一次来源">
-          {checkedAt ? `已更新 ${bj(checkedAt, false)}` : "加载中…"}
+        <span className="news-upd muted" title={t("news.updTitle")}>
+          {checkedAt ? t("news.updated", { time: bj(checkedAt, false) }) : t("common.loadingDots")}
         </span>
       </header>
 
       <div className="news-bar">
-        <div className="seg" role="tablist" aria-label="筛选">
+        <div className="seg" role="tablist" aria-label={t("news.filter")}>
           {(
             [
-              ["all", "全部"],
-              ["focus", "关注币"],
-              ["important", "要闻"],
+              ["all", t("ml.all")],
+              ["focus", t("news.focus")],
+              ["important", t("news.important")],
             ] as [Mode, string][]
           ).map(([m, label]) => (
             <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? "is-active" : ""} onClick={() => pick(() => setMode(m))}>
@@ -146,7 +150,7 @@ export function NewsPage() {
             </button>
           ))}
         </div>
-        <div className="news-chips" aria-label="币种">
+        <div className="news-chips" aria-label={t("ms.col.coin")}>
           {TOP.map((c) => (
             <button key={c} type="button" className={`news-chip${coin === c ? " is-active" : ""}`} onClick={() => pick(() => setCoin(coin === c ? "" : c))}>
               {c}
@@ -154,11 +158,11 @@ export function NewsPage() {
           ))}
           <select
             className="news-select"
-            aria-label="更多币种"
+            aria-label={t("news.moreCoins")}
             value={TOP.includes(coin) ? "" : coin}
             onChange={(e) => pick(() => setCoin(e.target.value))}
           >
-            <option value="">更多币种</option>
+            <option value="">{t("news.moreCoins")}</option>
             {coins
               .filter((c) => !TOP.includes(c))
               .map((c) => (
@@ -167,8 +171,8 @@ export function NewsPage() {
                 </option>
               ))}
           </select>
-          <select className="news-select" aria-label="来源" value={source} onChange={(e) => pick(() => setSource(e.target.value))}>
-            <option value="">全部来源</option>
+          <select className="news-select" aria-label={t("news.source")} value={source} onChange={(e) => pick(() => setSource(e.target.value))}>
+            <option value="">{t("news.allSources")}</option>
             {(data?.sources ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -177,16 +181,16 @@ export function NewsPage() {
           </select>
           {coin || source || mode !== "all" ? (
             <button type="button" className="news-clear" onClick={() => pick(() => (setCoin(""), setSource(""), setMode("all")))}>
-              清除筛选
+              {t("news.clear")}
             </button>
           ) : null}
         </div>
       </div>
 
-      {err ? <div className="pro-alert">行业动态暂时无法加载：{err}（主站其它功能不受影响）</div> : null}
+      {err ? <div className="pro-alert">{t("news.loadFailed", { err })}</div> : null}
       {failing.length ? (
         <div className="pro-alert is-warn">
-          {failing.map((s) => s.name).join("、")} 最近一次抓取失败，显示的是之前保存的内容，下次定时抓取会自动重试。
+          {t("news.failing", { names: failing.map((s) => s.name).join(", ") })}
         </div>
       ) : null}
 
@@ -195,8 +199,8 @@ export function NewsPage() {
       ) : items.length === 0 ? (
         <Empty
           icon="search"
-          title={data && data.total === 0 && !coin && !source && mode === "all" ? "还没有动态" : "没有符合条件的动态"}
-          hint={data && data.total === 0 && !coin && !source && mode === "all" ? "服务器启动后约 1 分钟完成首次抓取，之后每 12 分钟更新。" : "换个筛选条件试试。"}
+          title={data && data.total === 0 && !coin && !source && mode === "all" ? t("news.emptyAll") : t("news.emptyFilter")}
+          hint={data && data.total === 0 && !coin && !source && mode === "all" ? t("news.emptyAllHint") : t("news.emptyFilterHint")}
         />
       ) : (
         <div className="news-list">
@@ -207,33 +211,33 @@ export function NewsPage() {
       )}
 
       {data && data.pages > 1 ? (
-        <nav className="news-pager" aria-label="分页">
+        <nav className="news-pager" aria-label={t("news.pager")}>
           <button type="button" className="btn-ghost" disabled={page <= 1} onClick={() => go(page - 1)}>
-            ‹ 上一页
+            ‹ {t("news.prev")}
           </button>
           <span className="num">
             {page} / {data.pages}
           </span>
           <button type="button" className="btn-ghost" disabled={page >= data.pages} onClick={() => go(page + 1)}>
-            下一页 ›
+            {t("news.next")} ›
           </button>
         </nav>
       ) : null}
 
       <footer className="news-src-foot">
         <div className="news-src-list">
-          来源：
+          {t("news.sources")}
           {(data?.sources ?? []).map((s) => (
             <span key={s.id} className="news-src-st">
               <i className={`st-dot ${s.ok ? "ok" : s.lastAttemptAt ? "bad" : ""}`} aria-hidden="true" />
               <a href={s.home} target="_blank" rel="noopener noreferrer nofollow">
                 {s.name}
               </a>
-              <span className="muted">{s.lastOkAt ? ` 更新 ${bj(s.lastOkAt)}` : " 等待首次抓取"}</span>
+              <span className="muted">{s.lastOkAt ? ` ${t("news.srcUpdated", { time: bj(s.lastOkAt) })}` : ` ${t("news.srcWaiting")}`}</span>
             </span>
           ))}
         </div>
-        <p className="muted">{data?.note ?? "标题与摘要来自各媒体公开 RSS，版权归原作者。"} 新闻为英文原文标题与摘要，时间为北京时间。</p>
+        <p className="muted">{t("news.copyright")} {t("news.originalNote")}</p>
       </footer>
     </div>
   );

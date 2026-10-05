@@ -1,32 +1,28 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { ReconSummary } from "@/types/mainstream";
+import { fmtBjShort, fmtFixed, listJoin } from "@/i18n/format";
+import { errText } from "@/i18n/errors";
 
 /** Cross-source daily close reconciliation (read-only; never switches the strategy's data source). */
 
 const POLL_MS = 300_000;
-const SH = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
-const pct = (v: number | null | undefined, d = 3) => (v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(d)}%`);
+const pct = (v: number | null | undefined, d = 3) => (v == null || !Number.isFinite(v) ? "—" : `${fmtFixed(v, d)}%`);
 const px = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : String(+v.toPrecision(6)));
-const STATUS: Record<string, string> = {
-  ok: "正常",
-  partial: "部分完成",
-  error: "对照源不可用",
-  deviation: "偏差超阈值",
-  missing_primary: "策略源缺数据",
-  missing_secondary: "对照源缺数据",
-};
 
 export function ReconPanel() {
   const [d, setD] = useState<ReconSummary | null>(null);
   const [err, setErr] = useState("");
+  const { t } = useTranslation();
+  const st = (k: string) => t(`recon.st.${k}`, { defaultValue: k });
   useEffect(() => {
     let alive = true;
     const load = () =>
       marketProvider
         .getRecon()
         .then((x) => alive && (setD(x), setErr("")))
-        .catch((e) => alive && setErr(String(e?.message || e)));
+        .catch((e) => alive && setErr(errText(e, "common.loadFailed")));
     load();
     const id = window.setInterval(load, POLL_MS);
     return () => {
@@ -36,34 +32,38 @@ export function ReconPanel() {
   }, []);
   const tone = !d?.lastRunAt ? "" : d.flagged ? "down" : d.status === "ok" ? "up" : "";
   return (
-    <section className="console-card strat recon" aria-label="跨源对账">
+    <section className="console-card strat recon" aria-label={t("recon.aria")}>
       <header className="console-card-bar strat-head">
-        <div className="console-title">跨源对账 · 日线收盘价</div>
-        <span className="console-badge">只读 · 不自动切换数据源</span>
+        <div className="console-title">{t("recon.title")}</div>
+        <span className="console-badge">{t("recon.badge")}</span>
       </header>
       {err ? <p className="console-err">{err}</p> : null}
       <div className="strat-universe">
         <div>
-          每天 UTC 收盘后，用策略数据源（{d?.primary || "—"}）的最近 {d?.days ?? 7} 根日线收盘价对照 {d?.secondary || "另一家交易所"} 公开 K
-          线；偏差超过阈值（默认 {d ? d.thresholdPct : 0.5}%
-          {d && Object.keys(d.thresholdOverrides).length
-            ? `，${Object.entries(d.thresholdOverrides).map(([k, v]) => `${k} ${v}%`).join("、")}`
-            : ""}
-          ）或一边缺数据就告警邮件。
+          {t("recon.desc", {
+            primary: d?.primary || "—",
+            days: d?.days ?? 7,
+            secondary: d?.secondary || t("recon.otherEx"),
+            th: `${d ? d.thresholdPct : 0.5}%`,
+            extra:
+              d && Object.keys(d.thresholdOverrides).length
+                ? t("recon.overrides", { list: listJoin(Object.entries(d.thresholdOverrides).map(([k, v]) => `${k} ${v}%`)) })
+                : "",
+          })}
         </div>
       </div>
       <div className="strat-kpis">
-        <Stat label="上次对账" value={d?.lastRunAt ? SH.format(new Date(d.lastRunAt)) : "尚未运行"} sub={d?.status ? STATUS[d.status] || d.status : ""} />
-        <Stat label="核对 / 异常" value={d ? `${d.checked} / ${d.flagged}` : "—"} tone={tone} />
-        <Stat label="最大偏差" value={pct(d?.maxDevPct)} sub={d?.maxCoin || ""} />
-        <Stat label="对照源错误" value={d?.error ? "有" : "无"} sub={d?.error ? d.error.slice(0, 60) : ""} />
+        <Stat label={t("recon.last")} value={d?.lastRunAt ? fmtBjShort(d.lastRunAt) : t("recon.never")} sub={d?.status ? st(d.status) : ""} />
+        <Stat label={t("recon.checked")} value={d ? `${d.checked} / ${d.flagged}` : "—"} tone={tone} />
+        <Stat label={t("recon.maxDev")} value={pct(d?.maxDevPct)} sub={d?.maxCoin || ""} />
+        <Stat label={t("recon.srcErr")} value={d?.error ? t("common.yes") : t("common.no")} sub={d?.error ? d.error.slice(0, 60) : ""} />
       </div>
       <div className="strat-tables single">
         <div className="recon-scroll">
-          <h4>各币最新一天（{d?.coins[0]?.latestDay || "—"} UTC）</h4>
+          <h4>{t("recon.latest", { day: d?.coins[0]?.latestDay || "—" })}</h4>
           <table className="num">
             <thead>
-              <tr><th>币</th><th>{d?.primary || "策略源"}</th><th>{d?.secondary || "对照源"}</th><th>偏差</th><th>{d?.days ?? 7} 天最大</th><th>状态</th></tr>
+              <tr><th>{t("recon.col.coin")}</th><th>{d?.primary || t("recon.col.primary")}</th><th>{d?.secondary || t("recon.col.secondary")}</th><th>{t("recon.col.dev")}</th><th>{t("recon.col.max", { n: d?.days ?? 7 })}</th><th>{t("recon.col.status")}</th></tr>
             </thead>
             <tbody>
               {d?.coins.length ? (
@@ -74,11 +74,11 @@ export function ReconPanel() {
                     <td>{px(c.c2)}</td>
                     <td>{pct(c.latestDev)}</td>
                     <td className={c.maxDev != null && c.maxDev > c.threshold ? "down" : ""}>{pct(c.maxDev)}</td>
-                    <td className={c.flagged ? "down" : ""}>{c.flagged ? `${STATUS[c.status] || c.status} ×${c.flagged}` : "正常"}</td>
+                    <td className={c.flagged ? "down" : ""}>{c.flagged ? `${st(c.status)} ×${c.flagged}` : st("ok")}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={6} className="muted">还没有对账结果（每天北京时间 08:20 后运行）</td></tr>
+                <tr><td colSpan={6} className="muted">{t("recon.empty")}</td></tr>
               )}
             </tbody>
           </table>
@@ -86,10 +86,10 @@ export function ReconPanel() {
       </div>
       {d?.flags.length ? (
         <div className="strat-universe">
-          <b>异常明细</b>
+          <b>{t("recon.flags")}</b>
           {d.flags.slice(0, 12).map((f) => (
             <div key={`${f.coin}-${f.day}`} className="down">
-              {f.day} {f.coin} · {STATUS[f.status] || f.status} · {px(f.c1)} / {px(f.c2)} · {pct(f.dev)}（阈值 {f.threshold}%）
+              {f.day} {f.coin} · {st(f.status)} · {px(f.c1)} / {px(f.c2)} · {pct(f.dev)} ({t("recon.th", { v: `${f.threshold}%` })})
             </div>
           ))}
         </div>

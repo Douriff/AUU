@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PaperAccount, PaperOrder } from "@/types/mainstream";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { errText } from "@/i18n/errors";
+import { fmtDate, fmtFixed } from "@/i18n/format";
 
 /** Paper-only order ticket + position + orders for one coin. Live trading stays locked server-side. */
 
@@ -10,7 +14,7 @@ type OType = "market" | "limit" | "tpsl";
 const POLL_MS = 5_000;
 
 function n(v: number, d = 2) {
-  return Number.isFinite(v) ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—";
+  return Number.isFinite(v) ? fmtFixed(v, d) : "—";
 }
 function pxDigits(px: number) {
   return px >= 1000 ? 2 : px >= 10 ? 2 : px >= 1 ? 3 : px >= 0.01 ? 5 : Math.min(10, Math.ceil(-Math.log10(px)) + 3); // display only; sub-cent 大盘 coins
@@ -22,20 +26,23 @@ function tone(v: number) {
   return v > 0 ? "up" : v < 0 ? "down" : "";
 }
 function hhmm(ms: number) {
-  const t = new Date(ms);
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
+  return fmtDate(ms, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+/** Accept "1,5" as well as "1.5" (comma-decimal languages). */
+function num(s: string) {
+  return Number(s.trim().replace(",", "."));
 }
 function newId() {
   const c = globalThis.crypto as Crypto | undefined;
   return c?.randomUUID ? c.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-const STATUS: Record<PaperOrder["status"], string> = { open: "挂单中", filled: "已成交", cancelled: "已撤销", rejected: "已拒绝" };
-const TYPE: Record<PaperOrder["type"], string> = { market: "市", limit: "限", take_profit: "止盈", stop_loss: "止损" };
-const REASON: Record<string, string> = { OCO_CANCEL: "另一腿已成交/撤销", TP_TRIGGERED: "止盈触发", SL_TRIGGERED: "止损触发", INSUFFICIENT_POSITION: "持仓不足" };
+// i18n keys: trade.status.*, trade.type.*, trade.reason.*
+const REASONS = new Set(["OCO_CANCEL", "TP_TRIGGERED", "SL_TRIGGERED", "INSUFFICIENT_POSITION"]);
+const typeLabel = (t: string) => (i18n.exists(`trade.type.${t}`) ? i18n.t(`trade.type.${t}`) : t);
 
 export function PaperTradePanel({ symbol, price }: { symbol: string; price: number | null | undefined }) {
+  const { t } = useTranslation();
   const [acct, setAcct] = useState<PaperAccount | null>(null);
   const [loadErr, setLoadErr] = useState("");
   const [side, setSide] = useState<Side>("buy");
@@ -57,13 +64,13 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
         setAcct(a);
         setLoadErr("");
       })
-      .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : "读取失败"));
+      .catch((e: unknown) => setLoadErr(errText(e, "common.loadFailed")));
   }, [symbol]);
 
   useEffect(() => {
     refresh();
-    const t = window.setInterval(() => !document.hidden && refresh(), POLL_MS);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(() => !document.hidden && refresh(), POLL_MS);
+    return () => window.clearInterval(timer);
   }, [refresh]);
 
   useEffect(() => {
@@ -77,12 +84,12 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
   const pos = acct?.positions.find((p) => p.symbol === symbol);
   const cost = acct?.costs[symbol] ?? { takerFee: 0.0005, makerFee: 0.0002, slippage: 0.0003 };
   const last = price ?? pos?.last ?? 0;
-  const lp = Number(limitPx);
+  const lp = num(limitPx);
   const refPx = otype === "limit" && lp > 0 ? lp : last;
-  const amt = Number(amount);
+  const amt = num(amount);
   const qty = amt > 0 && refPx > 0 ? (unit === "coin" ? amt : amt / refPx) : 0;
-  const tp = Number(tpPx);
-  const sl = Number(slPx);
+  const tp = num(tpPx);
+  const sl = num(slPx);
   const tpsl = otype === "tpsl";
   const marketable = otype === "limit" && lp > 0 && last > 0 && (side === "buy" ? lp >= last : lp <= last);
   const asTaker = otype === "market" || marketable || tpsl;
@@ -99,25 +106,25 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
   const check = useMemo(() => {
     if (!acct || !lim) return "";
     if (!(qty > 0)) return "";
-    if (otype === "limit" && !(lp > 0)) return "请填写限价";
+    if (otype === "limit" && !(lp > 0)) return t("trade.chk.limit");
     if (tpsl) {
-      if (!(tp > 0) && !(sl > 0)) return "请填写止盈价或止损价（都填 = OCO，一边成交另一边自动撤销）";
-      if (tp > 0 && !(tp > last)) return "止盈价必须高于现价";
-      if (sl > 0 && !(sl < last)) return "止损价必须低于现价";
+      if (!(tp > 0) && !(sl > 0)) return t("trade.chk.tpslEmpty");
+      if (tp > 0 && !(tp > last)) return t("trade.chk.tpBelow");
+      if (sl > 0 && !(sl < last)) return t("trade.chk.slAbove");
       for (const v of [tp, sl].filter((x) => x > 0)) {
-        if (qty * v < lim.minOrderUsdt) return `单笔至少 ${lim.minOrderUsdt} USDT（按触发价）`;
-        if (qty * v > lim.maxOrderUsdt) return `超过单笔上限 ${n(lim.maxOrderUsdt, 0)} USDT（按触发价）`;
+        if (qty * v < lim.minOrderUsdt) return t("trade.chk.minTrig", { v: n(lim.minOrderUsdt, 0) });
+        if (qty * v > lim.maxOrderUsdt) return t("trade.chk.maxTrig", { v: n(lim.maxOrderUsdt, 0) });
       }
-      if (qty > (pos?.available ?? 0) + 1e-12) return "可卖数量不足（止盈止损只保护已有持仓）";
+      if (qty > (pos?.available ?? 0) + 1e-12) return t("trade.chk.posTpsl");
       return "";
     }
-    if (notional < lim.minOrderUsdt) return `单笔至少 ${lim.minOrderUsdt} USDT`;
-    if (notional > lim.maxOrderUsdt) return `超过单笔上限 ${n(lim.maxOrderUsdt, 0)} USDT`;
-    if (side === "buy" && total > acct.availableCash) return "可用资金不足";
-    if (side === "buy" && (pos?.value ?? 0) + notional > lim.maxPositionUsdt) return `超过单币持仓上限 ${n(lim.maxPositionUsdt, 0)} USDT`;
-    if (side === "sell" && qty > (pos?.available ?? 0) + 1e-12) return "可卖数量不足（不能做空）";
+    if (notional < lim.minOrderUsdt) return t("trade.chk.min", { v: n(lim.minOrderUsdt, 0) });
+    if (notional > lim.maxOrderUsdt) return t("trade.chk.max", { v: n(lim.maxOrderUsdt, 0) });
+    if (side === "buy" && total > acct.availableCash) return t("trade.chk.cash");
+    if (side === "buy" && (pos?.value ?? 0) + notional > lim.maxPositionUsdt) return t("trade.chk.posCap", { v: n(lim.maxPositionUsdt, 0) });
+    if (side === "sell" && qty > (pos?.available ?? 0) + 1e-12) return t("trade.chk.noShort");
     return "";
-  }, [acct, lim, qty, otype, lp, notional, side, total, pos, tpsl, tp, sl, last]);
+  }, [acct, lim, qty, otype, lp, notional, side, total, pos, tpsl, tp, sl, last, t]);
 
   const setPct = (pct: number) => {
     if (!acct || !(refPx > 0)) return;
@@ -159,15 +166,24 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
         ok: true,
         text:
           tpsl
-            ? `${(o.orders?.length ?? 1) > 1 ? "OCO 止盈止损" : o.type === "take_profit" ? "止盈单" : "止损单"}已挂出：卖 ${n(o.qty, 6)} ${symbol}，触发后按市价成交`
+            ? t("trade.msg.tpslPlaced", {
+                kind: (o.orders?.length ?? 1) > 1 ? t("trade.msg.oco") : o.type === "take_profit" ? t("trade.msg.tpOrder") : t("trade.msg.slOrder"),
+                qty: n(o.qty, 6),
+                sym: symbol,
+              })
             : o.status === "filled"
-            ? `纸面${o.side === "buy" ? "买入" : "卖出"} ${n(o.qty, 6)} ${symbol} @ ${n(o.fillPrice ?? 0, pxDigits(o.fillPrice ?? 1))}，手续费 ${n(o.fee, 4)} USDT`
-            : `限价单已挂出：${o.side === "buy" ? "买" : "卖"} ${n(o.qty, 6)} @ ${n(o.limitPrice ?? 0, pxDigits(o.limitPrice ?? 1))}`,
+            ? t(o.side === "buy" ? "trade.msg.filledBuy" : "trade.msg.filledSell", {
+                qty: n(o.qty, 6),
+                sym: symbol,
+                px: n(o.fillPrice ?? 0, pxDigits(o.fillPrice ?? 1)),
+                fee: n(o.fee, 4),
+              })
+            : t(o.side === "buy" ? "trade.msg.limitBuy" : "trade.msg.limitSell", { qty: n(o.qty, 6), px: n(o.limitPrice ?? 0, pxDigits(o.limitPrice ?? 1)) }),
       });
       refresh();
     } catch (e: unknown) {
       pendingId.current = null;
-      setMsg({ ok: false, text: e instanceof Error ? e.message : "下单失败" });
+      setMsg({ ok: false, text: errText(e, "trade.orderFailed") });
     } finally {
       setBusy(false);
     }
@@ -178,15 +194,15 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
       await marketProvider.cancelPaperOrder(id);
       refresh();
     } catch (e: unknown) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : "撤单失败" });
+      setMsg({ ok: false, text: errText(e, "trade.cancelFailed") });
     }
   };
 
   if (!acct) {
     return (
       <aside className="pt">
-        <div className="pt-head"><b>纸面交易</b><span className="pt-lock">实盘未开启</span></div>
-        <p className="muted pt-note">{loadErr || "加载账户…"}</p>
+        <div className="pt-head"><b>{t("trade.title")}</b><span className="pt-lock">{t("trade.liveOff")}</span></div>
+        <p className="muted pt-note">{loadErr || t("trade.loadingAcct")}</p>
       </aside>
     );
   }
@@ -194,56 +210,56 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
   const d = pxDigits(last || 1);
   const openHere = acct.openOrders.filter((o) => o.symbol === symbol);
   return (
-    <aside className="pt" aria-label="纸面交易">
+    <aside className="pt" aria-label={t("trade.title")}>
       <div className="pt-head">
-        <b>纸面交易</b>
+        <b>{t("trade.title")}</b>
         <span className="pt-paper">PAPER</span>
-        <span className="pt-lock" title={`${acct.live.reason}：网页端不能开启实盘`}>🔒 {acct.live.message}</span>
+        <span className="pt-lock" title={t("trade.liveLockTitle", { reason: acct.live.reason })}>🔒 {t("trade.liveOff")}</span>
       </div>
 
       <div className="pt-sides" role="tablist">
-        <button type="button" className={`pt-buy${side === "buy" ? " is-on" : ""}`} onClick={() => { setSide("buy"); if (otype === "tpsl") setOtype("market"); }}>买入</button>
-        <button type="button" className={`pt-sell${side === "sell" ? " is-on" : ""}`} onClick={() => setSide("sell")}>卖出</button>
+        <button type="button" className={`pt-buy${side === "buy" ? " is-on" : ""}`} onClick={() => { setSide("buy"); if (otype === "tpsl") setOtype("market"); }}>{t("trade.buy")}</button>
+        <button type="button" className={`pt-sell${side === "sell" ? " is-on" : ""}`} onClick={() => setSide("sell")}>{t("trade.sell")}</button>
       </div>
       <div className="pt-row pt-types">
-        {(["market", "limit", "tpsl"] as const).map((t) => (
+        {(["market", "limit", "tpsl"] as const).map((ot) => (
           <button
-            key={t}
+            key={ot}
             type="button"
-            className={otype === t ? "is-on" : ""}
+            className={otype === ot ? "is-on" : ""}
             onClick={() => {
-              setOtype(t);
-              if (t === "tpsl") setSide("sell"); // protects an existing long
+              setOtype(ot);
+              if (ot === "tpsl") setSide("sell"); // protects an existing long
             }}
           >
-            {t === "market" ? "市价" : t === "limit" ? "限价" : "止盈止损"}
+            {ot === "market" ? t("trade.market") : ot === "limit" ? t("trade.limit") : t("trade.tpsl")}
           </button>
         ))}
-        <span className="muted pt-last num">现价 {last ? n(last, d) : "—"}</span>
+        <span className="muted pt-last num">{t("trade.last")} {last ? n(last, d) : "—"}</span>
       </div>
       {otype === "limit" ? (
         <label className="pt-field">
-          <span>限价 (USDT)</span>
+          <span>{t("trade.limitPx")}</span>
           <input inputMode="decimal" value={limitPx} onChange={(e) => setLimitPx(e.target.value)} />
         </label>
       ) : null}
       {tpsl ? (
         <>
           <label className="pt-field">
-            <span>止盈触发价 (USDT，高于现价)</span>
-            <input inputMode="decimal" placeholder="不填则只设止损" value={tpPx} onChange={(e) => setTpPx(e.target.value)} />
+            <span>{t("trade.tpPx")}</span>
+            <input inputMode="decimal" placeholder={t("trade.tpPh")} value={tpPx} onChange={(e) => setTpPx(e.target.value)} />
           </label>
           <label className="pt-field">
-            <span>止损触发价 (USDT，低于现价)</span>
-            <input inputMode="decimal" placeholder="不填则只设止盈" value={slPx} onChange={(e) => setSlPx(e.target.value)} />
+            <span>{t("trade.slPx")}</span>
+            <input inputMode="decimal" placeholder={t("trade.slPh")} value={slPx} onChange={(e) => setSlPx(e.target.value)} />
           </label>
         </>
       ) : null}
       <label className="pt-field">
         <span>
-          {unit === "usdt" ? "金额 (USDT)" : `数量 (${symbol})`}
+          {unit === "usdt" ? t("trade.amountUsdt") : t("trade.qtyCoin", { sym: symbol })}
           <button type="button" className="pt-unit" onClick={() => { setUnit(unit === "usdt" ? "coin" : "usdt"); setAmount(""); }}>
-            按{unit === "usdt" ? "数量" : "金额"}
+            {unit === "usdt" ? t("trade.byQty") : t("trade.byAmount")}
           </button>
         </span>
         <input inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -255,72 +271,76 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
       </div>
 
       <dl className="pt-est num">
-        <div><dt>数量</dt><dd>{qty > 0 ? n(qty, 6) : "—"} {symbol}</dd></div>
+        <div><dt>{t("ob.qty")}</dt><dd>{qty > 0 ? n(qty, 6) : "—"} {symbol}</dd></div>
         {tpsl ? (
           <>
-            <div><dt>止盈到账（估）</dt><dd>{qty > 0 && tp > 0 ? `${n(qty * tp * (1 - slipRate) * (1 - feeRate), 2)} USDT` : "—"}</dd></div>
-            <div><dt>止损到账（估）</dt><dd>{qty > 0 && sl > 0 ? `${n(qty * sl * (1 - slipRate) * (1 - feeRate), 2)} USDT` : "—"}</dd></div>
+            <div><dt>{t("trade.tpProceeds")}</dt><dd>{qty > 0 && tp > 0 ? `${n(qty * tp * (1 - slipRate) * (1 - feeRate), 2)} USDT` : "—"}</dd></div>
+            <div><dt>{t("trade.slProceeds")}</dt><dd>{qty > 0 && sl > 0 ? `${n(qty * sl * (1 - slipRate) * (1 - feeRate), 2)} USDT` : "—"}</dd></div>
           </>
         ) : (
-          <div><dt>预估成交价</dt><dd>{qty > 0 ? n(execPx, d) : "—"}</dd></div>
+          <div><dt>{t("trade.estPx")}</dt><dd>{qty > 0 ? n(execPx, d) : "—"}</dd></div>
         )}
-        <div><dt>手续费 {(feeRate * 100).toFixed(3)}%</dt><dd>{qty > 0 ? n(fee, 4) : "—"}</dd></div>
-        <div><dt>滑点 {(slipRate * 1e4).toFixed(0)}bp</dt><dd>{qty > 0 ? n(slip, 4) : "—"}</dd></div>
-        {tpsl ? null : <div className="pt-total"><dt>{side === "buy" ? "合计支出" : "预计到账"}</dt><dd>{qty > 0 ? `${n(total, 2)} USDT` : "—"}</dd></div>}
+        <div><dt>{t("trade.fee")} {fmtFixed(feeRate * 100, 3)}% <small className="muted">{asTaker ? t("trade.taker") : t("trade.maker")}</small></dt><dd>{qty > 0 ? n(fee, 4) : "—"}</dd></div>
+        <div><dt>{t("trade.slippage")} {fmtFixed(slipRate * 1e4, 0)}bp</dt><dd>{qty > 0 ? n(slip, 4) : "—"}</dd></div>
+        {tpsl ? null : <div className="pt-total"><dt>{side === "buy" ? t("trade.totalCost") : t("trade.estProceeds")}</dt><dd>{qty > 0 ? `${n(total, 2)} USDT` : "—"}</dd></div>}
       </dl>
       {check ? <p className="pt-warn">{check}</p> : null}
       <button type="button" className={`pt-submit ${side}`} disabled={busy || !(qty > 0) || !!check} onClick={submit}>
-        {busy ? "提交中…" : tpsl ? `挂出${tp > 0 && sl > 0 ? " OCO " : ""}止盈止损 ${symbol}` : `纸面${side === "buy" ? "买入" : "卖出"} ${symbol}`}
+        {busy
+          ? t("common.submitting")
+          : tpsl
+          ? t(tp > 0 && sl > 0 ? "trade.submitOco" : "trade.submitTpsl", { sym: symbol })
+          : t(side === "buy" ? "trade.submitBuy" : "trade.submitSell", { sym: symbol })}
       </button>
       {msg ? <p className={msg.ok ? "pt-ok" : "pt-warn"}>{msg.text}</p> : null}
       {tpsl ? (
         <p className="muted pt-note">
-          触发后按市价卖出（含滑点与吃单费）；同时填两个价 = OCO，一边成交另一边自动撤销；同一分钟两边都触及时按止损处理。只用于手动纸面交易，自动策略不使用。
+          {t("trade.tpslNote")}
         </p>
       ) : null}
       <p className="muted pt-note">
-        可用 {n(acct.availableCash)} USDT · 单笔≤{n(acct.limits.maxOrderUsdt, 0)} · 单币≤{n(acct.limits.maxPositionUsdt, 0)} · 只做现货多头
+        {t("trade.limitsNote", { cash: n(acct.availableCash), order: n(acct.limits.maxOrderUsdt, 0), pos: n(acct.limits.maxPositionUsdt, 0) })}
       </p>
 
       <div className="pt-box">
-        <div className="pt-box-head"><b>{symbol} 持仓</b></div>
+        <div className="pt-box-head"><b>{t("trade.position", { sym: symbol })}</b></div>
         {pos && pos.qty > 0 ? (
           <dl className="pt-est num">
-            <div><dt>数量</dt><dd>{n(pos.qty, 6)}</dd></div>
-            <div><dt>均价 / 现价</dt><dd>{n(pos.avgPrice, d)} / {n(pos.last, d)}</dd></div>
-            <div><dt>市值</dt><dd>{n(pos.value)} USDT</dd></div>
-            <div><dt>未实现盈亏</dt><dd className={tone(pos.unrealized)}>{signed(pos.unrealized)} ({signed((pos.last / pos.avgPrice - 1) * 100)}%)</dd></div>
-            <div><dt>已实现（含费）</dt><dd className={tone(pos.realized)}>{signed(pos.realized)}</dd></div>
+            <div><dt>{t("ob.qty")}</dt><dd>{n(pos.qty, 6)}</dd></div>
+            <div><dt>{t("trade.avgLast")}</dt><dd>{n(pos.avgPrice, d)} / {n(pos.last, d)}</dd></div>
+            <div><dt>{t("trade.value")}</dt><dd>{n(pos.value)} USDT</dd></div>
+            <div><dt>{t("trade.upnl")}</dt><dd className={tone(pos.unrealized)}>{signed(pos.unrealized)} ({signed((pos.last / pos.avgPrice - 1) * 100)}%)</dd></div>
+            <div><dt>{t("trade.realized")}</dt><dd className={tone(pos.realized)}>{signed(pos.realized)}</dd></div>
           </dl>
         ) : (
-          <p className="muted pt-note">无持仓{pos && pos.realized ? ` · 已实现 ${signed(pos.realized)} USDT` : ""}</p>
+          <p className="muted pt-note">{t("trade.noPos")}{pos && pos.realized ? ` · ${t("trade.realizedShort", { v: signed(pos.realized) })}` : ""}</p>
         )}
         <dl className="pt-est num pt-acct">
-          <div><dt>账户权益</dt><dd>{n(acct.equity)} USDT</dd></div>
-          <div><dt>总盈亏</dt><dd className={tone(acct.pnl)}>{signed(acct.pnl)} ({signed(acct.pnlPct * 100)}%)</dd></div>
+          <div><dt>{t("trade.equity")}</dt><dd>{n(acct.equity)} USDT</dd></div>
+          <div><dt>{t("trade.totalPnl")}</dt><dd className={tone(acct.pnl)}>{signed(acct.pnl)} ({signed(acct.pnlPct * 100)}%)</dd></div>
         </dl>
       </div>
 
       <div className="pt-box">
         <div className="pt-box-head pt-tabs">
-          <button type="button" className={tab === "open" ? "is-on" : ""} onClick={() => setTab("open")}>挂单 {openHere.length}</button>
-          <button type="button" className={tab === "history" ? "is-on" : ""} onClick={() => setTab("history")}>订单记录</button>
+          <button type="button" className={tab === "open" ? "is-on" : ""} onClick={() => setTab("open")}>{t("trade.openOrders")} {openHere.length}</button>
+          <button type="button" className={tab === "history" ? "is-on" : ""} onClick={() => setTab("history")}>{t("trade.history")}</button>
         </div>
         <ul className="pt-orders num">
           {(tab === "open" ? openHere : acct.orders).slice(0, 20).map((o) => (
             <li key={o.id}>
-              <span className={o.side === "buy" ? "up" : "down"}>{o.side === "buy" ? "买" : "卖"}·{TYPE[o.type] ?? o.type}{o.ocoGroup ? "·OCO" : ""}</span>
+              <span className={o.side === "buy" ? "up" : "down"}>{o.side === "buy" ? t("chart.buy") : t("chart.sell")}·{typeLabel(o.type)}{o.ocoGroup ? "·OCO" : ""}</span>
               <span>
-                {n(o.qty, 6)} @ {o.status !== "filled" && o.triggerPrice ? `触发 ${n(o.triggerPrice, pxDigits(o.triggerPrice))}` : n(o.fillPrice ?? o.limitPrice ?? 0, pxDigits(o.fillPrice ?? o.limitPrice ?? 1))}
+                {n(o.qty, 6)} @ {o.status !== "filled" && o.triggerPrice ? t("trade.trigger", { px: n(o.triggerPrice, pxDigits(o.triggerPrice)) }) : n(o.fillPrice ?? o.limitPrice ?? 0, pxDigits(o.fillPrice ?? o.limitPrice ?? 1))}
               </span>
               <span className="muted">
-                {STATUS[o.status]}{o.status === "filled" ? ` · 费 ${n(o.fee, 3)}` : ""}{o.reason && REASON[o.reason] && o.status !== "open" ? ` · ${REASON[o.reason]}` : ""}
+                {t(`trade.status.${o.status}`)}{o.status === "filled" ? ` · ${t("trade.feeShort", { v: n(o.fee, 3) })}` : ""}{o.reason && REASONS.has(o.reason) && o.status !== "open" ? ` · ${t(`trade.reason.${o.reason}`)}` : ""}
               </span>
               <span className="muted">{hhmm(o.fillTs ?? o.ts)}</span>
-              {o.status === "open" ? <button type="button" onClick={() => cancel(o.id)}>撤单</button> : null}
+              {o.status === "open" ? <button type="button" onClick={() => cancel(o.id)}>{t("trade.cancel")}</button> : null}
             </li>
           ))}
-          {(tab === "open" ? openHere : acct.orders).length === 0 ? <li className="muted">暂无</li> : null}
+          {(tab === "open" ? openHere : acct.orders).length === 0 ? <li className="muted">{t("common.none")}</li> : null}
         </ul>
       </div>
     </aside>

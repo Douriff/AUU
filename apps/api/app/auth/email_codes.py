@@ -22,6 +22,8 @@ from email.utils import formataddr, formatdate, make_msgid
 from hashlib import sha256
 from typing import Any, Callable, Optional
 
+from app.auth.email_i18n import RTL as EMAIL_RTL, TEXTS as EMAIL_TEXTS, email_lang
+
 _LOG = logging.getLogger("auu.email")
 _EMAIL = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+$")
 PURPOSES = ("signup", "reset")
@@ -196,44 +198,35 @@ def _digest(purpose: str, email: str, code: str, salt: str) -> str:
     return hmac.new(key, f"{purpose}:{email}:{salt}:{code}".encode("utf-8"), sha256).hexdigest()
 
 
-_TEMPLATES = {
-    "signup": {
-        "subject": "AUUTRADE 注册验证码：{code}",
-        "action": "您正在注册 AUUTRADE 账号，本次验证码为：",
-        "ignore": "如果这不是您本人的操作，请忽略本邮件，您的邮箱不会被绑定。",
-    },
-    "reset": {
-        "subject": "AUUTRADE 重置密码验证码：{code}",
-        "action": "您正在重置 AUUTRADE 账号的登录密码，本次验证码为：",
-        "ignore": "如果这不是您本人的操作，请忽略本邮件，并建议尽快修改邮箱密码。",
-    },
-}
-
-
 def _ttl_minutes() -> int:
     return max(1, int(CODE_TTL // 60))
 
 
-def render_email(purpose: str, code: str) -> tuple[str, str, str]:
-    """Return (subject, plain text, HTML) for a verification code email.
+def render_email(purpose: str, code: str, lang: str = "zh-CN") -> tuple[str, str, str]:
+    """Return (subject, plain text, HTML) for a verification code email in `lang` (default zh-CN).
 
     The HTML uses inline styles only: no external images, fonts, links or tracking pixels."""
-    tpl = _TEMPLATES["reset" if purpose == "reset" else "signup"]
-    subject = tpl["subject"].format(code=code)
-    validity = f"验证码 {_ttl_minutes()} 分钟内有效，请勿泄露给任何人。{BRAND} 工作人员不会以任何理由向您索要验证码。"
+    lang = email_lang(lang)
+    T = {k: v.replace("{brand}", BRAND) for k, v in EMAIL_TEXTS[lang].items()}
+    kind = "reset" if purpose == "reset" else "signup"
+    tpl = {"action": T[f"{kind}_action"], "ignore": T[f"{kind}_ignore"]}
+    subject = T[f"{kind}_subject"].format(code=code)
+    validity = T["validity"].format(m=_ttl_minutes())
     text = (
-        "您好，\n\n"
+        f"{T['hello']}\n\n"
         f"{tpl['action']}\n\n"
         f"{code}\n\n"
         f"{validity}\n"
         f"{tpl['ignore']}\n\n"
-        f"—— {BRAND} 团队\n\n"
-        "此邮件由系统自动发送，请勿直接回复。\n"
+        f"{T['team']}\n\n"
+        f"{T['auto']}\n"
     )
+    html_lang = lang
+    direction = "rtl" if lang in EMAIL_RTL else "ltr"
     esc = html.escape
     font = "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif"
     html_body = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{html_lang}" dir="{direction}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 12px;font-family:{font};">
@@ -243,17 +236,17 @@ def render_email(purpose: str, code: str) -> tuple[str, str, str]:
 <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:4px;">{BRAND}</span>
 </td></tr>
 <tr><td style="padding:32px;color:#111827;font-size:15px;line-height:1.7;">
-<p style="margin:0 0 12px;">您好，</p>
+<p style="margin:0 0 12px;">{esc(T['hello'])}</p>
 <p style="margin:0 0 20px;">{esc(tpl['action'])}</p>
 <div style="margin:0 0 24px;padding:18px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-align:center;">
-<span style="font-size:34px;font-weight:700;letter-spacing:10px;color:#0f172a;font-family:Consolas,'SFMono-Regular',Menlo,monospace;">{esc(code)}</span>
+<span dir="ltr" style="font-size:34px;font-weight:700;letter-spacing:10px;color:#0f172a;font-family:Consolas,'SFMono-Regular',Menlo,monospace;">{esc(code)}</span>
 </div>
 <p style="margin:0 0 12px;color:#374151;">{esc(validity)}</p>
 <p style="margin:0 0 24px;color:#374151;">{esc(tpl['ignore'])}</p>
-<p style="margin:0;color:#111827;">—— {BRAND} 团队</p>
+<p style="margin:0;color:#111827;">{esc(T['team'])}</p>
 </td></tr>
 <tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.6;">
-此邮件由系统自动发送，请勿直接回复。<br>&copy; {BRAND}
+{esc(T['auto'])}<br>&copy; {BRAND}
 </td></tr>
 </table>
 </td></tr>
@@ -264,7 +257,7 @@ def render_email(purpose: str, code: str) -> tuple[str, str, str]:
     return subject, text, html_body
 
 
-def send_code(purpose: str, email: str, ip: str, *, deliver: bool = True) -> None:
+def send_code(purpose: str, email: str, ip: str, *, deliver: bool = True, lang: str = "zh-CN") -> None:
     """Create and email a 6-digit code. deliver=False applies the same throttles without sending
     (used for reset requests to unknown addresses so responses do not reveal registration)."""
     if purpose not in PURPOSES:
@@ -296,7 +289,7 @@ def send_code(purpose: str, email: str, ip: str, *, deliver: bool = True) -> Non
     if not deliver:
         _LOG.info("email code (%s) skipped for %s", purpose, mask_email(email))
         return
-    subject, body, html_body = render_email(purpose, code)
+    subject, body, html_body = render_email(purpose, code, lang)
     try:
         if _SENDER is not None:
             _SENDER(email, subject, body)

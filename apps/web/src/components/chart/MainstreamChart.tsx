@@ -17,16 +17,21 @@ import {
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MainstreamCandle, MainstreamTf, StrategyOverlay } from "@/types/mainstream";
 import { CHART_CHROME, chartColors, onColorPref } from "@/theme/colorPref";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { errText } from "@/i18n/errors";
+import { fmtDate, fmtFixed, intlLocale } from "@/i18n/format";
 
 /** lightweight-charts (Apache-2.0) candlestick + volume for the mainstream page. */
 
+/** label = i18n key */
 export const CHART_TFS: { id: MainstreamTf; label: string }[] = [
-  { id: "1m", label: "1分" },
-  { id: "5m", label: "5分" },
-  { id: "15m", label: "15分" },
-  { id: "1h", label: "1时" },
-  { id: "4h", label: "4时" },
-  { id: "1d", label: "日" },
+  { id: "1m", label: "chart.tf.1m" },
+  { id: "5m", label: "chart.tf.5m" },
+  { id: "15m", label: "chart.tf.15m" },
+  { id: "1h", label: "chart.tf.1h" },
+  { id: "4h", label: "chart.tf.4h" },
+  { id: "1d", label: "chart.tf.1d" },
 ];
 
 const INTRADAY = new Set<MainstreamTf>(["1m", "5m", "15m"]);
@@ -45,21 +50,19 @@ function priceFormat(px: number) {
 }
 
 function fmt(n: number, d: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  return fmtFixed(n, d);
 }
 
 function fmtVol(v: number) {
-  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-  if (v >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
-  return v.toFixed(2);
+  if (v >= 1e9) return `${fmtFixed(v / 1e9, 2)}B`;
+  if (v >= 1e6) return `${fmtFixed(v / 1e6, 2)}M`;
+  if (v >= 1e3) return `${fmtFixed(v / 1e3, 2)}K`;
+  return fmtFixed(v, 2);
 }
 
 function fmtTs(ms: number, tf: MainstreamTf) {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  const day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  return tf === "1d" ? day : `${day} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const day = { year: "numeric", month: "2-digit", day: "2-digit" } as const;
+  return tf === "1d" ? fmtDate(ms, day) : fmtDate(ms, { ...day, hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 const bar = (c: MainstreamCandle): CandlestickData => ({ time: toTime(c.ts), open: c.open, high: c.high, low: c.low, close: c.close });
@@ -76,9 +79,11 @@ type Legend = { c: MainstreamCandle; prev?: MainstreamCandle };
 type OvRow = StrategyOverlay["series"][number];
 
 const MOM_COLORS = ["#f2c94c", "#bb86fc", "#4fc3f7"];
-const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
+const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`);
 
 export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { symbol: string; tf: MainstreamTf; venue?: string | null; overlay?: boolean }) {
+  const { t, i18n: i18nInst } = useTranslation();
+  const lang = i18nInst.language;
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -131,6 +136,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       kineticScroll: { touch: true, mouse: false },
+      localization: { locale: intlLocale() },
     });
     const candles = chart.addCandlestickSeries(candleColors());
     const volume = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
@@ -165,6 +171,11 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     };
   }, [lastLegend]);
 
+  // Axis / crosshair labels follow the interface language.
+  useEffect(() => {
+    chartRef.current?.applyOptions({ localization: { locale: intlLocale() } });
+  }, [lang]);
+
   // Load latest bars whenever the symbol/timeframe changes.
   useEffect(() => {
     const my = ++gen.current;
@@ -181,9 +192,9 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         const n = d.candles.length;
         chartRef.current?.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 140), to: n + 6 });
         setLegend(lastLegend());
-        setState({ loading: false, err: d.candles.length ? "" : d.fetchError || "暂无K线数据", limited: !!d.limited, retention: d.retentionDays, count: n });
+        setState({ loading: false, err: d.candles.length ? "" : (i18n.language === "zh-CN" && d.fetchError) || i18n.t("chart.noData"), limited: !!d.limited, retention: d.retentionDays, count: n });
       })
-      .catch((e: unknown) => gen.current === my && setState({ loading: false, err: e instanceof Error ? e.message : "读取失败", limited: false, count: 0 }));
+      .catch((e: unknown) => gen.current === my && setState({ loading: false, err: errText(e, "common.loadFailed"), limited: false, count: 0 }));
   }, [symbol, tf, venue, setAll, lastLegend]);
 
   // Scroll/zoom near the left edge pages older history in (bounded by the server's window).
@@ -256,8 +267,8 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     let live = true;
     marketProvider
       .getStrategyOverlay(symbol)
-      .then((d) => live && (setOv(d), setOvErr(d.inUniverse ? "" : "该币不在策略池内")))
-      .catch((e: unknown) => live && (setOv(null), setOvErr(e instanceof Error ? e.message : "读取失败")));
+      .then((d) => live && (setOv(d), setOvErr(d.inUniverse ? "" : i18n.t("chart.notInPool"))))
+      .catch((e: unknown) => live && (setOv(null), setOvErr(errText(e, "common.loadFailed"))));
     return () => {
       live = false;
     };
@@ -286,7 +297,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         lastValueVisible: false,
         priceLineVisible: false,
         priceFormat: { type: "percent", precision: 1, minMove: 0.1 },
-        title: `${L}日`,
+        title: i18n.t("chart.nDay", { n: L }),
       });
       s.setData(
         ov.series.filter((r) => r.mom[k] != null).map((r): LineData => ({ time: toTime(r.ts), value: (r.mom[k] as number) * 100 })),
@@ -301,10 +312,10 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
       position: f.side === "buy" ? "belowBar" : "aboveBar",
       color: f.side === "buy" ? col.up : col.down,
       shape: f.side === "buy" ? "arrowUp" : "arrowDown",
-      text: `${f.side === "buy" ? "买" : "卖"}→${(f.wTo * 100).toFixed(1)}%`,
+      text: `${f.side === "buy" ? i18n.t("chart.buy") : i18n.t("chart.sell")}→${fmtFixed(f.wTo * 100, 1)}%`,
     }));
     candles.setMarkers(markers);
-  }, [ov, showSig, colorRev]);
+  }, [ov, showSig, colorRev, lang]);
 
   const lg = legend;
   const d = lg ? priceFormat(lg.c.close).precision : 2;
@@ -317,15 +328,15 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         {lg ? (
           <>
             <span className="muted">{fmtTs(lg.c.ts, tf)}</span>
-            <span>开 <b className={tone}>{fmt(lg.c.open, d)}</b></span>
-            <span>高 <b className={tone}>{fmt(lg.c.high, d)}</b></span>
-            <span>低 <b className={tone}>{fmt(lg.c.low, d)}</b></span>
-            <span>收 <b className={tone}>{fmt(lg.c.close, d)}</b></span>
-            <span className={tone}>{chg >= 0 ? "+" : ""}{(chg * 100).toFixed(2)}%</span>
-            <span>量 <b>{fmtVol(lg.c.volume)}</b></span>
+            <span>{t("chart.o")} <b className={tone}>{fmt(lg.c.open, d)}</b></span>
+            <span>{t("chart.h")} <b className={tone}>{fmt(lg.c.high, d)}</b></span>
+            <span>{t("chart.l")} <b className={tone}>{fmt(lg.c.low, d)}</b></span>
+            <span>{t("chart.c")} <b className={tone}>{fmt(lg.c.close, d)}</b></span>
+            <span className={tone}>{chg >= 0 ? "+" : ""}{fmtFixed(chg * 100, 2)}%</span>
+            <span>{t("chart.v")} <b>{fmtVol(lg.c.volume)}</b></span>
           </>
         ) : (
-          <span className="muted">{state.loading ? "加载中…" : state.err || "—"}</span>
+          <span className="muted">{state.loading ? t("common.loadingDots") : state.err || "—"}</span>
         )}
       </div>
       {showSig ? (
@@ -335,7 +346,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
               <span className="muted">{ov.strategy}</span>
               {ov.lookbacks.map((L, k) => (
                 <span key={L} style={{ color: MOM_COLORS[k % MOM_COLORS.length] }}>
-                  {L}日 {pctTxt((ovRow ?? ov.series[ov.series.length - 1])?.mom[k])}
+                  {t("chart.nDay", { n: L })} {pctTxt((ovRow ?? ov.series[ov.series.length - 1])?.mom[k])}
                 </span>
               ))}
               {(() => {
@@ -344,47 +355,47 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
                 const differs = rec != null && Math.abs(rec - row.target) > 1e-9;
                 return (
                   <>
-                    <span>信号 <b>{row?.signal?.toFixed(2) ?? "—"}</b></span>
+                    <span>{t("chart.signal")} <b>{row?.signal != null ? fmtFixed(row.signal, 2) : "—"}</b></span>
                     <span>
-                      目标仓位 <b>{pctTxt(rec ?? row?.target, 2)}</b>
-                      {rec != null ? <span className="muted">（记录）</span> : null}
-                      {differs ? <span className="bad"> · 按现数据重算 {pctTxt(row.target, 2)}</span> : null}
+                      {t("chart.target")} <b>{pctTxt(rec ?? row?.target, 2)}</b>
+                      {rec != null ? <span className="muted">{t("chart.recorded")}</span> : null}
+                      {differs ? <span className="bad"> · {t("chart.recalc", { v: pctTxt(row.target, 2) })}</span> : null}
                     </span>
                   </>
                 );
               })()}
-              <span className="muted">纸面调仓 {ov.fills.length} 次</span>
+              <span className="muted">{t("chart.rebalances", { n: ov.fills.length })}</span>
               {ov.revised.length ? (
-                <span className="bad" title="这些天的历史数据在调仓之后有变化（补数据/新增币种），按现数据重算的目标仓位与当时记录的不同">
-                  {ov.revised.length} 天重算≠记录
+                <span className="bad" title={t("chart.revisedTitle")}>
+                  {t("chart.revised", { n: ov.revised.length })}
                 </span>
               ) : null}
             </>
           ) : (
-            <span className="muted">{ovErr || "加载策略信号…"}</span>
+            <span className="muted">{ovErr || t("chart.loadingSig")}</span>
           )}
         </div>
       ) : null}
       <div className="msc-stage">
         <div ref={hostRef} className="msc-host" />
         {state.loading ? (
-          <div className="msc-overlay msc-skel" aria-label="K线加载中">
+          <div className="msc-overlay msc-skel" aria-label={t("chart.loadingAria")}>
             {Array.from({ length: 28 }, (_, i) => (
               <i key={i} style={{ height: `${22 + ((i * 37) % 50)}%`, marginTop: `${(i * 23) % 30}%` }} />
             ))}
           </div>
         ) : !state.count && state.err ? (
           <div className="msc-overlay msc-empty">
-            <b>暂无 K 线</b>
+            <b>{t("chart.empty")}</b>
             <span>{state.err}</span>
           </div>
         ) : null}
       </div>
       <div className="msc-foot muted">
         <span>
-          {state.count} 根
-          {INTRADAY.has(tf) ? ` · ${tf} 按需拉取，仅保留近 ${state.retention ?? 7} 天` : ""}
-          {state.limited ? " · 已到最早可用数据" : ""}
+          {t("chart.bars", { n: state.count })}
+          {INTRADAY.has(tf) ? ` · ${t("chart.intraday", { tf, days: state.retention ?? 7 })}` : ""}
+          {state.limited ? ` · ${t("chart.earliest")}` : ""}
         </span>
         <span className="msc-actions">
           {tf === "1d" && overlay ? (
@@ -392,14 +403,14 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
               type="button"
               className={sigOn ? "is-on" : ""}
               aria-pressed={sigOn}
-              title="叠加 M3 策略：纸面调仓买卖点（箭头 + 目标仓位）和 20/60/120 日回看收益线（只读）"
+              title={t("chart.sigTitle")}
               onClick={() => setSigOn((v) => !v)}
             >
-              策略信号
+              {t("chart.sig")}
             </button>
           ) : null}
-          <button type="button" onClick={() => chartRef.current?.timeScale().fitContent()}>全部</button>
-          <button type="button" onClick={() => chartRef.current?.timeScale().scrollToRealTime()}>最新</button>
+          <button type="button" onClick={() => chartRef.current?.timeScale().fitContent()}>{t("chart.all")}</button>
+          <button type="button" onClick={() => chartRef.current?.timeScale().scrollToRealTime()}>{t("chart.latest")}</button>
         </span>
       </div>
     </div>

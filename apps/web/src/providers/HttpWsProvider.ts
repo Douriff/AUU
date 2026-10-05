@@ -115,6 +115,23 @@ function wsUrl(): string {
   return `${proto}//${location.host}/api/v1/ws`;
 }
 
+/** API error with the server's stable code (translated on the client via i18n/errors.ts). */
+export class ApiError extends Error {
+  code: string;
+  key?: string;
+  params?: Record<string, unknown>;
+  retryAfter?: number;
+  status: number;
+  constructor(err: { code?: string; message?: string; key?: string; params?: Record<string, unknown>; retry_after?: number } | undefined, status: number) {
+    super(err?.message ?? "request failed");
+    this.code = err?.code ?? "REQUEST_FAILED";
+    this.key = err?.key;
+    this.params = err?.params;
+    this.retryAfter = typeof err?.retry_after === "number" ? err.retry_after : undefined;
+    this.status = status;
+  }
+}
+
 /** Fired when the API answers 401 (session missing/expired) so the shell can show the login page. */
 export const AUTH_REQUIRED_EVENT = "auu:auth-required";
 
@@ -129,7 +146,7 @@ async function getJson<T>(path: string): Promise<T> {
   noteAuth(res);
   const body = (await res.json()) as Envelope<T>;
   if (!body.ok) {
-    throw new Error(body.error?.message ?? "request failed");
+    throw new ApiError(body.error, res.status);
   }
   return body.data;
 }
@@ -144,7 +161,7 @@ async function sendJson<T>(path: string, body: unknown, method: "POST" | "PUT"):
   noteAuth(res);
   const env = (await res.json()) as Envelope<T>;
   if (!env.ok) {
-    throw new Error(env.error?.message ?? "request failed");
+    throw new ApiError(env.error, res.status);
   }
   return env.data;
 }
@@ -162,7 +179,7 @@ async function delJson<T>(path: string): Promise<T> {
   noteAuth(res);
   const env = (await res.json()) as Envelope<T>;
   if (!env.ok) {
-    throw new Error(env.error?.message ?? "request failed");
+    throw new ApiError(env.error, res.status);
   }
   return env.data;
 }
@@ -442,6 +459,11 @@ export class HttpWsProvider {
     return getJson("/api/v1/auth/me");
   }
 
+  /** Save the interface language on the account (any logged-in user). */
+  setLocale(locale: string): Promise<{ locale: string; locale_ts: number }> {
+    return putJson("/api/v1/auth/locale", { locale });
+  }
+
   registerAccount(body: {
     name: string;
     password: string;
@@ -455,7 +477,7 @@ export class HttpWsProvider {
     return postJson("/api/v1/auth/register", body);
   }
 
-  sendEmailCode(body: { email: string; purpose: "signup" | "reset" }): Promise<{
+  sendEmailCode(body: { email: string; purpose: "signup" | "reset"; lang?: string }): Promise<{
     sent: boolean;
     email: string;
     ttl_sec: number;

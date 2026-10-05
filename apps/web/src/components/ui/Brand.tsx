@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 /** AUUTRADE brand: geometric "A" mark (two rising strokes + amber bar) + wordmark. */
 export function LogoMark({ size = 22 }: { size?: number }) {
   return (
@@ -24,15 +26,16 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 
 /** The one site-wide mode badge: paper trading, live trading locked. */
 export function ModeBadge({ liveOff = true }: { liveOff?: boolean }) {
+  const { t } = useTranslation();
   return liveOff ? (
-    <span className="mode-pill" title="所有成交均为纸面模拟；实盘交易已锁定，不会动用真实资金">
+    <span className="mode-pill" title={t("mode.paperTitle")}>
       <i aria-hidden="true" />
-      纸面 · 实盘锁定
+      {t("mode.paper")}
     </span>
   ) : (
-    <span className="mode-pill is-warn" title="实盘锁未处于锁定状态，请检查配置">
+    <span className="mode-pill is-warn" title={t("mode.liveCheckTitle")}>
       <i aria-hidden="true" />
-      实盘检查
+      {t("mode.liveCheck")}
     </span>
   );
 }
