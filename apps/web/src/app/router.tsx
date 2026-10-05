@@ -21,6 +21,7 @@ import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
 import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
 import { StatusPage } from "@/pages/StatusPage/StatusPage";
+import { NewsPage } from "@/pages/NewsPage/NewsPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { path: "trade", element: <LegacyOnly><TradingPage /></LegacyOnly> },
       { path: "trade/:mint", element: <LegacyOnly><TradingPage /></LegacyOnly> },
       { path: "majors", element: <MajorsPage /> },
+      { path: "news", element: <NewsPage /> },
       { path: "positions", element: <LegacyOnly><PositionsPage /></LegacyOnly> },
       { path: "leaderboard", element: <LeaderboardPage /> },
       { path: "login", element: <LoginPage /> },

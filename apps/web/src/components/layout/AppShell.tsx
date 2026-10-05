@@ -38,12 +38,14 @@ const mainstreamNav: NavItem[] = [
   { to: "/console", label: "策略", icon: "term", match: (p) => p.startsWith("/console") },
   { to: "/performance", label: "绩效", icon: "rank", match: (p) => p.startsWith("/performance") },
   { to: "/majors", label: "大盘", icon: "globe", match: (p) => p.startsWith("/majors") },
+  { to: "/news", label: "动态", icon: "news", match: (p) => p.startsWith("/news") },
 ];
 const mobileTabs: NavItem[] = [
   mainstreamNav[0],
   mainstreamNav[1],
   mainstreamNav[2],
   mainstreamNav[3],
+  mainstreamNav[5],
   { to: "/settings", label: "我的", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") },
 ];
 
@@ -150,6 +152,13 @@ function Icon({ name }: { name: string }) {
         <path d="M12 20V4" />
         <path d="M17 20v-6" />
         <path d="M5 20h14" />
+      </>
+    ),
+    news: (
+      <>
+        <path d="M5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v12.5a1.5 1.5 0 0 0 3 0V9h-3" />
+        <path d="M5 4.5v14A1.5 1.5 0 0 0 6.5 20h14" />
+        <path d="M8 8.5h6M8 12h6M8 15.5h4" />
       </>
     ),
   };
