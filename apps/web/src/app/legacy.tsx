@@ -16,8 +16,8 @@ export function LegacyOnly({ children }: { children: ReactNode }) {
   if (legacy) return <>{children}</>;
   return (
     <div className="majors-page mj-dense">
-      <h1>旧版 pump.fun 功能已停用</h1>
-      <p>AUU 已转为主流币量化平台。pump.fun / Solana 模块已归档，服务端设置 AUU_LEGACY_PUMP=on 才会重新启用。</p>
+      <h1>该页面已停用</h1>
+      <p>AUUTRADE 已转为主流币量化平台，旧版模块已归档。</p>
       <p>
         <NavLink to="/">前往主流行情</NavLink>
       </p>
