@@ -372,6 +372,10 @@ def reset_shadow(s: Optional[ShadowS3] = None) -> None:
 def shadow_enabled() -> bool:
     import os
 
+    from app.role import is_standby
+
+    if is_standby():
+        return False
     return os.getenv("AUU_SHADOW_S3", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 

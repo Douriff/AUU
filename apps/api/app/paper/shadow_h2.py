@@ -722,6 +722,10 @@ def reset_shadow(s: Optional[ShadowH2] = None) -> None:
 
 
 def shadow_enabled() -> bool:
+    from app.role import is_standby
+
+    if is_standby():  # AUU_ROLE=standby: the primary writes the H2 record
+        return False
     return os.getenv("AUU_SHADOW_H2", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 

@@ -157,6 +157,10 @@ def late_rebalance_enabled() -> bool:
 
 
 def runner_enabled() -> bool:
+    from app.role import is_standby
+
+    if is_standby():  # AUU_ROLE=standby never rebalances (the primary owns the ledger)
+        return False
     return os.getenv("AUU_STRATEGY_RUNNER", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 
@@ -1179,6 +1183,10 @@ def _store_exec_prices(coins: list[str]) -> dict:
 
 
 def _exec_shadow_hook():
+    from app.role import is_standby
+
+    if is_standby():
+        return None
     if os.getenv("AUU_EXEC_SHADOW", "on").strip().lower() in {"0", "false", "off", "no"}:
         return None
     from app.paper.exec_shadow import on_commit

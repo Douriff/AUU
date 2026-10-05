@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 
 def recon_enabled() -> bool:
+    from app.role import is_standby
+
+    if is_standby():
+        return False
     return os.getenv("AUU_RECON", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 

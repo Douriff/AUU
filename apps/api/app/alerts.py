@@ -57,6 +57,10 @@ def _int(name: str, default: int) -> int:
 
 
 def alerts_enabled() -> bool:
+    from app.role import is_standby
+
+    if is_standby():  # AUU_ROLE=standby sends no alerts or digests (no duplicate mail)
+        return False
     return os.getenv("AUU_ALERTS", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 
