@@ -1,7 +1,7 @@
 # Account security: optional TOTP 2FA, recovery codes, login records (P1-4)
 
 - Off by default for every account; an account without 2FA logs in exactly as before (one step, cookie).
-- Enable (Settings → 账户安全): current password → QR (inline SVG, segno) + secret → one 6-digit code verifies → 10 one-time
+- Enable (Settings → 账户安全): current password → QR (PNG data-URI, segno, quiet-zone border=4 for dark UI / Google Authenticator) + secret → one 6-digit code verifies → 10 one-time
   recovery codes shown once. Stored: secret Fernet-encrypted (key = HKDF(AUU_SESSION_SECRET)), recovery codes SHA-256 only.
   Rotating `AUU_SESSION_SECRET` makes stored TOTP secrets unreadable: users then log in with a recovery code and re-bind.
 - Login with 2FA: `POST /auth/login` → `{totp_required, ticket}` (5 min, HMAC, bound to session_epoch, no cookie) →

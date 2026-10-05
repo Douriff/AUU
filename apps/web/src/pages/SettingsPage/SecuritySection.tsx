@@ -139,7 +139,7 @@ export function SecuritySection({ onChange }: { onChange?: () => void }) {
             <p className="td-note">
               请用 Google Authenticator / Microsoft Authenticator 等验证器 App 扫码，手机相机或微信扫不了。也可手动输入密钥。扫进 App 后填入 6 位数字完成绑定，15 分钟内有效。
             </p>
-            <div className="sec-qr" dangerouslySetInnerHTML={{ __html: setup.qr_svg }} aria-label="两步验证二维码" />
+            <div className="sec-qr"><img className="sec-qr-img" src={setup.qr_png} alt="两步验证二维码" width={196} height={196} /></div>
             <code className="sec-secret">{setup.secret.replace(/(.{4})/g, "$1 ").trim()}</code>
             <label>
               6 位验证码

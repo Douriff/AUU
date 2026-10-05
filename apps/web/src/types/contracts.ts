@@ -1174,7 +1174,7 @@ export interface AccountSecurity {
 export interface TotpSetup {
   secret: string;
   otpauth: string;
-  qr_svg: string;
+  qr_png: string;
   expires_in: number;
 }
 

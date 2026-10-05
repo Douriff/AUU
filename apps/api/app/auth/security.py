@@ -51,26 +51,57 @@ def decrypt(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
 
 
+def normalize_secret(secret: str) -> str:
+    """Uppercase Base32 without spaces or RFC 4648 padding (iOS Google Authenticator rejects '=')."""
+    return "".join(ch for ch in (secret or "").upper() if ch.isalnum()).rstrip("=")
+
+
 def new_secret() -> str:
     import pyotp
 
-    return pyotp.random_base32()
+    return normalize_secret(pyotp.random_base32())
 
 
 def otpauth_uri(secret: str, account: str) -> str:
-    import pyotp
+    """Google Authenticator Key URI (https://github.com/google/google-authenticator/wiki/Key-Uri-Format).
 
-    return pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name=ISSUER)
+    Label is ``Issuer:account`` with both sides percent-encoded (``safe=''`` so ``/`` etc. cannot
+    break the path). Query carries ``secret`` + ``issuer`` only — omit algorithm/digits/period so
+    apps use SHA1 / 6 / 30 defaults (some clients reject non-default or lowercase algorithm).
+    """
+    from urllib.parse import quote, urlencode
+
+    secret = normalize_secret(secret)
+    if not secret or any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" for ch in secret):
+        raise ValueError("TOTP_SECRET_BAD")
+    acct = quote((account or "user").strip() or "user", safe="")
+    label = f"{quote(ISSUER, safe='')}:{acct}"
+    query = urlencode({"secret": secret, "issuer": ISSUER})
+    return f"otpauth://totp/{label}?{query}"
 
 
-def qr_svg(uri: str) -> str:
-    """Inline SVG QR (segno, BSD) so the secret never leaves the server for a third-party QR service."""
+def qr_png_data_uri(uri: str) -> str:
+    """PNG data-URI QR (segno). border=4 meets the quiet-zone spec — critical on our dark UI so
+    Google Authenticator can find the symbol; SVG + border=2 was failing phone scans while manual
+    secret entry still worked."""
+    import base64
     import io
 
     import segno
 
     buf = io.BytesIO()
-    segno.make(uri, error="m").save(buf, kind="svg", scale=5, border=2, dark="#000", light="#fff", xmldecl=False, svgns=True)
+    segno.make(uri, error="m").save(buf, kind="png", scale=8, border=4, dark="#000000", light="#ffffff")
+    return "data:image/png;base64," + base64.standard_b64encode(buf.getvalue()).decode("ascii")
+
+
+def qr_svg(uri: str) -> str:
+    """Legacy SVG helper (tests / fallback). Prefer ``qr_png_data_uri`` for the setup UI."""
+    import io
+
+    import segno
+
+    buf = io.BytesIO()
+    segno.make(uri, error="m").save(buf, kind="svg", scale=8, border=4, dark="#000", light="#fff", xmldecl=False, svgns=True)
     return buf.getvalue().decode()
 
 
@@ -82,7 +113,7 @@ def match_step(secret: str, code: str, *, now: Optional[float] = None, last_step
     if len(code) != 6:
         return None
     t = time.time() if now is None else now
-    totp = pyotp.TOTP(secret)
+    totp = pyotp.TOTP(normalize_secret(secret))
     step = int(t // 30)
     for s in (step, step - 1, step + 1):
         if s > last_step and hmac.compare_digest(totp.at(s * 30), code):
