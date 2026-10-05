@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS minutes (ts INTEGER PRIMARY KEY, healthy INTEGER NOT 
 
 
 def uptime_enabled() -> bool:
+    from app.role import is_standby
+
+    if is_standby():
+        return False
     return os.getenv("AUU_UPTIME", "on").strip().lower() not in {"0", "false", "off", "no"}
 
 

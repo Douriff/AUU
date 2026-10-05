@@ -160,6 +160,12 @@ def create_app(legacy: bool | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def api_version_header(request: Request, call_next):
+        from app.role import standby_blocks
+
+        if standby_blocks(request.method, request.url.path):
+            from app.routes.envelope import err
+
+            return err("STANDBY", "standby node: ledger writes are disabled (AUU_ROLE=standby)", 503)
         response: Response = await call_next(request)
         response.headers["X-Api-Version"] = API_VERSION
         return response

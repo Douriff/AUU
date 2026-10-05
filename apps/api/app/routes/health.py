@@ -63,6 +63,10 @@ def _strategy_status() -> dict:
         from app.marketdata.mainstream import get_service
         from app.paper.strategy_runner import not_started_status, peek_runner, runner_enabled
 
+        from app.role import is_standby
+
+        if is_standby():
+            return {"active": False, "stalled": False, "reason": "standby"}
         if not runner_enabled() or not get_service().cfg.enabled:
             return {"active": False, "stalled": False, "reason": "runner_off"}
         r = peek_runner()
@@ -73,11 +77,16 @@ def _strategy_status() -> dict:
 
 def _mainstream_health(gate) -> dict:
     """Health when AUU_LEGACY_PUMP is off: no pump provider is constructed."""
+    from app.role import role_status
+
     md = _mainstream_fields()
     st = _strategy_status()
+    role = role_status()
     running = [st["strategy"]] if st.get("active") and st.get("strategy") else []
     return {
         "status": "up",
+        "role": role["role"],
+        "standby": role,
         "provider": "cex_public",
         "mode": "paper",
         "venue": "CEX",
