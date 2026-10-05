@@ -215,7 +215,7 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 .ml-tabs button { position: relative; height: 100%; padding: 0; background: none; border: 0; border-radius: 0; color: var(--muted); font-size: 13.5px; }
 .ml-tabs button.is-on { color: var(--text); background: none; font-weight: 600; }
 .ml-tabs button.is-on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
-.ml-count { margin-left: 4px; font: 11px var(--mono); color: var(--dim); }
+.ml-count { margin-inline-start: 4px; font: 11px var(--mono); color: var(--dim); }
 .ml-search {
   margin-inline-start: auto; flex: 0 1 220px; max-width: 240px; height: 30px; padding: 0 10px; border-radius: 4px; font-size: 13px;
   background: var(--panel2); border: 1px solid transparent; color: var(--text);
@@ -946,3 +946,6 @@ html[dir="rtl"] .ms-back, html[dir="rtl"] .tk .ms-back { transform: scaleX(-1); 
   /* "Held" chip: zh/ja/ko labels are 2 characters; longer words collapse to an accent dot (title keeps the meaning) */
   html:not([lang="zh-CN"]):not([lang="ja"]):not([lang="ko"]) .ml-held { font-size: 0; width: 7px; height: 7px; padding: 0; border-radius: 50%; background: var(--accent); }
 }
+/* RTL bidi: number-only text (+1.16%, −0.05 bp) resolves LTR, Arabic text RTL; tickers/pairs read BTC/USDT */
+html[dir="rtl"] :is(span, b, strong, em, small, td, th, dd, dt, label) { unicode-bidi: plaintext; }
+html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-child, .tk-sym) { direction: ltr; }
