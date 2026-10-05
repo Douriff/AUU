@@ -1,3 +1,4 @@
+import { msgText } from "@/i18n/msg";
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { ShadowH2Summary } from "@/types/mainstream";
@@ -67,15 +68,15 @@ export function H2ShadowCard() {
       {err ? <div className="pro-alert">{t("h2.loadFailed", { err })}</div> : null}
       {!h2 && !err ? <Sk h={88} r={6} className="sk-block" /> : null}
 
-      {h2?.refused ? <div className="pro-alert">{t("h2.refused", { why: h2.refused })}</div> : null}
-      {h2?.aborted ? <div className="pro-alert">{t("h2.aborted", { why: h2.aborted })}</div> : null}
+      {h2?.refused ? <div className="pro-alert">{t("h2.refused", { why: msgText(h2.refusedMsg, h2.refused) })}</div> : null}
+      {h2?.aborted ? <div className="pro-alert">{t("h2.aborted", { why: msgText(h2.abortedMsg, h2.aborted) })}</div> : null}
       {h2?.paused ? <div className="h2-warn">{t("h2.paused", { n: h2.lagDays })}</div> : null}
 
       {h2 && !last ? (
         <div className="h2-empty">
           <b>{t("h2.registered", { day: shortDay(inc) })}</b>
           <span className="muted">{t("h2.firstRow")}</span>
-          {h2.waiting ? <span className="muted">{t("h2.waiting", { s: h2.waiting })}</span> : null}
+          {h2.waiting ? <span className="muted">{t("h2.waiting", { s: msgText(h2.waitingMsg, h2.waiting) })}</span> : null}
         </div>
       ) : null}
 

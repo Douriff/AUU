@@ -989,5 +989,82 @@
     "title": "Cette page a été retirée",
     "body": "AUUTRADE est désormais une plateforme quantitative pour les cryptos majeures ; les anciens modules ont été archivés.",
     "go": "Aller aux marchés"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "Système",
+        "discovery": "Découverte",
+        "manual": "Manuel",
+        "entry": "Entrée",
+        "reject": "Rejet",
+        "shadow": "Ombre",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "Délai",
+        "weakTape": "Flux faible",
+        "graduation": "Graduation",
+        "orphan": "Orphelin",
+        "close": "Sortie"
+      },
+      "restart": "API redémarrée",
+      "autoOn": "Papier auto activé",
+      "autoOff": "Papier auto désactivé",
+      "discOffline": "Découverte hors ligne",
+      "discConnecting": "Découverte en connexion",
+      "discOnline": "Découverte en ligne {{active}}",
+      "newCoin": "Nouveau jeton {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} entrée manuelle {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} entrée papier {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} sortie manuelle net {{bps}} pb",
+      "exitAuto": "{{base}} {{pill}} net {{bps}} pb",
+      "impact": "impact",
+      "gross": "brut {{v}} pb",
+      "cap": "> plafond {{v}}",
+      "limit": "limite",
+      "shadow": "Ombre",
+      "vEnter": "entrée virtuelle",
+      "vSkip": "ignoré (virtuel)",
+      "shadowClose": "Ombre {{set}} {{base}} sortie virtuelle {{pill}}"
+    },
+    "nogo": {
+      "ledger": "Registre papier de la stratégie de tendance : {{msg}}",
+      "readFailed": "Lecture du registre de stratégie impossible : {{err}}"
+    },
+    "risk": {
+      "drawdown": "drawdown <= {{pct}} %",
+      "dayLoss": "perte du jour <= {{pct}} %",
+      "stale": "données 1h périmées : {{coins}}",
+      "noExchange": "aucune plateforme",
+      "healthFailed": "contrôle de la plateforme échoué",
+      "noRefresh": "aucune mise à jour de marché réussie ({{min}} min) : {{err}}",
+      "noRefreshStart": "aucune mise à jour de marché réussie ({{min}} min depuis le démarrage) : {{err}}",
+      "noRefreshNever": "aucune mise à jour de marché réussie (jamais dans ce processus) : {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "hash des paramètres {{h}} ≠ figé {{f}}",
+        "costModel": "modèle de coûts effectif {{cm}} ≠ coûts de tendance figés {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ figé {{f}}",
+        "registryUnreadable": "enregistrement {{path}} illisible : {{err}}",
+        "registryMismatch": "enregistrement {{name}} : stocké {{stored}}, hash des paramètres {{h}}, figé {{f}}",
+        "ledgerHash": "hash stocké dans le registre {{h}} ≠ figé {{f}}"
+      },
+      "wait": {
+        "nextDay": "jour suivant {{day}} pas encore clôturé",
+        "settling": "{{day}} clôturé il y a moins de {{min}} min",
+        "behind": "{{n}} jours de retard (> {{max}}) ; vérification manuelle",
+        "paper": "en attente du rééquilibrage papier du {{day}}",
+        "data": "en attente des données du {{day}} : {{why}}",
+        "noPanel": "panel du {{day}} indisponible",
+        "noPerp": "bougie journalière perp du {{day}} manquante"
+      },
+      "abortDrawdown": "{{day}} : drawdown {{dd}}, seuil d’arrêt atteint",
+      "abortCarry": "{{day}} : jambe de portage liquidée (arrêt)"
+    },
+    "board": {
+      "noteLocal": "Le mode local mono-utilisateur n’a pas de comptes. Avec AUU_AUTH=on, le classement par P&L papier s’affiche ici. Le moteur papier du système n’est pas compté.",
+      "noteAuth": "Comptes papier des utilisateurs uniquement. Le moteur papier du système n’est pas compté. Ni dépôt, ni retrait, ni trading réel."
+    }
   }
 }

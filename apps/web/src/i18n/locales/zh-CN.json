@@ -989,5 +989,82 @@
     "title": "该页面已停用",
     "body": "AUUTRADE 已转为主流币量化平台，旧版模块已归档。",
     "go": "前往主流行情"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "系统",
+        "discovery": "发现",
+        "manual": "手动",
+        "entry": "开仓",
+        "reject": "拒绝",
+        "shadow": "影子",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "timeout",
+        "weakTape": "weak-tape",
+        "graduation": "graduation",
+        "orphan": "orphan",
+        "close": "平仓"
+      },
+      "restart": "API 已重启",
+      "autoOn": "自动纸面 开",
+      "autoOff": "自动纸面 关",
+      "discOffline": "发现离线",
+      "discConnecting": "发现连接中",
+      "discOnline": "发现在线 {{active}}",
+      "newCoin": "新币 {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} 手动开仓 {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} 纸面开仓 {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} 手动平仓 净 {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} 净 {{bps}} bps",
+      "impact": "冲击",
+      "gross": "毛 {{v}} bps",
+      "cap": "> 上限 {{v}}",
+      "limit": "限额",
+      "shadow": "影子",
+      "vEnter": "虚拟开仓",
+      "vSkip": "虚拟跳过",
+      "shadowClose": "影子 {{set}} {{base}} 虚拟平仓 {{pill}}"
+    },
+    "nogo": {
+      "ledger": "趋势策略纸面账本：{{msg}}",
+      "readFailed": "策略账本读取失败：{{err}}"
+    },
+    "risk": {
+      "drawdown": "drawdown <= {{pct}}%",
+      "dayLoss": "day loss <= {{pct}}%",
+      "stale": "stale 1h: {{coins}}",
+      "noExchange": "no exchange",
+      "healthFailed": "exchange health failed",
+      "noRefresh": "no successful market refresh ({{min}} min): {{err}}",
+      "noRefreshStart": "no successful market refresh ({{min}} min since start): {{err}}",
+      "noRefreshNever": "no successful market refresh (never in this process): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "params hash {{h}} != frozen {{f}}",
+        "costModel": "effective CostModel {{cm}} != frozen trend cost {{fc}}",
+        "tbill": "stats.TBILL {{v}} != frozen {{f}}",
+        "registryUnreadable": "registry {{path}} unreadable: {{err}}",
+        "registryMismatch": "registry {{name}}: stored {{stored}}, params hash {{h}}, frozen {{f}}",
+        "ledgerHash": "ledger stored hash {{h}} != frozen {{f}}"
+      },
+      "wait": {
+        "nextDay": "next day {{day}} not closed yet",
+        "settling": "{{day}} closed < {{min}} min ago",
+        "behind": "behind {{n}} days (> {{max}}); manual review",
+        "paper": "waiting for the paper rebalance of {{day}}",
+        "data": "waiting for {{day}} data: {{why}}",
+        "noPanel": "panel for {{day}} not available",
+        "noPerp": "perp 1d kline for {{day}} missing"
+      },
+      "abortDrawdown": "{{day}} abort:drawdown: drawdown {{dd}}",
+      "abortCarry": "{{day}} abort:carry_liquidation: carry leg liquidated"
+    },
+    "board": {
+      "noteLocal": "本地单用户模式未开启账户。设置 AUU_AUTH=on 后，这里按纸面盈亏排名。系统纸面引擎不计入。",
+      "noteAuth": "仅用户纸面账户。系统纸面引擎不计入。无充值、无提现、无实盘。"
+    }
   }
 }

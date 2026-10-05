@@ -1,3 +1,4 @@
+import type { MsgNode } from "@/i18n/msg";
 /** Frozen contract field names — mirror of apps/api/app/models/contracts.py */
 
 export interface SymbolInfo {
@@ -859,6 +860,9 @@ export interface ConsoleEvent {
   type: ConsoleEventType | string;
   pill: string;
   message: string;
+  /** Translatable copies of pill / message (i18n/msg.ts); absent on older servers. */
+  pill_msg?: MsgNode;
+  msg?: MsgNode;
   pnl: number | null;
   net_bps: number | null;
   symbol: string;
@@ -874,6 +878,7 @@ export interface ConsoleStats {
   verdict: string;
   lamp: string;
   nogo_reason: string;
+  nogo_msg?: MsgNode;
   go_window_label: string;
   mode: string;
   liveEnabled: boolean;
@@ -1298,6 +1303,7 @@ export interface Leaderboard {
   auth_enabled: boolean;
   sort: string;
   note: string;
+  noteMsg?: MsgNode;
   items: AuthUser[];
 }
 

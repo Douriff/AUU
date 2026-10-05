@@ -989,5 +989,82 @@
     "title": "이 페이지는 더 이상 사용되지 않습니다",
     "body": "AUUTRADE는 이제 주요 코인 퀀트 플랫폼이며, 이전 기능은 보관 처리되었습니다.",
     "go": "시세로 이동"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "시스템",
+        "discovery": "발견",
+        "manual": "수동",
+        "entry": "진입",
+        "reject": "거부",
+        "shadow": "섀도",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "시간 초과",
+        "weakTape": "약한 흐름",
+        "graduation": "졸업",
+        "orphan": "고아",
+        "close": "청산"
+      },
+      "restart": "API 재시작됨",
+      "autoOn": "자동 모의 켜짐",
+      "autoOff": "자동 모의 꺼짐",
+      "discOffline": "발견 오프라인",
+      "discConnecting": "발견 연결 중",
+      "discOnline": "발견 온라인 {{active}}",
+      "newCoin": "새 코인 {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} 수동 진입 {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} 모의 진입 {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} 수동 청산 순 {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} 순 {{bps}} bps",
+      "impact": "충격",
+      "gross": "총 {{v}} bps",
+      "cap": "> 상한 {{v}}",
+      "limit": "한도",
+      "shadow": "섀도",
+      "vEnter": "가상 진입",
+      "vSkip": "가상 건너뜀",
+      "shadowClose": "섀도 {{set}} {{base}} 가상 청산 {{pill}}"
+    },
+    "nogo": {
+      "ledger": "추세 전략 모의 원장: {{msg}}",
+      "readFailed": "전략 원장을 읽지 못했습니다: {{err}}"
+    },
+    "risk": {
+      "drawdown": "낙폭 <= {{pct}}%",
+      "dayLoss": "일일 손실 <= {{pct}}%",
+      "stale": "1시간 데이터 지연: {{coins}}",
+      "noExchange": "거래소 없음",
+      "healthFailed": "거래소 상태 점검 실패",
+      "noRefresh": "시장 데이터 갱신 성공 없음 ({{min}}분): {{err}}",
+      "noRefreshStart": "시장 데이터 갱신 성공 없음 (시작 후 {{min}}분): {{err}}",
+      "noRefreshNever": "시장 데이터 갱신 성공 없음 (이 프로세스에서 한 번도 없음): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "파라미터 해시 {{h}} ≠ 고정값 {{f}}",
+        "costModel": "유효 비용 모델 {{cm}} ≠ 고정된 추세 비용 {{fc}}",
+        "tbill": "stats.TBILL {{v}} ≠ 고정값 {{f}}",
+        "registryUnreadable": "등록 파일 {{path}} 읽기 실패: {{err}}",
+        "registryMismatch": "등록 {{name}}: 저장값 {{stored}}, 파라미터 해시 {{h}}, 고정값 {{f}}",
+        "ledgerHash": "원장 저장 해시 {{h}} ≠ 고정값 {{f}}"
+      },
+      "wait": {
+        "nextDay": "다음 날 {{day}} 아직 마감 전",
+        "settling": "{{day}} 마감 후 {{min}}분 미만",
+        "behind": "{{n}}일 지연 (> {{max}}), 수동 검토 필요",
+        "paper": "{{day}} 모의 리밸런싱 대기 중",
+        "data": "{{day}} 데이터 대기 중: {{why}}",
+        "noPanel": "{{day}} 패널 없음",
+        "noPerp": "{{day}} 무기한 선물 일봉 없음"
+      },
+      "abortDrawdown": "{{day}}: 낙폭 {{dd}}, 중단 조건 도달",
+      "abortCarry": "{{day}}: 캐리 레그 청산됨 (중단)"
+    },
+    "board": {
+      "noteLocal": "로컬 단일 사용자 모드에는 계정이 없습니다. AUU_AUTH=on으로 설정하면 여기서 모의 손익 순위를 보여 줍니다. 시스템 모의 엔진은 포함되지 않습니다.",
+      "noteAuth": "사용자 모의 계좌만 표시합니다. 시스템 모의 엔진은 포함되지 않습니다. 입금·출금·실거래 없음."
+    }
   }
 }

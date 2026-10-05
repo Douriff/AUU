@@ -989,5 +989,82 @@
     "title": "This page has been retired",
     "body": "AUUTRADE is now a major-coin quant platform; the old modules have been archived.",
     "go": "Go to Markets"
+  },
+  "srv": {
+    "ev": {
+      "pill": {
+        "system": "System",
+        "discovery": "Discovery",
+        "manual": "Manual",
+        "entry": "Entry",
+        "reject": "Reject",
+        "shadow": "Shadow",
+        "TP": "TP",
+        "SL": "SL",
+        "timeout": "Timeout",
+        "weakTape": "Weak tape",
+        "graduation": "Graduation",
+        "orphan": "Orphan",
+        "close": "Exit"
+      },
+      "restart": "API restarted",
+      "autoOn": "Auto paper on",
+      "autoOff": "Auto paper off",
+      "discOffline": "Discovery offline",
+      "discConnecting": "Discovery connecting",
+      "discOnline": "Discovery online {{active}}",
+      "newCoin": "New coin {{base}} {{short}}{{who}}",
+      "entryManual": "{{base}} manual entry {{qty}} @ {{px}} SOL",
+      "entryPaper": "{{base}} paper entry {{qty}} @ {{px}} SOL",
+      "exitManual": "{{base}} manual exit net {{bps}} bps",
+      "exitAuto": "{{base}} {{pill}} net {{bps}} bps",
+      "impact": "impact",
+      "gross": "gross {{v}} bps",
+      "cap": "> cap {{v}}",
+      "limit": "limit",
+      "shadow": "Shadow",
+      "vEnter": "virtual entry",
+      "vSkip": "virtual skip",
+      "shadowClose": "Shadow {{set}} {{base}} virtual exit {{pill}}"
+    },
+    "nogo": {
+      "ledger": "Trend strategy paper ledger: {{msg}}",
+      "readFailed": "Could not read the strategy ledger: {{err}}"
+    },
+    "risk": {
+      "drawdown": "drawdown <= {{pct}}%",
+      "dayLoss": "day loss <= {{pct}}%",
+      "stale": "stale 1h: {{coins}}",
+      "noExchange": "no exchange",
+      "healthFailed": "exchange health failed",
+      "noRefresh": "no successful market refresh ({{min}} min): {{err}}",
+      "noRefreshStart": "no successful market refresh ({{min}} min since start): {{err}}",
+      "noRefreshNever": "no successful market refresh (never in this process): {{err}}"
+    },
+    "h2": {
+      "refusedWhy": {
+        "paramsHash": "params hash {{h}} != frozen {{f}}",
+        "costModel": "effective CostModel {{cm}} != frozen trend cost {{fc}}",
+        "tbill": "stats.TBILL {{v}} != frozen {{f}}",
+        "registryUnreadable": "registry {{path}} unreadable: {{err}}",
+        "registryMismatch": "registry {{name}}: stored {{stored}}, params hash {{h}}, frozen {{f}}",
+        "ledgerHash": "ledger stored hash {{h}} != frozen {{f}}"
+      },
+      "wait": {
+        "nextDay": "next day {{day}} not closed yet",
+        "settling": "{{day}} closed < {{min}} min ago",
+        "behind": "behind {{n}} days (> {{max}}); manual review",
+        "paper": "waiting for the paper rebalance of {{day}}",
+        "data": "waiting for {{day}} data: {{why}}",
+        "noPanel": "panel for {{day}} not available",
+        "noPerp": "perp 1d kline for {{day}} missing"
+      },
+      "abortDrawdown": "{{day}}: drawdown {{dd}} hit the abort limit",
+      "abortCarry": "{{day}}: carry leg liquidated (abort)"
+    },
+    "board": {
+      "noteLocal": "Local single-user mode has no accounts. Set AUU_AUTH=on to rank paper P&L here. The system paper engine is not included.",
+      "noteAuth": "User paper accounts only. The system paper engine is not included. No deposits, no withdrawals, no live trading."
+    }
   }
 }

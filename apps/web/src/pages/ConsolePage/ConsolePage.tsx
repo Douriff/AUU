@@ -1,3 +1,4 @@
+import { msgText } from "@/i18n/msg";
 import { SkRows } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useConsole } from "@/hooks/useConsole";
@@ -104,7 +105,7 @@ export function ConsolePage() {
         />
         <span
           className={`console-go lamp-${lamp}`}
-          title={stats?.nogo_reason || stats?.go_window_label || ""}
+          title={msgText(stats?.nogo_msg, stats?.nogo_reason || "") || stats?.go_window_label || ""}
         >
           {verdict}
         </span>
@@ -167,7 +168,9 @@ function Stat({ label, value, tone: toneName }: { label: string; value: string; 
 }
 
 function LogRow({ row }: { row: ConsoleEvent }) {
+  useTranslation(); // re-render on language change
   const pnl = formatSol(row.pnl);
+  const message = msgText(row.msg, row.message);
   const [open, setOpen] = useState(false);
   return (
     <div
@@ -175,7 +178,7 @@ function LogRow({ row }: { row: ConsoleEvent }) {
       role="button"
       tabIndex={0}
       aria-expanded={open}
-      title={row.message}
+      title={message}
       onClick={() => setOpen((v) => !v)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -185,8 +188,8 @@ function LogRow({ row }: { row: ConsoleEvent }) {
       }}
     >
       <time dateTime={new Date(row.ts).toISOString()}>{clock(row.ts)}</time>
-      <span className="console-pill">{row.pill}</span>
-      <span className="console-msg">{row.message}</span>
+      <span className="console-pill">{msgText(row.pill_msg, row.pill)}</span>
+      <span className="console-msg">{message}</span>
       <span className={`console-pnl ${tone(row.pnl)}`}>{pnl}</span>
     </div>
   );
