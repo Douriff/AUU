@@ -185,6 +185,8 @@ export interface StrategyGoNoGo {
   days: number;
   minDays: number;
   message: string;
+  /** no-go reasons as stable ids (CI_LO, TBILL) for translated text */
+  reasons?: string[];
   tbill: number;
   stats?: Record<string, number | null>;
 }
@@ -526,6 +528,7 @@ export type MainstreamCoin = {
   tradable: boolean;
   viewOnly: boolean;
   reason: string | null;
+  reasonCode?: "VENUE_NO_DATA" | "NOT_LISTED" | null;
   price: number | null;
   priceTs: number | null;
   change24h: number | null;

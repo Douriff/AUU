@@ -176,10 +176,11 @@ class AuthRoundtripTests(unittest.TestCase):
 
         web = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "authRules.ts"
         source = web.read_text(encoding="utf-8")
-        self.assertIn(f'PASSWORD_RULE = "{_MESSAGES["BAD_PASSWORD"]}"', source)
-        self.assertIn(f'NAME_RULE = "{_MESSAGES["BAD_NAME"]}"', source)
-        self.assertIn(f'DISPLAY_RULE = "{_MESSAGES["BAD_DISPLAY"]}"', source)
-        self.assertIn(f'START_RULE = "{_MESSAGES["BAD_START"]}"', source)
+        # Rule texts live in the i18n catalog now; the Chinese (default) wording must equal the server's.
+        zh = json.loads((web.parents[1] / "i18n" / "locales" / "zh-CN.json").read_text(encoding="utf-8"))["auth"]["rule"]
+        for key, code in (("password", "BAD_PASSWORD"), ("name", "BAD_NAME"), ("display", "BAD_DISPLAY"), ("start", "BAD_START")):
+            self.assertEqual(zh[key], _MESSAGES[code], key)
+            self.assertIn(f'i18n.t("auth.rule.{key}")', source)
         from app.auth import accounts
 
         pattern = re.search(r"const NAME = /(.+)/;", source).group(1)

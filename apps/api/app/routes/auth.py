@@ -30,6 +30,8 @@ from app.auth.accounts import (
     journal_for,
     leaderboard,
     list_users,
+    locale_view,
+    set_locale,
     passwords_match,
     register,
     reset_password,
@@ -89,6 +91,7 @@ _MESSAGES = {
     "TOTP_ALREADY_ON": "两步验证已开启",
     "TOTP_OFF": "两步验证未开启",
     "TOTP_SETUP_EXPIRED": "绑定已过期，请重新开始",
+    "BAD_LOCALE": "不支持的语言",
 }
 
 
@@ -200,6 +203,7 @@ def _fail(exc: ValueError, action: str = "auth"):
     wait = int(getattr(exc, "retry_after", 0) or 0)
     if code == "EMAIL_THROTTLE" and wait > 0:
         message = f"验证码发送太频繁，请 {wait} 秒后再试"
+        return err(code, message, status, extra={"retry_after": wait})
     return err(code, message, status)
 
 
@@ -215,7 +219,7 @@ def _me_payload(user: Optional[dict]) -> dict:
         "mode": "paper",
     }
     if user is not None:
-        body["user"] = account_row(user)
+        body["user"] = {**account_row(user), **locale_view(user)}
     return body
 
 
@@ -274,7 +278,7 @@ async def auth_email_code(request: Request):
         # Same answer whether or not the address is registered; only registered ones get mail.
         deliver = email_taken(address)
     try:
-        await run_in_threadpool(send_code, purpose, address, _ip(request), deliver=deliver)
+        await run_in_threadpool(send_code, purpose, address, _ip(request), deliver=deliver, lang=_text(raw, "lang") or "zh-CN")
     except CodeError as exc:
         return _fail(exc, "email code")
     note = "验证码已发送，请查收邮件（10 分钟内有效）"
@@ -499,6 +503,24 @@ async def auth_password(request: Request):
     _record(request, str(actor["id"]), "password_changed", "settings")
     # Other sessions end (session_epoch bumped); this device gets a fresh cookie.
     return _stamp(ok(scrub_secrets({"ok": True, "liveEnabled": False, "mode": "paper"})), str(actor["id"]))
+
+
+@router.put("/auth/locale")
+async def auth_locale(request: Request):
+    """Save the interface language on the account so other devices follow it."""
+    actor, bad = _actor(request)
+    if bad is not None:
+        return bad
+    if not allow_attempt(f"locale:{actor['id']}"):
+        return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
+    raw = await _json(request)
+    if not isinstance(raw, dict):
+        return raw
+    try:
+        view = set_locale(str(actor["id"]), _text(raw, "locale"))
+    except ValueError as exc:
+        return _fail(exc, "locale")
+    return ok({**view, "liveEnabled": False})
 
 
 @router.post("/auth/logout")

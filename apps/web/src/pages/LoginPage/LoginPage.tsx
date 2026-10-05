@@ -3,9 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
 import { AuthHead } from "./AuthHead";
+import { Trans, useTranslation } from "react-i18next";
+import { ApiError } from "@/providers/HttpWsProvider";
+import { errText } from "@/i18n/errors";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [me, setMe] = useState<AuthMe | null>(null);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +25,7 @@ export function LoginPage() {
         setMe(next);
         if (next.user) navigate("/leaderboard", { replace: true });
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "无法读取账户"));
+      .catch((e) => setError(errText(e, "auth.cantReadAccount")));
   }, [navigate]);
 
   async function submit(event: FormEvent) {
@@ -37,7 +41,7 @@ export function LoginPage() {
       }
       navigate("/");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "登录失败");
+      setError(errText(e, "auth.loginFailed"));
     } finally {
       setBusy(false);
     }
@@ -51,9 +55,8 @@ export function LoginPage() {
       await marketProvider.loginTotp({ ticket, code: code.trim() });
       navigate("/");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "验证失败";
-      setError(msg);
-      if (msg.includes("过期")) setTicket("");
+      setError(errText(e, "auth.verifyFailed"));
+      if (e instanceof ApiError && e.code === "TOTP_TICKET") setTicket("");
     } finally {
       setBusy(false);
     }
@@ -64,17 +67,17 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <AuthHead title="登录" sub="用邮箱或用户名登录。纸面交易：没有充值、没有提现、没有实盘下单。" />
+        <AuthHead title={t("auth.login.title")} sub={t("auth.login.sub")} />
         {me && !authOn && (
           <p className="td-note">
-            当前是本地单用户模式，不需要登录。直接去 <Link to="/">行情</Link> 或 <Link to="/?symbol=BTC">交易</Link>。
+            <Trans i18nKey="auth.login.localMode" components={{ market: <Link to="/" />, trade: <Link to="/?symbol=BTC" /> }} />
           </p>
         )}
         {authOn && ticket && (
           <form onSubmit={(event) => void submitCode(event)}>
-            <p className="td-note">此账户已开启两步验证。请输入验证器 App 里的 6 位数字，或一个恢复码（形如 abcde-fghjk）。</p>
+            <p className="td-note">{t("auth.login.totpNote")}</p>
             <label>
-              两步验证码 / 恢复码
+              {t("auth.login.totpLabel")}
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -87,21 +90,21 @@ export function LoginPage() {
             </label>
             {error && <p className="td-block">{error}</p>}
             <button className="td-submit buy" type="submit" disabled={busy}>
-              {busy ? "验证中…" : "验证并登录"}
+              {busy ? t("auth.login.verifying") : t("auth.login.verifySubmit")}
             </button>
             <button type="button" className="td-link" onClick={() => (setTicket(""), setError(""))}>
-              返回重新输入密码
+              {t("auth.login.backToPassword")}
             </button>
           </form>
         )}
         {authOn && !ticket && (
           <form onSubmit={(event) => void submit(event)}>
             <label>
-              邮箱或用户名
+              {t("auth.login.nameLabel")}
               <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} required />
             </label>
             <label>
-              密码
+              {t("auth.password")}
               <input
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -113,20 +116,20 @@ export function LoginPage() {
             </label>
             {error && <p className="td-block">{error}</p>}
             <button className="td-submit buy" type="submit" disabled={busy}>
-              {busy ? "提交中…" : "登录"}
+              {busy ? t("common.submitting") : t("auth.login.submit")}
             </button>
             {me?.signup_allowed && (
               <p className="td-note">
-                还没有账户？<Link to="/register">去注册</Link>
+                {t("auth.login.noAccount")}<Link to="/register">{t("auth.login.toRegister")}</Link>
               </p>
             )}
             {me?.email_verify && (
               <p className="td-note">
-                忘记密码？<Link to="/forgot-password">用邮箱验证码重置</Link>
+                {t("auth.login.forgot")}<Link to="/forgot-password">{t("auth.login.toReset")}</Link>
               </p>
             )}
             <p className="td-note">
-              <Link to="/status">系统状态</Link>（无需登录）
+              <Link to="/status">{t("auth.login.status")}</Link> {t("auth.login.noLoginNeeded")}
             </p>
           </form>
         )}

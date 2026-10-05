@@ -4,14 +4,18 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import type { StrategyReport } from "@/types/mainstream";
 import { Empty, Sk, SkCards } from "@/components/ui/Skeleton";
 import { H2ShadowCard } from "./H2ShadowCard";
+import { useTranslation } from "react-i18next";
+import { errText } from "@/i18n/errors";
+import { fmtFixed, fmtMax } from "@/i18n/format";
+import { goMessage, goVerdict } from "@/i18n/strategy";
 
 /** P1-1/P1-2: strategy performance report (paper ledger). Login is enforced by AppShell + the API (401). */
 
 const pct = (v: number | null | undefined, d = 2) =>
-  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
-const fx = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : v.toFixed(d));
+  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`;
+const fx = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : fmtFixed(v, d));
 const usd = (v: number | null | undefined) =>
-  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v, 2)}`;
 const MONTHS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
 function heat(v: number): string {
@@ -21,6 +25,7 @@ function heat(v: number): string {
 const tn = (v: number | null | undefined) => (v == null || !Number.isFinite(v) || v === 0 ? "" : v > 0 ? "up" : "down");
 
 export function PerformancePage() {
+  const { t } = useTranslation();
   const [rep, setRep] = useState<StrategyReport | null>(null);
   const [err, setErr] = useState("");
 
@@ -29,7 +34,7 @@ export function PerformancePage() {
     marketProvider
       .getStrategyReport()
       .then((d) => alive && (setRep(d), setErr("")))
-      .catch((e) => alive && setErr(String(e?.message || e)));
+      .catch((e) => alive && setErr(errText(e, "common.loadFailed")));
     return () => {
       alive = false;
     };
@@ -49,9 +54,9 @@ export function PerformancePage() {
   return (
     <div className="shell-page perf-page pro-page">
       <header className="pro-head">
-        <h1>策略绩效</h1>
-        <p>{rep ? `${rep.strategy} · 纸面账本 · 截至 ${rep.asOf ?? "—"} 收盘 · 起始 ${rep.startNav.toLocaleString()} USDT` : <Sk w={260} h={11} />}</p>
-        <Link to="/console" className="pro-head-link">策略控制台 ›</Link>
+        <h1>{t("perf.title")}</h1>
+        <p>{rep ? t("perf.sub", { strategy: rep.strategy, asOf: rep.asOf ?? "—", start: fmtMax(rep.startNav, 2) }) : <Sk w={260} h={11} />}</p>
+        <Link to="/console" className="pro-head-link">{t("perf.consoleLink")} ›</Link>
       </header>
       {err ? <div className="pro-alert">{err}</div> : null}
       {!rep && !err ? (
@@ -63,53 +68,55 @@ export function PerformancePage() {
       ) : null}
       {g ? (
         <section className={`perf-verdict lamp-${g.lamp}`}>
-          <b>Go/No-Go：{g.verdict === "go" ? "Go" : g.verdict === "no-go" ? "No-Go" : "待评估"}</b>
-          <span>{g.message}</span>
+          <b>Go/No-Go: {goVerdict(g)}</b>
+          <span>{goMessage(g)}</span>
           <span className="muted">
-            日收益年化 95% CI：{rep?.ci ? `${pct(rep.ci.lo)} ~ ${pct(rep.ci.hi)}` : `样本不足 30 天（${m?.days ?? 0} 天）`} · 判定标准：≥{g.minDays} 天、CI 下限 &gt; 0 且跑赢国债
+            {t("perf.ci")} {rep?.ci ? `${pct(rep.ci.lo)} ~ ${pct(rep.ci.hi)}` : t("perf.ciShort", { n: m?.days ?? 0 })} · {t("perf.criteria", { min: g.minDays })}
           </span>
         </section>
       ) : null}
 
       {m && m.days ? (
         <section className="perf-kpis">
-          {[
-            ["累计收益", pct(m.totalReturn)],
-            ["年化（CAGR）", m.shortSample ? "—" : pct(m.cagr)],
-            ["Sortino", m.shortSample ? "—" : fx(m.sortino)],
-            ["Calmar", m.shortSample ? "—" : fx(m.calmar)],
-            ["Sharpe", m.shortSample ? "—" : fx(m.sharpe)],
-            ["最大回撤", `${pct(m.maxDrawdown)}${m.maxDrawdownDay ? ` · ${m.maxDrawdownDay}` : ""}`],
-            ["最长回撤", `${m.longestDrawdownDays ?? 0} 天`],
-            ["当前回撤", `${pct(m.currentDrawdown)} · ${m.currentDrawdownDays ?? 0} 天`],
-            ["日胜率", pct(m.winRate, 1)],
-            ["日盈亏比", fx(m.winLossRatio)],
-            ["最好 / 最差日", `${pct(m.bestDay)} / ${pct(m.worstDay)}`],
-            ["天数", String(m.days)],
-          ].map(([k, v]) => (
-            <div key={k} className="perf-kpi">
+          {(
+            [
+              ["total", t("perf.k.total"), pct(m.totalReturn), tn(m.totalReturn)],
+              ["cagr", t("perf.k.cagr"), m.shortSample ? "—" : pct(m.cagr), m.shortSample ? "" : tn(m.cagr)],
+              ["sortino", "Sortino", m.shortSample ? "—" : fx(m.sortino), ""],
+              ["calmar", "Calmar", m.shortSample ? "—" : fx(m.calmar), ""],
+              ["sharpe", "Sharpe", m.shortSample ? "—" : fx(m.sharpe), ""],
+              ["mdd", t("perf.k.mdd"), `${pct(m.maxDrawdown)}${m.maxDrawdownDay ? ` · ${m.maxDrawdownDay}` : ""}`, tn(m.maxDrawdown)],
+              ["longest", t("perf.k.longest"), t("perf.nDays", { n: m.longestDrawdownDays ?? 0 }), ""],
+              ["cur", t("perf.k.current"), `${pct(m.currentDrawdown)} · ${t("perf.nDays", { n: m.currentDrawdownDays ?? 0 })}`, tn(m.currentDrawdown)],
+              ["win", t("perf.k.winRate"), pct(m.winRate, 1), ""],
+              ["wl", t("perf.k.winLoss"), fx(m.winLossRatio), ""],
+              ["bw", t("perf.k.bestWorst"), `${pct(m.bestDay)} / ${pct(m.worstDay)}`, ""],
+              ["days", t("perf.k.days"), String(m.days), ""],
+            ] as [string, string, string, string][]
+          ).map(([id, k, v, cls]) => (
+            <div key={id} className="perf-kpi">
               <span className="muted">{k}</span>
-              <b className={k === "累计收益" ? tn(m.totalReturn) : k === "年化（CAGR）" && !m.shortSample ? tn(m.cagr) : k === "最大回撤" ? tn(m.maxDrawdown) : k === "当前回撤" ? tn(m.currentDrawdown) : ""}>{v}</b>
+              <b className={cls}>{v}</b>
             </div>
           ))}
-          {m.shortSample ? <p className="muted perf-warn">样本少于 30 天：年化、Sortino、Calmar、Sharpe 没有统计意义，暂不显示（满 30 天后自动出现）。</p> : null}
+          {m.shortSample ? <p className="muted perf-warn">{t("perf.shortSample")}</p> : null}
         </section>
       ) : rep ? (
-        <Empty icon="chart" title="尚无纸面记录" hint="策略完成第一次调仓（北京时间 08:00）后开始生成绩效" />
+        <Empty icon="chart" title={t("perf.empty")} hint={t("perf.emptyHint")} />
       ) : null}
 
       <H2ShadowCard />
 
       {years.length ? (
         <section className="perf-card">
-          <h2>月度收益</h2>
+          <h2>{t("perf.monthly")}</h2>
           <div className="perf-scroll">
             <table className="perf-heat num">
               <thead>
                 <tr>
-                  <th>年</th>
+                  <th>{t("perf.year")}</th>
                   {MONTHS.map((x) => (
-                    <th key={x}>{x}月</th>
+                    <th key={x}>{t("perf.month", { m: x })}</th>
                   ))}
                 </tr>
               </thead>
@@ -120,7 +127,7 @@ export function PerformancePage() {
                     {MONTHS.map((x) => {
                       const c = row[x];
                       return (
-                        <td key={x} style={c ? { background: heat(c.ret) } : undefined} title={c ? `${c.days} 天` : ""}>
+                        <td key={x} style={c ? { background: heat(c.ret) } : undefined} title={c ? t("perf.nDays", { n: c.days }) : ""}>
                           {c ? pct(c.ret, 1) : ""}
                         </td>
                       );
@@ -137,16 +144,16 @@ export function PerformancePage() {
 
       {rep ? (
         <section className="perf-card">
-          <h2>逐币归因（USDT）</h2>
+          <h2>{t("perf.attr")}</h2>
           <div className="perf-scroll">
             <table className="perf-attr num">
               <thead>
                 <tr>
-                  <th>币</th>
-                  <th>价格</th>
-                  <th>资金费</th>
-                  <th>成本</th>
-                  <th>合计</th>
+                  <th>{t("perf.a.coin")}</th>
+                  <th>{t("perf.a.price")}</th>
+                  <th>{t("perf.a.funding")}</th>
+                  <th>{t("perf.a.cost")}</th>
+                  <th>{t("perf.a.total")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,24 +171,24 @@ export function PerformancePage() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={4}>账本实际盈亏</td>
+                  <td colSpan={4}>{t("perf.a.ledger")}</td>
                   <td>{usd(rep.attribution.totalUsd)}</td>
                 </tr>
                 <tr>
-                  <td colSpan={4}>未归因残差</td>
+                  <td colSpan={4}>{t("perf.a.residual")}</td>
                   <td>{usd(rep.attribution.residualUsd)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
           <p className="muted perf-note">
-            价格 = 前一日权重 × 当日涨跌；资金费 = −权重 × 当日资金费率（多头付正费率）；成本 = 手续费 + 滑点（含风控盘中调整成交）。
-            {rep.attribution.segmentsFromAdjustments ? ` 有 ${rep.attribution.segmentsFromAdjustments} 次盘中风控调整，已分段累加。` : ""}
-            {rep.attribution.fundingByCoin ? "" : " 资金费无法逐币取得，已按账本总额计入，不分币。"}
+            {t("perf.a.note")}
+            {rep.attribution.segmentsFromAdjustments ? ` ${t("perf.a.segments", { n: rep.attribution.segmentsFromAdjustments })}` : ""}
+            {rep.attribution.fundingByCoin ? "" : ` ${t("perf.a.noFundingByCoin")}`}
           </p>
         </section>
       ) : null}
-      {rep ? <p className="muted perf-note">{rep.note}</p> : null}
+      {rep ? <p className="muted perf-note">{t("perf.note", { min: rep.goNoGo?.minDays ?? 250 })}</p> : null}
     </div>
   );
 }
@@ -198,19 +205,20 @@ function DrawdownChart({ rep }: { rep: StrategyReport }) {
   const dd = `M0,0${pts.map((p, i) => `L${x(i).toFixed(1)},${yd(p.dd).toFixed(1)}`).join("")}L${W},0Z`;
   const nav = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yn(p.nav).toFixed(1)}`).join("");
   const m = rep.metrics;
+  const { t } = useTranslation();
   return (
     <section className="perf-card">
-      <h2>净值与回撤</h2>
-      <svg viewBox={`0 0 ${W} ${HN}`} className="perf-svg" preserveAspectRatio="none" role="img" aria-label="净值">
+      <h2>{t("perf.navDd")}</h2>
+      <svg viewBox={`0 0 ${W} ${HN}`} className="perf-svg" preserveAspectRatio="none" role="img" aria-label={t("perf.nav")}>
         <line x1={0} x2={W} y1={yn(rep.startNav)} y2={yn(rep.startNav)} stroke="currentColor" opacity={0.25} strokeDasharray="4 4" />
         <path d={nav} fill="none" stroke="#f0a531" strokeWidth={2} vectorEffect="non-scaling-stroke" />
       </svg>
-      <svg viewBox={`0 0 ${W} ${H}`} className="perf-svg perf-dd" preserveAspectRatio="none" role="img" aria-label="回撤">
+      <svg viewBox={`0 0 ${W} ${H}`} className="perf-svg perf-dd" preserveAspectRatio="none" role="img" aria-label={t("perf.dd")}>
         <path d={dd} className="dd-area" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       </svg>
       <p className="muted perf-note">
-        {pts[0].day} ~ {pts[pts.length - 1].day} · 最大回撤 {pct(m.maxDrawdown)} · 最长回撤 {m.longestDrawdownDays ?? 0} 天
-        {m.longestDrawdown ? `（${m.longestDrawdown.from} ~ ${m.longestDrawdown.to}）` : ""} · 回撤坐标底部 = {pct(minDd)}
+        {pts[0].day} ~ {pts[pts.length - 1].day} · {t("perf.k.mdd")} {pct(m.maxDrawdown)} · {t("perf.k.longest")} {t("perf.nDays", { n: m.longestDrawdownDays ?? 0 })}
+        {m.longestDrawdown ? ` (${m.longestDrawdown.from} ~ ${m.longestDrawdown.to})` : ""} · {t("perf.ddAxis", { v: pct(minDd) })}
       </p>
     </section>
   );

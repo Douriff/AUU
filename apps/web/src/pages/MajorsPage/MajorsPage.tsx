@@ -1,6 +1,10 @@
 import { Empty, SkRows } from "@/components/ui/Skeleton";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { fmtFixed, fmtKMB, fmtMax } from "@/i18n/format";
+import { errText } from "@/i18n/errors";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MajorsTicker, MajorsTickerBoard } from "@/types/contracts";
 
@@ -13,29 +17,25 @@ const VENUES: { id: Venue; label: string }[] = [
   { id: "okx", label: "OKX" },
   { id: "bybit", label: "Bybit" },
   { id: "coinbase", label: "Coinbase" },
-  { id: "cross", label: "跨所对照" },
+  { id: "cross", label: "majors.cross" },
 ];
 
 function formatPx(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const a = Math.abs(n);
   const digits = a >= 1000 ? 2 : a >= 1 ? 3 : a >= 0.01 ? 4 : 6;
-  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
+  return fmtMax(n, digits);
 }
 
 function formatVol(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  const a = Math.abs(n);
-  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return n.toFixed(0);
+  return fmtKMB(n);
 }
 
 function formatPct(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const pct = n * 100;
-  const body = `${Math.abs(pct).toFixed(2)}%`;
+  const body = `${fmtFixed(Math.abs(pct), 2)}%`;
   if (pct > 0) return `+${body}`;
   if (pct < 0) return `-${body}`;
   return body;
@@ -56,6 +56,7 @@ export function MajorsPage() {
   const [board, setBoard] = useState<MajorsTickerBoard | null>(null);
   const [err, setErr] = useState("");
   const navigate = useNavigate();
+  const { t } = useTranslation();
   // a row opens the coin's trade view (K 线 + 订单簿 + 纸面交易), carrying the venue tab
   const openCoin = (base: string) => {
     const q = new URLSearchParams({ symbol: base });
@@ -85,7 +86,7 @@ export function MajorsPage() {
           setErr("");
         }
       } catch (e) {
-        if (!stop) setErr(e instanceof Error ? e.message : "行情读取失败");
+        if (!stop) setErr(errText(e, "majors.loadFailed"));
       }
     };
     void tick();
@@ -112,34 +113,34 @@ export function MajorsPage() {
     <div className="majors-page mj-dense pro-page">
       <header className="mj-top pro-head">
         <div>
-          <h1>大盘</h1>
-          <p>各交易所成交额前 100 的现货交易对 · 公开行情 · 点击任一币查看 K 线 / 订单簿 / 纸面交易</p>
+          <h1>{t("majors.title")}</h1>
+          <p>{t("majors.sub")}</p>
         </div>
-        <div className="mj-health" aria-label="交易所状态">
+        <div className="mj-health" aria-label={t("majors.health")}>
           {health.map((row) => (
             <span key={row.id} className={row.status === "ok" ? "is-ok" : "is-down"}>
               <i aria-hidden="true" />
-              {row.label} {row.status_label}
+              {row.label} {row.status === "ok" ? t("majors.up") : t("majors.down")}
             </span>
           ))}
         </div>
       </header>
 
       <div className="mj-tools">
-        <div className="mk-tabs" role="tablist" aria-label="交易所">
+        <div className="mk-tabs" role="tablist" aria-label={t("majors.venue")}>
           {VENUES.map((item) => (
             <button key={item.id} type="button" className={venue === item.id ? "is-on" : ""} onClick={() => setVenue(item.id)}>
-              {item.label}
+              {item.id === "cross" ? t(item.label) : item.label}
             </button>
           ))}
         </div>
         {venue !== "cross" ? (
-          <div className="mk-tabs" aria-label="涨跌">
+          <div className="mk-tabs" aria-label={t("majors.bucket")}>
             {(
               [
-                ["all", "全部"],
-                ["gainers", "涨幅"],
-                ["losers", "跌幅"],
+                ["all", t("majors.all")],
+                ["gainers", t("majors.gainers")],
+                ["losers", t("majors.losers")],
               ] as const
             ).map(([id, label]) => (
               <button key={id} type="button" className={bucket === id ? "is-on" : ""} onClick={() => setBucket(id)}>
@@ -149,13 +150,13 @@ export function MajorsPage() {
           </div>
         ) : null}
         <label className="mk-search">
-          <span className="sr-only">搜索</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索币种" type="search" />
+          <span className="sr-only">{t("majors.search")}</span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("majors.searchPh")} type="search" />
         </label>
       </div>
 
       {err ? <p className="mj-err">{err}</p> : null}
-      {down ? <p className="mj-err">这个交易所当前不可用。</p> : null}
+      {down ? <p className="mj-err">{t("majors.venueDown")}</p> : null}
 
       <div className="mj-table-wrap">
         <table className="mj-table">
@@ -164,34 +165,34 @@ export function MajorsPage() {
               <tr>
                 <th>#</th>
                 <th>
-                  <button type="button" onClick={() => onSort("symbol")}>币种</button>
+                  <button type="button" onClick={() => onSort("symbol")}>{t("majors.col.coin")}</button>
                 </th>
-                <th>最优买</th>
-                <th>买价</th>
-                <th>最优卖</th>
-                <th>卖价</th>
+                <th>{t("majors.col.bestBidVenue")}</th>
+                <th>{t("majors.col.bidPx")}</th>
+                <th>{t("majors.col.bestAskVenue")}</th>
+                <th>{t("majors.col.askPx")}</th>
                 <th>
-                  <button type="button" onClick={() => onSort("spread")}>价差</button>
+                  <button type="button" onClick={() => onSort("spread")}>{t("majors.col.spread")}</button>
                 </th>
-                <th>参与交易所</th>
+                <th>{t("majors.col.venues")}</th>
               </tr>
             ) : (
               <tr>
                 <th>#</th>
                 <th>
-                  <button type="button" onClick={() => onSort("symbol")}>交易对</button>
+                  <button type="button" onClick={() => onSort("symbol")}>{t("majors.col.pair")}</button>
                 </th>
                 <th>
-                  <button type="button" onClick={() => onSort("price")}>最新价</button>
+                  <button type="button" onClick={() => onSort("price")}>{t("majors.col.last")}</button>
                 </th>
                 <th>
                   <button type="button" onClick={() => onSort("change")}>24h</button>
                 </th>
                 <th>
-                  <button type="button" onClick={() => onSort("volume")}>成交额</button>
+                  <button type="button" onClick={() => onSort("volume")}>{t("majors.col.volume")}</button>
                 </th>
-                <th>买一</th>
-                <th>卖一</th>
+                <th>{t("majors.col.bid")}</th>
+                <th>{t("majors.col.ask")}</th>
               </tr>
             )}
           </thead>
@@ -206,7 +207,7 @@ export function MajorsPage() {
           </tbody>
         </table>
         {!board && !err ? <SkRows rows={12} cols={7} h={36} /> : null}
-        {board && items.length === 0 && !down ? <Empty icon="search" title="没有匹配的交易对" hint="换个关键词或交易所试试" /> : null}
+        {board && items.length === 0 && !down ? <Empty icon="search" title={t("majors.noMatch")} hint={t("majors.noMatchHint")} /> : null}
       </div>
     </div>
   );
@@ -217,7 +218,7 @@ function rowProps(base: string, onOpen: (base: string) => void) {
     className: "mj-row-link",
     tabIndex: 0,
     role: "link",
-    title: `查看 ${base} K 线 · 订单簿 · 纸面交易`,
+    title: i18n.t("majors.rowTitle", { base }),
     onClick: () => onOpen(base),
     onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -251,7 +252,7 @@ function CrossRow({ row, rank, onOpen }: { row: MajorsTicker; rank: number; onOp
       <td className="num">{formatPx(row.bid)}</td>
       <td>{row.ask_venue || "—"}</td>
       <td className="num">{formatPx(row.ask)}</td>
-      <td className="num">{row.spread_bps == null ? "—" : `${row.spread_bps.toFixed(1)} bps`}</td>
+      <td className="num">{row.spread_bps == null ? "—" : `${fmtFixed(row.spread_bps, 1)} bps`}</td>
       <td>{(row.venues || []).join(" / ") || "—"}</td>
     </tr>
   );

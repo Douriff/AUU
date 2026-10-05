@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { emailProblem } from "@/lib/authRules";
+import { useTranslation } from "react-i18next";
+import { ApiError } from "@/providers/HttpWsProvider";
+import { errText } from "@/i18n/errors";
 
 type Props = {
   purpose: "signup" | "reset";
@@ -13,6 +16,7 @@ type Props = {
 
 /** Email input + 发送验证码 button with a 60 s cooldown, plus the 6-digit code input. */
 export function EmailCodeField({ purpose, email, code, onEmail, onCode, onError }: Props) {
+  const { t, i18n } = useTranslation();
   const [cooldown, setCooldown] = useState(0);
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState("");
@@ -33,14 +37,13 @@ export function EmailCodeField({ purpose, email, code, onEmail, onCode, onError 
     onError("");
     setNote("");
     try {
-      const res = await marketProvider.sendEmailCode({ email: email.trim(), purpose });
-      setNote(`${res.message}（${res.email}）`);
+      const res = await marketProvider.sendEmailCode({ email: email.trim(), purpose, lang: i18n.language });
+      setNote(t(purpose === "reset" ? "auth.code.sentReset" : "auth.code.sent", { email: res.email, min: Math.max(1, Math.round((res.ttl_sec || 600) / 60)) }));
       setCooldown(res.resend_after_sec || 60);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "验证码发送失败";
-      onError(message);
-      const wait = /请 (\d+) 秒后再试/.exec(message);
-      if (wait) setCooldown(Number(wait[1]));
+      onError(errText(e, "auth.code.sendFailed"));
+      const wait = e instanceof ApiError && e.code === "EMAIL_THROTTLE" ? e.retryAfter ?? 0 : 0;
+      if (wait) setCooldown(wait);
     } finally {
       setSending(false);
     }
@@ -49,24 +52,24 @@ export function EmailCodeField({ purpose, email, code, onEmail, onCode, onError 
   return (
     <>
       <label>
-        邮箱
+        {t("auth.email")}
         <input value={email} onChange={(e) => onEmail(e.target.value)} type="email" autoComplete="email" required />
-        <small className="muted">支持 QQ 邮箱、163 邮箱等，验证码 10 分钟内有效</small>
+        <small className="muted">{t("auth.code.hint")}</small>
       </label>
       <label>
-        邮箱验证码
+        {t("auth.code.label")}
         <span className="email-code-row" style={{ display: "flex", gap: 8 }}>
           <input
             value={code}
             onChange={(e) => onCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="6 位数字"
+            placeholder={t("auth.code.placeholder")}
             required
             style={{ flex: 1 }}
           />
           <button type="button" className="td-submit" onClick={() => void send()} disabled={sending || cooldown > 0}>
-            {sending ? "发送中…" : cooldown > 0 ? `${cooldown} 秒后可重发` : "发送验证码"}
+            {sending ? t("auth.code.sending") : cooldown > 0 ? t("auth.code.resendIn", { n: cooldown }) : t("auth.code.send")}
           </button>
         </span>
         {note && <small className="muted">{note}</small>}

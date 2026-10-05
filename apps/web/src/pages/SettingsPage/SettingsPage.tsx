@@ -20,6 +20,9 @@ import { Link } from "react-router-dom";
 import { ColorToggle } from "@/components/ui/ColorToggle";
 import { ModeBadge } from "@/components/ui/Brand";
 import { Sk } from "@/components/ui/Skeleton";
+import { useTranslation } from "react-i18next";
+import { errText } from "@/i18n/errors";
+import { LangSwitch } from "@/components/ui/LangSwitch";
 
 export function SettingsPage() {
   const legacy = useLegacyMode();
@@ -29,6 +32,7 @@ export function SettingsPage() {
 
 /** Mainstream mode: account + read-only data/live status (pump wallet/provider/discovery are legacy). */
 function MainstreamSettingsPage() {
+  const { t, i18n } = useTranslation();
   const [md, setMd] = useState<MainstreamFreshness | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState("");
@@ -36,7 +40,7 @@ function MainstreamSettingsPage() {
     marketProvider
       .getHealth()
       .then((h) => setMd(h.mainstream ?? null))
-      .catch((e: Error) => setErr(e.message));
+      .catch((e: unknown) => setErr(errText(e, "common.loadFailed")));
     marketProvider
       .getLiveStatus()
       .then((st) => setLive(st))
@@ -46,45 +50,55 @@ function MainstreamSettingsPage() {
   return (
     <div className="shell-page settings-page pro-page">
       <header className="pro-head">
-        <h1>设置与安全</h1>
-        <p>账户、两步验证、显示偏好</p>
+        <h1>{t("shell.settings")}</h1>
+        <p>{t("settings.sub")}</p>
       </header>
-      <nav className="set-links" aria-label="更多">
-        <Link to="/majors">大盘 ›</Link>
-        <Link to="/news">行业动态 ›</Link>
-        <Link to="/leaderboard">排行榜 ›</Link>
+      <nav className="set-links" aria-label={t("settings.more")}>
+        <Link to="/majors">{t("nav.majors")} ›</Link>
+        <Link to="/news">{t("news.title")} ›</Link>
+        <Link to="/leaderboard">{t("nav.leaderboard")} ›</Link>
       </nav>
       <section className="settings-section">
-        <h2>显示偏好</h2>
+        <h2>{t("settings.display")}</h2>
+        <div className="set-row set-row-lang">
+          <div>
+            <b>
+              {t("lang.label")}
+              {i18n.language === "en" ? null : <span className="muted"> · Language</span>}
+            </b>
+            <p className="muted">{t("settings.langHint")}</p>
+          </div>
+          <LangSwitch />
+        </div>
         <div className="set-row">
           <div>
-            <b>涨跌颜色</b>
-            <p className="muted">影响全站数字与 K 线颜色，只保存在本机浏览器</p>
+            <b>{t("color.label")}</b>
+            <p className="muted">{t("settings.colorHint")}</p>
           </div>
           <ColorToggle />
         </div>
       </section>
       <AccountSection />
       <section className="settings-section">
-        <h2>交易模式与数据</h2>
+        <h2>{t("settings.modeData")}</h2>
         {err ? <div className="pro-alert">{err}</div> : null}
         <dl className="set-dl">
           <div>
-            <dt>交易模式</dt>
+            <dt>{t("settings.mode")}</dt>
             <dd>
               <ModeBadge liveOff={!live?.liveEnabled} />
-              <span className="muted">所有成交均为纸面模拟，网页端无法开启实盘</span>
+              <span className="muted">{t("settings.modeNote")}</span>
             </dd>
           </div>
           <div>
-            <dt>行情来源</dt>
+            <dt>{t("settings.source")}</dt>
             <dd>
               {md ? (
                 <>
                   <b>{(md.exchange || "—").toUpperCase()}</b>
                   <span className="muted">
-                    备用顺序 {md.exchanges?.map((x) => x.toUpperCase()).join(" → ") || "—"}
-                    {blocked.length ? ` · 暂不可用 ${blocked.join(", ").toUpperCase()}` : ""}
+                    {t("settings.fallback")} {md.exchanges?.map((x) => x.toUpperCase()).join(" → ") || "—"}
+                    {blocked.length ? ` · ${t("settings.unavailable")} ${blocked.join(", ").toUpperCase()}` : ""}
                   </span>
                 </>
               ) : (
@@ -93,12 +107,12 @@ function MainstreamSettingsPage() {
             </dd>
           </div>
           <div>
-            <dt>数据状态</dt>
-            <dd>{md ? <span className={md.stale ? "warn" : "up"}>{md.stale ? "数据过期" : "数据新鲜"}</span> : <Sk w={80} h={12} />}</dd>
+            <dt>{t("settings.dataState")}</dt>
+            <dd>{md ? <span className={md.stale ? "warn" : "up"}>{md.stale ? t("shell.stale") : t("shell.fresh")}</span> : <Sk w={80} h={12} />}</dd>
           </div>
           <div>
-            <dt>币种</dt>
-            <dd className="muted">{md ? `${md.symbols?.length ?? 0} 个：${md.symbols?.join(" ")}` : <Sk w={240} h={12} />}</dd>
+            <dt>{t("ms.col.coin")}</dt>
+            <dd className="muted">{md ? t("settings.coins", { n: md.symbols?.length ?? 0, list: md.symbols?.join(" ") }) : <Sk w={240} h={12} />}</dd>
           </div>
         </dl>
       </section>

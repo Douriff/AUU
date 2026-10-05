@@ -350,8 +350,9 @@ export interface EnvelopeOk<T> {
 }
 
 export interface EnvelopeErr {
+  /** code: stable machine id; key/params: optional finer reason for translated messages. */
   ok: false;
-  error: { code: string; message: string };
+  error: { code: string; message: string; key?: string; params?: Record<string, unknown>; retry_after?: number };
 }
 
 export type Envelope<T> = EnvelopeOk<T> | EnvelopeErr;
@@ -1129,6 +1130,9 @@ export interface AuthUser {
   start_sol: number;
   created_ts?: number;
   totp_enabled?: boolean;
+  /** Saved interface language (null = never chosen) and when it was saved (ms). */
+  locale?: string | null;
+  locale_ts?: number | null;
   pnl: number;
   return_pct: number;
   equity: number;
