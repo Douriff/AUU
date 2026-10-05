@@ -30,7 +30,8 @@ export function ModeBadge({ liveOff = true }: { liveOff?: boolean }) {
   return liveOff ? (
     <span className="mode-pill" title={t("mode.paperTitle")}>
       <i aria-hidden="true" />
-      {t("mode.paper")}
+      <span className="mode-long">{t("mode.paper")}</span>
+      <span className="mode-short">{t("mode.paperShort")}</span>
     </span>
   ) : (
     <span className="mode-pill is-warn" title={t("mode.liveCheckTitle")}>

@@ -321,7 +321,7 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
                   <CoinBadge symbol={r.symbol} size={16} />
                   <b>{r.symbol}</b>
                   {favs.has(r.symbol) ? <span className="cs-fav">★</span> : null}
-                  {r.held ? <span className="ml-held">{t("ml.held")}</span> : null}
+                  {r.held ? <span className="ml-held" title={t("ml.heldTitle")}>{t("ml.held")}</span> : null}
                 </span>
                 <span className="num">{fmtPx(r.price)}</span>
                 <span className={tone(r.change24h)}>{fmtPct(r.change24h)}</span>

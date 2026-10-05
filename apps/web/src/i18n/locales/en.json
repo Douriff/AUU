@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "All fills are paper simulations; live trading is locked and no real funds are used",
     "paper": "Paper · live locked",
+    "paperShort": "Paper",
     "liveCheckTitle": "The live-trading lock is not engaged; please check the configuration",
     "liveCheck": "Live check"
   },

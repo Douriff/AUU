@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "Tüm işlemler sanal simülasyondur; gerçek işlem kilitlidir ve gerçek para kullanılmaz",
     "paper": "Sanal · gerçek kilitli",
+    "paperShort": "Sanal",
     "liveCheckTitle": "Gerçek işlem kilidi devrede değil; lütfen yapılandırmayı kontrol edin",
     "liveCheck": "Gerçek kontrol"
   },

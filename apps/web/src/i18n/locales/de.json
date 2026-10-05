@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "Alle Ausführungen sind Paper-Simulationen; Live-Handel ist gesperrt, es wird kein echtes Geld verwendet",
     "paper": "Paper · Live gesperrt",
+    "paperShort": "Paper",
     "liveCheckTitle": "Die Live-Handelssperre ist nicht aktiv; bitte Konfiguration prüfen",
     "liveCheck": "Live-Prüfung"
   },

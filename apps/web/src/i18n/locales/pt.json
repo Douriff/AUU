@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "Todas as execuções são simuladas; a negociação real está bloqueada e nenhum dinheiro real é usado",
     "paper": "Simulado · real bloqueado",
+    "paperShort": "Simulado",
     "liveCheckTitle": "O bloqueio da negociação real não está ativo; verifique a configuração",
     "liveCheck": "Verificar real"
   },
