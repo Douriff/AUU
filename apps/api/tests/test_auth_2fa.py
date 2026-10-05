@@ -54,7 +54,8 @@ class TwoFactorTests(unittest.TestCase):
         s = self.c.post("/api/v1/auth/2fa/setup", json={"password": PW})
         self.assertEqual(s.status_code, 200, s.text)
         secret = s.json()["data"]["secret"]
-        self.assertIn("<svg", s.json()["data"]["qr_svg"])
+        png = s.json()["data"]["qr_png"]
+        self.assertTrue(png.startswith("data:image/png;base64,"), png[:40])
         self.assertTrue(s.json()["data"]["otpauth"].startswith("otpauth://totp/AUUTRADE"))
         e = self.c.post("/api/v1/auth/2fa/enable", json={"code": pyotp.TOTP(secret).now()})
         self.assertEqual(e.status_code, 200, e.text)
@@ -77,6 +78,53 @@ class TwoFactorTests(unittest.TestCase):
         self.assertEqual(results[:2], ["bad_password", "ok"])
         self.assertEqual(sec["logins"][1]["ua"], "UnitTest/1.0")
         self.assertTrue(sec["logins"][1]["ip"])
+
+    def test_otpauth_qr_matches_google_authenticator_format(self):
+        """URI + PNG must be what Google Authenticator expects; pyzbar must recover the same URI."""
+        import base64
+        from io import BytesIO
+
+        from app.auth import security
+
+        try:
+            from PIL import Image
+            from pyzbar.pyzbar import decode as zbar_decode
+            have_zbar = True
+        except Exception:
+            have_zbar = False
+
+        secret = security.new_secret()
+        self.assertRegex(secret, r"^[A-Z2-7]{32}$")
+        self.assertNotIn("=", secret)
+        for name in ("Wangshu", "alice@test.com", "用户甲", "a/b", "Wang Shu"):
+            uri = security.otpauth_uri(secret, name)
+            self.assertTrue(uri.startswith("otpauth://totp/AUUTRADE:"), uri)
+            self.assertIn(f"secret={secret}", uri)
+            self.assertTrue(uri.endswith("&issuer=AUUTRADE") or "&issuer=AUUTRADE&" in uri, uri)
+            self.assertNotIn("algorithm=", uri)
+            self.assertNotIn("digits=", uri)
+            self.assertNotIn("period=", uri)
+            path = uri.split("?", 1)[0]
+            self.assertNotIn(" ", path)
+            if name == "a/b":
+                self.assertIn("a%2Fb", path)  # slash must not break the path
+            data_uri = security.qr_png_data_uri(uri)
+            self.assertTrue(data_uri.startswith("data:image/png;base64,"))
+            raw = base64.b64decode(data_uri.split(",", 1)[1])
+            self.assertTrue(raw.startswith(bytes([0x89]) + b"PNG"))
+            if have_zbar:
+                got = zbar_decode(Image.open(BytesIO(raw)))
+                self.assertTrue(got, f"pyzbar failed for name={name!r}")
+                self.assertEqual(got[0].data.decode(), uri)
+        s = self.c.post("/api/v1/auth/2fa/setup", json={"password": PW}).json()["data"]
+        self.assertEqual(s["otpauth"], security.otpauth_uri(s["secret"], "wangshu"))
+        raw = base64.b64decode(s["qr_png"].split(",", 1)[1])
+        self.assertTrue(raw.startswith(bytes([0x89]) + b"PNG"))
+        if have_zbar:
+            got = zbar_decode(Image.open(BytesIO(raw)))[0].data.decode()
+            self.assertEqual(got, s["otpauth"])
+        else:
+            self.assertTrue(s["qr_png"].startswith("data:image/png;base64,"))
 
     def test_enable_requires_password_and_a_valid_code(self):
         self.assertEqual(self.c.post("/api/v1/auth/2fa/setup", json={"password": "nope12345"}).status_code, 401)

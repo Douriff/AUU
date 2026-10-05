@@ -1951,8 +1951,8 @@ code.hl { color: var(--accent); }
 .sec-wrap { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 1.2rem; max-width: 100%; }
 .sec-card { max-width: 640px; width: 100%; box-sizing: border-box; }
 .sec-card h3 { margin: 0; font-size: 0.95rem; }
-.sec-qr { background: #fff; border-radius: 8px; padding: 6px; width: fit-content; max-width: 100%; }
-.sec-qr svg { display: block; width: 200px; height: 200px; max-width: 100%; }
+.sec-qr { background: #fff; border-radius: 12px; padding: 16px; width: fit-content; max-width: 100%; }
+.sec-qr-img { display: block; width: 196px; height: 196px; max-width: 100%; image-rendering: pixelated; }
 .sec-secret { font-size: 0.82rem; word-break: break-all; color: #e7e7ea; }
 .sec-codes ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.25rem 1rem; margin: 0.3rem 0; padding-left: 1.3rem; }
 .sec-codes code { font-size: 0.85rem; }

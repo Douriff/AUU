@@ -402,7 +402,7 @@ def totp_setup(user_id: str, password: str) -> dict[str, Any]:
         user["totp"] = t
         _save()
     uri = security.otpauth_uri(secret, str(user.get("name") or "user"))
-    return {"secret": secret, "otpauth": uri, "qr_svg": security.qr_svg(uri), "expires_in": security.SETUP_TTL}
+    return {"secret": secret, "otpauth": uri, "qr_png": security.qr_png_data_uri(uri), "expires_in": security.SETUP_TTL}
 
 
 def totp_enable(user_id: str, code: str) -> list[str]:
