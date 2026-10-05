@@ -1,0 +1,585 @@
+{
+"note": "145 extra Cointelegraph headlines (title only) from its public tag feeds bitcoin/ethereum/regulation/markets/blockchain/business + main feed, fetched 2026-10-05 16:04 BJ from the box, deduplicated against the server snapshot. Topic-biased toward BTC/ETH/regulation; used only to check the 要闻 share on a busier sample.",
+"items": [
+{
+"source": "cointelegraph",
+"title": "Core Lightning warns attackers are targeting unpatched nodes"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin fights for local uptrend as US bond yields drop from new 24-year highs"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin trapped below $86K as PCE changes cloud inflation reading"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs draw $6.3B in Q3 as BTC price rises nearly 43%"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin think tank questions MSCI’s ‘invisible committee’ over Strategy, Metaplanet rule"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs stretch $3.1B inflow streak as Ether funds turn red"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin gives back gains as long-term holder supply keeps $85K out of reach"
+},
+{
+"source": "cointelegraph",
+"title": "Peter Brandt says Bitcoin may hit $600K by 2029, calls XRP a ‘fool coin’"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETF inflows leave institutional demand unclear: CoinShares"
+},
+{
+"source": "cointelegraph",
+"title": "US crypto ETF inflows cool after $3.3B week but streaks hold"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin bounces to $84K after US 30-year bond yield sets 24-year high"
+},
+{
+"source": "cointelegraph",
+"title": "Strategy buys 1,665 Bitcoin for $143M as BTC stack hits 847,666"
+},
+{
+"source": "cointelegraph",
+"title": "BTC price eyes best Q3 in nine years: Three things to know in Bitcoin this week"
+},
+{
+"source": "cointelegraph",
+"title": "Bitget resumes Bitcoin withdrawals as hacker swaps ETH via THORChain"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin drops under $83K as liquidity hunting keeps bulls from targeting yearly open"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs draw $2.4B in biggest inflow week since October 2025"
+},
+{
+"source": "cointelegraph",
+"title": "IBIT options price trading more calmly after Bitcoin rebound"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETF inflows slow to $191M as six-day streak reaches $2.8B"
+},
+{
+"source": "cointelegraph",
+"title": "Researchers propose Zcash-style private Bitcoin transfers without a soft fork"
+},
+{
+"source": "cointelegraph",
+"title": "Block brings Bitcoin Lightning payments to x402 for AI agents"
+},
+{
+"source": "cointelegraph",
+"title": "Sequans exits Bitcoin treasury strategy after selling remaining 314 BTC"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin falls below $84K as 10-year Treasury yield hits 19-year high"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs add $347M as BTC falls below $84K after topping $87K"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin’s ‘last resort’ quantum-safe solution just got 79% cheaper: StarkWare"
+},
+{
+"source": "cointelegraph",
+"title": "Zano exploiter minted more than a quadrillion fUSD before blockchain rollback"
+},
+{
+"source": "cointelegraph",
+"title": "Tokenized assets don’t always mirror traditional markets, Dune finds"
+},
+{
+"source": "cointelegraph",
+"title": "Chainalysis beats most Celsius claims, but ‘audit’ lawsuit survives"
+},
+{
+"source": "cointelegraph",
+"title": "MetaMask exits Ethereum validators amid undisclosed security incident"
+},
+{
+"source": "cointelegraph",
+"title": "Base completes Cobalt upgrade, adds new tools for tokenized assets"
+},
+{
+"source": "cointelegraph",
+"title": "Brazil’s Petrobras uses Cardano to track sustainable aviation fuel, renewable diesel"
+},
+{
+"source": "cointelegraph",
+"title": "Singapore crypto activity grows 55% as broader region contracts"
+},
+{
+"source": "cointelegraph",
+"title": "Crypto hardware wallets compared for 2026"
+},
+{
+"source": "cointelegraph",
+"title": "SlowMist traces Bitget hack activity to Aug. 31 zero-day exploit"
+},
+{
+"source": "cointelegraph",
+"title": "NEAR Intents says it blocked $50M tied to Bitget hackers"
+},
+{
+"source": "cointelegraph",
+"title": "Scammers steal $2M in ETH as fake GIWA network fools DYORSWAP"
+},
+{
+"source": "cointelegraph",
+"title": "Zano rolls blockchain back a month after Gateway Address exploit"
+},
+{
+"source": "cointelegraph",
+"title": "Magic Eden scare puts 3,832 NFTs in whitehat protective custody"
+},
+{
+"source": "cointelegraph",
+"title": "KelpDAO sues LayerZero, CEO over $292M rsETH bridge exploit"
+},
+{
+"source": "cointelegraph",
+"title": "Samourai Wallet co-founder faces transfer after 30-day jail ordeal"
+},
+{
+"source": "cointelegraph",
+"title": "IBM opens beta Swift ledger link for 24/7 tokenized deposits"
+},
+{
+"source": "cointelegraph",
+"title": "Zcash’s November upgrade could freeze funds in legacy Sprout pool"
+},
+{
+"source": "cointelegraph",
+"title": "Malicious iOS app FomoPeek linked to $580K crypto theft, SlowMist says"
+},
+{
+"source": "cointelegraph",
+"title": "Kakao Pay, KakaoBank to explore stablecoin opportunities with Fireblocks"
+},
+{
+"source": "cointelegraph",
+"title": "ZetaChain holders approve plan to wind down L1, move ZETA to Solana"
+},
+{
+"source": "cointelegraph",
+"title": "Bank of Korea launches 24-hour won settlement pilot for foreign investors"
+},
+{
+"source": "cointelegraph",
+"title": "Hana Bank taps Euroclear blockchain for $100M bond issuance: Report"
+},
+{
+"source": "cointelegraph",
+"title": "Zcash targets November for NU7 mainnet upgrade with 25-second blocks"
+},
+{
+"source": "cointelegraph",
+"title": "Circle launches Arc mainnet with USDC as native gas token"
+},
+{
+"source": "cointelegraph",
+"title": "ECB seeks online merchants for 2027 digital euro pilot"
+},
+{
+"source": "cointelegraph",
+"title": "CoinMarketCap buys CoinGlass to expand crypto derivatives data"
+},
+{
+"source": "cointelegraph",
+"title": "MoonPay to buy North Capital in all-stock deal worth over $60M"
+},
+{
+"source": "cointelegraph",
+"title": "BitMart misses roadmap deadline, appoints financial adviser"
+},
+{
+"source": "cointelegraph",
+"title": "Circle to acquire Tazapay to expand USDC cross-border payments"
+},
+{
+"source": "cointelegraph",
+"title": "BitGo buys NYDIG trading arm to deepen institutional crypto push"
+},
+{
+"source": "cointelegraph",
+"title": "Japan’s SBI leads $68M Fasset round at $1B valuation"
+},
+{
+"source": "cointelegraph",
+"title": "MoonPay adds Cash App Pay for crypto purchases by US customers"
+},
+{
+"source": "cointelegraph",
+"title": "Strategy raises $334M through stock sales but buys no Bitcoin"
+},
+{
+"source": "cointelegraph",
+"title": "BitMart account demands founder explain funds status, Xia calls claims ‘fabricated’"
+},
+{
+"source": "cointelegraph",
+"title": "Gemini posts $108M Q2 net loss despite 37% revenue growth"
+},
+{
+"source": "cointelegraph",
+"title": "RedotPay US IPO delayed amid regulatory, legal hurdles: Report"
+},
+{
+"source": "cointelegraph",
+"title": "BitGo posts $19M Q2 loss despite 80% revenue surge to $4.3B"
+},
+{
+"source": "cointelegraph",
+"title": "Copper US arm becomes FINRA member, SEC-registered broker-dealer"
+},
+{
+"source": "cointelegraph",
+"title": "Bitdeer increased Bitcoin mining output by nearly fivefold in Q2"
+},
+{
+"source": "cointelegraph",
+"title": "Step App winds down after four years as FITFI token sinks"
+},
+{
+"source": "cointelegraph",
+"title": "Blockchain.com wins Cayman custody license after MiCA and FCA approvals"
+},
+{
+"source": "cointelegraph",
+"title": "Binance sues RedotPay over alleged $473 million user losses: Report"
+},
+{
+"source": "cointelegraph",
+"title": "Boerse Stuttgart Digital, Tradias close European crypto merger"
+},
+{
+"source": "cointelegraph",
+"title": "Nigeria sets crypto tax collection rules for digital asset platforms"
+},
+{
+"source": "cointelegraph",
+"title": "Citadel buys bulk of Situational Awareness stock portfolio after AI rout: Reports"
+},
+{
+"source": "cointelegraph",
+"title": "Chinese newspaper warns of Bitcoin extortion scam using its name"
+},
+{
+"source": "cointelegraph",
+"title": "Tether signs tokenization deal with Nairobi Securities Exchange"
+},
+{
+"source": "cointelegraph",
+"title": "Ondo shifts from layer-1 blockchain plan to offchain execution network"
+},
+{
+"source": "cointelegraph",
+"title": "BitMart withdrawals appear to slow following wind-down announcement"
+},
+{
+"source": "cointelegraph",
+"title": "BitMart to wind down exchange, end trading by Aug. 26"
+},
+{
+"source": "cointelegraph",
+"title": "Mirae Asset completes Korbit acquisition, becomes largest shareholder"
+},
+{
+"source": "cointelegraph",
+"title": "Tether-backed Twenty One, Strike merger plan scrapped: Bloomberg"
+},
+{
+"source": "cointelegraph",
+"title": "MoonPay buys Glide to bolster crypto deposits infrastructure"
+},
+{
+"source": "cointelegraph",
+"title": "Yield Guild Games cuts 35 staff, shuts game publisher to focus on AI"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum’s zkAPI brings privacy-preserving API payments to mainnet"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum schedules Glamsterdam upgrade on Sepolia for Oct. 6"
+},
+{
+"source": "cointelegraph",
+"title": "BitMine could hit its 5% Ether supply target within weeks — then what?"
+},
+{
+"source": "cointelegraph",
+"title": "Vitalik Buterin says Hegotá could be Ethereum’s last ‘normal’ fork"
+},
+{
+"source": "cointelegraph",
+"title": "THORChain under fire over Bitget, ETH evolves beyond blockchain: Hodler’s Digest"
+},
+{
+"source": "cointelegraph",
+"title": "Trueo prediction market moves from Base to Ethereum"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum Institutional signals support for Ethlabs’ motion to reduce Ethereum block times"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum, Base wallet standards talks fail, Ethlabs researcher says"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine projects $334M in annual staking revenue from $15.8B crypto treasury"
+},
+{
+"source": "cointelegraph",
+"title": "Consensys to split into MetaMask and institutional blockchain company"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine buys 28k ETH, completes 97% of treasury accumulation goal"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum Foundation names 2 ‘must ship’ EIPs for Hegotá upgrade"
+},
+{
+"source": "cointelegraph",
+"title": "Ether, XRP ETF inflow streaks end as Bitcoin funds rebound"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine now controls 4.9% of Ethereum supply after adding 53.5K ETH"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine extends 14-month ETH buying pace as Ether breaks above $2.5K"
+},
+{
+"source": "cointelegraph",
+"title": "GnosisDAO approves Gnosis Chain for Ethereum Economic Zone"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum Foundation warns some tools may break with Glamsterdam upgrade"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine nears 5% of Ethereum supply despite $8.4B in unrealized losses"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum devs to narrow 66 proposals tied to Hegotá upgrade"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum Foundation pivots away from Poseidon in post-quantum plan"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine’s $257M annualized staking income ‘fills’ operational gaps, share buybacks: analysts"
+},
+{
+"source": "cointelegraph",
+"title": "Fidelity files with SEC to add staking to Ethereum ETF"
+},
+{
+"source": "cointelegraph",
+"title": "Fierce backlash to Ethereum’s EIP-8363 staking proposal"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum researchers want to rein in staking; critics say it could backfire"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine adds $19.6M in ETH, repurchases 4.5M shares"
+},
+{
+"source": "cointelegraph",
+"title": "How Fake World Assets and onchain gacha became crypto’s latest craze"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum Foundation adds SEAL 911 co-founder to board as privacy focus grows"
+},
+{
+"source": "cointelegraph",
+"title": "Ethereum, Solana led crypto hack losses in H1 2026: Blockaid"
+},
+{
+"source": "cointelegraph",
+"title": "Lido upgrade aims to slash Ethereum’s validator count by one-third"
+},
+{
+"source": "cointelegraph",
+"title": "Bitmine keeps buying Ether as ETH outperforms Bitcoin"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs notch third inflow week as Ether ETFs shed $138M"
+},
+{
+"source": "cointelegraph",
+"title": "Altcoin exchange deposit count jumps 160% in 2 weeks"
+},
+{
+"source": "cointelegraph",
+"title": "South Korea weighs crypto market makers after JPYC trades at 4 times peg"
+},
+{
+"source": "cointelegraph",
+"title": "Institutions held crypto through 50% drawdown, Bitwise finds"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs take in $1.7B in 2 days as BTC tops holder cost basis"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs flirt with $1B as inflows hit 2026 high"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin price tags $86K as analysis sees crypto in ‘new bull market’"
+},
+{
+"source": "cointelegraph",
+"title": "NEAR jumps nearly 80% in a week as Intents volume nears $30B"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin treasuries buy just 5.9K BTC in three months as paper losses linger"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin tops $79K, oil falls as Trump says Iran war could end"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETF outflows accelerate as investors pull $449M in three days"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin buyers wary of July sub-$58K floor amid onchain data ‘anomaly’"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin sell-side risk returns to rare lows as $80K sellers fade from view"
+},
+{
+"source": "cointelegraph",
+"title": "Zcash hits highest price since 2016 as market cap tops $20B"
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETF inflows hit $731M, highest since January as BTC reclaims $80K"
+},
+{
+"source": "cointelegraph",
+"title": "South Korea advances tokenized securities rules ahead of 2027 rollout"
+},
+{
+"source": "cointelegraph",
+"title": "SEC moves to clear custody hurdle for advisers offering crypto"
+},
+{
+"source": "cointelegraph",
+"title": "Trump to host 3rd ‘exclusive’ memecoin event amid corruption claims"
+},
+{
+"source": "cointelegraph",
+"title": "50,000 Europeans call on EU to ease stablecoin rewards restrictions in MiCA review"
+},
+{
+"source": "cointelegraph",
+"title": "Illinois will postpone implementation of crypto tax following lawsuit"
+},
+{
+"source": "cointelegraph",
+"title": "New York, Wyoming regulators sign pact to coordinate crypto oversight"
+},
+{
+"source": "cointelegraph",
+"title": "Stablecoins can drain from banks and nations at lightning speed"
+},
+{
+"source": "cointelegraph",
+"title": "Binance’s EU services face scrutiny over licensing exemption: Report"
+},
+{
+"source": "cointelegraph",
+"title": "CFTC seeks to define event contracts as swaps amid prediction market fight"
+},
+{
+"source": "cointelegraph",
+"title": "Crypto advocacy group announces picks for US Congress as midterms loom"
+},
+{
+"source": "cointelegraph",
+"title": "FCA opens crypto authorization window ahead of 2027 UK regime"
+},
+{
+"source": "cointelegraph",
+"title": "A single market worth protecting: Getting the MiCA review right"
+},
+{
+"source": "cointelegraph",
+"title": "Illinois draft crypto tax rules detail DeFi, stablecoin treatment"
+},
+{
+"source": "cointelegraph",
+"title": "Crypto regulation at SEC, CFTC to come down to 3 commissioners following key resignation"
+},
+{
+"source": "cointelegraph",
+"title": "Greece gets first MiCA entrants as watchdog denies Binance-Lagarde claim"
+},
+{
+"source": "cointelegraph",
+"title": "Canadian ‘crypto king’ set to represent himself at fraud trial"
+},
+{
+"source": "cointelegraph",
+"title": "US SEC follows CFTC in staff guidance for crypto"
+},
+{
+"source": "cointelegraph",
+"title": "Crypto PAC spends $11M to oppose Sherrod Brown in Ohio"
+},
+{
+"source": "cointelegraph",
+"title": "MiCA focus shifts from rulemaking to supervision, ESMA chair says"
+},
+{
+"source": "cointelegraph",
+"title": "Hong Kong regulators expand financial reporting oversight to licensed crypto firms"
+},
+{
+"source": "cointelegraph",
+"title": "Newsom signs California ban on public officials issuing memecoins"
+},
+{
+"source": "cointelegraph",
+"title": "Kalshi loses appeal, setting up potential Supreme Court case"
+}
+]
+}

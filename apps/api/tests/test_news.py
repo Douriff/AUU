@@ -1,6 +1,7 @@
 """行业动态: RSS parsing, coin tagging, store/pagination, failure isolation, login-only route."""
 from __future__ import annotations
 
+import json
 import os
 import socket
 import tempfile
@@ -17,7 +18,7 @@ RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
 <channel><title>Feed</title>
 <item>
-  <title><![CDATA[Bitcoin ETFs kick off &#8216;Uptober&#8217; with $103M inflow]]></title>
+  <title><![CDATA[Bitcoin ETFs kick off &#8216;Uptober&#8217; with $1.03B inflow]]></title>
   <link><![CDATA[https://example.com/a?utm_source=rss_feed&utm_medium=rss&id=7]]></link>
   <guid isPermaLink="false">a-1</guid>
   <pubDate>Fri, 02 Oct 2026 08:20:08 +0000</pubDate>
@@ -45,12 +46,12 @@ class ParseTests(unittest.TestCase):
         items = news.parse_feed(RSS, "coindesk", NOW)
         self.assertEqual(len(items), 3)
         a = items[0]
-        self.assertEqual(a["title"], "Bitcoin ETFs kick off \u2018Uptober\u2019 with $103M inflow")
+        self.assertEqual(a["title"], "Bitcoin ETFs kick off \u2018Uptober\u2019 with $1.03B inflow")
         self.assertEqual(a["url"], "https://example.com/a?id=7")  # utm_* dropped
         self.assertEqual(a["guid"], "a-1")
         self.assertEqual(a["summary"], "Bitcoin ETFs returned to inflows, while Ether funds saw outflows.")
         self.assertEqual(a["coins"], ["BTC", "ETH"])
-        self.assertTrue(a["important"])  # ETF
+        self.assertTrue(a["important"])  # ETF inflow >= $300M
         self.assertNotIn("FULL ARTICLE", repr(items))
         self.assertEqual(a["published_at"], 1790929208000)
         self.assertLessEqual(items[2]["published_at"], NOW + 5 * 60_000)  # future date clamped
@@ -76,7 +77,131 @@ class ParseTests(unittest.TestCase):
         atom = b"""<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Solana upgrade</title><link href="https://e.com/x"/>
         <id>tag:1</id><updated>2026-10-04T01:02:03Z</updated><summary>s</summary></entry></feed>"""
         it = news.parse_feed(atom, "coindesk", NOW)[0]
-        self.assertEqual((it["url"], it["guid"], it["coins"], it["important"]), ("https://e.com/x", "tag:1", ["SOL"], True))
+        self.assertEqual((it["url"], it["guid"], it["coins"], it["important"]), ("https://e.com/x", "tag:1", ["SOL"], False))
+
+
+# 要闻 rules: (title, expected category or None). Positives = one per major-event category; negatives include the
+# real Cointelegraph/CoinDesk titles of 2026-10-05 that the old keyword rule flagged (10 of 30 on Cointelegraph).
+IMPORTANT_CASES = [
+    # etf: decisions, and flows >= $300M (single day / few days) or >= $1B (week / streak); never quarter recaps
+    ("SEC approves first spot Solana ETFs", "etf"),
+    ("Bitcoin ETFs draw record $1.4B daily inflow", "etf"),
+    ("Bitcoin ETFs add $347M as BTC falls below $84K after topping $87K", "etf"),
+    ("Bitcoin ETF outflows accelerate as investors pull $449M in three days", "etf"),
+    ("Bitcoin ETFs draw $2.4B in biggest inflow week since October 2025", "etf"),
+    ("Bitcoin ETFs kick off \u2018Uptober\u2019 with $103M inflow", None),
+    ("Bitcoin ETFs draw $6.3B in Q3 as BTC price rises nearly 43%", None),
+    ("US crypto ETF inflows top $600M for the week", None),
+    ("Fidelity files with SEC to add staking to Ethereum ETF", None),
+    ("BNB Chain crosses $1B in tokenized stocks, ETFs as market hits $3.7B", None),
+    # regulation / enforcement: the regulator / court acts; laws signed or passed
+    ("DOJ charges Tornado Cash developers with money laundering", "regulation"),
+    ("SEC sues Binance and CZ over securities violations", "regulation"),
+    ("Senate passes GENIUS Act in 68-30 vote", "regulation"),
+    ("Trump signs executive order on strategic Bitcoin reserve", "regulation"),
+    ("Do Kwon sentenced in New York to 15 years", "regulation"),  # passive enforcement form
+    ("US SEC follows CFTC in staff guidance for crypto", "regulation"),
+    ("Community banks sue OCC over trust bank charters of crypto firms", None),
+    ("Bank group sues U.S. regulator over granting crypto trust charters", None),
+    ("Japan adds Garantex to list of Russia sanctions over Ukraine war", None),
+    ("European crypto users have \u2018more faith\u2019 in regulated firms under MiCA: Bitpanda co-CEO", None),
+    ("Trump\u2019s potential AI czar, Jay Clayton, helped pioneer the SEC\u2019s crypto crackdown", None),
+    ("New York, Wyoming regulators sign pact to coordinate crypto oversight", None),
+    # hack / outage: top exchange, or >= $50M; follow-ups are not a new incident
+    ("Bybit hacked for $1.5 billion in largest crypto heist ever", "hack"),
+    ("Hackers drain $120M from Balancer pools", "hack"),
+    ("Coinbase suffers outage as trading volume spikes", "hack"),
+    ("Binance halts withdrawals amid network congestion", "hack"),
+    ("NEAR Intents recovers entire stolen $3.8M after ultimatum to exploiter", None),
+    ("Aave founder says V3 unaffected after third-party adapter exploit drains $305K", None),
+    ("SlowMist traces Bitget hack activity to Aug. 31 zero-day exploit", None),
+    # macro
+    ("Fed cuts rates by 25 basis points, signals more easing", "macro"),
+    ("FOMC holds rates steady as Powell warns on inflation", "macro"),
+    ("Bank of Japan raises rates to highest since 2008", "macro"),
+    ("US CPI rises 0.4% in August, hotter than expected", "macro"),
+    ("U.S. added just 29,000 jobs in September, with unemployment rate rising to 4.2%", "macro"),
+    ("Bitcoin briefly hits $87K as weak US jobs data sends bond yields lower", None),
+    # BTC/ETH/SOL big moves
+    ("Bitcoin crashes below $100K as traders flee risk", "move"),
+    ("Bitcoin hits new all-time high above $126,000", "move"),
+    ("Ether drops 12% as liquidations mount", "move"),
+    ("Bitcoin falls 8% in a day", "move"),
+    ("Solana slides 6% after network hiccup", None),  # SOL threshold is 10 %
+    ("Crypto liquidations top $2 billion as Bitcoin slides", "move"),
+    ("Bitcoin reaches for $87K as short liquidations top $120M", None),
+    ("Bitcoin zooms toward $87,000, nearly setting an eight-month high, then reverses", None),
+    ("Once a $2 billion Ethereum layer-2, Blast is shutting down after assets plunge 98%", None),
+    ("NEAR jumps nearly 80% in a week as Intents volume nears $30B", None),
+    ("Bitcoin falls below $84K as 10-year Treasury yield hits 19-year high", None),
+    # top institutions buying / selling
+    ("Strategy buys 1,665 Bitcoin for $143M as BTC stack hits 847,666", "whale"),
+    ("BlackRock buys $500M of Ether for its fund", "whale"),
+    ("US government moves 10,000 BTC to Coinbase", "whale"),
+    ("Strategy raises $334M through stock sales but buys no Bitcoin", None),
+    ("Bitmine adds $19.6M in ETH, repurchases 4.5M shares", None),
+    # roundups / opinion / speculation are never 要闻
+    ("Former SEC boss made AI Czar, Bitcoin may hit $600K this cycle: Hodler\u2019s Digest", None),
+    ("Here\u2019s what happened in crypto today", None),
+    ("Bitcoin price could crash 30%, analyst says", None),
+    ("Will the SEC approve a Solana ETF?", None),
+    ("Zcash activates NU7 on testnet ahead of November mainnet target", None),
+    # case-sensitive acronyms: the pronoun "us" / "fed up" are not the US / the Fed
+    ("Tell us why Saylor adds $200M of bitcoin", None),
+    ("Traders fed up as rates stay high and Bitcoin chops", None),
+    ("Upbit hacked for $30M in Solana hot wallet breach: Report", "hack"),
+    ("US sells $250M of seized Bitcoin", "whale"),
+]
+
+
+class ImportantRuleTests(unittest.TestCase):
+    def test_categories_and_real_false_positives(self):
+        bad = [(t, exp, news.importance(t)) for t, exp in IMPORTANT_CASES if news.importance(t) != exp]
+        self.assertEqual(bad, [])
+        for t, exp in IMPORTANT_CASES:
+            self.assertEqual(news.is_important(t), exp is not None, t)
+
+    def test_month_may_is_not_speculation(self):
+        self.assertEqual(news.importance("SEC approves spot Ether ETFs in May"), "etf")
+        self.assertIsNone(news.importance("SEC may approve spot Ether ETFs"))
+
+    def test_usd_amounts(self):
+        self.assertEqual(news.usd_amounts("$103M, $1.5 billion, $87,000 and $305K"), [103e6, 1.5e9, 87000.0, 305e3])
+        self.assertEqual(news.usd_amounts("no money here"), [])
+
+    def test_ratio_on_the_2026_10_05_feed_snapshot(self):
+        # Replay of the 55 headlines stored on the server at the first fetch (25 CoinDesk + 30 Cointelegraph).
+        snap = json.loads((Path(__file__).parent / "fixtures" / "news_titles_20261005.json").read_text(encoding="utf-8"))["items"]
+        self.assertEqual(len(snap), 55)
+        old = [r for r in snap if r["old_important"]]
+        self.assertEqual((len(old), sum(r["source"] == "cointelegraph" for r in old)), (12, 10))  # v1: 21.8 %, Cointelegraph 10/30
+        new = [(r["source"], r["title"], news.importance(r["title"])) for r in snap if news.is_important(r["title"])]
+        # quiet news day: only the US September jobs report qualifies (1/55 = 1.8 %; Cointelegraph 0/30)
+        self.assertEqual(new, [("coindesk", "U.S. added just 29,000 jobs in September, with unemployment rate rising to 4.2%", "macro")])
+        self.assertLessEqual(len(new) / len(snap), 0.15)
+
+    def test_ratio_on_a_busier_sample(self):
+        # 145 more Cointelegraph headlines (tag feeds, weeks of ETF / hack / regulation news): ~9 % flagged.
+        snap = json.loads((Path(__file__).parent / "fixtures" / "news_titles_extra_20261005.json").read_text(encoding="utf-8"))["items"]
+        cats = [news.importance(r["title"]) for r in snap]
+        flagged = [c for c in cats if c]
+        self.assertEqual(len(snap), 145)
+        self.assertEqual(len(flagged), 13)
+        self.assertEqual({c: flagged.count(c) for c in set(flagged)}, {"etf": 9, "whale": 2, "regulation": 2})
+        self.assertTrue(0.05 <= len(flagged) / len(snap) <= 0.15)
+
+    def test_retag_on_open_updates_old_flags(self):
+        with tempfile.TemporaryDirectory() as d:
+            st = news.NewsStore(Path(d) / "news.sqlite")
+            st.add([{"source": "cointelegraph", "guid": g, "url": f"https://e.com/{g}", "title": t, "summary": "", "published_at": NOW,
+                     "coins": [], "important": True} for g, t in (("1", "Zcash activates NU7 on testnet ahead of November mainnet target"),
+                                                                 ("2", "Bybit hacked for $1.5 billion in largest crypto heist ever"))], NOW)
+            self.assertEqual(st.page(important=True)["total"], 2)  # flags as written by the old rule
+            st.close()
+            st = news.NewsStore(Path(d) / "news.sqlite")  # opening re-applies the current rules
+            self.assertEqual([i["title"][:5] for i in st.page(important=True)["items"]], ["Bybit"])
+            self.assertEqual(st.retag(), 0)  # idempotent
+            st.close()
 
 
 class StoreFetcherTests(unittest.TestCase):
