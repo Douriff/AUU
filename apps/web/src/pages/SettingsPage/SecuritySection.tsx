@@ -123,7 +123,7 @@ export function SecuritySection({ onChange }: { onChange?: () => void }) {
         {!sec.totp_enabled && !setup && (
           <form onSubmit={startSetup}>
             <p className="td-note">
-              开启后，登录时除密码外还要输入验证器 App（Google Authenticator、Microsoft Authenticator、1Password 等）里的 6 位数字。默认关闭。
+              开启后，登录时除密码外还要输入验证器 App（Google Authenticator、Microsoft Authenticator、1Password 等）里的 6 位数字。默认关闭。绑定二维码必须用验证器 App 扫，手机相机或微信扫不了。
             </p>
             <label>
               当前密码（确认是你本人）
@@ -136,7 +136,9 @@ export function SecuritySection({ onChange }: { onChange?: () => void }) {
         )}
         {setup && (
           <form onSubmit={confirmSetup}>
-            <p className="td-note">1. 用验证器 App 扫描二维码（或手动输入密钥）。2. 输入 App 显示的 6 位数字完成绑定。15 分钟内有效。</p>
+            <p className="td-note">
+              请用 Google Authenticator / Microsoft Authenticator 等验证器 App 扫码，手机相机或微信扫不了。也可手动输入密钥。扫进 App 后填入 6 位数字完成绑定，15 分钟内有效。
+            </p>
             <div className="sec-qr" dangerouslySetInnerHTML={{ __html: setup.qr_svg }} aria-label="两步验证二维码" />
             <code className="sec-secret">{setup.secret.replace(/(.{4})/g, "$1 ").trim()}</code>
             <label>
