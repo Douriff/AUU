@@ -362,7 +362,9 @@ class WebParityTests(unittest.TestCase):
 
         web = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "authRules.ts"
         source = web.read_text(encoding="utf-8")
-        self.assertIn(f'EMAIL_RULE = "{_MESSAGES["BAD_EMAIL"]}"', source)
+        zh = json.loads((web.parents[1] / "i18n" / "locales" / "zh-CN.json").read_text(encoding="utf-8"))["auth"]["rule"]
+        self.assertEqual(zh["email"], _MESSAGES["BAD_EMAIL"])
+        self.assertIn('i18n.t("auth.rule.email")', source)
         pattern = re.search(r"const EMAIL = /(.+)/;", source).group(1)
         self.assertEqual(pattern, email_codes._EMAIL.pattern)
 
