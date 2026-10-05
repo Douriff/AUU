@@ -1,0 +1,280 @@
+{
+"note": "Headlines (title only) stored on the server at the first 行业动态 fetch, 2026-10-05 15:35 BJ; old_important = flag set by the v1 keyword rule. Used to replay the 要闻 rule.",
+"items": [
+{
+"source": "coindesk",
+"title": "Bitcoin is about to get a major bullish signal it hasn't had in over a year",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Ethereum has a 25-day wait to start staking, with nearly 1.5 million ETH in line",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Here’s what happened in crypto today",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Joint venture of OKX and NYSE parent ICE files for 24/7 tokenized U.S. stock trading",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Zcash’s 25-second blocks go live on public testnet ahead of schedule",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Bitcoin zooms toward $87,000, nearly setting an eight-month high, then reverses",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Ether's bitcoin-beating Q3 rally came with a catch. Liquidity thinned.",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Zcash activates NU7 on testnet ahead of November mainnet target",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "OKX, NYSE parent file to launch tokenized US stock platform",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Safe investor asks Swiss watchdog to intervene in governance dispute",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Zcash gets a Washington lobbyist to push crypto policy",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Former SEC boss made AI Czar, Bitcoin may hit $600K this cycle: Hodler’s Digest",
+"old_important": true
+},
+{
+"source": "coindesk",
+"title": "There's an election next month: State of Crypto",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Crypto poured years into new products. The next challenge is keeping users",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Trump taps intel chief Jay Clayton to lead new Super Intelligence Force",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "The Clarity Act stalled. Bankers aren’t hitting the brakes yet on crypto dealmaking",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Japan adds Garantex to list of Russia sanctions over Ukraine war",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "El Salvador receives $138 million from IMF after Bitcoin waivers granted",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Russia’s Finance Ministry pays wages in digital rubles for first time",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Crypto job postings triple to over 1,200 in September, but applications fall",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Payments firm OpenPayd targets year-end Nasdaq listing to fund U.S. expansion and acquisitions",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Cathie Wood says smart investors need to start watching where AI agents spend money",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "BlackRock offers a glimpse of how tokenization may change your investment portfolio",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Crypto's Sisyphean struggle",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "NEAR Intents recovers entire stolen $3.8M after ultimatum to exploiter",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "Community banks sue OCC over trust bank charters of crypto firms",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "Trump expected to appoint Jay Clayton as new AI czar: Reports",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Bank group sues U.S. regulator over granting crypto trust charters",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "European crypto users have ‘more faith’ in regulated firms under MiCA: Bitpanda co-CEO",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "$4.2B crypto bank Anchorage Digital cuts 17% of workforce: Report",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Blast to wind down Ethereum L2 after costs outpace revenue",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "BNY in talks with Kraken parent Payward over infrastructure partnership",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Once a $2 billion Ethereum layer-2, Blast is shutting down after assets plunge 98%",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Trump’s potential AI czar, Jay Clayton, helped pioneer the SEC’s crypto crackdown",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "71% of UK finance leaders expect tokenization to reshape financial services: Lloyds",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Crypto’s billions are back, but the premiums aren’t",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin briefly hits $87K as weak US jobs data sends bond yields lower",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "‘Euro stablecoin isn’t enough’: EU issuers make case for USD tokens",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Furious debate about THORChain vs NEAR shows idealism has limits",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "America at a crossroads: Commissioner Peirce’s parting challenge",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "U.S. added just 29,000 jobs in September, with unemployment rate rising to 4.2%",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Circle urges EU to revise stablecoin reserve rules in MiCA review",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "BNB Chain crosses $1B in tokenized stocks, ETFs as market hits $3.7B",
+"old_important": true
+},
+{
+"source": "coindesk",
+"title": "Cboe wants to turn VIX into a never-ending trade",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Live updates: Bitcoin reverses big early gains following soft U.S. jobs data",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin treasuries may struggle to match Strategy, says Ammous",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Crypto traders are in risk-on mode as bitcoin dominance nears return to 60%",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "CONNECT recap: Arthur Hayes on money printing, Wall Street moves onchain",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin reaches for $87K as short liquidations top $120M",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "Aave founder says V3 unaffected after third-party adapter exploit drains $305K",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "Porsche’s ‘long haul’ Web3 project ends in less than four years",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Bitcoin open interest jumps $2.3 billion as traders pay more for bullish positions",
+"old_important": false
+},
+{
+"source": "coindesk",
+"title": "Tether's USDT is 'coming home' to Bitcoin after more than a decade",
+"old_important": false
+},
+{
+"source": "cointelegraph",
+"title": "Bitcoin ETFs kick off ‘Uptober’ with $103M inflow",
+"old_important": true
+},
+{
+"source": "cointelegraph",
+"title": "South Korea crypto exchange profits fall 78% in H1 amid trading slump",
+"old_important": false
+}
+]
+}

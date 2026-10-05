@@ -6,8 +6,9 @@
   300..3600) and writes ``news.sqlite`` in the data dir. Every failure is caught and recorded in
   ``fetch_log``; nothing here is read by the strategy, the ledgers, health or the guard, so a dead
   feed can never affect the main site.
-- Each item is tagged with the strategy's 19 coins it mentions (BTC/ETH/SOL first), plus a
-  keyword-based ``important`` flag (ETF, SEC, hack, listing, upgrade ...).
+- Each item is tagged with the strategy's 19 coins it mentions (BTC/ETH/SOL first), plus a rule-based
+  ``important`` (要闻) flag for major events only (see ``importance``). The flag is recomputed for stored rows
+  whenever the store opens, so a rule change applies to old items too.
 - Off switch: ``AUU_NEWS=off``. Under the test runner (AUU_TEST=1) it is off unless set explicitly.
 - Retention: 30 days, at most 3000 rows.
 """
@@ -73,12 +74,195 @@ _NAMES: dict[str, tuple[str, str]] = {
     "NEAR": (r"near\s+protocol", r"NEAR"),
 }
 _RX = {c: (re.compile(n, re.I), re.compile(r"(?<![A-Za-z0-9$])\$?" + t + r"(?![A-Za-z0-9])")) for c, (n, t) in _NAMES.items()}
-_IMPORTANT = re.compile(
-    r"\b(etfs?|sec|cftc|fed|federal reserve|rate (?:cut|hike)|lawsuit|sues?|charged|approv\w*|ban(?:s|ned)?|hack\w*|exploit\w*|"
-    r"stolen|drain\w*|outage|halt\w*|delist\w*|hard fork|upgrade|mainnet|liquidat\w*|bankrupt\w*|"
-    r"regulat\w*|sanction\w*|stablecoin bill)\b",
-    re.I,
+# ---- 要闻 (important) rules ---------------------------------------------------------------
+# Title-only, rule-based, deterministic. Only truly major events qualify (target ≈10–15 % of items on a normal
+# news day, less on a quiet one). A title is 要闻 when it is not a roundup/opinion/speculation piece AND it hits
+# one of these categories (``importance`` returns the category id):
+#   etf        spot-ETF approval/rejection/launch, or ETF flows of at least ETF_FLOW_MIN_USD
+#   regulation a regulator / court / law-enforcement body *taking* a hard action (approves, sues, charges,
+#              bans, sanctions, arrests, seizes, signs/passes a law ...), or a crypto bill passing/being signed
+#   hack       hack/exploit/theft at a top exchange, or of at least HACK_MIN_USD; top-exchange outage/halt
+#   macro      central-bank rate decisions (Fed/FOMC/ECB/BOJ), CPI, US jobs report / unemployment rate
+#   move       BTC/ETH/SOL crash/surge/all-time high, a single-day move ≥ MOVE_MIN_PCT, or liquidations ≥ LIQ_MIN_USD
+#   whale      a top institution / treasury / government buying or selling ≥ WHALE_MIN_USD (or ≥ 1,000 BTC /
+#              ≥ 50,000 ETH) of BTC/ETH/SOL
+IMPORTANT_RULES = "v2"
+ETF_FLOW_MIN_USD = 300e6
+HACK_MIN_USD = 50e6
+LIQ_MIN_USD = 1e9
+WHALE_MIN_USD = 100e6
+ETF_AGG_MIN_USD = 1e9
+MOVE_MIN_PCT = {"BTC": 7.0, "ETH": 10.0, "SOL": 10.0}
+
+_I = re.I
+# Digests, live blogs, explainers, opinion and questions are never 要闻; neither is "may/might/could/would"
+# speculation (lower-case only, so the month "May" is still allowed).
+_EXCLUDE = re.compile(
+    r"hodler.?s digest|what happened in crypto today|state of crypto|live updates?|\brecap\b|\bweekly\b|newsletter|"
+    r"podcast|things to know|price (?:prediction|analysis)|\bopinion\b|\bexplained\b|\bhow to\b|\bcompared\b|"
+    r"\bvs\.?(?=\s)|\?\s*$|\bwhy\b",
+    _I,
 )
+_MODAL = re.compile(r"\b(?:may|might|could|would)\b")
+
+_AMOUNT = re.compile(r"\$\s?(\d+(?:[.,]\d+)*)\s*(trillion|billion|million|thousand|tn|bn|[tbmk])?\b", _I)
+_MULT = {"t": 1e12, "tn": 1e12, "trillion": 1e12, "b": 1e9, "bn": 1e9, "billion": 1e9, "m": 1e6, "million": 1e6,
+         "k": 1e3, "thousand": 1e3}
+
+
+def usd_amounts(title: str) -> list[float]:
+    """Every "$..." amount in a title, in USD ("$103M" -> 1.03e8, "$1.5 billion" -> 1.5e9, "$87,000" -> 87000)."""
+    out = []
+    for num, unit in _AMOUNT.findall(title or ""):
+        try:
+            v = float(num.replace(",", ""))
+        except ValueError:
+            continue
+        out.append(v * _MULT.get((unit or "").lower(), 1.0))
+    return out
+
+
+def _max_usd(title: str) -> float:
+    return max(usd_amounts(title), default=0.0)
+
+
+_COIN_QTY = re.compile(r"(\d+(?:[.,]\d+)*)\s*(k|thousand|million|m)?\s*(btc|bitcoin|eth|ether)\b", _I)
+
+
+def _coin_qty(title: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for num, unit, coin in _COIN_QTY.findall(title or ""):
+        try:
+            v = float(num.replace(",", ""))
+        except ValueError:
+            continue
+        v *= {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}.get((unit or "").lower(), 1.0)
+        c = "BTC" if coin.lower() in {"btc", "bitcoin"} else "ETH"
+        out[c] = max(out.get(c, 0.0), v)
+    return out
+
+
+_GAP = r"[^,;:|]{0,60}?"  # same clause: no comma/semicolon/colon between subject and verb
+_ETF = re.compile(r"\betfs?\b", _I)
+_ETF_DECISION = re.compile(r"\b(?:approv\w*|reject\w*|den(?:y|ies|ied)|green.?light\w*|launch(?:es|ed)?|debut\w*|"
+                           r"begins? trading|starts? trading)\b", _I)
+_ETF_SPECULATIVE = re.compile(r"\b(?:files?|filed|filing|applications?|proposals?|seeks?|amend\w*)\b", _I)
+_FLOW = re.compile(r"\b(?:inflows?|outflows?|flows?|draws?|drew|take[sn]? in|pull(?:s|ed)?|shed\w*|bleed\w*|"
+                   r"add(?:s|ed)?|lose|lost)\b", _I)
+_RECORD = re.compile(r"\brecord\b", _I)
+# flow aggregates: week / month / streak totals need ETF_AGG_MIN_USD; quarter / half-year / year recaps never count
+_ETF_AGG = re.compile(r"\b(?:weeks?|weekly|months?|monthly|streaks?)\b", _I)
+_ETF_RECAP = re.compile(r"\b(?:quarter|Q[1-4]|H[12]|half|years?|yearly|annual|YTD)\b(?!\s+high)", _I)
+
+# acronyms that are also English words / pronouns are matched case-sensitively via (?-i:...)
+_REGULATOR = (r"(?:(?-i:\bSEC\b)|\bCFTC\b|\bDOJ\b|Justice Department|Department of Justice|\bTreasury\b|\bOFAC\b|\bFinCEN\b|"
+              r"Federal Reserve|\bOCC\b|\bFCA\b|\bESMA\b|\bPBOC\b|People.s Bank of China|\bCongress\b|\bSenate\b|"
+              r"(?-i:\bHouse\b)|White House|\bTrump\b|\bcourt\b|\bjudge\b|\bjury\b|\bpolice\b|prosecutors?|\bFBI\b|\bIRS\b|"
+              r"(?-i:\bEU\b)|European Commission|(?-i:\bMAS\b)|\bSFC\b|\bFSA\b|\bregulators?\b|\bgovernment\b)")
+_REG_ACTION = (r"(?:approv(?:es|ed)|reject(?:s|ed)|den(?:ies|ied)|sues|sued|charg(?:es|ed)|fin(?:es|ed)|settles?|settled|"
+               r"bans?|banned|sanction(?:s|ed)|arrest(?:s|ed)|seiz(?:es|ed)|indict(?:s|ed)|"
+               r"raid(?:s|ed)|orders?|ordered|freez(?:es)|froze|halts?|halted|sentenc(?:es|ed)|"
+               r"convict(?:s|ed)|drops? (?:case|lawsuit|charges)|dropped)")
+_REG = re.compile(_REGULATOR + _GAP + r"\b" + _REG_ACTION + r"\b", _I)
+# a law / executive order being signed or passed (only counts together with a crypto word)
+_LAW = re.compile(r"\b(?:signs?|signed|pass(?:es|ed)|enacts?|enacted)\b" + _GAP + r"\b(?:into law|bill|act|law|executive order)\b", _I)
+# the primary crypto regulators publishing binding rules / guidance / exemptions
+_RULEMAKER = re.compile(r"(?:(?-i:\bSEC\b)|\bCFTC\b|\bOCC\b|Federal Reserve|\bTreasury\b|\bFCA\b|\bESMA\b|(?-i:\bMAS\b)|\bSFC\b|\bPBOC\b)"
+                        + _GAP + r"\b(?:guidance|rules?|rulemaking|propos(?:es|ed|al)|framework|exemptions?|no-action|"
+                        r"clears?|cleared|unveils?|issues?|issued|finaliz\w*|adopts?|adopted|withdraws?|rescinds?)\b", _I)
+_REG_PASSIVE = re.compile(r"\b(?:charged|sued|fined|arrested|sentenced|indicted|banned|sanctioned|convicted|extradited)\s+"
+                          r"(?:by|in|for|over|after)\b", _I)
+_BILL = re.compile(r"(?:\b(?:GENIUS|CLARITY|FIT21|stablecoin|crypto|market structure)\b[^,;:]{0,20}\b(?:act|bill|law)\b)"
+                   + _GAP + r"\b(?:pass(?:es|ed)|signed|clears?|cleared|becomes law|enacted|fails|failed)\b", _I)
+_EXEC_ORDER = re.compile(r"\bexecutive order\b", _I)
+_CRYPTO_WORD = re.compile(r"\b(?:crypto\w*|bitcoin|stablecoins?|digital assets?|GENIUS|CLARITY|FIT21|MiCA)\b", _I)
+
+_TOP_EXCHANGE = (r"(?:Binance|Coinbase|\bOKX\b|Bybit|Kraken|Bitget|Upbit|Bitfinex|\bHTX\b|Huobi|KuCoin|Gate\.io|Gemini|"
+                 r"Robinhood|Crypto\.com|Bithumb|Hyperliquid)")
+_TOP_EXCHANGE_RX = re.compile(_TOP_EXCHANGE, _I)
+_HACK = re.compile(r"\b(?:hack(?:s|ed|er|ers)?|exploit(?:s|ed|er)?|stolen|steal(?:s)?|stole|drain(?:s|ed)?|breach(?:es|ed)?|heist)\b", _I)
+# follow-up stories (traced, recovered, blocked, resumed, lawsuits ...) are not a new incident
+_HACK_FOLLOWUP = re.compile(r"\b(?:trac(?:es|ed)|recover\w*|returns?|returned|refund\w*|blocks?|blocked|resum\w*|sues?|sued|"
+                            r"lawsuits?|probe|analysis|linked|losses)\b", _I)
+_OUTAGE = re.compile(r"\b(?:outage|goes down|went down|offline|halts?|halted|suspends?|suspended|pauses?|paused|freez(?:es)|froze)\b"
+                     + _GAP + r"\b(?:withdrawals?|deposits?|trading|services?|platform)\b|\boutage\b", _I)
+
+_MACRO = re.compile(
+    r"(?:\b(?:(?-i:Fed)|FOMC|Federal Reserve|Powell|ECB|BOJ|Bank of Japan)\b" + _GAP +
+    r"\b(?:cuts?|hikes?|raises?|holds?|keeps?|leaves?|pauses?|decision|rate)\b)|"
+    r"\b(?:rate (?:cut|hike)s?)\b" + _GAP + r"\b(?:(?-i:Fed)|FOMC|ECB|BOJ)\b|"
+    r"\bCPI\b|\bconsumer price index\b|\bnonfarm\b|\bpayrolls?\b|\bjobs report\b|\bunemployment rate\b",
+    _I,
+)
+
+_FOCUS_NAME = r"(?:\bbitcoin\b(?!\s+cash)|\bBTC\b|\bether(?:eum)?\b(?!\s+classic)|\bETH\b|\bsolana\b|\bSOL\b|\bcrypto(?:\s+market)?\b)"
+_FOCUS_RX = {"BTC": re.compile(r"\bbitcoin\b(?!\s+cash)|\bBTC\b", _I), "ETH": re.compile(r"\bether(?:eum)?\b(?!\s+classic)|\bETH\b", _I),
+             "SOL": re.compile(r"\bsolana\b|\bSOL\b", _I)}
+_BIG_MOVE = re.compile(_FOCUS_NAME + _GAP + r"\b(?:crash(?:es|ed)?|plung(?:es|ed)|plummet(?:s|ed)?|tumbl(?:es|ed)|nosediv(?:es|ed)|"
+                       r"soar(?:s|ed)?|skyrocket(?:s|ed)?|all.time high|record high|new high|\bATH\b)", _I)
+_MOVE_VERB = (r"(?:up|down|falls?|fell|drops?|dropped|jumps?|jumped|rises?|rose|gains?|sinks?|sank|slides?|slid|"
+              r"rall(?:ies|ied)|surg(?:es|ed)|dives?|dived|spikes?|spiked|tank(?:s|ed)?|loses|lost|soars?|soared|plung(?:es|ed))")
+_PCT_MOVE = {c: re.compile("(?:" + rx.pattern + ")" + _GAP + r"\b" + _MOVE_VERB + r"\b" + _GAP + r"(?P<pct>\d+(?:\.\d+)?)\s?%", _I)
+             for c, rx in _FOCUS_RX.items()}
+_LONG_WINDOW = re.compile(r"\b(?:week|weeks|weekly|month|months|monthly|quarter|Q[1-4]|year|years|YTD|since|H[12])\b", _I)
+_LIQ = re.compile(r"\bliquidat\w*\b", _I)
+
+_WHALE = re.compile(r"(?:\bStrategy\b|MicroStrategy|Saylor|BlackRock|Fidelity|Tesla|Metaplanet|BitMine|Trump Media|Mt\.?\s?Gox|"
+                    r"\bgovernment\b|Grayscale|Tether|sovereign|GameStop|Coinbase|Bhutan|El Salvador|(?-i:\bUS\b|\bU\.S\.)|China|"
+                    r"Germany|(?-i:\bUK\b)|Harvard|Mubadala)" + _GAP +
+                    r"\b(?:buys?|bought|acquir(?:es|ed)|purchas(?:es|ed)|adds?|added|adding|sells?|sold|selling|dumps?|dumped|"
+                    r"offloads?|offloaded|liquidat(?:es|ed)|transfers?|transferred|moves?|moved)\b", _I)
+_WHALE_NEG = re.compile(r"\b(?:buys|bought|sells|sold) no\b|\bno (?:bitcoin|btc|ether|eth)\b", _I)
+_CRYPTO_ASSET = re.compile(r"\bbitcoin\b(?!\s+cash)|\bBTC\b|\bether(?:eum)?\b|\bETH\b|\bsolana\b|\bSOL\b", _I)
+
+
+def _excluded(title: str) -> bool:
+    return bool(_EXCLUDE.search(title) or _MODAL.search(title))
+
+
+def importance(title: str) -> Optional[str]:
+    """Category id when ``title`` is 要闻 (see the rule table above), else None."""
+    t = _WS.sub(" ", title or "").strip()
+    if not t or _excluded(t):
+        return None
+    usd = _max_usd(t)
+    # etf
+    if _ETF.search(t):
+        if _ETF_DECISION.search(t) and not _ETF_SPECULATIVE.search(t):
+            return "etf"
+        if _FLOW.search(t) and not _ETF_RECAP.search(t):
+            need = ETF_AGG_MIN_USD if _ETF_AGG.search(t) else ETF_FLOW_MIN_USD
+            if usd >= need or _RECORD.search(t):
+                return "etf"
+    # hack / outage
+    if _HACK.search(t) and not _HACK_FOLLOWUP.search(t) and (usd >= HACK_MIN_USD or _TOP_EXCHANGE_RX.search(t)):
+        return "hack"
+    if _TOP_EXCHANGE_RX.search(t) and _OUTAGE.search(t):
+        return "hack"
+    # regulation / enforcement
+    if _REG.search(t) or _RULEMAKER.search(t) or _REG_PASSIVE.search(t) or _BILL.search(t):
+        return "regulation"
+    if (_EXEC_ORDER.search(t) or _LAW.search(t)) and _CRYPTO_WORD.search(t):
+        return "regulation"
+    # macro
+    if _MACRO.search(t):
+        return "macro"
+    # BTC/ETH/SOL big move
+    if _BIG_MOVE.search(t):
+        return "move"
+    if not _LONG_WINDOW.search(t):
+        for coin, rx in _PCT_MOVE.items():
+            m = rx.search(t)
+            if m and float(m.group("pct")) >= MOVE_MIN_PCT[coin]:
+                return "move"
+    if _LIQ.search(t) and usd >= LIQ_MIN_USD:
+        return "move"
+    # top institution buying / selling
+    if _WHALE.search(t) and _CRYPTO_ASSET.search(t) and not _WHALE_NEG.search(t):
+        qty = _coin_qty(t)
+        if usd >= WHALE_MIN_USD or qty.get("BTC", 0) >= 1000 or qty.get("ETH", 0) >= 50_000:
+            return "whale"
+    return None
 
 
 def news_enabled() -> bool:
@@ -145,7 +329,7 @@ def tag_coins(text: str) -> list[str]:
 
 
 def is_important(title: str) -> bool:
-    return bool(_IMPORTANT.search(title or ""))
+    return importance(title) is not None
 
 
 def _local(tag: str) -> str:
@@ -243,6 +427,25 @@ class NewsStore:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
         self._lock = threading.RLock()
+        with _suppress():
+            self.retag()
+
+    def retag(self) -> int:
+        """Re-apply the current 要闻 rules to every stored row (rows keep whatever flag they were inserted with
+        otherwise). Idempotent; returns the number of rows whose flag changed."""
+        with self._lock:
+            rows = self._db.execute("SELECT id, title, important FROM items").fetchall()
+            upd = [(1 if is_important(r["title"]) else 0, r["id"]) for r in rows]
+            upd = [(v, i) for (v, i), r in zip(upd, rows) if v != r["important"]]
+            if upd:
+                self._db.execute("BEGIN")
+                try:
+                    self._db.executemany("UPDATE items SET important=? WHERE id=?", upd)
+                    self._db.execute("COMMIT")
+                except Exception:
+                    self._db.execute("ROLLBACK")
+                    raise
+            return len(upd)
 
     def close(self) -> None:
         with self._lock:
