@@ -32,7 +32,7 @@ export function SettingsPage() {
 
 /** Mainstream mode: account + read-only data/live status (pump wallet/provider/discovery are legacy). */
 function MainstreamSettingsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [md, setMd] = useState<MainstreamFreshness | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState("");
@@ -62,7 +62,10 @@ function MainstreamSettingsPage() {
         <h2>{t("settings.display")}</h2>
         <div className="set-row set-row-lang">
           <div>
-            <b>{t("lang.label")} · Language</b>
+            <b>
+              {t("lang.label")}
+              {i18n.language === "en" ? null : <span className="muted"> · Language</span>}
+            </b>
             <p className="muted">{t("settings.langHint")}</p>
           </div>
           <LangSwitch />
