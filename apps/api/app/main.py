@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, stats, status, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, news, stats, status, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -105,6 +105,10 @@ def _make_lifespan(legacy: bool):
 
             if uptime_enabled():
                 tasks.append(asyncio.create_task(uptime_loop(), name="uptime"))
+            from app.news import news_enabled, run_loop as news_loop
+
+            if news_enabled():
+                tasks.append(asyncio.create_task(news_loop(), name="news"))
         try:
             yield
         finally:
@@ -160,7 +164,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow):
+    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow, news):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -193,6 +197,7 @@ def root(legacy: bool = False):
                     "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go, risk caps)",
                     "shadowS3": "GET /api/v1/mainstream/shadow/s3 (shadow hypothesis, no capital, not evidence)",
                     "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
+                    "news": "GET /api/v1/news?page=&size=&coin=&focus=&important= (行业动态: RSS headlines, login required)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

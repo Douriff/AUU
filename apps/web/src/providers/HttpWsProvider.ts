@@ -9,6 +9,7 @@ import type {
   PaperAccount,
   StrategySummary,
   ShadowH2Summary, ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
+  NewsPage, NewsQuery,
   PaperOrder,
   PaperOrderRequest,
 } from "@/types/mainstream";
@@ -351,6 +352,17 @@ export class HttpWsProvider {
 
   getShadowH2(): Promise<ShadowH2Summary> {
     return getJson("/api/v1/mainstream/shadow/h2");
+  }
+
+  getNews(q: NewsQuery = {}): Promise<NewsPage> {
+    const p = new URLSearchParams();
+    p.set("page", String(q.page ?? 1));
+    p.set("size", String(q.size ?? 20));
+    if (q.coin) p.set("coin", q.coin);
+    if (q.focus) p.set("focus", "true");
+    if (q.important) p.set("important", "true");
+    if (q.source) p.set("source", q.source);
+    return getJson(`/api/v1/news?${p}`);
   }
 
   getShadowS3(): Promise<ShadowS3Summary> {

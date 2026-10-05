@@ -533,3 +533,47 @@ export type MainstreamCoin = {
   bid: number | null;
   ask: number | null;
 };
+
+/** 行业动态 (GET /api/v1/news): RSS headlines, title + summary + link only. */
+export interface NewsItem {
+  id: number;
+  source: string;
+  sourceName: string;
+  title: string;
+  summary: string;
+  url: string;
+  publishedAt: number;
+  coins: string[];
+  important: boolean;
+}
+export interface NewsSourceStatus {
+  id: string;
+  name: string;
+  home: string;
+  lastOkAt: number | null;
+  lastAttemptAt: number | null;
+  ok: boolean;
+  fails: number;
+  error: string | null;
+}
+export interface NewsPage {
+  items: NewsItem[];
+  page: number;
+  size: number;
+  total: number;
+  pages: number;
+  sources: NewsSourceStatus[];
+  lastFetchedAt: number | null;
+  enabled: boolean;
+  intervalSec: number;
+  coins: string[];
+  note: string;
+}
+export interface NewsQuery {
+  page?: number;
+  size?: number;
+  coin?: string;
+  focus?: boolean;
+  important?: boolean;
+  source?: string;
+}

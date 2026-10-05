@@ -51,6 +51,7 @@ function MainstreamSettingsPage() {
       </header>
       <nav className="set-links" aria-label="更多">
         <Link to="/majors">大盘 ›</Link>
+        <Link to="/news">行业动态 ›</Link>
         <Link to="/leaderboard">排行榜 ›</Link>
       </nav>
       <section className="settings-section">
