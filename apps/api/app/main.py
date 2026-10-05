@@ -124,7 +124,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
     """Build the API. ``legacy`` defaults to ``AUU_LEGACY_PUMP`` (off)."""
     legacy = legacy_pump_enabled() if legacy is None else bool(legacy)
     app = FastAPI(
-        title="AUU Market Terminal API",
+        title="AUUTRADE API",
         version="0.2.0",
         description=(
             "Mainstream-coin quant platform (paper only): public CEX market data, paper ledger, "
