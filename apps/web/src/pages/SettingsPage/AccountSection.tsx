@@ -2,10 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
-import { PASSWORD_RULE, passwordProblem } from "@/lib/authRules";
+import { passwordRule, passwordProblem } from "@/lib/authRules";
+import { Trans, useTranslation } from "react-i18next";
+import { errText } from "@/i18n/errors";
 import { SecuritySection } from "@/pages/SettingsPage/SecuritySection";
 
 export function AccountSection() {
+  const { t } = useTranslation();
   const [me, setMe] = useState<AuthMe | null>(null);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -24,7 +27,7 @@ export function AccountSection() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const problem = passwordProblem(next) ?? (next !== confirm ? "两次密码不一致" : null);
+    const problem = passwordProblem(next) ?? (next !== confirm ? t("auth.rule.mismatch") : null);
     if (problem) {
       setError(problem);
       setNote("");
@@ -44,9 +47,9 @@ export function AccountSection() {
       setCurrent("");
       setNext("");
       setConfirm("");
-      setNote("密码已更新，其他设备上的登录已失效");
+      setNote(t("account.updated"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "修改失败");
+      setError(errText(e, "account.failed"));
     } finally {
       setBusy(false);
     }
@@ -56,52 +59,52 @@ export function AccountSection() {
   if (!me.auth_enabled) {
     return (
       <section className="settings-section">
-        <h2>账户</h2>
-        <p className="muted">本地单用户模式，不需要登录或修改密码。</p>
+        <h2>{t("account.title")}</h2>
+        <p className="muted">{t("account.local")}</p>
       </section>
     );
   }
   if (!me.user) {
     return (
       <section className="settings-section">
-        <h2>账户</h2>
+        <h2>{t("account.title")}</h2>
         <p className="muted">
-          <Link to="/login">登录</Link> 后可以修改密码。还没有账户可以 <Link to="/register">注册</Link>。
+          <Trans i18nKey="account.anon" components={{ login: <Link to="/login" />, reg: <Link to="/register" /> }} />
         </p>
       </section>
     );
   }
 
-  const label = me.user.display_name && me.user.display_name !== me.user.name ? `${me.user.display_name}（${me.user.name}）` : me.user.name;
+  const label = me.user.display_name && me.user.display_name !== me.user.name ? `${me.user.display_name} (${me.user.name})` : me.user.name;
 
   return (
     <section className="settings-section">
-      <h2>修改密码</h2>
-      <p className="muted">当前账户 {label}。密码只以哈希保存，管理员看不到。</p>
+      <h2>{t("account.change")}</h2>
+      <p className="muted">{t("account.current", { label })}</p>
       <form className="auth-card settings-password" onSubmit={(event) => void submit(event)}>
         <label>
-          当前密码
+          {t("account.currentPw")}
           <input value={current} onChange={(e) => setCurrent(e.target.value)} type="password" autoComplete="current-password" required />
         </label>
         <label>
-          新密码
+          {t("auth.newPassword")}
           <input value={next} onChange={(e) => setNext(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
-          <small className="muted">{PASSWORD_RULE}</small>
+          <small className="muted">{passwordRule()}</small>
         </label>
         <label>
-          确认新密码
+          {t("auth.confirmNewPassword")}
           <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
         </label>
         {me.user.totp_enabled && (
           <label>
-            两步验证码 / 恢复码
+            {t("auth.login.totpLabel")}
             <input value={totp} onChange={(e) => setTotp(e.target.value)} autoComplete="one-time-code" maxLength={16} required />
           </label>
         )}
         {error && <p className="td-block">{error}</p>}
         {note && <p className="td-note">{note}</p>}
         <button className="td-submit buy" type="submit" disabled={busy}>
-          {busy ? "提交中…" : "修改密码"}
+          {busy ? t("common.submitting") : t("account.change")}
         </button>
       </form>
       <SecuritySection onChange={() => void marketProvider.getMe().then(setMe)} />

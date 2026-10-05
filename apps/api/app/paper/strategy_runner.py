@@ -952,6 +952,8 @@ class StrategyRunner:
             why = [] if go else (["日收益年化 bootstrap CI 下限 ≤ 0"] if not ci_ok else []) + (["未跑赢国债（超额 CI 下限 ≤ 0）"] if not tb_ok else [])
             out = {**base, "verdict": "go" if go else "no-go", "lamp": "green" if go else "red",
                    "message": "通过：日收益 CI 下限 > 0 且跑赢国债" if go else "未通过：" + "；".join(why),
+                   # stable ids for the translated web UI (message above stays as-is)
+                   "reasons": [] if go else (["CI_LO"] if not ci_ok else []) + (["TBILL"] if not tb_ok else []),
                    "stats": {k: (None if isinstance(s.get(k), float) and s[k] != s[k] else s.get(k))
                              for k in ("ann_mean", "cagr", "ci_lo", "ci_hi", "sharpe", "mdd", "excess_vs_tbill")}}
         self._go_cache = (n, out)

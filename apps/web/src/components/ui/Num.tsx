@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { decimalSep } from "@/i18n/format";
 
 /**
  * Decimal-point aligned number: integer part right-aligned in `int` ch, fraction left-aligned in `frac` ch.
@@ -17,7 +18,7 @@ export function Num({
   className?: string;
   title?: string;
 }) {
-  const i = text.indexOf(".");
+  const i = text.indexOf(decimalSep());
   const head = i < 0 ? text : text.slice(0, i);
   const tail = i < 0 ? "" : text.slice(i);
   const style = { "--ni": `${int}ch`, "--nd": `${frac}ch` } as CSSProperties;

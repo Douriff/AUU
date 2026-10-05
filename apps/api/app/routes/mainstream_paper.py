@@ -64,7 +64,7 @@ def place(request: Request, body: OrderBody):
     try:
         return ok(get_accounts().place(uid, body.model_dump()))
     except OrderError as e:
-        return err(e.code, e.message, e.status)
+        return err(e.code, e.message, e.status, extra=e.extra())
 
 
 @router.post("/orders/{order_id}/cancel")
@@ -75,4 +75,4 @@ def cancel(request: Request, order_id: str):
     try:
         return ok(get_accounts().cancel(uid, order_id))
     except OrderError as e:
-        return err(e.code, e.message, e.status)
+        return err(e.code, e.message, e.status, extra=e.extra())

@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { AuthMe } from "@/types/contracts";
 import {
-  NAME_RULE,
-  PASSWORD_RULE,
+  nameRule,
+  passwordRule,
   codeProblem,
   emailProblem,
   nameProblem,
@@ -12,9 +12,12 @@ import {
 } from "@/lib/authRules";
 import { EmailCodeField } from "./EmailCodeField";
 import { AuthHead } from "./AuthHead";
+import { Trans, useTranslation } from "react-i18next";
+import { errText } from "@/i18n/errors";
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [me, setMe] = useState<AuthMe | null>(null);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +35,7 @@ export function RegisterPage() {
         setMe(next);
         if (next.user) navigate("/leaderboard", { replace: true });
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "无法读取账户"));
+      .catch((e) => setError(errText(e, "auth.cantReadAccount")));
   }, [navigate]);
 
   async function submit(event: FormEvent) {
@@ -43,7 +46,7 @@ export function RegisterPage() {
       (verify ? emailProblem(email) ?? codeProblem(emailCode) : null) ??
       nameProblem(name) ??
       passwordProblem(password) ??
-      (password !== confirm ? "两次密码不一致" : null);
+      (password !== confirm ? t("auth.rule.mismatch") : null);
     if (problem) {
       setError(problem);
       return;
@@ -61,7 +64,7 @@ export function RegisterPage() {
       });
       navigate("/");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "注册失败");
+      setError(errText(e, "auth.register.failed"));
     } finally {
       setBusy(false);
     }
@@ -73,46 +76,46 @@ export function RegisterPage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <AuthHead title="注册" sub="用邮箱注册纸面交易账户：先收验证码，再设置用户名和密码。" />
+        <AuthHead title={t("auth.register.title")} sub={t("auth.register.sub")} />
         {me && !authOn && (
           <p className="td-note">
-            当前是本地单用户模式，不需要注册。直接去 <Link to="/">行情</Link>。
+            <Trans i18nKey="auth.register.localMode" components={{ market: <Link to="/" /> }} />
           </p>
         )}
-        {authOn && !open && <p className="td-note">注册已关闭。</p>}
+        {authOn && !open && <p className="td-note">{t("auth.register.closed")}</p>}
         {authOn && open && (
           <form onSubmit={(event) => void submit(event)}>
             {me?.email_verify ? (
               <EmailCodeField purpose="signup" email={email} code={emailCode} onEmail={setEmail} onCode={setEmailCode} onError={setError} />
             ) : (
-              <p className="td-note">当前未开启邮箱验证，直接设置用户名和密码。</p>
+              <p className="td-note">{t("auth.register.noEmailVerify")}</p>
             )}
             <label>
-              用户名
+              {t("auth.username")}
               <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={2} maxLength={32} required />
-              <small className="muted">{NAME_RULE}</small>
+              <small className="muted">{nameRule()}</small>
             </label>
             <label>
-              密码
+              {t("auth.password")}
               <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
-              <small className="muted">{PASSWORD_RULE}</small>
+              <small className="muted">{passwordRule()}</small>
             </label>
             <label>
-              确认密码
+              {t("auth.confirmPassword")}
               <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" autoComplete="new-password" minLength={8} required />
             </label>
             {me?.invite_required && (
               <label>
-                邀请码
+                {t("auth.register.invite")}
                 <input value={invite} onChange={(e) => setInvite(e.target.value)} autoCapitalize="none" required />
               </label>
             )}
             {error && <p className="td-block">{error}</p>}
             <button className="td-submit buy" type="submit" disabled={busy}>
-              {busy ? "提交中…" : "注册"}
+              {busy ? t("common.submitting") : t("auth.register.submit")}
             </button>
             <p className="td-note">
-              已有账户？<Link to="/login">去登录</Link>
+              {t("auth.register.haveAccount")}<Link to="/login">{t("auth.toLogin")}</Link>
             </p>
           </form>
         )}

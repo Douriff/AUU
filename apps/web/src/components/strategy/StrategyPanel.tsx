@@ -5,6 +5,11 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import { SkCards } from "@/components/ui/Skeleton";
 import { CHART_CHROME, chartColors, onColorPref } from "@/theme/colorPref";
 import type { ExecShadowSummary, ExpectedBand, RunVersion, StrategyRisk, StrategySummary } from "@/types/mainstream";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { errText } from "@/i18n/errors";
+import { fmtBjShort, fmtDate, fmtFixed, intlLocale } from "@/i18n/format";
+import { goMessage, goVerdict } from "@/i18n/strategy";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
@@ -12,13 +17,14 @@ const POLL_MS = 60_000;
 const COL = { strat: "#f0a531", btc: "#7d8fb3", tbill: "#5f6672" };
 
 const pct = (v: number | null | undefined, d = 2) =>
-  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
-const num = (v: number | null | undefined, d = 2) =>
-  v == null || !Number.isFinite(v) ? "—" : v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`;
+const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : fmtFixed(v, d));
 const tone = (v: number | null | undefined) => (v == null || !v ? "flat" : v > 0 ? "up" : "down");
-const SH = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+const SH = { format: (d: Date) => fmtBjShort(d.getTime()) };
+const tx = (group: string, k: string, fallback?: string) => (i18n.exists(`strat.${group}.${k}`) ? i18n.t(`strat.${group}.${k}`) : fallback ?? k);
 
 export function StrategyPanel() {
+  const { t, i18n: inst } = useTranslation();
   const [data, setData] = useState<StrategySummary | null>(null);
   const [err, setErr] = useState("");
   const host = useRef<HTMLDivElement>(null);
@@ -31,7 +37,7 @@ export function StrategyPanel() {
       marketProvider
         .getStrategySummary()
         .then((d) => alive && (setData(d), setErr("")))
-        .catch((e) => alive && setErr(String(e?.message || e)));
+        .catch((e) => alive && setErr(errText(e, "common.loadFailed")));
     load();
     const id = window.setInterval(load, POLL_MS);
     return () => {
@@ -49,12 +55,13 @@ export function StrategyPanel() {
       rightPriceScale: { borderColor: CHART_CHROME.border, scaleMargins: { top: 0.08, bottom: 0.3 } },
       timeScale: { borderColor: CHART_CHROME.border, rightOffset: 2 },
       handleScroll: { vertTouchDrag: false },
+      localization: { locale: intlLocale() },
     });
-    const fmt = { type: "custom" as const, formatter: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%` };
+    const fmt = { type: "custom" as const, formatter: (v: number) => `${v > 0 ? "+" : ""}${fmtFixed(v, 2)}%` };
     series.current = {
-      s: c.addLineSeries({ color: COL.strat, lineWidth: 2, priceFormat: fmt, title: "策略" }),
+      s: c.addLineSeries({ color: COL.strat, lineWidth: 2, priceFormat: fmt, title: i18n.t("strat.series.strategy") }),
       b: c.addLineSeries({ color: COL.btc, lineWidth: 1, priceFormat: fmt, title: "BTC" }),
-      t: c.addLineSeries({ color: COL.tbill, lineWidth: 1, lineStyle: 2, priceFormat: fmt, title: "国债" }),
+      t: c.addLineSeries({ color: COL.tbill, lineWidth: 1, lineStyle: 2, priceFormat: fmt, title: i18n.t("strat.series.tbill") }),
       r: c.addHistogramSeries({ priceScaleId: "ret", priceFormat: fmt, lastValueVisible: false, priceLineVisible: false }),
     };
     c.priceScale("ret").applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
@@ -64,6 +71,13 @@ export function StrategyPanel() {
       chart.current = null;
     };
   }, []);
+
+  // Series titles / axis locale follow the interface language.
+  useEffect(() => {
+    chart.current?.applyOptions({ localization: { locale: intlLocale() } });
+    series.current.s?.applyOptions({ title: i18n.t("strat.series.strategy") });
+    series.current.t?.applyOptions({ title: i18n.t("strat.series.tbill") });
+  }, [inst.language]);
 
   // Daily-return bars follow the 红涨绿跌 toggle (canvas colours are set from JS).
   const [colorRev, setColorRev] = useState(0);
@@ -96,92 +110,92 @@ export function StrategyPanel() {
   const st = data?.status;
   const last = data?.curve[data.curve.length - 1];
   return (
-    <section className="console-card strat" aria-label="趋势策略纸面">
+    <section className="console-card strat" aria-label={t("ms.stratCard")}>
       <header className="console-card-bar strat-head">
-        <div className="console-title">趋势策略 · {data?.strategy.name || "trend_tsmom_v1"}</div>
-        <span className="strat-sub">每日 08:00 调仓</span>
-        <Link to="/performance" className="console-badge strat-report-link">绩效报告 →</Link>
+        <div className="console-title">{t("strat.title", { name: data?.strategy.name || "trend_tsmom_v1" })}</div>
+        <span className="strat-sub">{t("strat.daily")}</span>
+        <Link to="/performance" className="console-badge strat-report-link">{t("strat.report")} →</Link>
         {g ? (
-          <span className={`console-go lamp-${g.lamp}`} title={g.message}>
-            {g.verdict === "go" ? "Go" : g.verdict === "no-go" ? "No-Go" : "待评估"}
+          <span className={`console-go lamp-${g.lamp}`} title={goMessage(g)}>
+            {goVerdict(g)}
           </span>
         ) : null}
       </header>
       {err ? <p className="console-err">{err}</p> : null}
       {!data && !err ? <SkCards n={8} h={62} /> : null}
       <div className="strat-kpis" hidden={!data}>
-        <Kpi label="权益 USDT" value={num(data?.nav)} />
-        <Kpi label="策略累计" value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
-        <Kpi label="BTC 买入持有" value={pct(data?.totals.btc)} tone={tone(data?.totals.btc ?? 0)} />
-        <Kpi label="国债（年化 3.99%）" value={pct(data?.totals.tbill)} />
-        <Kpi label="最近日收益" value={pct(last?.ret, 3)} tone={tone(last?.ret)} />
-        <Kpi label="总敞口" value={last ? `${(last.gross * 100).toFixed(1)}%` : "—"} />
+        <Kpi label={t("strat.k.nav")} value={num(data?.nav)} />
+        <Kpi label={t("strat.k.cum")} value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
+        <Kpi label={t("strat.k.btc")} value={pct(data?.totals.btc)} tone={tone(data?.totals.btc ?? 0)} />
+        <Kpi label={t("strat.k.tbill", { r: "3.99%" })} value={pct(data?.totals.tbill)} />
+        <Kpi label={t("strat.k.lastRet")} value={pct(last?.ret, 3)} tone={tone(last?.ret)} />
+        <Kpi label={t("ms.grossExposure")} value={last ? `${fmtFixed(last.gross * 100, 1)}%` : "—"} />
         <Kpi
-          label="上次调仓"
-          value={st?.lastDay ? `${st.lastDay} 收盘` : "尚未调仓"}
-          sub={st?.lastRunAt ? `执行于 ${SH.format(new Date(st.lastRunAt))}` : st?.waiting || ""}
+          label={t("status.lastRebalance")}
+          value={st?.lastDay ? t("strat.k.close", { day: st.lastDay }) : t("strat.k.none")}
+          sub={st?.lastRunAt ? t("strat.k.ranAt", { time: SH.format(new Date(st.lastRunAt)) }) : st?.waiting || ""}
         />
         <Kpi
-          label="调仓状态"
-          value={st ? (st.stalled ? `停滞 ${st.hoursSinceRebalance.toFixed(1)}h` : `正常 · ${st.hoursSinceRebalance.toFixed(1)}h 前`) : "—"}
+          label={t("strat.k.state")}
+          value={st ? (st.stalled ? t("strat.k.stalled", { h: fmtFixed(st.hoursSinceRebalance, 1) }) : t("strat.k.ok", { h: fmtFixed(st.hoursSinceRebalance, 1) })) : "—"}
           tone={st?.stalled ? "bad" : "ok"}
-          sub={st ? `已运行 ${st.days} 天 · 超过 ${st.stallHours}h 报警` : ""}
+          sub={st ? t("strat.k.running", { days: st.days, h: st.stallHours }) : ""}
         />
       </div>
-      {g ? <p className={`strat-go lamp-${g.lamp}`}>{g.message}（标准：日收益 ≥ {g.minDays} 天，bootstrap CI 下限 &gt; 0 且跑赢国债）</p> : null}
+      {g ? <p className={`strat-go lamp-${g.lamp}`}>{goMessage(g)} {t("strat.goStd", { min: g.minDays })}</p> : null}
       {data ? <UniverseNote data={data} /> : null}
       {data?.risk?.enabled ? <RiskBox risk={data.risk} /> : null}
       <BandBox b={data?.expectedBand ?? null} />
       <ExecShadowBox s={data?.execShadow ?? null} />
       {data?.version ? <VersionLine v={data.version} /> : null}
       <div className="strat-legend">
-        <i style={{ background: COL.strat }} />策略 <i style={{ background: COL.btc }} />BTC 买入持有 <i style={{ background: COL.tbill }} />国债 <i className="bar" />日收益
+        <i style={{ background: COL.strat }} />{t("strat.series.strategy")} <i style={{ background: COL.btc }} />{t("strat.k.btc")} <i style={{ background: COL.tbill }} />{t("strat.series.tbill")} <i className="bar" />{t("strat.series.daily")}
       </div>
       <div className="strat-chart" ref={host} />
       <div className="strat-tables">
         <div>
-          <h4>持仓（{data?.positions.length ?? 0}）</h4>
+          <h4>{t("strat.positions", { n: data?.positions.length ?? 0 })}</h4>
           <table className="num">
             <thead>
-              <tr><th>币</th><th>权重</th><th>市值</th><th>数量</th><th>收盘价</th></tr>
+              <tr><th>{t("perf.a.coin")}</th><th>{t("strat.col.weight")}</th><th>{t("trade.value")}</th><th>{t("ob.qty")}</th><th>{t("strat.col.close")}</th></tr>
             </thead>
             <tbody>
               {data?.positions.length ? (
                 data.positions.map((p) => (
                   <tr key={p.coin}>
                     <td>{p.coin}</td>
-                    <td>{(p.weight * 100).toFixed(2)}%</td>
+                    <td>{fmtFixed(p.weight * 100, 2)}%</td>
                     <td>{num(p.notional)}</td>
                     <td>{num(p.qty, 6)}</td>
                     <td>{num(p.price)}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={5} className="muted">空仓（信号为负或尚未调仓）</td></tr>
+                <tr><td colSpan={5} className="muted">{t("strat.flat")}</td></tr>
               )}
             </tbody>
           </table>
         </div>
         <div>
-          <h4>调仓成交（费 {(data?.cost.taker ?? 0) * 100}% + 滑点）</h4>
+          <h4>{t("strat.fills", { fee: fmtFixed((data?.cost.taker ?? 0) * 100, 2) })}</h4>
           <table className="num">
             <thead>
-              <tr><th>日</th><th>币</th><th>方向</th><th>金额</th><th>成交价</th><th>费+滑点</th></tr>
+              <tr><th>{t("strat.col.day")}</th><th>{t("perf.a.coin")}</th><th>{t("ms.col.side")}</th><th>{t("strat.col.amount")}</th><th>{t("strat.col.fillPx")}</th><th>{t("strat.col.feeSlip")}</th></tr>
             </thead>
             <tbody>
               {data?.fills.length ? (
                 data.fills.slice(0, 12).map((f) => (
                   <tr key={`${f.day}-${f.coin}`}>
-                    <td>{new Date(f.day).toISOString().slice(5, 10)}</td>
+                    <td>{fmtDate(f.day, { timeZone: "UTC", month: "2-digit", day: "2-digit" })}</td>
                     <td>{f.coin}</td>
-                    <td className={f.side === "buy" ? "up" : "down"}>{f.side === "buy" ? "买" : "卖"}</td>
+                    <td className={f.side === "buy" ? "up" : "down"}>{f.side === "buy" ? t("chart.buy") : t("chart.sell")}</td>
                     <td>{num(f.notional)}</td>
                     <td>{num(f.fill_price)}</td>
                     <td>{num(f.fee + f.slippage, 3)}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={6} className="muted">暂无</td></tr>
+                <tr><td colSpan={6} className="muted">{t("common.none")}</td></tr>
               )}
             </tbody>
           </table>
@@ -210,111 +224,105 @@ function UniverseNote({ data }: { data: StrategySummary }) {
   const pending = cur.length > 0 && avail.length > 0 && (cur.length !== avail.length || avail.some((c) => !cur.includes(c)));
   const nextDay = data.status.nextDueDay;
   const unavailable = Object.entries(u.unavailable || {});
+  const { t } = useTranslation();
   return (
     <div className="strat-universe">
       <div>
-        <b>币池</b>：当前 {cur.length} 个（{cur.join(" ")}）
-        {conf.length ? <> · 研究币池 {conf.length} 个，已有数据 {avail.length} 个</> : null}
+        <b>{t("strat.u.pool")}</b>: {t("strat.u.current", { n: cur.length, list: cur.join(" ") })}
+        {conf.length ? <> · {t("strat.u.research", { n: conf.length, avail: avail.length })}</> : null}
       </div>
       {last ? (
         <div>
-          切换记录：{last.day} 收盘起 {last.prev.length} → {last.coins.length} 个币（之前的账本历史保持原样）
+          {t("strat.u.changed", { day: last.day, from: last.prev.length, to: last.coins.length })}
         </div>
       ) : pending ? (
         <div>
-          待切换：从 {nextDay} 收盘（次日北京时间 08:00 调仓）起改用 {avail.length} 个币；之前的账本历史不重算
+          {t("strat.u.pending", { day: nextDay, n: avail.length })}
         </div>
       ) : null}
-      {unavailable.length ? <div className="down">缺少数据：{unavailable.map(([c, why]) => `${c}（${why}）`).join("；")}</div> : null}
-      <div className="strat-warn">⚠ 幸存者偏差：{u.survivorship}</div>
+      {unavailable.length ? <div className="down">{t("strat.u.missing")} {unavailable.map(([c, why]) => `${c} (${why})`).join("; ")}</div> : null}
+      <div className="strat-warn">⚠ {t("strat.u.survivorship")}</div>
     </div>
   );
 }
 
-const RISK_RULES = [
-  "总敞口 ≤ 1x 权益",
-  "单币 ≤ 25%",
-  "当日 −3% 停止新开仓",
-  "当日 −5% 全部减半",
-  "当日 −8% 全部平仓并锁 24h",
-  "回撤 −15% 仓位减半",
-  "回撤 −20% 清仓复查",
-  "资金费：多头 > 0.1%/8h 减仓",
-  "数据：1h 标记价超过 2 根未更新或交易所异常 → 只减不开",
-];
+// i18n keys strat.rule.r1..r9 (display only; the limits themselves live in the API)
+const RISK_RULES = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"];
 
 function RiskBox({ risk }: { risk: StrategyRisk }) {
   const m = risk.lastMark;
   const f = risk.todayFlags || {};
   const lock = risk.locked && risk.lock;
-  const flags = [f.stop_new ? "停止新开仓" : "", f.halve ? "已减半" : "", f.flat ? "已平仓" : ""].filter(Boolean);
+  const { t } = useTranslation();
+  const flags = [f.stop_new ? t("strat.flag.stopNew") : "", f.halve ? t("strat.flag.halved") : "", f.flat ? t("strat.flag.flat") : ""].filter(Boolean);
   const ev = risk.events || [];
   return (
     <div className="strat-risk">
       <div className="strat-risk-head">
-        <b>风控硬上限</b>
+        <b>{t("strat.risk.title")}</b>
         <span className={`strat-risk-state ${lock || risk.dataBad ? "down" : "up"}`}>
           {lock
             ? risk.lock?.kind === "review"
-              ? `🔒 已锁定，需人工复查（${risk.lock?.reason}）`
-              : `🔒 锁定至 ${SH.format(new Date(risk.lock?.until || 0))}（${risk.lock?.reason}）`
+              ? `🔒 ${t("strat.risk.lockReview", { why: risk.lock?.reason })}`
+              : `🔒 ${t("strat.risk.lockUntil", { time: SH.format(new Date(risk.lock?.until || 0)), why: risk.lock?.reason })}`
             : risk.dataBad
-              ? `⚠ 数据熔断：只减不开（${risk.dataBad.reason}）`
-              : "正常，未触发"}
+              ? `⚠ ${t("strat.risk.dataBad", { why: risk.dataBad.reason })}`
+              : t("strat.risk.ok")}
         </span>
         {m ? (
           <span className="muted">
-            小时标记 {SH.format(new Date(m.ts))}：当日 {pct(m.dayRet)} · 回撤 {pct(m.drawdown)}
-            {flags.length ? ` · 今日：${flags.join("、")}` : ""}
+            {t("strat.risk.mark", { time: SH.format(new Date(m.ts)), day: pct(m.dayRet), dd: pct(m.drawdown) })}
+            {flags.length ? ` · ${t("strat.risk.today", { list: flags.join(", ") })}` : ""}
           </span>
         ) : (
-          <span className="muted">小时标记：尚无（调仓后的下一个整点开始）</span>
+          <span className="muted">{t("strat.risk.noMark")}</span>
         )}
       </div>
-      <div className="strat-risk-rules">{RISK_RULES.map((r) => <span key={r}>{r}</span>)}</div>
+      <div className="strat-risk-rules">{RISK_RULES.map((r) => <span key={r}>{t(`strat.rule.${r}`)}</span>)}</div>
       <table className="num strat-risk-events">
         <thead>
-          <tr><th>时间（北京）</th><th>触发</th><th>动作</th><th>数值</th><th>场景</th></tr>
+          <tr><th>{t("sec.colTime")}</th><th>{t("strat.risk.trigger")}</th><th>{t("strat.risk.action")}</th><th>{t("strat.risk.value")}</th><th>{t("strat.risk.when")}</th></tr>
         </thead>
         <tbody>
           {ev.length ? (
             ev.slice(0, 10).map((e, i) => (
               <tr key={`${e.ts}-${e.kind}-${i}`}>
                 <td>{SH.format(new Date(e.ts))}</td>
-                <td>{e.label}</td>
-                <td>{e.action}</td>
-                <td>{e.value == null ? "—" : e.kind.startsWith("cap") ? `${(e.value * 100).toFixed(1)}%` : pct(e.value, e.kind === "funding" ? 3 : 2)}</td>
-                <td>{e.at === "close" ? "收盘调仓" : e.at === "intraday" ? "盘中" : e.at}</td>
+                <td>{tx("kind", e.kind, e.label)}</td>
+                <td>{tx("action", e.action)}</td>
+                <td>{e.value == null ? "—" : e.kind.startsWith("cap") ? `${fmtFixed(e.value * 100, 1)}%` : pct(e.value, e.kind === "funding" ? 3 : 2)}</td>
+                <td>{e.at === "close" ? t("strat.risk.atClose") : e.at === "intraday" ? t("strat.risk.atIntraday") : e.at}</td>
               </tr>
             ))
           ) : (
-            <tr><td colSpan={5} className="muted">暂无触发记录（共 {risk.eventCount ?? 0} 条）</td></tr>
+            <tr><td colSpan={5} className="muted">{t("strat.risk.noEvents", { n: risk.eventCount ?? 0 })}</td></tr>
           )}
         </tbody>
       </table>
-      {risk.backtestNote ? <div className="muted strat-risk-note">{risk.backtestNote}</div> : null}
+      {risk.backtestNote ? <div className="muted strat-risk-note">{t("strat.risk.backtestNote")}</div> : null}
     </div>
   );
 }
 
-const bp = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(d)} bp`);
+const bp = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v, d)} bp`);
 
 function ExecShadowBox({ s }: { s: ExecShadowSummary | null }) {
+  const { t } = useTranslation();
   return (
     <div className="strat-risk strat-exec">
       <div className="strat-risk-head">
-        <b>执行价影子记录</b>
-        <span className="muted">每次调仓时按成交金额读取永续公开盘口（不影响成交和账本）</span>
+        <b>{t("strat.exec.title")}</b>
+        <span className="muted">{t("strat.exec.sub")}</span>
         {s && s.n ? (
           <span className={(s.notionalWeightedDeviationBp ?? 0) > 0 ? "down" : "up"}>
-            按金额加权：实际 {bp(s.notionalWeightedShortfallMidBp)} vs 假设 · 偏差 {bp(s.notionalWeightedDeviationBp)}
+            {t("strat.exec.weighted", { actual: bp(s.notionalWeightedShortfallMidBp), dev: bp(s.notionalWeightedDeviationBp) })}
           </span>
         ) : null}
       </div>
       {s && s.coins.length ? (
         <table className="num strat-risk-events">
           <thead>
-            <tr><th>币</th><th>次数</th><th>价差</th><th>盘口成本（对中间价）</th><th>假设滑点</th><th>偏差</th><th>对收盘价</th></tr>
+            <tr><th>{t("perf.a.coin")}</th><th>{t("strat.exec.n")}</th><th>{t("ob.spread")}</th><th>{t("strat.exec.shortfall")}</th><th>{t("strat.exec.assumed")}</th><th>{t("strat.exec.dev")}</th><th>{t("strat.exec.vsClose")}</th></tr>
           </thead>
           <tbody>
             {s.coins.map((c) => (
@@ -331,14 +339,14 @@ function ExecShadowBox({ s }: { s: ExecShadowSummary | null }) {
           </tbody>
         </table>
       ) : (
-        <div className="muted">暂无记录（下一次调仓开始积累）{s?.error ? ` · ${s.error}` : ""}</div>
+        <div className="muted">{t("strat.exec.empty")}{s?.error ? ` · ${s.error}` : ""}</div>
       )}
-      {s ? <div className="muted strat-risk-note">{s.note}{s.skipped ? ` 补跑日跳过 ${s.skipped} 笔。` : ""}{s.errors ? ` 读取失败 ${s.errors} 笔。` : ""}</div> : null}
+      {s ? <div className="muted strat-risk-note">{t("strat.exec.note")}{s.skipped ? ` ${t("strat.exec.skipped", { n: s.skipped })}` : ""}{s.errors ? ` ${t("strat.exec.errors", { n: s.errors })}` : ""}</div> : null}
     </div>
   );
 }
 
-const bpct = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
+const bpct = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`);
 const short = (x: string | null | undefined) => (x ? x.slice(0, 10) : "—");
 
 function BandBox({ b }: { b: ExpectedBand | null }) {
@@ -355,19 +363,20 @@ function BandBox({ b }: { b: ExpectedBand | null }) {
   const mid = curve.map((c, i) => `${i ? "L" : "M"}${x(c.n).toFixed(1)},${y(c.p50).toFixed(1)}`).join("");
   const paper = curve.filter((c) => c.paper != null).map((c, i) => `${i ? "L" : "M"}${x(c.n).toFixed(1)},${y(c.paper as number).toFixed(1)}`).join("");
   const bad = b.status === "below" || b.status === "dd_breach";
+  const { t } = useTranslation();
   return (
     <div className="strat-risk strat-band">
       <div className="strat-risk-head">
-        <b>纸面 vs 回测预期区间</b>
-        <span className={bad ? "down" : b.status === "above" ? "warn" : "up"}>{b.label ?? b.status}</span>
+        <b>{t("strat.band.title")}</b>
+        <span className={bad ? "down" : b.status === "above" ? "warn" : "up"}>{tx("band", b.status, b.label ?? b.status)}</span>
         {b.n ? (
           <span className="muted">
-            N={b.n} 天 · 累计 {bpct(b.cum)}（5%–95%：{bpct(b.p05)} ~ {bpct(b.p95)}）· 回撤 {bpct(b.mdd)}（5% 最差 {bpct(b.mddP05)}）
+            {t("strat.band.stats", { n: b.n, cum: bpct(b.cum), p05: bpct(b.p05), p95: bpct(b.p95), mdd: bpct(b.mdd), worst: bpct(b.mddP05) })}
           </span>
         ) : null}
       </div>
       {curve.length ? (
-        <svg viewBox={`0 0 ${W} ${H}`} className="strat-band-svg" preserveAspectRatio="none" role="img" aria-label="预期区间">
+        <svg viewBox={`0 0 ${W} ${H}`} className="strat-band-svg" preserveAspectRatio="none" role="img" aria-label={t("strat.band.aria")}>
           <path d={area} fill="currentColor" opacity={0.12} />
           <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="currentColor" opacity={0.25} strokeDasharray="3 3" />
           <path d={mid} fill="none" stroke="currentColor" opacity={0.4} strokeWidth={1} />
@@ -375,7 +384,7 @@ function BandBox({ b }: { b: ExpectedBand | null }) {
         </svg>
       ) : null}
       <div className="muted strat-risk-note">
-        {b.note} 区间 {b.name} v{b.version} · seed {b.registered?.seed} · block {b.registered?.block} · {b.registered?.n_paths} 条路径 · 来源 {b.sourceSha}
+        {t("strat.band.note")} {t("strat.band.meta", { name: b.name, v: b.version, seed: b.registered?.seed, block: b.registered?.block, paths: b.registered?.n_paths, src: b.sourceSha })}
         {b.error ? ` · ${b.error}` : ""}
       </div>
     </div>
@@ -384,12 +393,13 @@ function BandBox({ b }: { b: ExpectedBand | null }) {
 
 function VersionLine({ v }: { v: RunVersion }) {
   const l = v.lastRun;
+  const { t } = useTranslation();
   return (
     <div className="muted strat-version">
-      本次运行版本：commit {short(l.git_commit)} · 参数 {short(l.params_sha)} · 成本模型 {short(l.cost_model_sha)}
-      {v.unversionedRuns ? ` · 早期 ${v.unversionedRuns} 天无版本记录` : ""}
-      {v.changedSinceLastRun ? " · ⚠ 当前参数与上次运行不同" : ""}
-      {l.git_commit && v.current.git_commit && l.git_commit !== v.current.git_commit ? ` · 当前代码 ${short(v.current.git_commit)}` : ""}
+      {t("strat.ver.line", { commit: short(l.git_commit), params: short(l.params_sha), cost: short(l.cost_model_sha) })}
+      {v.unversionedRuns ? ` · ${t("strat.ver.unversioned", { n: v.unversionedRuns })}` : ""}
+      {v.changedSinceLastRun ? ` · ⚠ ${t("strat.ver.changed")}` : ""}
+      {l.git_commit && v.current.git_commit && l.git_commit !== v.current.git_commit ? ` · ${t("strat.ver.current", { c: short(v.current.git_commit) })}` : ""}
     </div>
   );
 }

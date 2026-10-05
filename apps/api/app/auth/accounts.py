@@ -366,6 +366,34 @@ def bump_epoch(user_id: str) -> None:
         _save()
 
 
+# Interface languages the web app ships (apps/web/src/i18n/locales/*.json).
+LOCALES = ("zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar")
+
+
+def set_locale(user_id: str, locale: str) -> dict[str, Any]:
+    """Remember the user's interface language (display preference only)."""
+    if locale not in LOCALES:
+        raise ValueError("BAD_LOCALE")
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    with _LOCK:
+        user["locale"] = locale
+        user["locale_ts"] = int(time.time() * 1000)
+        _save()
+    return locale_view(user)
+
+
+def locale_view(user: dict[str, Any]) -> dict[str, Any]:
+    loc = user.get("locale")
+    return {"locale": loc if loc in LOCALES else None, "locale_ts": int(user.get("locale_ts") or 0)}
+
+
+def user_locale(user: Optional[dict[str, Any]]) -> Optional[str]:
+    loc = (user or {}).get("locale")
+    return loc if loc in LOCALES else None
+
+
 def session_epoch(user_id: str) -> int:
     return _epoch_of(user_id)
 

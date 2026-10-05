@@ -5,28 +5,15 @@ import type { ConsoleEvent } from "@/types/contracts";
 import { StrategyPanel } from "@/components/strategy/StrategyPanel";
 import { ShadowS3Panel } from "@/components/strategy/ShadowS3Panel";
 import { ReconPanel } from "@/components/strategy/ReconPanel";
+import { useTranslation } from "react-i18next";
+import { dateFmt, decimalSep, fmtFixed } from "@/i18n/format";
 
-const FILTERS: { id: string; label: string }[] = [
-  { id: "all", label: "全部" },
-  { id: "discovery", label: "发现" },
-  { id: "entry", label: "开仓" },
-  { id: "exit", label: "平仓" },
-  { id: "reject", label: "拒绝" },
-  { id: "shadow", label: "影子" },
-  { id: "system", label: "系统" },
-];
-
-const CLOCK = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Asia/Shanghai",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
+// label = i18n key under console.f.*
+const FILTERS: string[] = ["all", "discovery", "entry", "exit", "reject", "shadow", "system"];
 
 function clock(ts: number): string {
   if (!ts) return "--:--:--";
-  return CLOCK.format(new Date(ts));
+  return dateFmt({ timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(ts));
 }
 
 function formatSol(n: number | null | undefined): string {
@@ -35,7 +22,8 @@ function formatSol(n: number | null | undefined): string {
   const body = Math.abs(n)
     .toFixed(digits)
     .replace(/(\.\d*?[1-9])0+$/, "$1")
-    .replace(/\.0+$/, "");
+    .replace(/\.0+$/, "")
+    .replace(".", decimalSep());
   if (n > 0) return `+${body}`;
   if (n < 0) return `-${body}`;
   return body;
@@ -44,7 +32,7 @@ function formatSol(n: number | null | undefined): string {
 function formatBps(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const digits = Math.abs(n) >= 10 ? 0 : 1;
-  const body = Math.abs(n).toFixed(digits);
+  const body = fmtFixed(Math.abs(n), digits);
   if (n > 0) return `+${body}`;
   if (n < 0) return `-${body}`;
   return body;
@@ -56,6 +44,7 @@ function tone(n: number | null | undefined): string {
 }
 
 export function ConsolePage() {
+  const { t } = useTranslation();
   const { events, stats, err } = useConsole(2000);
   const [filter, setFilter] = useState("all");
   const [paused, setPaused] = useState(false);
@@ -91,25 +80,25 @@ export function ConsolePage() {
     });
   }
 
-  const verdict = stats?.verdict === "go" ? "Go" : stats?.verdict === "pending" ? "待评估" : "No-Go";
+  const verdict = stats?.verdict === "go" ? "Go" : stats?.verdict === "pending" ? t("go.pendingShort") : "No-Go";
   const lamp = stats?.lamp || "gray";
 
   return (
     <div className="console-page pro-page">
       <header className="pro-head">
-        <h1>策略控制台</h1>
-        <p>趋势策略纸面运行、风控与执行记录</p>
+        <h1>{t("perf.consoleLink")}</h1>
+        <p>{t("console.sub")}</p>
       </header>
-      <section className="console-stats" aria-label="今日纸面">
-        <Stat label="持仓" value={stats ? String(stats.open_positions) : "—"} />
-        <Stat label="今日平仓" value={stats ? String(stats.closed_today) : "—"} />
+      <section className="console-stats" aria-label={t("console.todayAria")}>
+        <Stat label={t("ml.held")} value={stats ? String(stats.open_positions) : "—"} />
+        <Stat label={t("console.closedToday")} value={stats ? String(stats.closed_today) : "—"} />
         <Stat
-          label="今日净盈亏"
+          label={t("console.pnlToday")}
           value={stats ? `${formatSol(stats.pnl_today) || "0"}${stats.go_window_label === "mainstream" ? "" : " SOL"}` : "—"}
           tone={tone(stats?.pnl_today)}
         />
         <Stat
-          label="平均净收益 (bp)"
+          label={t("console.avgNet")}
           value={stats ? formatBps(stats.avg_net_bps) : "—"}
           tone={tone(stats?.avg_net_bps)}
         />
@@ -127,35 +116,35 @@ export function ConsolePage() {
 
       <ShadowS3Panel />
 
-      <section className="console-card console-log-card" aria-label="事件日志">
+      <section className="console-card console-log-card" aria-label={t("console.logAria")}>
         <header className="console-card-bar">
           <div className="console-title">
             <span className={`console-live${paused ? " is-paused" : ""}`} aria-hidden="true" />
-            控制台
+            {t("console.title")}
           </div>
-          <div className="console-chips" role="tablist" aria-label="事件类型">
-            {FILTERS.map((item) => (
+          <div className="console-chips" role="tablist" aria-label={t("console.typeAria")}>
+            {FILTERS.map((id) => (
               <button
-                key={item.id}
+                key={id}
                 type="button"
                 role="tab"
-                aria-selected={filter === item.id}
-                className={filter === item.id ? "is-on" : ""}
-                onClick={() => setFilter(item.id)}
+                aria-selected={filter === id}
+                className={filter === id ? "is-on" : ""}
+                onClick={() => setFilter(id)}
               >
-                {item.label}
+                {t(`console.f.${id}`)}
               </button>
             ))}
           </div>
           <button type="button" className="console-pause" onClick={togglePause} aria-pressed={paused}>
-            {paused ? "继续跟随" : "暂停滚动"}
+            {paused ? t("console.resume") : t("console.pause")}
           </button>
         </header>
         {err ? <p className="console-err">{err}</p> : null}
         <div className="console-log" ref={scroller} onScroll={onScroll}>
           {rows.length === 0 ? (
             stats ? (
-              <p className="console-empty">此类型暂无事件</p>
+              <p className="console-empty">{t("console.empty")}</p>
             ) : (
               <SkRows rows={6} cols={3} h={30} />
             )

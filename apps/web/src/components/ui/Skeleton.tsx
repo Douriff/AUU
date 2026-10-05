@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import i18n from "i18next";
 
 /** Shimmer placeholder block. */
 export function Sk({ w = "100%", h = 12, r = 4, className = "" }: { w?: number | string; h?: number; r?: number; className?: string }) {
@@ -8,7 +9,7 @@ export function Sk({ w = "100%", h = 12, r = 4, className = "" }: { w?: number |
 /** N placeholder rows shaped like a table/list. */
 export function SkRows({ rows = 8, cols = 5, h = 40 }: { rows?: number; cols?: number; h?: number }) {
   return (
-    <div className="sk-rows" role="status" aria-label="加载中">
+    <div className="sk-rows" role="status" aria-label={i18n.t("common.loading")}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="sk-row" style={{ height: h }}>
           {Array.from({ length: cols }, (_, j) => (
@@ -23,7 +24,7 @@ export function SkRows({ rows = 8, cols = 5, h = 40 }: { rows?: number; cols?: n
 /** Card-shaped skeleton grid (KPI tiles). */
 export function SkCards({ n = 4, h = 72 }: { n?: number; h?: number }) {
   return (
-    <div className="sk-cards" role="status" aria-label="加载中">
+    <div className="sk-cards" role="status" aria-label={i18n.t("common.loading")}>
       {Array.from({ length: n }, (_, i) => (
         <div key={i} className="sk-card" style={{ height: h }}>
           <Sk w="40%" h={10} />

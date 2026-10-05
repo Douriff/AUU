@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarketRow } from "@/types/mainstream";
 import { Num } from "@/components/ui/Num";
 import { Empty } from "@/components/ui/Skeleton";
+import { useTranslation } from "react-i18next";
+import { decimalSep, fmtFixed, fmtKMB, fmtSignedPct } from "@/i18n/format";
 
 /** Exchange-style market list (own implementation): tabs, search, sortable columns, favorites. */
 
@@ -16,22 +18,19 @@ const SORT_KEY = "auu.ms.sort";
 export function fmtPx(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const d = n >= 1000 ? 2 : n >= 100 ? 2 : n >= 1 ? 4 : n >= 0.01 ? 5 : Math.min(10, Math.max(7, Math.ceil(-Math.log10(Math.abs(n) || 1e-10)) + 3));
-  return n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  return fmtFixed(n, d);
 }
 export function fmtPct(n: number | null | undefined, digits = 2): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return `${n > 0 ? "+" : ""}${(n * 100).toFixed(digits)}%`;
+  return fmtSignedPct(n, digits);
 }
 export function fmtRate(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return `${n > 0 ? "+" : ""}${(n * 100).toFixed(4)}%`;
+  return fmtSignedPct(n, 4);
 }
 export function fmtVol(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return n.toFixed(0);
+  return fmtKMB(n);
 }
 export const tone = (n: number | null | undefined) => (n == null || !Number.isFinite(n) || n === 0 ? "flat" : n > 0 ? "up" : "down");
 
@@ -59,9 +58,10 @@ export function useFavorites(): [Set<string>, (s: string) => void] {
 export function pxWidths(values: (number | null | undefined)[]): { int: number; frac: number } {
   let int = 1;
   let frac = 0;
+  const sep = decimalSep();
   for (const v of values) {
     const t = fmtPx(v);
-    const i = t.indexOf(".");
+    const i = t.indexOf(sep);
     int = Math.max(int, i < 0 ? t.length : i);
     frac = Math.max(frac, i < 0 ? 0 : t.length - i);
   }
@@ -114,6 +114,7 @@ export function filterRows(rows: MarketRow[], q: string): MarketRow[] {
 }
 
 export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen: (symbol: string) => void; quote: string }) {
+  const { t } = useTranslation();
   const [favs, toggleFav] = useFavorites();
   const [tab, setTabState] = useState<MarketTab>(() => (window.localStorage.getItem(TAB_KEY) as MarketTab) || "all");
   const [q, setQ] = useState("");
@@ -145,20 +146,20 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
 
   const pxW = useMemo(() => pxWidths(shown.map((r) => r.price)), [shown]);
   const Head = ({ k, label, className = "" }: { k: SortKey; label: string; className?: string }) => (
-    <button type="button" className={`ml-h ${className}${sort.key === k ? " is-on" : ""}`} onClick={() => setSort(k)} aria-label={`按${label}排序`}>
+    <button type="button" className={`ml-h ${className}${sort.key === k ? " is-on" : ""}`} onClick={() => setSort(k)} aria-label={t("ml.sortBy", { label })}>
       {label}
       <span className="ml-arrow">{sort.key === k ? (sort.dir === "desc" ? "↓" : "↑") : "↕"}</span>
     </button>
   );
 
   return (
-    <section className="ml" aria-label="行情列表">
+    <section className="ml" aria-label={t("ml.aria")}>
       <div className="ml-bar">
-        <div className="ml-tabs" role="tablist" aria-label="列表">
+        <div className="ml-tabs" role="tablist" aria-label={t("ml.listAria")}>
           {([
-            ["fav", "自选"],
-            ["all", "全部"],
-            ["held", "策略持仓"],
+            ["fav", t("ml.fav")],
+            ["all", t("ml.all")],
+            ["held", t("ms.stratPos")],
           ] as [MarketTab, string][]).map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "is-on" : ""} onClick={() => setTab(id)}>
               {label}
@@ -166,18 +167,18 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
             </button>
           ))}
         </div>
-        <input className="ml-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索币种" aria-label="搜索币种" />
+        <input className="ml-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("ml.search")} aria-label={t("ml.search")} />
       </div>
       <div className="ml-row ml-head" role="row">
         <span className="ml-c-star" />
-        <Head k="symbol" label="币种" className="ml-c-name" />
-        <Head k="price" label="最新价" className="ml-c-px" />
-        <Head k="change24h" label="24h 涨跌" className="ml-c-chg" />
-        <Head k="change7d" label="7 天" className="ml-c-7d" />
-        <Head k="quoteVolume24h" label="24h 成交额" className="ml-c-vol" />
-        <Head k="funding" label="资金费率" className="ml-c-fr" />
-        <span className="ml-h ml-c-w">策略权重</span>
-        <Head k="change30d" label="30 天" className="ml-c-spark" />
+        <Head k="symbol" label={t("ms.col.coin")} className="ml-c-name" />
+        <Head k="price" label={t("ms.col.last")} className="ml-c-px" />
+        <Head k="change24h" label={t("ml.chg24h")} className="ml-c-chg" />
+        <Head k="change7d" label={t("ms.d7")} className="ml-c-7d" />
+        <Head k="quoteVolume24h" label={t("ms.vol24h")} className="ml-c-vol" />
+        <Head k="funding" label={t("ms.funding")} className="ml-c-fr" />
+        <span className="ml-h ml-c-w">{t("ml.weight")}</span>
+        <Head k="change30d" label={t("ms.d30")} className="ml-c-spark" />
       </div>
       {shown.map((r) => (
         <div
@@ -191,7 +192,7 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
           <button
             type="button"
             className={`ml-c-star ml-star${favs.has(r.symbol) ? " is-on" : ""}`}
-            aria-label={favs.has(r.symbol) ? `取消自选 ${r.symbol}` : `加入自选 ${r.symbol}`}
+            aria-label={favs.has(r.symbol) ? t("ml.unfav", { sym: r.symbol }) : t("ml.addFav", { sym: r.symbol })}
             aria-pressed={favs.has(r.symbol)}
             onClick={(e) => {
               e.stopPropagation();
@@ -207,17 +208,17 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
                 <b>{r.symbol}</b>
                 <span className="ml-quote">/{quote}</span>
                 {r.held ? (
-                  <span className={`ml-held ${(r.weight ?? 0) < 0 ? "is-short" : ""}`} title="趋势策略纸面当前持仓">
-                    {(r.weight ?? 0) < 0 ? "空" : "持仓"}
+                  <span className={`ml-held ${(r.weight ?? 0) < 0 ? "is-short" : ""}`} title={t("ml.heldTitle")}>
+                    {(r.weight ?? 0) < 0 ? t("ms.short") : t("ml.held")}
                   </span>
                 ) : null}
               </span>
-              <span className="ml-sub">成交额 {fmtVol(r.quoteVolume24h)}</span>
+              <span className="ml-sub">{t("ml.vol")} {fmtVol(r.quoteVolume24h)}</span>
             </span>
           </span>
           <span className="ml-c-px num">
             <Num text={fmtPx(r.price)} int={pxW.int} frac={pxW.frac} />
-            <span className="ml-sub">{fmtPct(r.change7d)} · 7天</span>
+            <span className="ml-sub">{fmtPct(r.change7d)} · {t("ms.d7")}</span>
           </span>
           <span className="ml-c-chg">
             <em className={`ml-pill ${tone(r.change24h)}`}>{fmtPct(r.change24h)}</em>
@@ -227,11 +228,11 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
           <span className={`ml-c-fr num ${tone(r.funding)}`}>{fmtRate(r.funding)}</span>
           <span className="ml-c-w num">
             {r.held && r.weight != null ? (
-              <span className="wbar" title={`${r.weight < 0 ? "空" : "多"} ${Math.abs(r.weight * 100).toFixed(1)}%`}>
+              <span className="wbar" title={`${r.weight < 0 ? t("ms.short") : t("ms.long")} ${fmtFixed(Math.abs(r.weight * 100), 1)}%`}>
                 <span>
                   <i style={{ width: `${Math.min(100, Math.abs(r.weight) * 100 * 4)}%` }} />
                 </span>
-                {(r.weight * 100).toFixed(1)}%
+                {fmtFixed(r.weight * 100, 1)}%
               </span>
             ) : (
               <span className="dim">—</span>
@@ -245,11 +246,11 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
       {!shown.length ? (
         <div className="ml-empty">
           {tab === "fav" && !q ? (
-            <Empty icon="star" title="还没有自选" hint="在列表里点 ☆ 把常看的币加入自选" action={<button type="button" className="btn-ghost" onClick={() => setTab("all")}>查看全部</button>} />
+            <Empty icon="star" title={t("ml.noFav")} hint={t("ml.noFavHint")} action={<button type="button" className="btn-ghost" onClick={() => setTab("all")}>{t("ml.viewAll")}</button>} />
           ) : tab === "held" && !q ? (
-            <Empty icon="inbox" title="策略当前空仓" hint="趋势策略每日 08:00 调仓，信号触发后这里会列出持仓" />
+            <Empty icon="inbox" title={t("ms.flat")} hint={t("ms.flatHint")} />
           ) : (
-            <Empty icon="search" title={`没有匹配「${q}」的币种`} hint="试试 BTC、ETH 或交易对名称" />
+            <Empty icon="search" title={t("ml.noMatch", { q })} hint={t("ml.noMatchHint")} />
           )}
         </div>
       ) : null}
@@ -259,6 +260,7 @@ export function MarketList({ rows, onOpen, quote }: { rows: MarketRow[]; onOpen:
 
 /** Quick coin switch for the chart page: button + searchable dropdown. */
 export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow[]; current: string; onPick: (s: string) => void; quote: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const box = useRef<HTMLDivElement>(null);
@@ -283,7 +285,7 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
         <span className="cs-caret" aria-hidden="true">▾</span>
       </button>
       {open ? (
-        <div className="cs-pop" role="listbox" aria-label="切换币种">
+        <div className="cs-pop" role="listbox" aria-label={t("ml.switchCoin")}>
           <input
             ref={input}
             className="ml-search"
@@ -298,8 +300,8 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
               }
               if (e.key === "Escape") setOpen(false);
             }}
-            placeholder="搜索币种"
-            aria-label="搜索币种"
+            placeholder={t("ml.search")}
+            aria-label={t("ml.search")}
           />
           <div className="cs-list">
             {list.map((r) => (
@@ -319,7 +321,7 @@ export function CoinSwitcher({ rows, current, onPick, quote }: { rows: MarketRow
                   <CoinBadge symbol={r.symbol} size={16} />
                   <b>{r.symbol}</b>
                   {favs.has(r.symbol) ? <span className="cs-fav">★</span> : null}
-                  {r.held ? <span className="ml-held">持仓</span> : null}
+                  {r.held ? <span className="ml-held">{t("ml.held")}</span> : null}
                 </span>
                 <span className="num">{fmtPx(r.price)}</span>
                 <span className={tone(r.change24h)}>{fmtPct(r.change24h)}</span>

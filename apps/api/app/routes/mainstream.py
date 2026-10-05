@@ -79,6 +79,8 @@ def coin(symbol: str = Query(...), venue: Optional[str] = Query(None)):
         "tradable": tradable,
         "viewOnly": not tradable,
         "reason": None if tradable else ("该币只在此交易所成交额前 100，暂无 K 线和纸面交易" if why == "VENUE_NO_DATA" else "不在可交易列表"),
+        # stable id for the web UI's translated text (reason above stays for older clients)
+        "reasonCode": None if tradable else ("VENUE_NO_DATA" if why == "VENUE_NO_DATA" else "NOT_LISTED"),
         "price": price,
         "priceTs": price_ts,
         "change24h": row.get("change_24h"),
