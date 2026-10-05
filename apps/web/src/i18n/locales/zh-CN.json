@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "所有成交均为纸面模拟；实盘交易已锁定，不会动用真实资金",
     "paper": "纸面 · 实盘锁定",
+    "paperShort": "纸面",
     "liveCheckTitle": "实盘锁未处于锁定状态，请检查配置",
     "liveCheck": "实盘检查"
   },

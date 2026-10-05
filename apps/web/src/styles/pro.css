@@ -934,3 +934,15 @@ html[dir="rtl"] .news-sum { direction: ltr; text-align: left; }
 html[dir="rtl"] .um-pop { right: auto; left: 0; }
 html[dir="rtl"] .um-pop a, html[dir="rtl"] .um-pop .um-out { text-align: right; }
 html[dir="rtl"] .ms-back, html[dir="rtl"] .tk .ms-back { transform: scaleX(-1); }
+
+/* Mobile fit for longer languages */
+.mode-short { display: none; }
+.strat-tables > div { min-width: 0; overflow-x: auto; }
+.set-row .seg { flex-wrap: wrap; max-width: 100%; }
+@media (max-width: 760px) {
+  html:not([lang="zh-CN"]) .mode-pill .mode-long { display: none; }
+  html:not([lang="zh-CN"]) .mode-pill .mode-short { display: inline; }
+  .set-row .seg button { white-space: normal; height: auto; min-height: 30px; padding: 4px 10px; line-height: 1.3; }
+  /* "Held" chip: zh/ja/ko labels are 2 characters; longer words collapse to an accent dot (title keeps the meaning) */
+  html:not([lang="zh-CN"]):not([lang="ja"]):not([lang="ko"]) .ml-held { font-size: 0; width: 7px; height: 7px; padding: 0; border-radius: 50%; background: var(--accent); }
+}

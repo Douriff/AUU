@@ -970,6 +970,7 @@
   "mode": {
     "paperTitle": "Toutes les exécutions sont des simulations fictives ; le trading réel est verrouillé et aucun fonds réel n’est utilisé",
     "paper": "Fictif · réel verrouillé",
+    "paperShort": "Fictif",
     "liveCheckTitle": "Le verrou du trading réel n’est pas engagé ; vérifiez la configuration",
     "liveCheck": "Vérif. réel"
   },
