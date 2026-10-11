@@ -373,7 +373,7 @@ class ConfigTests(unittest.TestCase):
             self.assertTrue(legacy_pump_enabled())
         from app.main import create_app
 
-        paths = {getattr(r, "path", "") for r in create_app(legacy=True).routes}
+        paths = set(create_app(legacy=True).openapi()["paths"])
         self.assertIn("/api/v1/board", paths)
         self.assertIn("/api/v1/mainstream/overview", paths)
         paths = {getattr(r, "path", "") for r in create_app(legacy=False).routes}
@@ -505,7 +505,8 @@ class MainstreamApiTests(_NoNetwork):
         self.assertEqual(user.post("/api/v1/mainstream/overview", json={}).status_code, 405)
 
     def test_health_mainstream_mode(self):
-        anon = self.TestClient(self.app)
+        # auu-guard reads health over loopback and gets the full view.
+        anon = self.TestClient(self.app, client=("127.0.0.1", 50000))
         h = anon.get("/api/v1/health").json()["data"]
         self.assertEqual(h["provider"], "cex_public")
         self.assertEqual(h["marketData"], "real")

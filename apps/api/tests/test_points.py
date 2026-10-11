@@ -233,7 +233,7 @@ class UserApiTests(_Api):
         self.assertEqual(r.json()["error"]["code"], "POINTS_SHOP_OFF")
 
     def test_no_withdraw_or_transfer_routes(self):
-        paths = [getattr(r, "path", "") for r in self.app.routes]
+        paths = list(self.app.openapi()["paths"])
         self.assertTrue(any(p.startswith("/api/v1/points/") for p in paths))
         self.assertFalse([p for p in paths if re.search(r"(?i)withdraw|transfer|cashout|payout", p)])
 

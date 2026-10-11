@@ -317,7 +317,8 @@ async def auth_login(request: Request):
     if "@" in name and find_user(name) is None:  # username first; else an email -> its account name
         hit = user_by_email(name)
         name = str(hit["name"]) if hit is not None else name
-    if not allow_attempt(f"login:{name.strip().lower()}:{_ip(request)}"):
+    # per account+IP, plus per IP across all names (password spraying from one address)
+    if not allow_attempt(f"login:{name.strip().lower()}:{_ip(request)}") or not allow_attempt(f"login-ip:{_ip(request)}"):
         return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
     if not auth_enabled():
         return err("AUTH_OFF", _MESSAGES["AUTH_OFF"], 400)

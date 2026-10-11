@@ -118,7 +118,7 @@ class StandbyAppTests(unittest.TestCase):
             return real(coro, *a, **kw)
 
         with patch("asyncio.create_task", side_effect=spy):
-            with TestClient(create_app(legacy=False)) as c:
+            with TestClient(create_app(legacy=False), client=("127.0.0.1", 50000)) as c:
                 h = c.get("/api/v1/health").json()["data"]
                 self.assertEqual(h["role"], "standby")
                 self.assertTrue(h["standby"]["standby"])
@@ -152,7 +152,7 @@ class StandbyAppTests(unittest.TestCase):
             return real(coro, *a, **kw)
 
         with patch("asyncio.create_task", side_effect=spy):
-            with TestClient(create_app(legacy=False)) as c:
+            with TestClient(create_app(legacy=False), client=("127.0.0.1", 50000)) as c:
                 h = c.get("/api/v1/health").json()["data"]
                 self.assertEqual(h["role"], "primary")
                 self.assertFalse(h["standby"]["standby"])

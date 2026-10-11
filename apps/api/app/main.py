@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.gate import AuthGateMiddleware
+from app.security.shield import ApiHeadersMiddleware, ShieldMiddleware, reset_shield
 from app.legacy import legacy_pump_enabled
 from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, news, points, stats, status, ws
 from app.routes.envelope import API_VERSION
@@ -146,6 +147,11 @@ def create_app(legacy: bool | None = None) -> FastAPI:
 
     # Login gate first so CORS (added after, so outermost) still decorates 401/403s.
     app.add_middleware(AuthGateMiddleware)
+    # Rate limits / scraper soft-ban / bad-client filter run before the gate (so floods of
+    # anonymous requests are cut early) and security headers wrap every /api answer.
+    reset_shield()
+    app.add_middleware(ShieldMiddleware)
+    app.add_middleware(ApiHeadersMiddleware)
 
     origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 

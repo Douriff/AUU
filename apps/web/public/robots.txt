@@ -1,0 +1,22 @@
+# AUUTRADE — data is for signed-in users only; automated collection is not permitted.
+User-agent: *
+Disallow: /api/
+Disallow: /console
+Disallow: /admin
+Allow: /$
+Allow: /login
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
