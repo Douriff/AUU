@@ -345,7 +345,7 @@ def points_trc20(request: Request):
     if bad is not None:
         return bad
     rows = trc20.user_orders(str(actor["id"]), 30)
-    return ok({"config": trc20.public_config(bool(actor.get("is_admin"))), "orders": [trc20.order_view(o) for o in rows]})
+    return ok({"config": trc20.public_config(bool(actor.get("is_admin"))), "orders": [trc20.order_view(o, qr=True) for o in rows]})
 
 
 @router.post("/points/trc20/orders")
