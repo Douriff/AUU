@@ -143,12 +143,43 @@ def _alerts_status() -> dict:
         return {"enabled": False, "error": type(exc).__name__}
 
 
+PUBLIC_HEALTH_KEYS = (
+    "status", "provider", "mode", "venue", "quote", "marketData", "marketDataLabel", "legacyPump", "defaultSymbol",
+    "liveEnabled", "liveDisabled", "liveConfirmed", "liveArmed", "role", "trading_state",
+)
+
+
+def public_health(body: dict) -> dict:
+    """What an anonymous internet caller sees: no strategy, runner, error or data-source internals."""
+    out = {k: body[k] for k in PUBLIC_HEALTH_KEYS if k in body}
+    runner = body.get("strategyRunner")
+    if isinstance(runner, dict):  # failover/status checks only need on/off
+        out["strategyRunner"] = {"active": bool(runner.get("active"))}
+    return out
+
+
+def _full_view(request: Request) -> bool:
+    """Full health for loopback (auu-guard, self-checks) and signed-in users; trimmed otherwise."""
+    from app.auth.accounts import auth_enabled
+    from app.security.shield import client_ip, is_loopback
+
+    if not auth_enabled() or is_loopback(client_ip(request.scope)):
+        return True
+    from app.routes.auth import session_user
+
+    try:
+        return session_user(request) is not None
+    except Exception:
+        return False
+
+
 @router.get("/health")
 def health(request: Request):
     gate = get_risk_gate()
     legacy = getattr(request.app.state, "legacy_pump", None)
     if not (legacy_pump_enabled() if legacy is None else legacy):
-        return ok(_mainstream_health(gate))
+        body = _mainstream_health(gate)
+        return ok(body if _full_view(request) else public_health(body))
     from app.legacy.pump.discovery import discovery_health_fields
     from app.legacy.pump.strategies.pump_paper_v1 import get_engine, loop_enabled
     from app.legacy.pump.traders import COPY_TRADE_ENABLED

@@ -136,7 +136,7 @@ class ReconRouteTests(unittest.TestCase):
         from app.main import create_app
 
         with patch.dict(os.environ, {"AUU_AUTH": "on"}):
-            c = TestClient(create_app(legacy=False))
+            c = TestClient(create_app(legacy=False), client=("127.0.0.1", 50000))
             self.assertEqual(c.get("/api/v1/mainstream/recon").status_code, 401)
             h = c.get("/api/v1/health").json()["data"]
         self.assertIn("recon", h)
