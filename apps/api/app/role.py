@@ -23,7 +23,7 @@ PRIMARY = "primary"
 STANDBY = "standby"
 
 # Background jobs a standby never runs (reported in health).
-STANDBY_OFF = ("strategy", "exec_shadow", "shadow_s3", "shadow_h2", "alerts", "recon", "uptime")
+STANDBY_OFF = ("strategy", "exec_shadow", "shadow_s3", "shadow_h2", "alerts", "recon", "uptime", "trc20")
 
 # API prefixes whose writes change a ledger; refused on a standby.
 STANDBY_WRITE_BLOCK_PREFIXES = (

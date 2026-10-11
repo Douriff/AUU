@@ -70,7 +70,7 @@ import type {
   TraderSnapshot,
   TradingStateEvent,
   LiveStatus,
-  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus
+  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus, Trc20Admin, Trc20Config, Trc20Order, Trc20Transfer
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -482,6 +482,31 @@ export class HttpWsProvider {
 
   adminPointsAdjust(body: { user_id: string; amount: number; reason: string; password: string; totp_code: string; idempotency_key: string }): Promise<{ balance: number; replayed: boolean }> {
     return postJson("/api/v1/admin/points/adjust", body);
+  }
+
+  // ---- USDT-TRC20 top-up (watch-only receive address; config comes from the server) ----
+  getTrc20(): Promise<{ config: Trc20Config; orders: Trc20Order[] }> {
+    return getJson("/api/v1/points/trc20");
+  }
+
+  createTrc20Order(usdt: number, idempotency_key: string): Promise<{ order: Trc20Order; replayed: boolean; config: Trc20Config }> {
+    return postJson("/api/v1/points/trc20/orders", { usdt, idempotency_key });
+  }
+
+  getTrc20Order(id: string): Promise<{ order: Trc20Order }> {
+    return getJson(`/api/v1/points/trc20/orders/${encodeURIComponent(id)}`);
+  }
+
+  adminTrc20(): Promise<Trc20Admin> {
+    return getJson("/api/v1/admin/points/trc20");
+  }
+
+  adminTrc20Resolve(body: { tx_hash: string; user_id: string; points: number; reason: string; password: string; totp_code: string; idempotency_key: string }): Promise<{ balance: number }> {
+    return postJson("/api/v1/admin/points/trc20/resolve", body);
+  }
+
+  adminTrc20Dismiss(body: { tx_hash: string; reason: string; password: string; totp_code: string }): Promise<{ transfer: Trc20Transfer }> {
+    return postJson("/api/v1/admin/points/trc20/dismiss", body);
   }
 
   adminPointsExportUrl(userId = ""): string {

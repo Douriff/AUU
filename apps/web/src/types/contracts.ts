@@ -1407,3 +1407,81 @@ export interface PointsUserRow {
   display_name: string;
   balance: number;
 }
+
+// ---- USDT-TRC20 top-up ----
+export interface Trc20Config {
+  enabled: boolean;
+  address: string | null;
+  rate: number;
+  min: number;
+  max: number;
+  dailyMax: number;
+  maxPending: number;
+  ttlMin: number;
+  network: "TRC20";
+  token: "USDT";
+  contract: string;
+  pollEnabled?: boolean;
+  adminOnly?: boolean;
+}
+
+export interface Trc20Order {
+  orderId: string;
+  status: "pending" | "paid" | "expired";
+  usdt: number;
+  amount: string;
+  points: number;
+  address: string;
+  network: "TRC20";
+  createdAt: number;
+  expiresAt: number;
+  txHash: string | null;
+  secondsLeft: number;
+  qr?: string;
+  userId?: string;
+  userName?: string;
+  entryId?: number | null;
+}
+
+export interface Trc20Transfer {
+  txHash: string;
+  blockTs: number;
+  from: string | null;
+  contract: string;
+  official: boolean;
+  symbol: string | null;
+  amount: string;
+  status: "matched" | "exception" | "resolved" | "ignored";
+  reason: string | null;
+  orderId: string | null;
+  userId: string | null;
+  userName?: string;
+  points: number | null;
+  note: string | null;
+  url: string;
+}
+
+export interface Trc20Reconcile {
+  chainTotal: string;
+  chainCount: number;
+  creditedTotal: string;
+  creditedAuto: string;
+  creditedManual: string;
+  pendingTotal: string;
+  pendingCount: number;
+  ignoredTotal: string;
+  balanced: boolean;
+  fakeContractCount: number;
+  pointsCredited: number;
+  pointsMatchLedger: boolean;
+  lastPoll: { at: number; source: string; count: number } | null;
+  lastError: { at: number; error: string } | null;
+}
+
+export interface Trc20Admin {
+  config: Trc20Config;
+  orders: Trc20Order[];
+  pending: Trc20Transfer[];
+  transfers: Trc20Transfer[];
+  reconcile: Trc20Reconcile;
+}

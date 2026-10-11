@@ -106,6 +106,10 @@ def _make_lifespan(legacy: bool):
 
             if uptime_enabled():
                 tasks.append(asyncio.create_task(uptime_loop(), name="uptime"))
+            from app.points.trc20 import poll_enabled as trc20_enabled, run_loop as trc20_loop
+
+            if trc20_enabled():  # primary only (standby: poll_enabled() is False); never in tests
+                tasks.append(asyncio.create_task(trc20_loop(), name="trc20-watch"))
             from app.news import news_enabled, run_loop as news_loop
 
             if news_enabled():

@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "この履歴は返金できません",
     "POINTS_REFUND_EXCEEDS": "返金額がこの履歴の残りを超えています",
     "POINTS_UNKNOWN_ORDER": "注文が見つかりません",
-    "POINTS_BAD_REQUEST": "無効なリクエストです"
+    "POINTS_BAD_REQUEST": "無効なリクエストです",
+    "TRC20_BAD_AMOUNT": "金額が許可範囲外です",
+    "TRC20_TOO_MANY_PENDING": "未払いの注文が多すぎます。完了するか期限切れを待ってください",
+    "TRC20_DAILY_LIMIT": "本日のチャージ上限に達しました",
+    "TRC20_BUSY": "この金額は現在注文できません。別の金額を選んでください",
+    "TRC20_UNKNOWN_TX": "該当するオンチェーン取引がありません",
+    "TRC20_NOT_PENDING": "この取引は処理済みです"
   },
   "common": {
     "submitting": "送信中…",
@@ -1129,7 +1135,8 @@
       "mock": "テストチャネル",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1163,5 +1170,78 @@
       "noWithdraw": "ポイントは出金できず、他のユーザーへの譲渡もできません。",
       "separate": "ペーパートレードの損益は模擬資金にのみ影響し、ポイントは増減しません。"
     }
+  },
+  "usdt": {
+    "intro": "USDT（TRC20）でポイントをチャージ：1 USDT = {{rate}} ポイント、1回 {{min}}–{{max}} USDT、1日最大 {{daily}} USDT。",
+    "amountLabel": "金額（USDT、{{min}}–{{max}} の整数）",
+    "preview": "{{usdt}} USDT → {{points}} ポイント（小さな端数が付きます。注文の正確な金額を送金してください）",
+    "badAmount": "{{min}}〜{{max}} の整数を入力してください",
+    "agree": "理解しました：TRC20 ネットワークの USDT のみ。注文の正確な金額を送ること。ポイントは出金・譲渡できず、USDT で返金されません。",
+    "create": "チャージ注文を作成",
+    "newOrder": "もう一度チャージ",
+    "orderTitle": "チャージ注文",
+    "countdown": "残り {{time}}",
+    "network": "ネットワーク",
+    "address": "受取アドレス",
+    "exactAmount": "正確な金額",
+    "willGet": "付与ポイント",
+    "qrAlt": "受取アドレスの QR コード",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "warnTrc20": "TRON（TRC20）ネットワークの USDT のみ対応。ERC20・BEP20 など他のネットワークから送ると失われ、取り戻せません。",
+    "warnExact": "端数を含め、正確に {{amount}} USDT を送金してください。金額が違うと自動では反映されず、手動確認が必要です。",
+    "warnTime": "{{min}} 分以内に送金してください。期限切れ後の入金は自動で反映されません。",
+    "warnNoWithdraw": "ポイントはこのプラットフォーム内でのみ使えます。出金・譲渡はできず、USDT で返金もされません。",
+    "warnConfirm": "ブロックチェーンの確認には約 1〜3 分かかります。ポイントは自動で付与され、このページも自動で更新されます。",
+    "paidNote": "入金済み：{{points}} ポイントがアカウントに追加されました。",
+    "expiredNote": "注文の期限が切れました。すでに送金した場合は再送金せず、管理者に手動確認を依頼してください。",
+    "history": "チャージ注文",
+    "noOrders": "チャージ注文はまだありません",
+    "status": {
+      "pending": "支払い待ち",
+      "paid": "入金済み",
+      "expired": "期限切れ"
+    },
+    "col": {
+      "amount": "金額（USDT）",
+      "points": "ポイント",
+      "status": "状態",
+      "tx": "取引"
+    },
+    "reason": {
+      "amount_mismatch": "どの注文とも金額が一致しない",
+      "late": "注文の期限切れ後に入金",
+      "already_paid": "入金済みの注文に再度送金",
+      "fake_contract": "公式 USDT コントラクトではない",
+      "verify_failed": "オンチェーン検証に失敗"
+    },
+    "admin": {
+      "title": "USDT（TRC20）チャージ",
+      "closed": "チャネル停止中：サーバーに受取アドレスが設定されていません（AUU_TRC20_RECEIVE_ADDRESS）。",
+      "address": "受取アドレス",
+      "addrNote": "アドレスはサーバー設定と再デプロイでのみ変更できます。Web から変更する画面はありません。",
+      "params": "レート 1 USDT = {{rate}} ポイント · 1回 {{min}}–{{max}} USDT · 1人1日 {{daily}} USDT · 1人最大 {{pending}} 件の未払い注文 · 有効期限 {{ttl}} 分",
+      "recon": "照合",
+      "reconLine": "オンチェーン合計 {{chain}} USDT（{{n}} 件）= 入金済み {{credited}} + 保留 {{pending}} + 無視 {{ignored}}",
+      "reconOk": "一致",
+      "reconBad": "不一致：確認してください",
+      "fakeCount": "非公式コントラクトからの送金 {{n}} 件（集計外）",
+      "lastPoll": "最終確認 {{time}}（{{source}}）",
+      "neverPolled": "まだブロックチェーンを確認していません",
+      "lastError": "最終確認が {{time}} に失敗",
+      "pending": "手動確認待ち（{{n}}）",
+      "noPending": "確認待ちの送金はありません",
+      "orders": "すべての注文",
+      "reason": "理由",
+      "order": "注文",
+      "handle": "処理",
+      "resolve": "ユーザーに割り当て",
+      "dismiss": "無視（ポイントなし）",
+      "userId": "ユーザー ID",
+      "resolveBtn": "確認してポイント付与",
+      "dismissBtn": "無視を確定",
+      "adminOnly": "管理者のみ表示（試験運用）：一般ユーザーには「チャージは未開放」と表示されます。"
+    },
+    "adminOnlyNote": "試験運用中：チャネルは管理者のみに開放されています（AUU_TRC20_ADMIN_ONLY=on）。少額の実チャージで反映を確認したら、サーバー設定でスイッチをオフにして再起動すると全員に開放されます。"
   }
 }

@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "Este asiento no es reembolsable",
     "POINTS_REFUND_EXCEEDS": "El reembolso supera lo que queda de este asiento",
     "POINTS_UNKNOWN_ORDER": "Pedido no encontrado",
-    "POINTS_BAD_REQUEST": "Solicitud no válida"
+    "POINTS_BAD_REQUEST": "Solicitud no válida",
+    "TRC20_BAD_AMOUNT": "El importe está fuera del rango permitido",
+    "TRC20_TOO_MANY_PENDING": "Demasiados pedidos sin pagar: completa uno o espera a que venza",
+    "TRC20_DAILY_LIMIT": "Se alcanzó el límite de recarga de hoy",
+    "TRC20_BUSY": "Este importe no está disponible ahora: elige otro",
+    "TRC20_UNKNOWN_TX": "No existe esa transacción en la cadena",
+    "TRC20_NOT_PENDING": "Esta transacción ya se gestionó"
   },
   "common": {
     "submitting": "Enviando…",
@@ -1129,7 +1135,8 @@
       "mock": "canal de prueba",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1163,5 +1170,78 @@
       "noWithdraw": "Los puntos no se pueden retirar ni transferir a otros usuarios.",
       "separate": "Las ganancias y pérdidas en papel solo afectan a los fondos simulados, nunca a tus puntos."
     }
+  },
+  "usdt": {
+    "intro": "Recarga puntos con USDT (TRC20): 1 USDT = {{rate}} puntos, {{min}}–{{max}} USDT por pedido, hasta {{daily}} USDT al día.",
+    "amountLabel": "Importe (USDT, número entero {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT → {{points}} puntos (se añade una pequeña cola decimal: envía el importe exacto del pedido)",
+    "badAmount": "Introduce un número entero entre {{min}} y {{max}}",
+    "agree": "Lo entiendo: solo USDT en la red TRC20; debo enviar el importe exacto del pedido; los puntos no se pueden retirar, transferir ni reembolsar en USDT.",
+    "create": "Crear pedido de recarga",
+    "newOrder": "Recargar otra vez",
+    "orderTitle": "Pedido de recarga",
+    "countdown": "Quedan {{time}}",
+    "network": "Red",
+    "address": "Dirección de recepción",
+    "exactAmount": "Importe exacto",
+    "willGet": "Puntos que recibes",
+    "qrAlt": "Código QR de la dirección de recepción",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "warnTrc20": "Solo USDT en la red TRON (TRC20). Los fondos enviados por ERC20, BEP20 u otra red se pierden y no se pueden recuperar.",
+    "warnExact": "Envía exactamente {{amount}} USDT, decimales incluidos. Un importe distinto no se abona automáticamente y requiere revisión manual.",
+    "warnTime": "Completa la transferencia en {{min}} minutos; los pagos que lleguen después del vencimiento no se abonan automáticamente.",
+    "warnNoWithdraw": "Los puntos solo se usan en esta plataforma. No se pueden retirar, transferir ni reembolsar en USDT.",
+    "warnConfirm": "La confirmación en la cadena tarda de 1 a 3 minutos; los puntos se abonan solos y esta página se actualiza sola.",
+    "paidNote": "Recibido: se añadieron {{points}} puntos a tu cuenta.",
+    "expiredNote": "El pedido ha vencido. Si ya pagaste, no vuelvas a pagar: contacta con un administrador para una revisión manual.",
+    "history": "Pedidos de recarga",
+    "noOrders": "Aún no hay pedidos de recarga",
+    "status": {
+      "pending": "Pendiente de pago",
+      "paid": "Abonado",
+      "expired": "Vencido"
+    },
+    "col": {
+      "amount": "Importe (USDT)",
+      "points": "Puntos",
+      "status": "Estado",
+      "tx": "Transacción"
+    },
+    "reason": {
+      "amount_mismatch": "El importe no coincide con ningún pedido",
+      "late": "Pagado después de vencer el pedido",
+      "already_paid": "Pagado de nuevo tras abonar el pedido",
+      "fake_contract": "No es el contrato oficial de USDT",
+      "verify_failed": "Falló la verificación en la cadena"
+    },
+    "admin": {
+      "title": "Recargas USDT (TRC20)",
+      "closed": "Canal cerrado: el servidor no tiene dirección de recepción configurada (AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "Dirección de recepción",
+      "addrNote": "La dirección solo se cambia en la configuración del servidor con un nuevo despliegue; no hay formulario web para ello.",
+      "params": "Tasa 1 USDT = {{rate}} puntos · {{min}}–{{max}} USDT por pedido · {{daily}} USDT por usuario y día · máx. {{pending}} pedidos abiertos por usuario · validez {{ttl}} min",
+      "recon": "Conciliación",
+      "reconLine": "Total en cadena {{chain}} USDT ({{n}} transferencias) = abonado {{credited}} + pendiente {{pending}} + descartado {{ignored}}",
+      "reconOk": "cuadra",
+      "reconBad": "no cuadra: revísalo",
+      "fakeCount": "{{n}} transferencias de contratos no oficiales (no se cuentan)",
+      "lastPoll": "Última consulta {{time}} ({{source}})",
+      "neverPolled": "Aún no se ha consultado la cadena",
+      "lastError": "La última consulta falló a las {{time}}",
+      "pending": "Pendiente de revisión manual ({{n}})",
+      "noPending": "No hay transferencias pendientes",
+      "orders": "Todos los pedidos",
+      "reason": "Motivo",
+      "order": "Pedido",
+      "handle": "Gestionar",
+      "resolve": "Asignar a un usuario",
+      "dismiss": "Descartar (sin puntos)",
+      "userId": "ID de usuario",
+      "resolveBtn": "Confirmar y abonar puntos",
+      "dismissBtn": "Confirmar descarte",
+      "adminOnly": "Solo administradores (prueba): los usuarios siguen viendo «Recarga aún no disponible»."
+    },
+    "adminOnlyNote": "Prueba: el canal solo está abierto a administradores (AUU_TRC20_ADMIN_ONLY=on). Tras verificar una pequeña recarga real, desactiva el interruptor en la configuración del servidor y reinicia para abrirlo a todos."
   }
 }

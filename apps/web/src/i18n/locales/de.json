@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "Dieser Eintrag kann nicht erstattet werden",
     "POINTS_REFUND_EXCEEDS": "Die Erstattung übersteigt den Restbetrag dieses Eintrags",
     "POINTS_UNKNOWN_ORDER": "Bestellung nicht gefunden",
-    "POINTS_BAD_REQUEST": "Ungültige Anfrage"
+    "POINTS_BAD_REQUEST": "Ungültige Anfrage",
+    "TRC20_BAD_AMOUNT": "Der Betrag liegt außerhalb des erlaubten Bereichs",
+    "TRC20_TOO_MANY_PENDING": "Zu viele unbezahlte Aufträge – schließe einen ab oder warte auf den Ablauf",
+    "TRC20_DAILY_LIMIT": "Das heutige Aufladelimit ist erreicht",
+    "TRC20_BUSY": "Dieser Betrag ist gerade nicht möglich – bitte wähle einen anderen",
+    "TRC20_UNKNOWN_TX": "Keine solche Transaktion auf der Blockchain",
+    "TRC20_NOT_PENDING": "Diese Transaktion wurde bereits bearbeitet"
   },
   "common": {
     "submitting": "Wird gesendet…",
@@ -1129,7 +1135,8 @@
       "mock": "Testkanal",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1163,5 +1170,78 @@
       "noWithdraw": "Punkte können weder ausgezahlt noch an andere Nutzer übertragen werden.",
       "separate": "Gewinne und Verluste im Papierhandel betreffen nur das simulierte Kapital, nie Ihre Punkte."
     }
+  },
+  "usdt": {
+    "intro": "Punkte mit USDT (TRC20) aufladen: 1 USDT = {{rate}} Punkte, {{min}}–{{max}} USDT pro Auftrag, höchstens {{daily}} USDT pro Tag.",
+    "amountLabel": "Betrag (USDT, ganze Zahl {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT → {{points}} Punkte (eine kleine Nachkommastelle wird angehängt – überweise genau den Betrag des Auftrags)",
+    "badAmount": "Gib eine ganze Zahl zwischen {{min}} und {{max}} ein",
+    "agree": "Ich habe verstanden: nur USDT im TRC20-Netzwerk; ich muss den exakten Auftragsbetrag senden; Punkte können nicht ausgezahlt, übertragen oder in USDT erstattet werden.",
+    "create": "Aufladeauftrag erstellen",
+    "newOrder": "Erneut aufladen",
+    "orderTitle": "Aufladeauftrag",
+    "countdown": "noch {{time}}",
+    "network": "Netzwerk",
+    "address": "Empfangsadresse",
+    "exactAmount": "Exakter Betrag",
+    "willGet": "Du erhältst Punkte",
+    "qrAlt": "QR-Code der Empfangsadresse",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "warnTrc20": "Nur USDT im TRON-Netzwerk (TRC20). Über ERC20, BEP20 oder andere Netzwerke gesendetes Geld geht verloren und ist nicht wiederherstellbar.",
+    "warnExact": "Sende genau {{amount}} USDT, einschließlich der Nachkommastellen. Ein anderer Betrag wird nicht automatisch gutgeschrieben und muss manuell geprüft werden.",
+    "warnTime": "Schließe die Überweisung innerhalb von {{min}} Minuten ab; Zahlungen nach Ablauf werden nicht automatisch gutgeschrieben.",
+    "warnNoWithdraw": "Punkte gelten nur auf dieser Plattform. Sie können nicht ausgezahlt, übertragen oder in USDT erstattet werden.",
+    "warnConfirm": "Die Bestätigung auf der Blockchain dauert etwa 1–3 Minuten; die Punkte werden automatisch gutgeschrieben und diese Seite aktualisiert sich selbst.",
+    "paidNote": "Eingegangen: {{points}} Punkte wurden deinem Konto gutgeschrieben.",
+    "expiredNote": "Der Auftrag ist abgelaufen. Wenn du schon bezahlt hast, zahle nicht erneut – wende dich für eine manuelle Prüfung an einen Admin.",
+    "history": "Aufladeaufträge",
+    "noOrders": "Noch keine Aufladeaufträge",
+    "status": {
+      "pending": "Wartet auf Zahlung",
+      "paid": "Gutgeschrieben",
+      "expired": "Abgelaufen"
+    },
+    "col": {
+      "amount": "Betrag (USDT)",
+      "points": "Punkte",
+      "status": "Status",
+      "tx": "Transaktion"
+    },
+    "reason": {
+      "amount_mismatch": "Betrag passt zu keinem Auftrag",
+      "late": "Nach Ablauf des Auftrags bezahlt",
+      "already_paid": "Erneut bezahlt, obwohl schon gutgeschrieben",
+      "fake_contract": "Nicht der offizielle USDT-Vertrag",
+      "verify_failed": "Prüfung auf der Blockchain fehlgeschlagen"
+    },
+    "admin": {
+      "title": "USDT-Aufladungen (TRC20)",
+      "closed": "Kanal geschlossen: Auf dem Server ist keine Empfangsadresse konfiguriert (AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "Empfangsadresse",
+      "addrNote": "Die Adresse lässt sich nur in der Serverkonfiguration mit neuem Deployment ändern; es gibt kein Webformular dafür.",
+      "params": "Kurs 1 USDT = {{rate}} Punkte · {{min}}–{{max}} USDT pro Auftrag · {{daily}} USDT pro Nutzer und Tag · max. {{pending}} offene Aufträge pro Nutzer · Aufträge gültig {{ttl}} Min.",
+      "recon": "Abgleich",
+      "reconLine": "Summe auf der Blockchain {{chain}} USDT ({{n}} Überweisungen) = gutgeschrieben {{credited}} + zur Prüfung {{pending}} + verworfen {{ignored}}",
+      "reconOk": "stimmt",
+      "reconBad": "stimmt nicht – bitte prüfen",
+      "fakeCount": "{{n}} Überweisungen aus nicht offiziellen Verträgen (nicht gezählt)",
+      "lastPoll": "Letzte Abfrage {{time}} ({{source}})",
+      "neverPolled": "Die Blockchain wurde noch nicht abgefragt",
+      "lastError": "Letzte Abfrage fehlgeschlagen um {{time}}",
+      "pending": "Manuelle Prüfung ausstehend ({{n}})",
+      "noPending": "Keine Überweisungen zur Prüfung",
+      "orders": "Alle Aufträge",
+      "reason": "Grund",
+      "order": "Auftrag",
+      "handle": "Bearbeiten",
+      "resolve": "Einem Nutzer zuordnen",
+      "dismiss": "Verwerfen (keine Punkte)",
+      "userId": "Nutzer-ID",
+      "resolveBtn": "Bestätigen und Punkte gutschreiben",
+      "dismissBtn": "Verwerfen bestätigen",
+      "adminOnly": "Nur für Admins (Testbetrieb): normale Nutzer sehen weiterhin „Aufladen noch nicht verfügbar“."
+    },
+    "adminOnlyNote": "Testbetrieb: Der Kanal ist nur für Admins offen (AUU_TRC20_ADMIN_ONLY=on). Nach einer geprüften kleinen echten Aufladung den Schalter in der Serverkonfiguration ausschalten und neu starten, um ihn für alle zu öffnen."
   }
 }

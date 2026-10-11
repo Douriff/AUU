@@ -966,3 +966,36 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
   .pts-search input { width: 100%; }
   .pts-search { width: 100%; }
 }
+
+/* USDT-TRC20 top-up */
+.usdt-box { display: flex; flex-direction: column; gap: 10px; }
+.usdt-form { display: flex; flex-direction: column; gap: 10px; max-width: 460px; }
+.usdt-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--dim); }
+.usdt-form input[inputmode] { font-size: 16px; padding: 8px 10px; }
+.usdt-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.td-chip { border: 1px solid var(--border); background: var(--panel); color: var(--text2); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; }
+.td-chip.is-active { border-color: var(--accent); color: var(--text); }
+.usdt-agree { flex-direction: row !important; align-items: flex-start; gap: 8px !important; color: var(--text2) !important; line-height: 1.5; }
+.usdt-order { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: var(--panel); display: flex; flex-direction: column; gap: 12px; }
+.usdt-order-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.usdt-timer { margin-inline-start: auto; font-family: var(--mono, monospace); font-size: 18px; color: var(--accent); }
+.usdt-pay { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.usdt-qr { background: #fff; border-radius: 6px; width: 180px; height: 180px; image-rendering: pixelated; }
+.usdt-fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; min-width: 0; flex: 1 1 260px; }
+.usdt-fields label { color: var(--dim); font-size: 12.5px; }
+.usdt-val { min-width: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.usdt-addr { word-break: break-all; font-size: 13px; }
+.usdt-amount { font-size: 22px; color: var(--accent); font-family: var(--mono, monospace); }
+.usdt-warn { margin: 0; padding: 10px 10px 10px 28px; border: 1px solid rgba(240, 167, 50, 0.45); border-radius: 6px; background: rgba(240, 167, 50, 0.08); line-height: 1.75; font-size: 13px; }
+.usdt-st-paid { color: #2ebd85; }
+.usdt-st-expired { color: var(--dim); }
+.usdt-st-pending { color: var(--accent); }
+.usdt-table td, .usdt-table th { text-align: start; }
+.usdt-resolve { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; min-width: 260px; }
+.usdt-resolve label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.pro-alert.is-ok { border-color: rgba(46, 189, 133, 0.45); background: rgba(46, 189, 133, 0.08); color: var(--text); }
+@media (max-width: 640px) {
+  .usdt-fields { grid-template-columns: 1fr; gap: 4px; }
+  .usdt-pay { justify-content: center; }
+  .usdt-timer { margin-inline-start: 0; }
+}

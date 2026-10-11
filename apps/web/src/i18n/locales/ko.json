@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "이 내역은 환불할 수 없습니다",
     "POINTS_REFUND_EXCEEDS": "환불액이 이 내역의 남은 금액을 초과합니다",
     "POINTS_UNKNOWN_ORDER": "주문을 찾을 수 없습니다",
-    "POINTS_BAD_REQUEST": "잘못된 요청입니다"
+    "POINTS_BAD_REQUEST": "잘못된 요청입니다",
+    "TRC20_BAD_AMOUNT": "금액이 허용 범위를 벗어났습니다",
+    "TRC20_TOO_MANY_PENDING": "미결제 주문이 너무 많습니다. 하나를 완료하거나 만료를 기다리세요",
+    "TRC20_DAILY_LIMIT": "오늘 충전 한도에 도달했습니다",
+    "TRC20_BUSY": "이 금액은 지금 주문할 수 없습니다. 다른 금액을 선택하세요",
+    "TRC20_UNKNOWN_TX": "해당 온체인 거래가 없습니다",
+    "TRC20_NOT_PENDING": "이미 처리된 거래입니다"
   },
   "common": {
     "submitting": "제출 중…",
@@ -1129,7 +1135,8 @@
       "mock": "테스트 채널",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1163,5 +1170,78 @@
       "noWithdraw": "포인트는 출금하거나 다른 사용자에게 양도할 수 없습니다.",
       "separate": "페이퍼 트레이딩 손익은 모의 자금에만 영향을 주며 포인트는 바뀌지 않습니다."
     }
+  },
+  "usdt": {
+    "intro": "USDT(TRC20)로 포인트 충전: 1 USDT = {{rate}} 포인트, 건당 {{min}}–{{max}} USDT, 하루 최대 {{daily}} USDT.",
+    "amountLabel": "금액(USDT, {{min}}–{{max}} 정수)",
+    "preview": "{{usdt}} USDT → {{points}} 포인트(작은 소수점 끝자리가 붙습니다. 주문의 정확한 금액을 송금하세요)",
+    "badAmount": "{{min}}~{{max}} 사이의 정수를 입력하세요",
+    "agree": "이해했습니다: TRC20 네트워크의 USDT만 지원, 주문의 정확한 금액을 보내야 함, 포인트는 출금·양도할 수 없고 USDT로 환불되지 않음.",
+    "create": "충전 주문 만들기",
+    "newOrder": "다시 충전",
+    "orderTitle": "충전 주문",
+    "countdown": "{{time}} 남음",
+    "network": "네트워크",
+    "address": "입금 주소",
+    "exactAmount": "정확한 금액",
+    "willGet": "받을 포인트",
+    "qrAlt": "입금 주소 QR 코드",
+    "copy": "복사",
+    "copied": "복사됨",
+    "warnTrc20": "TRON(TRC20) 네트워크의 USDT만 지원합니다. ERC20, BEP20 등 다른 네트워크로 보내면 잃게 되며 되찾을 수 없습니다.",
+    "warnExact": "소수점 끝자리까지 정확히 {{amount}} USDT를 보내세요. 금액이 다르면 자동 반영되지 않고 수동 확인이 필요합니다.",
+    "warnTime": "{{min}}분 안에 송금을 완료하세요. 만료 후 도착한 입금은 자동 반영되지 않습니다.",
+    "warnNoWithdraw": "포인트는 이 플랫폼에서만 사용할 수 있으며 출금·양도할 수 없고 USDT로 환불되지 않습니다.",
+    "warnConfirm": "블록체인 확인에 약 1~3분이 걸리며, 포인트는 자동 지급되고 이 페이지도 자동으로 새로고침됩니다.",
+    "paidNote": "입금 완료: {{points}} 포인트가 계정에 추가되었습니다.",
+    "expiredNote": "주문이 만료되었습니다. 이미 송금했다면 다시 보내지 말고 관리자에게 수동 확인을 요청하세요.",
+    "history": "충전 주문",
+    "noOrders": "아직 충전 주문이 없습니다",
+    "status": {
+      "pending": "결제 대기",
+      "paid": "입금 완료",
+      "expired": "만료"
+    },
+    "col": {
+      "amount": "금액(USDT)",
+      "points": "포인트",
+      "status": "상태",
+      "tx": "거래"
+    },
+    "reason": {
+      "amount_mismatch": "어느 주문과도 금액이 맞지 않음",
+      "late": "주문 만료 후 입금",
+      "already_paid": "이미 입금된 주문에 다시 송금",
+      "fake_contract": "공식 USDT 컨트랙트가 아님",
+      "verify_failed": "온체인 검증 실패"
+    },
+    "admin": {
+      "title": "USDT(TRC20) 충전",
+      "closed": "채널 닫힘: 서버에 입금 주소가 설정되지 않았습니다(AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "입금 주소",
+      "addrNote": "주소는 서버 설정과 재배포로만 바꿀 수 있으며 웹에서 바꾸는 화면은 없습니다.",
+      "params": "비율 1 USDT = {{rate}} 포인트 · 건당 {{min}}–{{max}} USDT · 1인 1일 {{daily}} USDT · 1인 최대 {{pending}}건 대기 주문 · 유효 {{ttl}}분",
+      "recon": "대사",
+      "reconLine": "온체인 합계 {{chain}} USDT({{n}}건) = 입금 처리 {{credited}} + 대기 {{pending}} + 무시 {{ignored}}",
+      "reconOk": "일치",
+      "reconBad": "불일치, 확인 필요",
+      "fakeCount": "비공식 컨트랙트 입금 {{n}}건(집계 제외)",
+      "lastPoll": "마지막 조회 {{time}}({{source}})",
+      "neverPolled": "아직 블록체인을 조회하지 않았습니다",
+      "lastError": "마지막 조회 실패 {{time}}",
+      "pending": "수동 확인 대기({{n}})",
+      "noPending": "확인 대기 중인 송금이 없습니다",
+      "orders": "전체 주문",
+      "reason": "사유",
+      "order": "주문",
+      "handle": "처리",
+      "resolve": "사용자에게 귀속",
+      "dismiss": "무시(포인트 없음)",
+      "userId": "사용자 ID",
+      "resolveBtn": "확인하고 포인트 지급",
+      "dismissBtn": "무시 확정",
+      "adminOnly": "관리자 전용(시험 운영): 일반 사용자에게는 여전히 '충전 미개방'으로 표시됩니다."
+    },
+    "adminOnlyNote": "시험 운영 중: 채널이 관리자에게만 열려 있습니다(AUU_TRC20_ADMIN_ONLY=on). 소액 실제 충전으로 입금 반영을 확인한 뒤 서버 설정에서 스위치를 끄고 재시작하면 모두에게 열립니다."
   }
 }

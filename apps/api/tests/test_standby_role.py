@@ -12,7 +12,8 @@ from app import role
 
 # Per-job switches that would otherwise be "on" by default.
 _JOB_ENV = {"AUU_STRATEGY_RUNNER": "on", "AUU_SHADOW_H2": "on", "AUU_SHADOW_S3": "on", "AUU_ALERTS": "on",
-            "AUU_RECON": "on", "AUU_UPTIME": "on", "AUU_EXEC_SHADOW": "on"}
+            "AUU_RECON": "on", "AUU_UPTIME": "on", "AUU_EXEC_SHADOW": "on",
+            "AUU_TRC20_RECEIVE_ADDRESS": "TEB618Hz3BT4YKsJYLMqbhiZvpBLsrZGtL"}
 
 
 def _enabled() -> dict:
@@ -21,10 +22,12 @@ def _enabled() -> dict:
     from app.paper.shadow_h2 import shadow_enabled as h2_enabled
     from app.paper.shadow_s3 import shadow_enabled as s3_enabled
     from app.paper.strategy_runner import _exec_shadow_hook, runner_enabled
+    from app.points.trc20 import poll_wanted
     from app.status import uptime_enabled
 
     return {"strategy": runner_enabled(), "exec_shadow": _exec_shadow_hook() is not None, "shadow_s3": s3_enabled(),
-            "shadow_h2": h2_enabled(), "alerts": alerts_enabled(), "recon": recon_enabled(), "uptime": uptime_enabled()}
+            "shadow_h2": h2_enabled(), "alerts": alerts_enabled(), "recon": recon_enabled(), "uptime": uptime_enabled(),
+            "trc20": poll_wanted()}
 
 
 class RoleParseTests(unittest.TestCase):

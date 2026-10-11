@@ -5,6 +5,7 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PointsAccount, PointsUserRow } from "@/types/contracts";
 import { errText } from "@/i18n/errors";
 import { EntryTable, newIdemKey } from "@/pages/PointsPage/PointsPage";
+import { Trc20AdminPanel } from "@/pages/PointsPage/Trc20AdminPanel";
 
 type UserView = PointsAccount & { user: { id: string; name: string; display_name: string } };
 
@@ -160,6 +161,7 @@ export function AdminPointsPage() {
           <EntryTable entries={sel.entries} admin />
         </section>
       ) : null}
+      <Trc20AdminPanel />
     </div>
   );
 }

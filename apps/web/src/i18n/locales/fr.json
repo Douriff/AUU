@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "Cette écriture n'est pas remboursable",
     "POINTS_REFUND_EXCEEDS": "Le remboursement dépasse le reste de cette écriture",
     "POINTS_UNKNOWN_ORDER": "Commande introuvable",
-    "POINTS_BAD_REQUEST": "Requête invalide"
+    "POINTS_BAD_REQUEST": "Requête invalide",
+    "TRC20_BAD_AMOUNT": "Le montant est hors de la plage autorisée",
+    "TRC20_TOO_MANY_PENDING": "Trop de commandes impayées : terminez-en une ou attendez son expiration",
+    "TRC20_DAILY_LIMIT": "La limite de recharge du jour est atteinte",
+    "TRC20_BUSY": "Ce montant n'est pas disponible pour le moment : choisissez-en un autre",
+    "TRC20_UNKNOWN_TX": "Transaction introuvable sur la blockchain",
+    "TRC20_NOT_PENDING": "Cette transaction a déjà été traitée"
   },
   "common": {
     "submitting": "Envoi…",
@@ -1129,7 +1135,8 @@
       "mock": "canal de test",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1163,5 +1170,78 @@
       "noWithdraw": "Les points ne peuvent être ni retirés ni transférés à d'autres utilisateurs.",
       "separate": "Les gains et pertes du trading papier n'affectent que les fonds simulés, jamais vos points."
     }
+  },
+  "usdt": {
+    "intro": "Recharger des points en USDT (TRC20) : 1 USDT = {{rate}} points, {{min}}–{{max}} USDT par commande, jusqu'à {{daily}} USDT par jour.",
+    "amountLabel": "Montant (USDT, nombre entier {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT → {{points}} points (une petite décimale est ajoutée : envoyez le montant exact indiqué sur la commande)",
+    "badAmount": "Saisissez un nombre entier entre {{min}} et {{max}}",
+    "agree": "J'ai compris : uniquement de l'USDT sur le réseau TRC20 ; je dois envoyer le montant exact de la commande ; les points ne peuvent être ni retirés, ni transférés, ni remboursés en USDT.",
+    "create": "Créer la commande de recharge",
+    "newOrder": "Recharger à nouveau",
+    "orderTitle": "Commande de recharge",
+    "countdown": "{{time}} restantes",
+    "network": "Réseau",
+    "address": "Adresse de réception",
+    "exactAmount": "Montant exact",
+    "willGet": "Points obtenus",
+    "qrAlt": "QR code de l'adresse de réception",
+    "copy": "Copier",
+    "copied": "Copié",
+    "warnTrc20": "Uniquement de l'USDT sur le réseau TRON (TRC20). Les fonds envoyés via ERC20, BEP20 ou tout autre réseau sont perdus et irrécupérables.",
+    "warnExact": "Envoyez exactement {{amount}} USDT, décimales comprises. Un autre montant n'est pas crédité automatiquement et doit être vérifié manuellement.",
+    "warnTime": "Effectuez le virement dans les {{min}} minutes ; un paiement reçu après expiration n'est pas crédité automatiquement.",
+    "warnNoWithdraw": "Les points ne s'utilisent que sur cette plateforme. Ils ne peuvent être ni retirés, ni transférés, ni remboursés en USDT.",
+    "warnConfirm": "La confirmation sur la blockchain prend environ 1 à 3 minutes ; les points sont ajoutés automatiquement et cette page se met à jour toute seule.",
+    "paidNote": "Reçu : {{points}} points ont été ajoutés à votre compte.",
+    "expiredNote": "Cette commande a expiré. Si vous avez déjà payé, ne payez pas à nouveau : contactez un administrateur pour une vérification manuelle.",
+    "history": "Commandes de recharge",
+    "noOrders": "Aucune commande de recharge",
+    "status": {
+      "pending": "En attente de paiement",
+      "paid": "Crédité",
+      "expired": "Expirée"
+    },
+    "col": {
+      "amount": "Montant (USDT)",
+      "points": "Points",
+      "status": "Statut",
+      "tx": "Transaction"
+    },
+    "reason": {
+      "amount_mismatch": "Le montant ne correspond à aucune commande",
+      "late": "Payé après l'expiration de la commande",
+      "already_paid": "Payé à nouveau après crédit de la commande",
+      "fake_contract": "Pas le contrat USDT officiel",
+      "verify_failed": "Échec de la vérification sur la blockchain"
+    },
+    "admin": {
+      "title": "Recharges USDT (TRC20)",
+      "closed": "Canal fermé : aucune adresse de réception n'est configurée sur le serveur (AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "Adresse de réception",
+      "addrNote": "L'adresse ne se modifie que dans la configuration du serveur, avec un redéploiement ; aucun formulaire web ne le permet.",
+      "params": "Taux 1 USDT = {{rate}} points · {{min}}–{{max}} USDT par commande · {{daily}} USDT par utilisateur et par jour · {{pending}} commandes ouvertes max. par utilisateur · validité {{ttl}} min",
+      "recon": "Rapprochement",
+      "reconLine": "Total sur la blockchain {{chain}} USDT ({{n}} virements) = crédité {{credited}} + en attente {{pending}} + ignoré {{ignored}}",
+      "reconOk": "équilibré",
+      "reconBad": "déséquilibré : à vérifier",
+      "fakeCount": "{{n}} virements de contrats non officiels (non comptés)",
+      "lastPoll": "Dernière vérification {{time}} ({{source}})",
+      "neverPolled": "La blockchain n'a pas encore été interrogée",
+      "lastError": "Dernière vérification échouée à {{time}}",
+      "pending": "À vérifier manuellement ({{n}})",
+      "noPending": "Aucun virement à vérifier",
+      "orders": "Toutes les commandes",
+      "reason": "Motif",
+      "order": "Commande",
+      "handle": "Traiter",
+      "resolve": "Attribuer à un utilisateur",
+      "dismiss": "Ignorer (sans points)",
+      "userId": "ID utilisateur",
+      "resolveBtn": "Confirmer et créditer les points",
+      "dismissBtn": "Confirmer l'abandon",
+      "adminOnly": "Réservé aux admins (essai) : les utilisateurs voient toujours « Recharge pas encore disponible »."
+    },
+    "adminOnlyNote": "Essai : le canal n'est ouvert qu'aux admins (AUU_TRC20_ADMIN_ONLY=on). Après vérification d'une petite recharge réelle, désactivez l'option dans la configuration du serveur et redémarrez pour l'ouvrir à tous."
   }
 }
