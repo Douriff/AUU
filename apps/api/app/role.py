@@ -35,6 +35,8 @@ STANDBY_WRITE_BLOCK_PREFIXES = (
     "/api/v1/live/",
     "/api/v1/watch/",
     "/api/v1/trade/",
+    "/api/v1/points/",
+    "/api/v1/admin/",
 )
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

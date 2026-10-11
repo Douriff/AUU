@@ -85,7 +85,23 @@
     "noShort": "Quantidade para venda insuficiente (somente compra no spot, sem venda a descoberto)",
     "tpslHeldOnly": "Quantidade para venda insuficiente (TP/SL só protege uma posição existente)",
     "tooManyOpen": "No máximo {{n}} ordens abertas",
-    "unknownSymbol": "Moeda não suportada: {{s}}"
+    "unknownSymbol": "Moeda não suportada: {{s}}",
+    "POINTS_2FA_REQUIRED": "Ative primeiro a verificação em duas etapas nas Configurações",
+    "POINTS_BAD_AMOUNT": "Quantidade de pontos inválida",
+    "POINTS_REASON_REQUIRED": "Informe um motivo",
+    "POINTS_REASON_TOO_LONG": "O motivo pode ter no máximo 200 caracteres",
+    "POINTS_IDEMPOTENCY_REQUIRED": "ID da solicitação ausente. Recarregue a página e tente novamente",
+    "POINTS_IDEMPOTENCY_CONFLICT": "Este ID já foi usado em outra operação. Recarregue e tente novamente",
+    "POINTS_INSUFFICIENT": "Pontos insuficientes",
+    "POINTS_TOO_LARGE": "Limite de pontos excedido",
+    "POINTS_TOPUP_CLOSED": "A recarga ainda não está disponível",
+    "POINTS_MANUAL_OFF": "O lançamento manual do admin está desligado",
+    "POINTS_SHOP_OFF": "O resgate de pontos ainda não está disponível",
+    "POINTS_UNKNOWN_ITEM": "Item desconhecido",
+    "POINTS_NOT_REFUNDABLE": "Este lançamento não pode ser reembolsado",
+    "POINTS_REFUND_EXCEEDS": "O reembolso excede o restante deste lançamento",
+    "POINTS_UNKNOWN_ORDER": "Pedido não encontrado",
+    "POINTS_BAD_REQUEST": "Solicitação inválida"
   },
   "common": {
     "submitting": "Enviando…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "O modo local de usuário único não tem contas. Com AUU_AUTH=on, o ranking por P&L em papel aparece aqui. O motor em papel do sistema não conta.",
       "noteAuth": "Somente contas em papel de usuários. O motor em papel do sistema não conta. Sem depósitos, sem saques, sem negociação real."
+    }
+  },
+  "points": {
+    "title": "Pontos",
+    "sub": "Os pontos são usados apenas dentro da plataforma: assinaturas e desbloqueios. Não têm relação com os fundos simulados do trading em papel.",
+    "balance": "Saldo de pontos",
+    "topup": "Recarregar",
+    "topupClosed": "A recarga ainda não está disponível",
+    "topupChannels": "Métodos disponíveis: {{list}}",
+    "topupNote": "Quando a recarga abrir, os pontos só são creditados após confirmação do provedor de pagamento e aparecem abaixo.",
+    "unlocks": "Assinatura e desbloqueios",
+    "unlocksNote": "Todos os recursos atuais continuam gratuitos. Abaixo há apenas um exemplo.",
+    "example": "Exemplo",
+    "cost": "{{n}} pontos",
+    "days": "{{n}} dias",
+    "permanent": "Permanente",
+    "activeUntil": "ativo até {{time}}",
+    "unlockBtn": "Desbloquear com pontos",
+    "shopOff": "Ainda indisponível",
+    "unlocked": "Desbloqueado",
+    "history": "Histórico de pontos",
+    "noEntries": "Ainda sem movimentos",
+    "unlock": "Desbloqueio: {{item}}",
+    "viaProvider": "Recarga via {{p}}",
+    "col": {
+      "time": "Hora (Pequim)",
+      "kind": "Tipo",
+      "amount": "Variação",
+      "balance": "Saldo após",
+      "reason": "Motivo",
+      "operator": "Por"
+    },
+    "kind": {
+      "topup": "Recarga",
+      "spend": "Gasto",
+      "adjust": "Ajuste do admin",
+      "refund": "Reembolso"
+    },
+    "op": {
+      "user": "Você",
+      "admin": "Admin",
+      "provider": "Canal de pagamento"
+    },
+    "provider": {
+      "manual_admin": "lançamento manual do admin",
+      "mock": "canal de teste",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "Selo de apoiador",
+        "desc": "Apenas exemplo: mostra um selo na página de pontos e não desbloqueia nenhum recurso de trading."
+      }
+    },
+    "admin": {
+      "title": "Gestão de pontos",
+      "sub": "Consultar, ajustar manualmente (senha + 2FA, motivo obrigatório) e exportar. Cada ação é auditada.",
+      "search": "Buscar nome / apelido / ID",
+      "searchBtn": "Buscar",
+      "exportAll": "Exportar livro completo (CSV)",
+      "exportUser": "Exportar livro deste usuário (CSV)",
+      "verify": "Conciliar",
+      "verifyOk": "Conciliado: {{n}} lançamentos, {{users}} contas",
+      "verifyBad": "Problemas na conciliação: {{list}}",
+      "user": "Usuário",
+      "adjust": "Ajustar pontos manualmente",
+      "adjustNote": "Positivo soma, negativo subtrai. Digite de novo a senha e o código 2FA (ou de recuperação).",
+      "amount": "Quantidade",
+      "reason": "Motivo (obrigatório)",
+      "code": "Código 2FA / de recuperação",
+      "next": "Avançar",
+      "confirm": "Ajustar {{name}} em {{n}} pontos? Saldo após: {{after}}.",
+      "confirmBtn": "Confirmar ajuste",
+      "done": "Ajustado. Saldo atual {{balance}}"
+    },
+    "rule": {
+      "inApp": "Os pontos só podem ser gastos na plataforma (assinatura, recursos).",
+      "noWithdraw": "Os pontos não podem ser sacados nem transferidos para outros usuários.",
+      "separate": "Lucros e perdas do trading em papel afetam apenas os fundos simulados, nunca seus pontos."
     }
   }
 }

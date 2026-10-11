@@ -85,7 +85,23 @@
     "noShort": "可卖数量不足（只做现货多头，不能做空）",
     "tpslHeldOnly": "可卖数量不足（止盈止损只能保护已有持仓）",
     "tooManyOpen": "挂单最多 {{n}} 个",
-    "unknownSymbol": "不支持的币种：{{s}}"
+    "unknownSymbol": "不支持的币种：{{s}}",
+    "POINTS_2FA_REQUIRED": "管理员需先在设置里开启两步验证，才能调整积分",
+    "POINTS_BAD_AMOUNT": "积分数量不正确",
+    "POINTS_REASON_REQUIRED": "请填写原因",
+    "POINTS_REASON_TOO_LONG": "原因不能超过 200 字",
+    "POINTS_IDEMPOTENCY_REQUIRED": "缺少幂等键，请刷新页面后重试",
+    "POINTS_IDEMPOTENCY_CONFLICT": "同一请求编号已用于另一笔操作，请刷新页面后重试",
+    "POINTS_INSUFFICIENT": "积分余额不足",
+    "POINTS_TOO_LARGE": "积分余额超出上限",
+    "POINTS_TOPUP_CLOSED": "充值暂未开放",
+    "POINTS_MANUAL_OFF": "管理员手工入账通道未开启",
+    "POINTS_SHOP_OFF": "积分兑换暂未开放",
+    "POINTS_UNKNOWN_ITEM": "没有这个兑换项",
+    "POINTS_NOT_REFUNDABLE": "这条流水不能退款",
+    "POINTS_REFUND_EXCEEDS": "退款超过了这条流水剩余可退的积分",
+    "POINTS_UNKNOWN_ORDER": "订单不存在",
+    "POINTS_BAD_REQUEST": "请求无效"
   },
   "common": {
     "submitting": "提交中…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "本地单用户模式未开启账户。设置 AUU_AUTH=on 后，这里按纸面盈亏排名。系统纸面引擎不计入。",
       "noteAuth": "仅用户纸面账户。系统纸面引擎不计入。无充值、无提现、无实盘。"
+    }
+  },
+  "points": {
+    "title": "积分",
+    "sub": "平台内使用的积分：可用于开通会员、解锁功能。与纸面交易的模拟资金完全无关。",
+    "balance": "积分余额",
+    "topup": "充值",
+    "topupClosed": "充值暂未开放",
+    "topupChannels": "可用充值方式：{{list}}",
+    "topupNote": "开放充值后，到账以支付平台的确认为准；积分到账后会出现在下方流水里。",
+    "unlocks": "会员与功能解锁",
+    "unlocksNote": "现有功能全部免费可用，不会因为积分而受限。下面只是一个示例开关。",
+    "example": "示例",
+    "cost": "{{n}} 积分",
+    "days": "{{n}} 天",
+    "permanent": "永久",
+    "activeUntil": "有效期至 {{time}}",
+    "unlockBtn": "用积分解锁",
+    "shopOff": "兑换暂未开放",
+    "unlocked": "已解锁",
+    "history": "积分流水",
+    "noEntries": "还没有积分流水",
+    "unlock": "解锁：{{item}}",
+    "viaProvider": "通过{{p}}充值",
+    "col": {
+      "time": "时间（北京）",
+      "kind": "类型",
+      "amount": "变动",
+      "balance": "变动后余额",
+      "reason": "原因",
+      "operator": "操作者"
+    },
+    "kind": {
+      "topup": "充值",
+      "spend": "消费",
+      "adjust": "管理员调整",
+      "refund": "退款"
+    },
+    "op": {
+      "user": "本人",
+      "admin": "管理员",
+      "provider": "支付通道"
+    },
+    "provider": {
+      "manual_admin": "管理员手工入账",
+      "mock": "测试通道",
+      "alipay": "支付宝",
+      "wechat_pay": "微信支付",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "支持者徽章",
+        "desc": "仅作示例：在积分页显示一枚徽章，不解锁任何交易功能。"
+      }
+    },
+    "admin": {
+      "title": "积分管理",
+      "sub": "查询积分、手工调整（需密码 + 两步验证、必填原因），导出流水。每次操作都写入审计日志。",
+      "search": "搜索用户名 / 昵称 / ID",
+      "searchBtn": "搜索",
+      "exportAll": "导出全部流水 CSV",
+      "exportUser": "导出该用户流水 CSV",
+      "verify": "对账",
+      "verifyOk": "对账通过：{{n}} 条流水，{{users}} 个账户",
+      "verifyBad": "对账发现问题：{{list}}",
+      "user": "用户",
+      "adjust": "手工调整积分",
+      "adjustNote": "正数为增加，负数为扣减。需要再次输入密码和两步验证码（或恢复码）。",
+      "amount": "调整数量",
+      "reason": "原因（必填）",
+      "code": "两步验证码 / 恢复码",
+      "next": "下一步",
+      "confirm": "确认给 {{name}} 调整 {{n}} 积分？调整后余额 {{after}}。",
+      "confirmBtn": "确认调整",
+      "done": "已调整，当前余额 {{balance}}"
+    },
+    "rule": {
+      "inApp": "积分只能在平台内消费（开会员、解锁功能）。",
+      "noWithdraw": "积分不能提现，也不能转让给其他用户。",
+      "separate": "纸面交易盈亏只影响模拟资金，不会增减积分。"
     }
   }
 }

@@ -22,6 +22,8 @@ import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
 import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
 import { StatusPage } from "@/pages/StatusPage/StatusPage";
 import { NewsPage } from "@/pages/NewsPage/NewsPage";
+import { PointsPage } from "@/pages/PointsPage/PointsPage";
+import { AdminPointsPage } from "@/pages/PointsPage/AdminPointsPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
@@ -54,6 +56,8 @@ export const router = createBrowserRouter([
       { path: "alerts", element: <LegacyOnly><AlertsPage /></LegacyOnly> },
       { path: "settings", element: <SettingsPage /> },
       { path: "status", element: <StatusPage /> },
+      { path: "points", element: <PointsPage /> },
+      { path: "admin/points", element: <AdminPointsPage /> },
     ],
   },
 ]);

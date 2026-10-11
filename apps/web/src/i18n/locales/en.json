@@ -85,7 +85,23 @@
     "noShort": "Insufficient quantity to sell (spot long only, no shorting)",
     "tpslHeldOnly": "Insufficient quantity to sell (take-profit/stop-loss only protects an existing position)",
     "tooManyOpen": "At most {{n}} open orders",
-    "unknownSymbol": "Unsupported coin: {{s}}"
+    "unknownSymbol": "Unsupported coin: {{s}}",
+    "POINTS_2FA_REQUIRED": "Turn on two-step verification in Settings before adjusting points",
+    "POINTS_BAD_AMOUNT": "Invalid number of points",
+    "POINTS_REASON_REQUIRED": "Please enter a reason",
+    "POINTS_REASON_TOO_LONG": "The reason can be at most 200 characters",
+    "POINTS_IDEMPOTENCY_REQUIRED": "Missing request ID. Refresh the page and try again",
+    "POINTS_IDEMPOTENCY_CONFLICT": "This request ID was already used for another operation. Refresh and try again",
+    "POINTS_INSUFFICIENT": "Not enough points",
+    "POINTS_TOO_LARGE": "Points balance limit exceeded",
+    "POINTS_TOPUP_CLOSED": "Top-up is not available yet",
+    "POINTS_MANUAL_OFF": "Manual admin booking is switched off",
+    "POINTS_SHOP_OFF": "Points redemption is not available yet",
+    "POINTS_UNKNOWN_ITEM": "No such item",
+    "POINTS_NOT_REFUNDABLE": "This entry cannot be refunded",
+    "POINTS_REFUND_EXCEEDS": "The refund exceeds what is left on this entry",
+    "POINTS_UNKNOWN_ORDER": "Order not found",
+    "POINTS_BAD_REQUEST": "Invalid request"
   },
   "common": {
     "submitting": "Submitting…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "Local single-user mode has no accounts. Set AUU_AUTH=on to rank paper P&L here. The system paper engine is not included.",
       "noteAuth": "User paper accounts only. The system paper engine is not included. No deposits, no withdrawals, no live trading."
+    }
+  },
+  "points": {
+    "title": "Points",
+    "sub": "Points are used inside the platform only: memberships and feature unlocks. They have nothing to do with the simulated paper-trading funds.",
+    "balance": "Points balance",
+    "topup": "Top up",
+    "topupClosed": "Top-up is not available yet",
+    "topupChannels": "Available methods: {{list}}",
+    "topupNote": "Once top-up opens, points are credited only after the payment provider confirms; they then appear in the history below.",
+    "unlocks": "Membership & unlocks",
+    "unlocksNote": "All existing features stay free and are never limited by points. Below is just an example switch.",
+    "example": "Example",
+    "cost": "{{n}} points",
+    "days": "{{n}} days",
+    "permanent": "Permanent",
+    "activeUntil": "active until {{time}}",
+    "unlockBtn": "Unlock with points",
+    "shopOff": "Not available yet",
+    "unlocked": "Unlocked",
+    "history": "Points history",
+    "noEntries": "No points activity yet",
+    "unlock": "Unlock: {{item}}",
+    "viaProvider": "Top-up via {{p}}",
+    "col": {
+      "time": "Time (Beijing)",
+      "kind": "Type",
+      "amount": "Change",
+      "balance": "Balance after",
+      "reason": "Reason",
+      "operator": "By"
+    },
+    "kind": {
+      "topup": "Top-up",
+      "spend": "Spend",
+      "adjust": "Admin adjustment",
+      "refund": "Refund"
+    },
+    "op": {
+      "user": "You",
+      "admin": "Admin",
+      "provider": "Payment channel"
+    },
+    "provider": {
+      "manual_admin": "manual admin booking",
+      "mock": "test channel",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "Supporter badge",
+        "desc": "Example only: shows a badge on the points page and unlocks no trading feature."
+      }
+    },
+    "admin": {
+      "title": "Points admin",
+      "sub": "Look up points, adjust manually (password + 2FA, reason required) and export the ledger. Every action is written to the audit log.",
+      "search": "Search name / display name / ID",
+      "searchBtn": "Search",
+      "exportAll": "Export full ledger (CSV)",
+      "exportUser": "Export this user's ledger (CSV)",
+      "verify": "Reconcile",
+      "verifyOk": "Reconciled: {{n}} entries, {{users}} accounts",
+      "verifyBad": "Reconciliation problems: {{list}}",
+      "user": "User",
+      "adjust": "Adjust points manually",
+      "adjustNote": "Positive adds, negative deducts. Re-enter your password and a 2FA code (or recovery code).",
+      "amount": "Amount",
+      "reason": "Reason (required)",
+      "code": "2FA code / recovery code",
+      "next": "Next",
+      "confirm": "Adjust {{name}} by {{n}} points? Balance afterwards: {{after}}.",
+      "confirmBtn": "Confirm adjustment",
+      "done": "Adjusted. Balance now {{balance}}"
+    },
+    "rule": {
+      "inApp": "Points can only be spent inside the platform (memberships, feature unlocks).",
+      "noWithdraw": "Points cannot be withdrawn or transferred to other users.",
+      "separate": "Paper-trading profit and loss only affects simulated funds and never changes your points."
     }
   }
 }

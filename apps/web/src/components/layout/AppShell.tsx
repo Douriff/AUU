@@ -331,6 +331,7 @@ function UserMenu({ who, authOn, onLogout }: { who: string; authOn: boolean; onL
         <div className="um-pop" role="menu">
           <Link role="menuitem" to="/settings">{t("shell.settings")}</Link>
           <Link role="menuitem" to="/leaderboard">{t("nav.leaderboard")}</Link>
+          {authOn && who ? <Link role="menuitem" to="/points">{t("points.title")}</Link> : null}
           <div className="um-sep" />
           <div className="um-label">{t("color.label")}</div>
           <ColorToggle />

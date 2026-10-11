@@ -85,7 +85,23 @@
     "noShort": "매도 가능한 보유 수량이 부족합니다(현물 롱 전용, 공매도 불가)",
     "tpslHeldOnly": "매도 가능한 보유 수량이 부족합니다(익절/손절은 보유 포지션만 보호합니다)",
     "tooManyOpen": "미체결 주문은 최대 {{n}}건입니다",
-    "unknownSymbol": "지원하지 않는 코인: {{s}}"
+    "unknownSymbol": "지원하지 않는 코인: {{s}}",
+    "POINTS_2FA_REQUIRED": "포인트를 조정하려면 먼저 설정에서 2단계 인증을 켜세요",
+    "POINTS_BAD_AMOUNT": "포인트 수량이 올바르지 않습니다",
+    "POINTS_REASON_REQUIRED": "사유를 입력하세요",
+    "POINTS_REASON_TOO_LONG": "사유는 최대 200자입니다",
+    "POINTS_IDEMPOTENCY_REQUIRED": "요청 ID가 없습니다. 페이지를 새로고침한 뒤 다시 시도하세요",
+    "POINTS_IDEMPOTENCY_CONFLICT": "이 요청 ID는 다른 작업에 이미 사용되었습니다. 새로고침 후 다시 시도하세요",
+    "POINTS_INSUFFICIENT": "포인트가 부족합니다",
+    "POINTS_TOO_LARGE": "포인트 잔액 한도를 초과했습니다",
+    "POINTS_TOPUP_CLOSED": "충전은 아직 열리지 않았습니다",
+    "POINTS_MANUAL_OFF": "관리자 수동 입금이 꺼져 있습니다",
+    "POINTS_SHOP_OFF": "포인트 교환은 아직 열리지 않았습니다",
+    "POINTS_UNKNOWN_ITEM": "알 수 없는 항목입니다",
+    "POINTS_NOT_REFUNDABLE": "이 내역은 환불할 수 없습니다",
+    "POINTS_REFUND_EXCEEDS": "환불액이 이 내역의 남은 금액을 초과합니다",
+    "POINTS_UNKNOWN_ORDER": "주문을 찾을 수 없습니다",
+    "POINTS_BAD_REQUEST": "잘못된 요청입니다"
   },
   "common": {
     "submitting": "제출 중…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "로컬 단일 사용자 모드에는 계정이 없습니다. AUU_AUTH=on으로 설정하면 여기서 모의 손익 순위를 보여 줍니다. 시스템 모의 엔진은 포함되지 않습니다.",
       "noteAuth": "사용자 모의 계좌만 표시합니다. 시스템 모의 엔진은 포함되지 않습니다. 입금·출금·실거래 없음."
+    }
+  },
+  "points": {
+    "title": "포인트",
+    "sub": "포인트는 플랫폼 안에서만 사용됩니다(멤버십, 기능 잠금 해제). 페이퍼 트레이딩의 모의 자금과는 전혀 관계가 없습니다.",
+    "balance": "포인트 잔액",
+    "topup": "충전",
+    "topupClosed": "충전은 아직 열리지 않았습니다",
+    "topupChannels": "사용 가능한 방법: {{list}}",
+    "topupNote": "충전이 열리면 결제사 확인 후에만 포인트가 지급되며 아래 내역에 표시됩니다.",
+    "unlocks": "멤버십 및 잠금 해제",
+    "unlocksNote": "기존 기능은 모두 무료로 유지됩니다. 아래는 예시 스위치일 뿐입니다.",
+    "example": "예시",
+    "cost": "{{n}} 포인트",
+    "days": "{{n}}일",
+    "permanent": "영구",
+    "activeUntil": "{{time}}까지 유효",
+    "unlockBtn": "포인트로 잠금 해제",
+    "shopOff": "아직 사용할 수 없음",
+    "unlocked": "잠금 해제됨",
+    "history": "포인트 내역",
+    "noEntries": "포인트 내역이 아직 없습니다",
+    "unlock": "잠금 해제: {{item}}",
+    "viaProvider": "{{p}}(으)로 충전",
+    "col": {
+      "time": "시간(베이징)",
+      "kind": "유형",
+      "amount": "변동",
+      "balance": "변동 후 잔액",
+      "reason": "사유",
+      "operator": "처리자"
+    },
+    "kind": {
+      "topup": "충전",
+      "spend": "사용",
+      "adjust": "관리자 조정",
+      "refund": "환불"
+    },
+    "op": {
+      "user": "본인",
+      "admin": "관리자",
+      "provider": "결제 채널"
+    },
+    "provider": {
+      "manual_admin": "관리자 수동 입금",
+      "mock": "테스트 채널",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "서포터 배지",
+        "desc": "예시용: 포인트 페이지에 배지를 표시하며 거래 기능은 열지 않습니다."
+      }
+    },
+    "admin": {
+      "title": "포인트 관리",
+      "sub": "포인트 조회, 수동 조정(비밀번호 + 2FA, 사유 필수), 내보내기. 모든 작업은 감사 로그에 기록됩니다.",
+      "search": "이름 / 표시 이름 / ID 검색",
+      "searchBtn": "검색",
+      "exportAll": "전체 내역 내보내기(CSV)",
+      "exportUser": "이 사용자 내역 내보내기(CSV)",
+      "verify": "대사",
+      "verifyOk": "대사 완료: {{n}}건, {{users}}개 계정",
+      "verifyBad": "대사 문제: {{list}}",
+      "user": "사용자",
+      "adjust": "포인트 수동 조정",
+      "adjustNote": "양수는 추가, 음수는 차감입니다. 비밀번호와 2FA 코드(또는 복구 코드)를 다시 입력하세요.",
+      "amount": "수량",
+      "reason": "사유(필수)",
+      "code": "2FA 코드 / 복구 코드",
+      "next": "다음",
+      "confirm": "{{name}}의 포인트를 {{n}} 조정할까요? 조정 후 잔액: {{after}}.",
+      "confirmBtn": "조정 확인",
+      "done": "조정됨. 현재 잔액 {{balance}}"
+    },
+    "rule": {
+      "inApp": "포인트는 플랫폼 안에서만 쓸 수 있습니다(멤버십, 기능).",
+      "noWithdraw": "포인트는 출금하거나 다른 사용자에게 양도할 수 없습니다.",
+      "separate": "페이퍼 트레이딩 손익은 모의 자금에만 영향을 주며 포인트는 바뀌지 않습니다."
     }
   }
 }

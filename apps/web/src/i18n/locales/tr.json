@@ -85,7 +85,23 @@
     "noShort": "Satılabilir miktar yetersiz (yalnızca spot long, açığa satış yok)",
     "tpslHeldOnly": "Satılabilir miktar yetersiz (TP/SL yalnızca mevcut pozisyonu korur)",
     "tooManyOpen": "En fazla {{n}} açık emir",
-    "unknownSymbol": "Desteklenmeyen coin: {{s}}"
+    "unknownSymbol": "Desteklenmeyen coin: {{s}}",
+    "POINTS_2FA_REQUIRED": "Puan düzeltmeden önce Ayarlar'da iki adımlı doğrulamayı açın",
+    "POINTS_BAD_AMOUNT": "Geçersiz puan miktarı",
+    "POINTS_REASON_REQUIRED": "Lütfen bir neden girin",
+    "POINTS_REASON_TOO_LONG": "Neden en fazla 200 karakter olabilir",
+    "POINTS_IDEMPOTENCY_REQUIRED": "İstek kimliği eksik. Sayfayı yenileyip tekrar deneyin",
+    "POINTS_IDEMPOTENCY_CONFLICT": "Bu istek kimliği başka bir işlem için kullanıldı. Yenileyip tekrar deneyin",
+    "POINTS_INSUFFICIENT": "Yetersiz puan",
+    "POINTS_TOO_LARGE": "Puan bakiyesi sınırı aşıldı",
+    "POINTS_TOPUP_CLOSED": "Yükleme henüz açık değil",
+    "POINTS_MANUAL_OFF": "Yönetici manuel kaydı kapalı",
+    "POINTS_SHOP_OFF": "Puan kullanımı henüz açık değil",
+    "POINTS_UNKNOWN_ITEM": "Bilinmeyen öğe",
+    "POINTS_NOT_REFUNDABLE": "Bu kayıt iade edilemez",
+    "POINTS_REFUND_EXCEEDS": "İade, bu kayıtta kalan miktarı aşıyor",
+    "POINTS_UNKNOWN_ORDER": "Sipariş bulunamadı",
+    "POINTS_BAD_REQUEST": "Geçersiz istek"
   },
   "common": {
     "submitting": "Gönderiliyor…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "Yerel tek kullanıcı modunda hesap yok. AUU_AUTH=on ayarlanınca burada kâğıt K/Z sıralaması görünür. Sistem kâğıt motoru dahil değildir.",
       "noteAuth": "Yalnızca kullanıcı kâğıt hesapları. Sistem kâğıt motoru dahil değildir. Para yatırma, çekme ve gerçek işlem yok."
+    }
+  },
+  "points": {
+    "title": "Puan",
+    "sub": "Puanlar yalnızca platform içinde kullanılır: üyelik ve özellik kilidi açma. Kâğıt işlemlerin simüle fonlarıyla hiçbir ilgisi yoktur.",
+    "balance": "Puan bakiyesi",
+    "topup": "Yükle",
+    "topupClosed": "Yükleme henüz açık değil",
+    "topupChannels": "Kullanılabilir yöntemler: {{list}}",
+    "topupNote": "Yükleme açıldığında puanlar yalnızca ödeme sağlayıcısı onayladıktan sonra yüklenir ve aşağıdaki geçmişte görünür.",
+    "unlocks": "Üyelik ve kilit açma",
+    "unlocksNote": "Mevcut tüm özellikler ücretsiz kalır. Aşağıdaki yalnızca bir örnek anahtardır.",
+    "example": "Örnek",
+    "cost": "{{n}} puan",
+    "days": "{{n}} gün",
+    "permanent": "Kalıcı",
+    "activeUntil": "{{time}} tarihine kadar geçerli",
+    "unlockBtn": "Puanla aç",
+    "shopOff": "Henüz kullanılamıyor",
+    "unlocked": "Açıldı",
+    "history": "Puan geçmişi",
+    "noEntries": "Henüz puan hareketi yok",
+    "unlock": "Kilit açma: {{item}}",
+    "viaProvider": "{{p}} ile yükleme",
+    "col": {
+      "time": "Zaman (Pekin)",
+      "kind": "Tür",
+      "amount": "Değişim",
+      "balance": "Sonraki bakiye",
+      "reason": "Neden",
+      "operator": "İşlemi yapan"
+    },
+    "kind": {
+      "topup": "Yükleme",
+      "spend": "Harcama",
+      "adjust": "Yönetici düzeltmesi",
+      "refund": "İade"
+    },
+    "op": {
+      "user": "Siz",
+      "admin": "Yönetici",
+      "provider": "Ödeme kanalı"
+    },
+    "provider": {
+      "manual_admin": "yönetici manuel kaydı",
+      "mock": "test kanalı",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "Destekçi rozeti",
+        "desc": "Yalnızca örnek: puan sayfasında bir rozet gösterir, hiçbir işlem özelliğini açmaz."
+      }
+    },
+    "admin": {
+      "title": "Puan yönetimi",
+      "sub": "Puanları sorgulayın, manuel düzeltin (şifre + 2FA, neden zorunlu) ve dışa aktarın. Her işlem denetim kaydına yazılır.",
+      "search": "Ad / görünen ad / ID ara",
+      "searchBtn": "Ara",
+      "exportAll": "Tüm defteri dışa aktar (CSV)",
+      "exportUser": "Bu kullanıcının defterini dışa aktar (CSV)",
+      "verify": "Mutabakat",
+      "verifyOk": "Mutabakat tamam: {{n}} kayıt, {{users}} hesap",
+      "verifyBad": "Mutabakat sorunları: {{list}}",
+      "user": "Kullanıcı",
+      "adjust": "Puanı manuel düzelt",
+      "adjustNote": "Pozitif ekler, negatif düşer. Şifrenizi ve 2FA kodunu (veya kurtarma kodunu) yeniden girin.",
+      "amount": "Miktar",
+      "reason": "Neden (zorunlu)",
+      "code": "2FA kodu / kurtarma kodu",
+      "next": "İleri",
+      "confirm": "{{name}} için {{n}} puan düzeltilsin mi? Sonraki bakiye: {{after}}.",
+      "confirmBtn": "Düzeltmeyi onayla",
+      "done": "Düzeltildi. Güncel bakiye {{balance}}"
+    },
+    "rule": {
+      "inApp": "Puanlar yalnızca platform içinde harcanabilir (üyelik, özellikler).",
+      "noWithdraw": "Puanlar çekilemez ve başka kullanıcılara aktarılamaz.",
+      "separate": "Kâğıt işlem kâr/zararı yalnızca simüle fonları etkiler, puanlarınızı asla değiştirmez."
     }
   }
 }

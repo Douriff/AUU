@@ -70,7 +70,7 @@ import type {
   TraderSnapshot,
   TradingStateEvent,
   LiveStatus,
-  LiveLimits,
+  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -457,6 +457,35 @@ export class HttpWsProvider {
 
   getMe(): Promise<AuthMe> {
     return getJson("/api/v1/auth/me");
+  }
+
+  // ---- points (积分): separate from every paper ledger ----
+  getPointsMe(before?: number): Promise<PointsAccount> {
+    return getJson(`/api/v1/points/me${before ? `?before=${before}` : ""}`);
+  }
+
+  pointsSpend(item: string, idempotency_key: string): Promise<{ balance: number; replayed: boolean }> {
+    return postJson("/api/v1/points/spend", { item, idempotency_key });
+  }
+
+  adminPointsUsers(q = ""): Promise<{ items: PointsUserRow[]; topup: PointsTopupStatus }> {
+    return getJson(`/api/v1/admin/points/users?q=${encodeURIComponent(q)}`);
+  }
+
+  adminPointsUser(id: string): Promise<PointsAccount & { user: { id: string; name: string; display_name: string } }> {
+    return getJson(`/api/v1/admin/points/user/${encodeURIComponent(id)}`);
+  }
+
+  adminPointsVerify(): Promise<{ ok: boolean; entries: number; users: number; total: number; headHash: string; problems: string[] }> {
+    return getJson("/api/v1/admin/points/verify");
+  }
+
+  adminPointsAdjust(body: { user_id: string; amount: number; reason: string; password: string; totp_code: string; idempotency_key: string }): Promise<{ balance: number; replayed: boolean }> {
+    return postJson("/api/v1/admin/points/adjust", body);
+  }
+
+  adminPointsExportUrl(userId = ""): string {
+    return `${apiBase()}/api/v1/admin/points/export.csv${userId ? `?user_id=${encodeURIComponent(userId)}` : ""}`;
   }
 
   /** Save the interface language on the account (any logged-in user). */
