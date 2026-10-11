@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.gate import AuthGateMiddleware
 from app.security.shield import ApiHeadersMiddleware, ShieldMiddleware, reset_shield
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, mainstream_shadow, mainstream_strategy, majors, news, points, stats, status, ws
+from app.routes import auth, events, health, live, mainstream, mainstream_paper, pnl, mainstream_shadow, mainstream_strategy, majors, news, points, stats, status, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -180,7 +180,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, mainstream_strategy, mainstream_shadow, news, points):
+    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, news, points):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():

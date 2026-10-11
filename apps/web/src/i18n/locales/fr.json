@@ -442,7 +442,8 @@
       "watch": "Observation",
       "backtest": "Backtest",
       "alerts": "Alertes"
-    }
+    },
+    "pnl": "Actifs/P&L"
   },
   "shell": {
     "source": "Source de données {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Réservé aux admins (essai) : les utilisateurs voient toujours « Recharge pas encore disponible »."
     },
     "adminOnlyNote": "Essai : le canal n'est ouvert qu'aux admins (AUU_TRC20_ADMIN_ONLY=on). Après vérification d'une petite recharge réelle, désactivez l'option dans la configuration du serveur et redémarrez pour l'ouvrir à tous."
+  },
+  "pnl": {
+    "title": "Actifs / P&L",
+    "sub": "Votre propre compte papier manuel (fonds simulés, en USDT). Tous les chiffres sont calculés sur le serveur et actualisés toutes les 10 s.",
+    "strategyLink": "Portefeuille papier de la stratégie et H2",
+    "loginFirst": "Connectez-vous pour voir vos gains et pertes.",
+    "login": "Se connecter",
+    "staleNote": "Certains prix n'ont pas été mis à jour depuis plus de {{min}} minutes ; les chiffres marqués « Retardé » peuvent être inexacts.",
+    "priceMissingNote": "Certaines positions n'ont pas de prix pour le moment et sont valorisées à leur prix moyen (« Au coût ») ; leur P&L latent est affiché à 0.",
+    "equity": "Actifs totaux (USDT)",
+    "cashLine": "Dont liquidités {{cash}}",
+    "today": "P&L du jour",
+    "unrealized": "P&L latent",
+    "realized": "P&L réalisé",
+    "totalReturn": "Rendement total",
+    "curve": "Courbe de valeur",
+    "range": {
+      "7d": "7 j",
+      "30d": "30 j",
+      "all": "Tout"
+    },
+    "rangeChange": "Variation sur la période",
+    "noCurve": "Pas encore assez de données pour la courbe",
+    "approxNote": "Certains points n'ont pas de prix historique et sont estimés au coût.",
+    "positions": "Positions ({{n}})",
+    "updated": "Mis à jour {{time}}",
+    "noPositions": "Aucune position",
+    "goTrade": "Aller trader",
+    "col": {
+      "symbol": "Crypto",
+      "qty": "Quantité",
+      "avg": "Prix moyen",
+      "last": "Dernier prix",
+      "value": "Valeur (USDT)",
+      "pnl": "P&L latent",
+      "pct": "P&L %"
+    },
+    "staleTag": "Retardé",
+    "costTag": "Au coût",
+    "noPrice": "Pas de prix",
+    "ageSec": "prix d'il y a {{n}} s",
+    "ageMin": "prix d'il y a {{n}} min",
+    "footnote": "Le P&L réalisé est net de frais ; P&L du jour = actifs totaux actuels − actifs totaux à 0 h (heure de Pékin). Seuls vos trades papier manuels sont comptés, pas le portefeuille de la stratégie ni H2.",
+    "stripAria": "Voir mes actifs et mon P&L",
+    "details": "Détails"
   }
 }

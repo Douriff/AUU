@@ -1485,3 +1485,55 @@ export interface Trc20Admin {
   transfers: Trc20Transfer[];
   reconcile: Trc20Reconcile;
 }
+
+// ---- 盈亏 (manual paper account P&L, computed on the server) ----
+export interface PnlPosition {
+  symbol: string;
+  qty: number;
+  avgPrice: number;
+  last: number;
+  priceTs: number | null;
+  priceAgeMs: number | null;
+  stale: boolean;
+  priceMissing: boolean;
+  value: number;
+  unrealized: number;
+  unrealizedPct: number;
+  realized: number;
+  weight: number;
+}
+
+export interface PnlSummary {
+  mode: "paper";
+  scope: "manual";
+  asOf: number;
+  equity: number;
+  cash: number;
+  positionsValue: number;
+  startCash: number;
+  unrealized: number;
+  realized: number;
+  fees: number;
+  today: number | null;
+  todayPct: number | null;
+  totalPnl: number;
+  totalReturn: number;
+  positions: PnlPosition[];
+  stale: boolean;
+  priceMissing: boolean;
+  oldestPriceTs: number | null;
+  staleAfterMs: number;
+  trades: number;
+}
+
+export interface PnlCurve {
+  range: "7d" | "30d" | "all";
+  tf: string;
+  points: { ts: number; equity: number; approx?: boolean; live?: boolean }[];
+  start: number;
+  end: number;
+  change: number;
+  changePct: number;
+  approx: boolean;
+  stale: boolean;
+}

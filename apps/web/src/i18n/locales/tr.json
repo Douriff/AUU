@@ -442,7 +442,8 @@
       "watch": "İzle",
       "backtest": "Geriye dönük test",
       "alerts": "Uyarılar"
-    }
+    },
+    "pnl": "Varlık/K&Z"
   },
   "shell": {
     "source": "Veri kaynağı {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Yalnızca yöneticiler (deneme): normal kullanıcılar hâlâ “Yükleme henüz açık değil” görür."
     },
     "adminOnlyNote": "Deneme: kanal yalnızca yöneticilere açık (AUU_TRC20_ADMIN_ONLY=on). Küçük bir gerçek yükleme doğrulandıktan sonra sunucu yapılandırmasında anahtarı kapatıp yeniden başlatarak herkese açın."
+  },
+  "pnl": {
+    "title": "Varlık / K&Z",
+    "sub": "Kendi manuel kâğıt hesabınız (simüle fon, USDT cinsinden). Tüm rakamlar sunucuda hesaplanır ve 10 saniyede bir yenilenir.",
+    "strategyLink": "Strateji kâğıt portföyü ve H2",
+    "loginFirst": "K&Z'nizi görmek için giriş yapın.",
+    "login": "Giriş yap",
+    "staleNote": "Bazı fiyatlar {{min}} dakikadan uzun süredir güncellenmedi; “Gecikmeli” etiketli rakamlar doğru olmayabilir.",
+    "priceMissingNote": "Bazı pozisyonlar için şu an fiyat yok; ortalama maliyetle değerlenir (“Maliyetle”) ve gerçekleşmemiş K&Z 0 gösterilir.",
+    "equity": "Toplam varlık (USDT)",
+    "cashLine": "Nakit {{cash}}",
+    "today": "Bugünkü K&Z",
+    "unrealized": "Gerçekleşmemiş K&Z",
+    "realized": "Gerçekleşen K&Z",
+    "totalReturn": "Toplam getiri",
+    "curve": "Varlık eğrisi",
+    "range": {
+      "7d": "7 G",
+      "30d": "30 G",
+      "all": "Tümü"
+    },
+    "rangeChange": "Dönem değişimi",
+    "noCurve": "Eğri için henüz yeterli veri yok",
+    "approxNote": "Bazı noktalarda geçmiş fiyat yok; maliyetle tahmin edildi.",
+    "positions": "Pozisyonlar ({{n}})",
+    "updated": "Güncellendi {{time}}",
+    "noPositions": "Henüz pozisyon yok",
+    "goTrade": "İşleme git",
+    "col": {
+      "symbol": "Coin",
+      "qty": "Miktar",
+      "avg": "Ort. giriş",
+      "last": "Güncel fiyat",
+      "value": "Değer (USDT)",
+      "pnl": "Gerçekleşmemiş K&Z",
+      "pct": "K&Z %"
+    },
+    "staleTag": "Gecikmeli",
+    "costTag": "Maliyetle",
+    "noPrice": "Fiyat yok",
+    "ageSec": "{{n}} sn önceki fiyat",
+    "ageMin": "{{n}} dk önceki fiyat",
+    "footnote": "Gerçekleşen K&Z ücretler düşülmüş hâldedir; bugünkü K&Z = şu anki toplam varlık − Pekin saatiyle 00:00'daki toplam varlık. Yalnızca manuel kâğıt işlemleriniz sayılır; strateji kâğıt portföyü ve H2 dahil değildir.",
+    "stripAria": "Varlıklarımı ve K&Z'mi gör",
+    "details": "Ayrıntılar"
   }
 }

@@ -42,17 +42,19 @@ const isTrade = (p: string, q: string) => p === "/" && /(?:^|[?&])symbol=/.test(
 const mainstreamNav: NavItem[] = [
   { to: "/", label: "market", icon: "bars", match: (p, q) => p === "/" && !isTrade(p, q) },
   { to: "/?symbol=BTC", label: "trade", icon: "swap", match: isTrade },
+  { to: "/pnl", label: "pnl", icon: "wallet", match: (p) => p.startsWith("/pnl") },
   { to: "/console", label: "strategy", icon: "term", match: (p) => p.startsWith("/console") },
   { to: "/performance", label: "performance", icon: "rank", match: (p) => p.startsWith("/performance") },
   { to: "/majors", label: "majors", icon: "globe", match: (p) => p.startsWith("/majors") },
   { to: "/news", label: "news", icon: "news", match: (p) => p.startsWith("/news") },
 ];
+// mobile: 行情 · 交易 · 盈亏 · 策略 · 动态 · 我的 (绩效 is one tap away from the 盈亏 page)
 const mobileTabs: NavItem[] = [
   mainstreamNav[0],
   mainstreamNav[1],
   mainstreamNav[2],
   mainstreamNav[3],
-  mainstreamNav[5],
+  mainstreamNav[6],
   { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") },
 ];
 
@@ -84,6 +86,14 @@ function Icon({ name }: { name: string }) {
         <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
         <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
         <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    wallet: (
+      <>
+        <rect x="3.5" y="6" width="17" height="13" rx="2" />
+        <path d="M3.5 9.5h17" />
+        <path d="M15 14h2.5" />
+        <path d="M6 6l9-2.5 1 2.5" />
       </>
     ),
     bars: (
@@ -417,7 +427,7 @@ function ShellFrame({
         </Link>
         <nav className="topnav-links" aria-label={t("nav.mainAria")}>
           {nav.map((i) => (
-            <Link key={i.to + i.label} to={href(i)} className={i.match(location.pathname, location.search) ? "is-active" : ""} aria-current={i.match(location.pathname, location.search) ? "page" : undefined}>
+            <Link key={i.to + i.label} to={href(i)} className={`${i.match(location.pathname, location.search) ? "is-active" : ""}${i.label === "pnl" ? " nav-hot" : ""}`} aria-current={i.match(location.pathname, location.search) ? "page" : undefined}>
               {t(`nav.${i.label}`)}
             </Link>
           ))}
@@ -450,7 +460,7 @@ function ShellFrame({
           {mobileTabs.map((i) => {
             const on = i.match(location.pathname, location.search);
             return (
-              <Link key={i.label} to={href(i)} className={on ? "is-active" : ""} aria-current={on ? "page" : undefined}>
+              <Link key={i.label} to={href(i)} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}`} aria-current={on ? "page" : undefined}>
                 <Icon name={i.icon} />
                 <span>{t(`nav.${i.label}`)}</span>
               </Link>
