@@ -81,7 +81,8 @@ export function Trc20AdminPanel() {
   return (
     <section className="settings-section usdt-admin">
       <h2>{t("usdt.admin.title")}</h2>
-      {!d.config.enabled ? <div className="pro-alert is-warn">{t("usdt.admin.closed")}</div> : null}
+      {!d.config.address ? <div className="pro-alert is-warn">{t("usdt.admin.closed")}</div> : null}
+      {d.config.address && d.config.adminOnly ? <div className="pro-alert is-warn">{t("usdt.admin.adminOnly")}</div> : null}
       <p className="muted" dir="auto">
         {t("usdt.admin.address")}: <code dir="ltr">{d.config.address ?? "—"}</code> · {t("usdt.admin.addrNote")}
       </p>

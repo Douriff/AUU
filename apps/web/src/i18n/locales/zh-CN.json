@@ -1239,7 +1239,9 @@
       "dismiss": "忽略（不加积分）",
       "userId": "用户 ID",
       "resolveBtn": "确认归属并加积分",
-      "dismissBtn": "确认忽略"
-    }
+      "dismissBtn": "确认忽略",
+      "adminOnly": "仅管理员可见（试运行）：普通用户看到的仍是「充值暂未开放」。"
+    },
+    "adminOnlyNote": "试运行中：充值通道目前只对管理员开放（AUU_TRC20_ADMIN_ONLY=on）。小额真实充值验证入账后，在服务器配置里关掉这个开关并重启即可对所有用户开放。"
   }
 }

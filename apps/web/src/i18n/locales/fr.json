@@ -1239,7 +1239,9 @@
       "dismiss": "Ignorer (sans points)",
       "userId": "ID utilisateur",
       "resolveBtn": "Confirmer et créditer les points",
-      "dismissBtn": "Confirmer l'abandon"
-    }
+      "dismissBtn": "Confirmer l'abandon",
+      "adminOnly": "Réservé aux admins (essai) : les utilisateurs voient toujours « Recharge pas encore disponible »."
+    },
+    "adminOnlyNote": "Essai : le canal n'est ouvert qu'aux admins (AUU_TRC20_ADMIN_ONLY=on). Après vérification d'une petite recharge réelle, désactivez l'option dans la configuration du serveur et redémarrez pour l'ouvrir à tous."
   }
 }

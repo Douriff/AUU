@@ -1239,7 +1239,9 @@
       "dismiss": "Descartar (sem pontos)",
       "userId": "ID do usuário",
       "resolveBtn": "Confirmar e creditar pontos",
-      "dismissBtn": "Confirmar descarte"
-    }
+      "dismissBtn": "Confirmar descarte",
+      "adminOnly": "Só administradores (teste): usuários comuns continuam vendo “Recarga ainda não disponível”."
+    },
+    "adminOnlyNote": "Teste: o canal está aberto só para administradores (AUU_TRC20_ADMIN_ONLY=on). Depois de verificar uma pequena recarga real, desligue a opção na configuração do servidor e reinicie para abrir a todos."
   }
 }

@@ -1239,7 +1239,9 @@
       "dismiss": "Verwerfen (keine Punkte)",
       "userId": "Nutzer-ID",
       "resolveBtn": "Bestätigen und Punkte gutschreiben",
-      "dismissBtn": "Verwerfen bestätigen"
-    }
+      "dismissBtn": "Verwerfen bestätigen",
+      "adminOnly": "Nur für Admins (Testbetrieb): normale Nutzer sehen weiterhin „Aufladen noch nicht verfügbar“."
+    },
+    "adminOnlyNote": "Testbetrieb: Der Kanal ist nur für Admins offen (AUU_TRC20_ADMIN_ONLY=on). Nach einer geprüften kleinen echten Aufladung den Schalter in der Serverkonfiguration ausschalten und neu starten, um ihn für alle zu öffnen."
   }
 }

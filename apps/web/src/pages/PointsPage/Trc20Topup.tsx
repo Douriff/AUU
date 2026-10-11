@@ -142,6 +142,7 @@ export function Trc20Topup() {
 
   return (
     <div className="usdt-box">
+      {cfg.adminOnly ? <div className="pro-alert is-warn">{t("usdt.adminOnlyNote")}</div> : null}
       <p className="muted">{t("usdt.intro", { rate: cfg.rate, min: cfg.min, max: cfg.max, daily: cfg.dailyMax })}</p>
       {active ? (
         <>

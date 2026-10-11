@@ -128,7 +128,7 @@ def user_channels() -> list[PaymentProvider]:
     return out
 
 
-def topup_status() -> dict[str, Any]:
+def topup_status(is_admin: bool = False) -> dict[str, Any]:
     chans = user_channels()
     manual = REGISTRY["manual_admin"].enabled()
     # The mock never shows in a production listing (it is only enabled under the test runner).
@@ -136,7 +136,7 @@ def topup_status() -> dict[str, Any]:
     from app.points import trc20
 
     ids = [p.id for p in chans]
-    if trc20.enabled():  # watch-only USDT-TRC20 (own order flow, see app.points.trc20)
+    if trc20.enabled_for(is_admin):  # watch-only USDT-TRC20 (own order flow, see app.points.trc20)
         ids.append(trc20.PROVIDER_ID)
-    shown.append({"id": trc20.PROVIDER_ID, "enabled": trc20.enabled(), "userInitiated": True, "testOnly": False, "implemented": True})
+    shown.append({"id": trc20.PROVIDER_ID, "enabled": trc20.enabled_for(is_admin), "adminOnly": trc20.admin_only(), "userInitiated": True, "testOnly": False, "implemented": True})
     return {"open": bool(ids), "channels": ids, "manual": manual, "providers": shown}

@@ -206,6 +206,16 @@ def enabled() -> bool:
     return bool(receive_address())
 
 
+def admin_only() -> bool:
+    """AUU_TRC20_ADMIN_ONLY=on: channel visible / usable by admins only (soft launch: verify one small
+    real payment first). Polling still runs so the admin's test payment is credited."""
+    return os.getenv("AUU_TRC20_ADMIN_ONLY", "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def enabled_for(is_admin: bool) -> bool:
+    return enabled() and (is_admin or not admin_only())
+
+
 def poll_wanted() -> bool:
     """Configured to poll on this node: address set, primary role (a standby only takes over after failover)."""
     from app.role import is_standby
@@ -221,11 +231,12 @@ def poll_enabled() -> bool:
     return poll_wanted() and not tests_active()
 
 
-def public_config() -> dict[str, Any]:
+def public_config(is_admin: bool = False) -> dict[str, Any]:
     from app.role import is_standby
 
     c = config()
-    return {"enabled": enabled() and not is_standby(), "address": c["address"] or None, "rate": c["rate"], "min": c["min"], "max": c["max"],
+    on = enabled_for(is_admin) and not is_standby()
+    return {"enabled": on, "adminOnly": admin_only(), "address": (c["address"] or None) if enabled_for(is_admin) else None, "rate": c["rate"], "min": c["min"], "max": c["max"],
             "dailyMax": c["dailyMax"], "maxPending": c["maxPending"], "ttlMin": c["ttlMin"], "network": "TRC20",
             "token": "USDT", "contract": USDT_CONTRACT}
 
@@ -293,10 +304,10 @@ def _parse_usdt(value: Any, lo: int, hi: int) -> int:
     return n
 
 
-def create_order(user_id: str, usdt: Any, idem: Any, *, now: Optional[int] = None,
+def create_order(user_id: str, usdt: Any, idem: Any, *, is_admin: bool = False, now: Optional[int] = None,
                  rand: Callable[[int], int] = secrets.randbelow) -> tuple[dict[str, Any], bool]:
     """Returns (order row, replayed)."""
-    if not enabled():
+    if not enabled_for(is_admin):
         raise PointsError("POINTS_TOPUP_CLOSED")
     from app.points.service import parse_idem
 

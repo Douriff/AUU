@@ -359,3 +359,19 @@ class LiveTronGridTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdminOnlyTests(Trc20Base):
+    def test_admin_only_switch(self):
+        with patch.dict(os.environ, {"AUU_TRC20_ADMIN_ONLY": "on"}):
+            d = self.user.get("/api/v1/points/trc20").json()["data"]["config"]
+            self.assertEqual((d["enabled"], d["address"], d["adminOnly"]), (False, None, True))
+            self.assertFalse(self.user.get("/api/v1/points/me").json()["data"]["topup"]["open"])
+            r = self.user.post("/api/v1/points/trc20/orders", json={"usdt": 10, "idempotency_key": key("ao1")})
+            self.assertEqual(r.json()["error"]["code"], "POINTS_TOPUP_CLOSED")
+            a = self.admin.get("/api/v1/points/trc20").json()["data"]["config"]
+            self.assertEqual((a["enabled"], a["address"]), (True, ADDR))
+            self.assertTrue(self.admin.get("/api/v1/points/me").json()["data"]["topup"]["open"])
+            r = self.admin.post("/api/v1/points/trc20/orders", json={"usdt": 10, "idempotency_key": key("ao2")})
+            self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(self.user.get("/api/v1/points/trc20").json()["data"]["config"]["enabled"])

@@ -122,7 +122,7 @@ def points_me(request: Request, limit: int = Query(50, ge=1, le=200), before: Op
     if bad is not None:
         return bad
     view = service.account_view(str(actor["id"]), limit=limit, before_id=before)
-    return ok({**view, "topup": providers.topup_status(), "liveEnabled": False})
+    return ok({**view, "topup": providers.topup_status(bool(actor.get("is_admin"))), "liveEnabled": False})
 
 
 @router.get("/points/topup")
@@ -130,7 +130,7 @@ def points_topup_status(request: Request):
     actor, bad = _who(request)
     if bad is not None:
         return bad
-    return ok({**providers.topup_status(), "min": service.TOPUP_MIN, "max": service.TOPUP_MAX})
+    return ok({**providers.topup_status(bool(actor.get("is_admin"))), "min": service.TOPUP_MIN, "max": service.TOPUP_MAX})
 
 
 @router.post("/points/topup")
@@ -189,7 +189,7 @@ def admin_points_users(request: Request, q: str = Query("", max_length=64)):
         if needle and needle not in str(u["name"]).lower() and needle not in str(u["display_name"]).lower() and needle != u["id"]:
             continue
         items.append({"id": u["id"], "name": u["name"], "display_name": u["display_name"], "balance": led.balance(u["id"])})
-    return ok({"items": items[:200], "topup": providers.topup_status()})
+    return ok({"items": items[:200], "topup": providers.topup_status(True)})
 
 
 @router.get("/admin/points/user/{user_id}")
@@ -345,7 +345,7 @@ def points_trc20(request: Request):
     if bad is not None:
         return bad
     rows = trc20.user_orders(str(actor["id"]), 30)
-    return ok({"config": trc20.public_config(), "orders": [trc20.order_view(o) for o in rows]})
+    return ok({"config": trc20.public_config(bool(actor.get("is_admin"))), "orders": [trc20.order_view(o) for o in rows]})
 
 
 @router.post("/points/trc20/orders")
@@ -361,13 +361,14 @@ async def points_trc20_order(request: Request):
         _audit(request, f"user:{uid}", "trc20_order", "RATE_LIMIT", uid)
         return _e("RATE_LIMIT")
     try:
-        row, replayed = await run_in_threadpool(trc20.create_order, uid, raw.get("usdt"), _idem(request, raw))
+        row, replayed = await run_in_threadpool(lambda: trc20.create_order(uid, raw.get("usdt"), _idem(request, raw),
+                                                                             is_admin=bool(actor.get("is_admin"))))
     except PointsError as exc:
         _audit(request, f"user:{uid}", "trc20_order", str(exc), uid, {"usdt": raw.get("usdt")})
         return _e(str(exc))
     _audit(request, f"user:{uid}", "trc20_order", "replayed" if replayed else "ok", uid,
            {"order": row["order_id"], "amount": trc20.fmt_order_amount(int(row["amount_micro"]))})
-    return ok({"order": trc20.order_view(row, qr=True), "replayed": replayed, "config": trc20.public_config()})
+    return ok({"order": trc20.order_view(row, qr=True), "replayed": replayed, "config": trc20.public_config(bool(actor.get("is_admin")))})
 
 
 @router.get("/points/trc20/orders/{order_id}")
@@ -390,7 +391,7 @@ def admin_points_trc20(request: Request, limit: int = Query(200, ge=1, le=1000))
     orders = [{**trc20.order_view(o, admin=True), "userName": names.get(o["user_id"], "")} for o in trc20.all_orders(limit)]
     pend = [{**trc20.tx_view(t), "userName": names.get(t.get("user_id") or "", "")} for t in trc20.txs("exception", limit)]
     recent = [{**trc20.tx_view(t), "userName": names.get(t.get("user_id") or "", "")} for t in trc20.txs(None, limit)]
-    return ok({"config": {**trc20.public_config(), "pollEnabled": trc20.poll_enabled()}, "orders": orders, "pending": pend,
+    return ok({"config": {**trc20.public_config(True), "pollEnabled": trc20.poll_enabled()}, "orders": orders, "pending": pend,
                "transfers": recent, "reconcile": trc20.reconcile()})
 
 

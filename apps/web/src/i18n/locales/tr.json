@@ -1239,7 +1239,9 @@
       "dismiss": "Yok say (puan yok)",
       "userId": "Kullanıcı kimliği",
       "resolveBtn": "Onayla ve puan yükle",
-      "dismissBtn": "Yok saymayı onayla"
-    }
+      "dismissBtn": "Yok saymayı onayla",
+      "adminOnly": "Yalnızca yöneticiler (deneme): normal kullanıcılar hâlâ “Yükleme henüz açık değil” görür."
+    },
+    "adminOnlyNote": "Deneme: kanal yalnızca yöneticilere açık (AUU_TRC20_ADMIN_ONLY=on). Küçük bir gerçek yükleme doğrulandıktan sonra sunucu yapılandırmasında anahtarı kapatıp yeniden başlatarak herkese açın."
   }
 }

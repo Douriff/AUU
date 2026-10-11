@@ -1422,6 +1422,7 @@ export interface Trc20Config {
   token: "USDT";
   contract: string;
   pollEnabled?: boolean;
+  adminOnly?: boolean;
 }
 
 export interface Trc20Order {

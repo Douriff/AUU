@@ -1239,7 +1239,9 @@
       "dismiss": "Dismiss (no points)",
       "userId": "User ID",
       "resolveBtn": "Confirm and credit points",
-      "dismissBtn": "Confirm dismissal"
-    }
+      "dismissBtn": "Confirm dismissal",
+      "adminOnly": "Admins only (trial): regular users still see “Top-up not available yet”."
+    },
+    "adminOnlyNote": "Trial: the channel is open to admins only (AUU_TRC20_ADMIN_ONLY=on). After a small real top-up is verified, turn the switch off in the server config and restart to open it to everyone."
   }
 }
