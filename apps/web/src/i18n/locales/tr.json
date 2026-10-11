@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "Bu kayıt iade edilemez",
     "POINTS_REFUND_EXCEEDS": "İade, bu kayıtta kalan miktarı aşıyor",
     "POINTS_UNKNOWN_ORDER": "Sipariş bulunamadı",
-    "POINTS_BAD_REQUEST": "Geçersiz istek"
+    "POINTS_BAD_REQUEST": "Geçersiz istek",
+    "TRC20_BAD_AMOUNT": "Tutar izin verilen aralığın dışında",
+    "TRC20_TOO_MANY_PENDING": "Çok fazla ödenmemiş sipariş var; birini tamamlayın veya süresinin dolmasını bekleyin",
+    "TRC20_DAILY_LIMIT": "Bugünkü yükleme sınırına ulaşıldı",
+    "TRC20_BUSY": "Bu tutar şu an kullanılamıyor, lütfen başka bir tutar seçin",
+    "TRC20_UNKNOWN_TX": "Zincirde böyle bir işlem yok",
+    "TRC20_NOT_PENDING": "Bu işlem zaten ele alındı"
   },
   "common": {
     "submitting": "Gönderiliyor…",
@@ -1129,7 +1135,8 @@
       "mock": "test kanalı",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1162,6 +1169,77 @@
       "inApp": "Puanlar yalnızca platform içinde harcanabilir (üyelik, özellikler).",
       "noWithdraw": "Puanlar çekilemez ve başka kullanıcılara aktarılamaz.",
       "separate": "Kâğıt işlem kâr/zararı yalnızca simüle fonları etkiler, puanlarınızı asla değiştirmez."
+    }
+  },
+  "usdt": {
+    "intro": "USDT (TRC20) ile puan yükleyin: 1 USDT = {{rate}} puan, sipariş başına {{min}}–{{max}} USDT, günde en fazla {{daily}} USDT.",
+    "amountLabel": "Tutar (USDT, {{min}}–{{max}} arası tam sayı)",
+    "preview": "{{usdt}} USDT → {{points}} puan (küçük bir ondalık ek eklenir: siparişteki tutarın aynısını gönderin)",
+    "badAmount": "{{min}} ile {{max}} arasında bir tam sayı girin",
+    "agree": "Anladım: yalnızca TRC20 ağındaki USDT; siparişteki tam tutarı göndermeliyim; puanlar çekilemez, devredilemez ve USDT olarak iade edilmez.",
+    "create": "Yükleme siparişi oluştur",
+    "newOrder": "Tekrar yükle",
+    "orderTitle": "Yükleme siparişi",
+    "countdown": "{{time}} kaldı",
+    "network": "Ağ",
+    "address": "Alıcı adresi",
+    "exactAmount": "Tam tutar",
+    "willGet": "Alacağınız puan",
+    "qrAlt": "Alıcı adresinin QR kodu",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
+    "warnTrc20": "Yalnızca TRON (TRC20) ağındaki USDT. ERC20, BEP20 veya başka bir ağdan gönderilen para kaybolur ve geri alınamaz.",
+    "warnExact": "Ondalık kısmı dahil tam olarak {{amount}} USDT gönderin. Farklı tutar otomatik yüklenmez, elle kontrol gerekir.",
+    "warnTime": "Transferi {{min}} dakika içinde tamamlayın; süre dolduktan sonra gelen ödemeler otomatik yüklenmez.",
+    "warnNoWithdraw": "Puanlar yalnızca bu platformda kullanılır. Çekilemez, devredilemez ve USDT olarak iade edilmez.",
+    "warnConfirm": "Zincir üstü onay yaklaşık 1–3 dakika sürer; puanlar otomatik eklenir ve bu sayfa kendiliğinden yenilenir.",
+    "paidNote": "Alındı: hesabınıza {{points}} puan eklendi.",
+    "expiredNote": "Siparişin süresi doldu. Ödeme yaptıysanız tekrar ödemeyin; elle kontrol için bir yöneticiye başvurun.",
+    "history": "Yükleme siparişleri",
+    "noOrders": "Henüz yükleme siparişi yok",
+    "status": {
+      "pending": "Ödeme bekleniyor",
+      "paid": "Yüklendi",
+      "expired": "Süresi doldu"
+    },
+    "col": {
+      "amount": "Tutar (USDT)",
+      "points": "Puan",
+      "status": "Durum",
+      "tx": "İşlem"
+    },
+    "reason": {
+      "amount_mismatch": "Tutar hiçbir siparişle eşleşmiyor",
+      "late": "Sipariş süresi dolduktan sonra ödendi",
+      "already_paid": "Sipariş yüklendikten sonra tekrar ödendi",
+      "fake_contract": "Resmî USDT sözleşmesi değil",
+      "verify_failed": "Zincir üstü doğrulama başarısız"
+    },
+    "admin": {
+      "title": "USDT (TRC20) yüklemeleri",
+      "closed": "Kanal kapalı: sunucuda alıcı adresi yapılandırılmamış (AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "Alıcı adresi",
+      "addrNote": "Adres yalnızca sunucu yapılandırmasında yeniden dağıtımla değiştirilebilir; web üzerinden değiştirme formu yoktur.",
+      "params": "Kur 1 USDT = {{rate}} puan · sipariş başına {{min}}–{{max}} USDT · kullanıcı başına günde {{daily}} USDT · kullanıcı başına en fazla {{pending}} açık sipariş · geçerlilik {{ttl}} dk",
+      "recon": "Mutabakat",
+      "reconLine": "Zincirdeki toplam {{chain}} USDT ({{n}} transfer) = yüklenen {{credited}} + bekleyen {{pending}} + yok sayılan {{ignored}}",
+      "reconOk": "tutarlı",
+      "reconBad": "tutarsız, lütfen kontrol edin",
+      "fakeCount": "Resmî olmayan sözleşmelerden {{n}} transfer (sayılmaz)",
+      "lastPoll": "Son sorgu {{time}} ({{source}})",
+      "neverPolled": "Zincir henüz sorgulanmadı",
+      "lastError": "Son sorgu {{time}} saatinde başarısız oldu",
+      "pending": "Elle inceleme bekleyen ({{n}})",
+      "noPending": "İnceleme bekleyen transfer yok",
+      "orders": "Tüm siparişler",
+      "reason": "Neden",
+      "order": "Sipariş",
+      "handle": "İşle",
+      "resolve": "Bir kullanıcıya ata",
+      "dismiss": "Yok say (puan yok)",
+      "userId": "Kullanıcı kimliği",
+      "resolveBtn": "Onayla ve puan yükle",
+      "dismissBtn": "Yok saymayı onayla"
     }
   }
 }

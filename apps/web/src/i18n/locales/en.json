@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "This entry cannot be refunded",
     "POINTS_REFUND_EXCEEDS": "The refund exceeds what is left on this entry",
     "POINTS_UNKNOWN_ORDER": "Order not found",
-    "POINTS_BAD_REQUEST": "Invalid request"
+    "POINTS_BAD_REQUEST": "Invalid request",
+    "TRC20_BAD_AMOUNT": "The amount is outside the allowed range",
+    "TRC20_TOO_MANY_PENDING": "Too many unpaid orders — finish one or wait for it to expire",
+    "TRC20_DAILY_LIMIT": "Today's top-up limit has been reached",
+    "TRC20_BUSY": "This amount cannot be ordered right now — please pick another",
+    "TRC20_UNKNOWN_TX": "No such on-chain transaction",
+    "TRC20_NOT_PENDING": "This transaction has already been handled"
   },
   "common": {
     "submitting": "Submitting…",
@@ -1129,7 +1135,8 @@
       "mock": "test channel",
       "alipay": "Alipay",
       "wechat_pay": "WeChat Pay",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT (TRC20)"
     },
     "item": {
       "example_badge": {
@@ -1162,6 +1169,77 @@
       "inApp": "Points can only be spent inside the platform (memberships, feature unlocks).",
       "noWithdraw": "Points cannot be withdrawn or transferred to other users.",
       "separate": "Paper-trading profit and loss only affects simulated funds and never changes your points."
+    }
+  },
+  "usdt": {
+    "intro": "Top up points with USDT (TRC20): 1 USDT = {{rate}} points, {{min}}–{{max}} USDT per order, up to {{daily}} USDT per day.",
+    "amountLabel": "Amount (USDT, whole number {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT → {{points}} points (a small decimal tail is added — send the exact amount shown on the order)",
+    "badAmount": "Enter a whole number between {{min}} and {{max}}",
+    "agree": "I understand: USDT on the TRC20 network only; I must send the exact order amount; points cannot be withdrawn, transferred or refunded in USDT.",
+    "create": "Create top-up order",
+    "newOrder": "Top up again",
+    "orderTitle": "Top-up order",
+    "countdown": "{{time}} left",
+    "network": "Network",
+    "address": "Receive address",
+    "exactAmount": "Exact amount",
+    "willGet": "Points you get",
+    "qrAlt": "Receive address QR code",
+    "copy": "Copy",
+    "copied": "Copied",
+    "warnTrc20": "USDT on the TRON (TRC20) network only. Funds sent over ERC20, BEP20 or any other network are lost and cannot be recovered.",
+    "warnExact": "Send exactly {{amount}} USDT, including the decimal tail. A different amount is not credited automatically and needs a manual check.",
+    "warnTime": "Complete the transfer within {{min}} minutes; payments arriving after expiry are not credited automatically.",
+    "warnNoWithdraw": "Points can only be used on this platform. They cannot be withdrawn, transferred or refunded in USDT.",
+    "warnConfirm": "On-chain confirmation takes about 1–3 minutes; points are added automatically and this page refreshes by itself.",
+    "paidNote": "Received: {{points}} points were added to your account.",
+    "expiredNote": "This order has expired. If you already paid, do not pay again — contact an admin for a manual check.",
+    "history": "Top-up orders",
+    "noOrders": "No top-up orders yet",
+    "status": {
+      "pending": "Awaiting payment",
+      "paid": "Credited",
+      "expired": "Expired"
+    },
+    "col": {
+      "amount": "Amount (USDT)",
+      "points": "Points",
+      "status": "Status",
+      "tx": "Transaction"
+    },
+    "reason": {
+      "amount_mismatch": "Amount matches no order",
+      "late": "Paid after the order expired",
+      "already_paid": "Paid again after the order was credited",
+      "fake_contract": "Not the official USDT contract",
+      "verify_failed": "On-chain check failed"
+    },
+    "admin": {
+      "title": "USDT (TRC20) top-ups",
+      "closed": "Channel closed: no receive address configured on the server (AUU_TRC20_RECEIVE_ADDRESS).",
+      "address": "Receive address",
+      "addrNote": "The address can only be changed in the server configuration with a redeploy; there is no web form for it.",
+      "params": "Rate 1 USDT = {{rate}} points · {{min}}–{{max}} USDT per order · {{daily}} USDT per user per day · max {{pending}} open orders per user · orders valid {{ttl}} min",
+      "recon": "Reconciliation",
+      "reconLine": "On-chain total {{chain}} USDT ({{n}} transfers) = credited {{credited}} + pending review {{pending}} + dismissed {{ignored}}",
+      "reconOk": "balanced",
+      "reconBad": "does not balance — please check",
+      "fakeCount": "{{n}} transfers from non-official contracts (not counted)",
+      "lastPoll": "Last check {{time}} ({{source}})",
+      "neverPolled": "The chain has not been checked yet",
+      "lastError": "Last check failed at {{time}}",
+      "pending": "Pending manual review ({{n}})",
+      "noPending": "No transfers pending review",
+      "orders": "All orders",
+      "reason": "Reason",
+      "order": "Order",
+      "handle": "Handle",
+      "resolve": "Attribute to a user",
+      "dismiss": "Dismiss (no points)",
+      "userId": "User ID",
+      "resolveBtn": "Confirm and credit points",
+      "dismissBtn": "Confirm dismissal"
     }
   }
 }

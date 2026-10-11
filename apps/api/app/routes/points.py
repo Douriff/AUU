@@ -21,7 +21,7 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from app.auth.accounts import admin_step_up, allow_attempt, auth_enabled, list_users, user_by_id
-from app.points import providers, service
+from app.points import providers, service, trc20
 from app.points.ledger import PointsError, get_points_ledger
 from app.routes.auth import _ip, session_user
 from app.routes.envelope import err, ok
@@ -56,8 +56,15 @@ _MESSAGES = {
     "POINTS_REFUND_EXCEEDS": "退款超过了这条流水剩余可退的积分",
     "POINTS_UNKNOWN_ORDER": "订单不存在",
     "POINTS_BAD_REQUEST": "请求无效",
+    "TRC20_BAD_AMOUNT": "充值金额不在允许范围内",
+    "TRC20_TOO_MANY_PENDING": "待支付订单太多，请先完成或等待过期",
+    "TRC20_DAILY_LIMIT": "已超过今日充值上限",
+    "TRC20_BUSY": "该金额暂时无法下单，请换一个金额",
+    "TRC20_UNKNOWN_TX": "没有这笔链上交易",
+    "TRC20_NOT_PENDING": "这笔交易已处理过",
 }
-_STATUS = {"AUTH_REQUIRED": 401, "BAD_LOGIN": 401, "TOTP_BAD": 401, "FORBIDDEN": 403, "POINTS_2FA_REQUIRED": 403,
+_STATUS = {"TRC20_TOO_MANY_PENDING": 429, "TRC20_DAILY_LIMIT": 429, "TRC20_UNKNOWN_TX": 404, "TRC20_NOT_PENDING": 409,
+           "AUTH_REQUIRED": 401, "BAD_LOGIN": 401, "TOTP_BAD": 401, "FORBIDDEN": 403, "POINTS_2FA_REQUIRED": 403,
            "UNKNOWN_USER": 404, "RATE_LIMIT": 429, "POINTS_IDEMPOTENCY_CONFLICT": 409, "POINTS_TOPUP_CLOSED": 403,
            "POINTS_MANUAL_OFF": 403, "POINTS_SHOP_OFF": 403}
 
@@ -329,3 +336,117 @@ async def admin_points_refund(request: Request):
 
     return await _admin_write(request, "refund", pre, lambda aid, raw: service.admin_refund(
         aid, raw.get("entry_id"), raw.get("amount"), raw.get("reason"), _idem(request, raw)))
+
+
+# ---- USDT-TRC20 ------------------------------------------------------------------------------------
+@router.get("/points/trc20")
+def points_trc20(request: Request):
+    actor, bad = _who(request)
+    if bad is not None:
+        return bad
+    rows = trc20.user_orders(str(actor["id"]), 30)
+    return ok({"config": trc20.public_config(), "orders": [trc20.order_view(o) for o in rows]})
+
+
+@router.post("/points/trc20/orders")
+async def points_trc20_order(request: Request):
+    actor, bad = _who(request)
+    if bad is not None:
+        return bad
+    raw = await _body(request)
+    if raw is None:
+        return _e("BAD_BODY")
+    uid = str(actor["id"])
+    if not allow_attempt(f"trc20-order:{uid}"):
+        _audit(request, f"user:{uid}", "trc20_order", "RATE_LIMIT", uid)
+        return _e("RATE_LIMIT")
+    try:
+        row, replayed = await run_in_threadpool(trc20.create_order, uid, raw.get("usdt"), _idem(request, raw))
+    except PointsError as exc:
+        _audit(request, f"user:{uid}", "trc20_order", str(exc), uid, {"usdt": raw.get("usdt")})
+        return _e(str(exc))
+    _audit(request, f"user:{uid}", "trc20_order", "replayed" if replayed else "ok", uid,
+           {"order": row["order_id"], "amount": trc20.fmt_order_amount(int(row["amount_micro"]))})
+    return ok({"order": trc20.order_view(row, qr=True), "replayed": replayed, "config": trc20.public_config()})
+
+
+@router.get("/points/trc20/orders/{order_id}")
+def points_trc20_get(request: Request, order_id: str):
+    actor, bad = _who(request)
+    if bad is not None:
+        return bad
+    o = trc20.get_order(order_id[:64])
+    if o is None or (o["user_id"] != str(actor["id"]) and not actor.get("is_admin")):
+        return _e("POINTS_UNKNOWN_ORDER")
+    return ok({"order": trc20.order_view(o, qr=True)})
+
+
+@router.get("/admin/points/trc20")
+def admin_points_trc20(request: Request, limit: int = Query(200, ge=1, le=1000)):
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    names = {u["id"]: u["name"] for u in list_users()}
+    orders = [{**trc20.order_view(o, admin=True), "userName": names.get(o["user_id"], "")} for o in trc20.all_orders(limit)]
+    pend = [{**trc20.tx_view(t), "userName": names.get(t.get("user_id") or "", "")} for t in trc20.txs("exception", limit)]
+    recent = [{**trc20.tx_view(t), "userName": names.get(t.get("user_id") or "", "")} for t in trc20.txs(None, limit)]
+    return ok({"config": {**trc20.public_config(), "pollEnabled": trc20.poll_enabled()}, "orders": orders, "pending": pend,
+               "transfers": recent, "reconcile": trc20.reconcile()})
+
+
+def _trc20_pre(raw: dict, *, need_user: bool) -> None:
+    tx = _text(raw, "tx_hash").strip().lower()
+    if not tx or len(tx) != 64 or any(c not in "0123456789abcdef" for c in tx):
+        raise PointsError("TRC20_UNKNOWN_TX")
+    if need_user:
+        _known_user(raw)
+        service.parse_amount(raw.get("points"), lo=1, hi=service.TOPUP_MAX * 100)
+    service.parse_reason(raw.get("reason"))
+
+
+@router.post("/admin/points/trc20/resolve")
+async def admin_points_trc20_resolve(request: Request):
+    """Attribute a review-list transfer to a user: password + 2FA + reason, credited once per tx hash."""
+    def pre(raw):
+        _trc20_pre(raw, need_user=True)
+        service.parse_idem(_idem(request, raw))
+
+    def fn(aid, raw):
+        entry = trc20.resolve(_text(raw, "tx_hash").strip().lower(), _known_user(raw),
+                              service.parse_amount(raw.get("points"), lo=1, hi=service.TOPUP_MAX * 100),
+                              service.parse_reason(raw.get("reason")), aid)
+        return entry, False
+
+    return await _admin_write(request, "trc20_resolve", pre, fn)
+
+
+@router.post("/admin/points/trc20/dismiss")
+async def admin_points_trc20_dismiss(request: Request):
+    """Close a review-list transfer without crediting anyone (spam / refunded off-platform): password + 2FA + reason."""
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    raw = await _body(request)
+    if raw is None:
+        return _e("BAD_BODY")
+    aid = str(actor["id"])
+    tx = _text(raw, "tx_hash").strip().lower()
+    if not allow_attempt(f"points-admin:{aid}"):
+        return _e("RATE_LIMIT")
+    try:
+        _trc20_pre(raw, need_user=False)
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "trc20_dismiss", str(exc), tx)
+        return _e(str(exc))
+    try:
+        await run_in_threadpool(admin_step_up, aid, _text(raw, "password"), _text(raw, "totp_code"))
+    except ValueError as exc:
+        _audit(request, f"admin:{aid}", "trc20_dismiss", f"step_up:{exc}", tx)
+        return _e(str(exc))
+    try:
+        row = await run_in_threadpool(trc20.dismiss, tx, service.parse_reason(raw.get("reason")), aid)
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "trc20_dismiss", str(exc), tx)
+        return _e(str(exc))
+    _audit(request, f"admin:{aid}", "trc20_dismiss", "ok", tx, {"reason": raw.get("reason")})
+    return ok({"transfer": trc20.tx_view(row)})

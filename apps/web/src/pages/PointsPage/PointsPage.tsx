@@ -6,8 +6,9 @@ import type { AuthMe, PointsAccount, PointsEntry } from "@/types/contracts";
 import { errText } from "@/i18n/errors";
 import { fmtDate } from "@/i18n/format";
 import { Empty, Sk } from "@/components/ui/Skeleton";
+import { Trc20Topup } from "@/pages/PointsPage/Trc20Topup";
 
-/** 积分: balance, append-only history, top-up (closed until a real channel exists), example unlock. */
+/** 积分: balance, append-only history, top-up (USDT-TRC20 when the server has a receive address), example unlock. */
 
 export function newIdemKey(): string {
   const c = globalThis.crypto;
@@ -120,7 +121,8 @@ export function PointsPage() {
       <section className="settings-section" id="topup">
         <h2>{t("points.topup")}</h2>
         {acct && !topupOpen ? <div className="pro-alert is-warn pts-closed">{t("points.topupClosed")}</div> : null}
-        {acct && topupOpen ? <p className="muted">{t("points.topupChannels", { list: acct.topup?.channels.join(", ") })}</p> : null}
+        {acct && topupOpen && acct.topup?.channels.includes("usdt_trc20") ? <Trc20Topup /> : null}
+        {acct && topupOpen && !acct.topup?.channels.includes("usdt_trc20") ? <p className="muted">{t("points.topupChannels", { list: acct.topup?.channels.join(", ") })}</p> : null}
         <p className="muted">{t("points.topupNote")}</p>
       </section>
       <section className="settings-section">

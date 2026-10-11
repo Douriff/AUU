@@ -111,6 +111,7 @@ def _mainstream_health(gate) -> dict:
         "mainstream": md,
         "alerts": _alerts_status(),
         "recon": _recon_status(),
+        "trc20": _trc20_status(),
         **_live_fields(),
         "copy_trade_enabled": False,
     }
@@ -122,6 +123,15 @@ def _recon_status() -> dict:
         from app.marketdata.mainstream.recon import peek_health
 
         return peek_health()
+    except Exception as exc:
+        return {"enabled": False, "error": type(exc).__name__}
+
+
+def _trc20_status() -> dict:
+    try:
+        from app.points import trc20
+
+        return trc20.health()
     except Exception as exc:
         return {"enabled": False, "error": type(exc).__name__}
 

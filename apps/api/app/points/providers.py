@@ -133,4 +133,10 @@ def topup_status() -> dict[str, Any]:
     manual = REGISTRY["manual_admin"].enabled()
     # The mock never shows in a production listing (it is only enabled under the test runner).
     shown = [p.describe() for p in REGISTRY.values() if not p.test_only or p.enabled()]
-    return {"open": bool(chans), "channels": [p.id for p in chans], "manual": manual, "providers": shown}
+    from app.points import trc20
+
+    ids = [p.id for p in chans]
+    if trc20.enabled():  # watch-only USDT-TRC20 (own order flow, see app.points.trc20)
+        ids.append(trc20.PROVIDER_ID)
+    shown.append({"id": trc20.PROVIDER_ID, "enabled": trc20.enabled(), "userInitiated": True, "testOnly": False, "implemented": True})
+    return {"open": bool(ids), "channels": ids, "manual": manual, "providers": shown}

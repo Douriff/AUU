@@ -101,7 +101,13 @@
     "POINTS_NOT_REFUNDABLE": "这条流水不能退款",
     "POINTS_REFUND_EXCEEDS": "退款超过了这条流水剩余可退的积分",
     "POINTS_UNKNOWN_ORDER": "订单不存在",
-    "POINTS_BAD_REQUEST": "请求无效"
+    "POINTS_BAD_REQUEST": "请求无效",
+    "TRC20_BAD_AMOUNT": "充值金额不在允许范围内",
+    "TRC20_TOO_MANY_PENDING": "待支付订单太多，请先完成或等待过期",
+    "TRC20_DAILY_LIMIT": "已超过今日充值上限",
+    "TRC20_BUSY": "该金额暂时无法下单，请换一个金额",
+    "TRC20_UNKNOWN_TX": "没有这笔链上交易",
+    "TRC20_NOT_PENDING": "这笔交易已处理过"
   },
   "common": {
     "submitting": "提交中…",
@@ -1129,7 +1135,8 @@
       "mock": "测试通道",
       "alipay": "支付宝",
       "wechat_pay": "微信支付",
-      "stripe": "Stripe"
+      "stripe": "Stripe",
+      "usdt_trc20": "USDT（TRC20）"
     },
     "item": {
       "example_badge": {
@@ -1162,6 +1169,77 @@
       "inApp": "积分只能在平台内消费（开会员、解锁功能）。",
       "noWithdraw": "积分不能提现，也不能转让给其他用户。",
       "separate": "纸面交易盈亏只影响模拟资金，不会增减积分。"
+    }
+  },
+  "usdt": {
+    "intro": "用 USDT（TRC20）充值积分：1 USDT = {{rate}} 积分，单笔 {{min}}–{{max}} USDT，每天最多 {{daily}} USDT。",
+    "amountLabel": "充值金额（USDT，{{min}}–{{max}} 的整数）",
+    "preview": "{{usdt}} USDT → {{points}} 积分（系统会加一个小数尾数，请按订单上的精确金额转账）",
+    "badAmount": "请输入 {{min}}–{{max}} 之间的整数",
+    "agree": "我已了解：只支持 TRC20 网络的 USDT；必须转订单上的精确金额；积分不能提现、不能转让、不退回 USDT。",
+    "create": "生成充值订单",
+    "newOrder": "再充一笔",
+    "orderTitle": "充值订单",
+    "countdown": "剩余 {{time}}",
+    "network": "网络",
+    "address": "收款地址",
+    "exactAmount": "精确金额",
+    "willGet": "到账积分",
+    "qrAlt": "收款地址二维码",
+    "copy": "复制",
+    "copied": "已复制",
+    "warnTrc20": "只支持 TRON（TRC20）网络的 USDT。从 ERC20、BEP20 等其他网络转入会丢失，无法找回。",
+    "warnExact": "必须转精确金额 {{amount}} USDT（包括小数尾数）。金额不对不会自动到账，只能人工核对。",
+    "warnTime": "请在 {{min}} 分钟内完成转账；超时后到账的款项不会自动入账。",
+    "warnNoWithdraw": "积分只能在平台内使用，不可提现，不可转让，也不会退回 USDT。",
+    "warnConfirm": "转账后链上确认约 1–3 分钟，系统确认后自动加积分，本页会自动刷新。",
+    "paidNote": "已到账：{{points}} 积分已加到你的账户。",
+    "expiredNote": "订单已过期。如果你已经转账，请不要重复转，联系管理员人工核对。",
+    "history": "充值订单",
+    "noOrders": "还没有充值订单",
+    "status": {
+      "pending": "待支付",
+      "paid": "已到账",
+      "expired": "已过期"
+    },
+    "col": {
+      "amount": "金额（USDT）",
+      "points": "积分",
+      "status": "状态",
+      "tx": "链上交易"
+    },
+    "reason": {
+      "amount_mismatch": "金额对不上任何订单",
+      "late": "订单过期后才到账",
+      "already_paid": "订单已入账后再次付款",
+      "fake_contract": "非官方 USDT 合约",
+      "verify_failed": "链上校验不通过"
+    },
+    "admin": {
+      "title": "USDT（TRC20）充值",
+      "closed": "通道关闭：服务器没有配置收款地址（AUU_TRC20_RECEIVE_ADDRESS）。",
+      "address": "收款地址",
+      "addrNote": "地址只能通过服务器配置修改并重新部署，网页上没有修改入口。",
+      "params": "比例 1 USDT = {{rate}} 积分 · 单笔 {{min}}–{{max}} USDT · 每人每天 {{daily}} USDT · 每人最多 {{pending}} 笔待支付 · 订单有效 {{ttl}} 分钟",
+      "recon": "对账",
+      "reconLine": "链上合计 {{chain}} USDT（{{n}} 笔）= 已入账 {{credited}} + 待处理 {{pending}} + 已忽略 {{ignored}}",
+      "reconOk": "一致",
+      "reconBad": "不一致，请检查",
+      "fakeCount": "非官方合约转入 {{n}} 笔（不计入）",
+      "lastPoll": "上次查询 {{time}}（{{source}}）",
+      "neverPolled": "还没有查询过链上",
+      "lastError": "最近一次查询失败 {{time}}",
+      "pending": "待人工处理（{{n}}）",
+      "noPending": "没有待处理的转账",
+      "orders": "全部订单",
+      "reason": "原因",
+      "order": "订单",
+      "handle": "处理",
+      "resolve": "归属给用户",
+      "dismiss": "忽略（不加积分）",
+      "userId": "用户 ID",
+      "resolveBtn": "确认归属并加积分",
+      "dismissBtn": "确认忽略"
     }
   }
 }
