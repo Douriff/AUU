@@ -949,3 +949,20 @@ html[dir="rtl"] .ms-back, html[dir="rtl"] .tk .ms-back { transform: scaleX(-1); 
 /* RTL bidi: number-only text (+1.16%, −0.05 bp) resolves LTR, Arabic text RTL; tickers/pairs read BTC/USDT */
 html[dir="rtl"] :is(span, b, strong, em, small, td, th, dd, dt, label) { unicode-bidi: plaintext; }
 html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-child, .tk-sym) { direction: ltr; }
+
+/* points (积分) */
+.pts-balance .pts-big { display: flex; flex-direction: column; gap: 4px; }
+.pts-balance .pts-big b { font-size: 28px; font-weight: 600; }
+.pts-rules { margin: 10px 0; padding-inline-start: 18px; color: var(--dim); font-size: 12.5px; line-height: 1.7; }
+.pts-closed { margin: 6px 0; }
+.pts-item { padding: 8px 0; }
+.pts-table .pts-reason { text-align: start; white-space: normal; max-width: 320px; }
+.pts-search { display: flex; gap: 8px; align-items: center; }
+.pts-search input { min-width: 0; width: 220px; }
+.pts-tools { display: flex; gap: 12px; flex-wrap: wrap; }
+.pts-adjust { max-width: 440px; margin: 12px 0; }
+.points-admin tr.is-active { background: #151920; }
+@media (max-width: 720px) {
+  .pts-search input { width: 100%; }
+  .pts-search { width: 100%; }
+}

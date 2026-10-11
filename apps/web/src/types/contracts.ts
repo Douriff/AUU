@@ -1368,3 +1368,42 @@ export interface PublicStatus {
     outages: { start: number; minutes: number; kind: "down" | "degraded" }[];
   } | null;
 }
+
+// ---- points (积分) ----
+export interface PointsEntry {
+  id: number;
+  ts: number;
+  kind: "topup" | "spend" | "adjust" | "refund";
+  amount: number;
+  balance_after: number;
+  reason: string;
+  provider: string | null;
+  ref: string | null;
+  operatorKind: string;
+  operator?: string;
+  user_id?: string;
+}
+
+export interface PointsTopupStatus {
+  open: boolean;
+  channels: string[];
+  manual: boolean;
+  providers: { id: string; enabled: boolean; userInitiated: boolean; testOnly: boolean; implemented: boolean }[];
+}
+
+export interface PointsAccount {
+  balance: number;
+  entries: PointsEntry[];
+  hasMore: boolean;
+  entitlements: Record<string, { active: boolean; until: number | null }>;
+  shop: { enabled: boolean; items: { id: string; cost: number; days: number; example: boolean }[] };
+  rules: { withdraw: boolean; transfer: boolean; separateFromPaper: boolean };
+  topup?: PointsTopupStatus;
+}
+
+export interface PointsUserRow {
+  id: string;
+  name: string;
+  display_name: string;
+  balance: number;
+}

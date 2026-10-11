@@ -57,6 +57,7 @@ function MainstreamSettingsPage() {
         <Link to="/majors">{t("nav.majors")} ›</Link>
         <Link to="/news">{t("news.title")} ›</Link>
         <Link to="/leaderboard">{t("nav.leaderboard")} ›</Link>
+        <Link to="/points">{t("points.title")} ›</Link>
       </nav>
       <section className="settings-section">
         <h2>{t("settings.display")}</h2>

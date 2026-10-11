@@ -85,7 +85,23 @@
     "noShort": "売却できる保有数量が不足しています（現物ロングのみ、空売り不可）",
     "tpslHeldOnly": "売却できる保有数量が不足しています（利確/損切は保有ポジションのみ保護します）",
     "tooManyOpen": "未約定注文は最大 {{n}} 件までです",
-    "unknownSymbol": "対応していない銘柄: {{s}}"
+    "unknownSymbol": "対応していない銘柄: {{s}}",
+    "POINTS_2FA_REQUIRED": "ポイントを調整する前に、設定で2段階認証を有効にしてください",
+    "POINTS_BAD_AMOUNT": "ポイント数が正しくありません",
+    "POINTS_REASON_REQUIRED": "理由を入力してください",
+    "POINTS_REASON_TOO_LONG": "理由は200文字以内です",
+    "POINTS_IDEMPOTENCY_REQUIRED": "リクエストIDがありません。ページを再読み込みしてやり直してください",
+    "POINTS_IDEMPOTENCY_CONFLICT": "このリクエストIDは別の操作で使用済みです。再読み込みしてやり直してください",
+    "POINTS_INSUFFICIENT": "ポイントが不足しています",
+    "POINTS_TOO_LARGE": "ポイント残高の上限を超えています",
+    "POINTS_TOPUP_CLOSED": "チャージはまだ利用できません",
+    "POINTS_MANUAL_OFF": "管理者の手動入金はオフです",
+    "POINTS_SHOP_OFF": "ポイント交換はまだ利用できません",
+    "POINTS_UNKNOWN_ITEM": "該当する項目がありません",
+    "POINTS_NOT_REFUNDABLE": "この履歴は返金できません",
+    "POINTS_REFUND_EXCEEDS": "返金額がこの履歴の残りを超えています",
+    "POINTS_UNKNOWN_ORDER": "注文が見つかりません",
+    "POINTS_BAD_REQUEST": "無効なリクエストです"
   },
   "common": {
     "submitting": "送信中…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "ローカル単一ユーザーモードではアカウントがありません。AUU_AUTH=on にするとペーパー損益のランキングを表示します。システムのペーパーエンジンは含みません。",
       "noteAuth": "ユーザーのペーパー口座のみ。システムのペーパーエンジンは含みません。入金・出金・実取引はありません。"
+    }
+  },
+  "points": {
+    "title": "ポイント",
+    "sub": "ポイントはプラットフォーム内でのみ使えます（会員・機能の解放）。ペーパートレードの模擬資金とは一切関係ありません。",
+    "balance": "ポイント残高",
+    "topup": "チャージ",
+    "topupClosed": "チャージはまだ利用できません",
+    "topupChannels": "利用可能な方法：{{list}}",
+    "topupNote": "チャージ開始後は、決済事業者の確認後にのみポイントが付与され、下の履歴に表示されます。",
+    "unlocks": "会員・機能解放",
+    "unlocksNote": "既存の機能はすべて無料のままです。以下は例示用のスイッチです。",
+    "example": "例",
+    "cost": "{{n}} ポイント",
+    "days": "{{n}} 日",
+    "permanent": "無期限",
+    "activeUntil": "{{time}} まで有効",
+    "unlockBtn": "ポイントで解放",
+    "shopOff": "まだ利用できません",
+    "unlocked": "解放しました",
+    "history": "ポイント履歴",
+    "noEntries": "ポイントの履歴はまだありません",
+    "unlock": "解放：{{item}}",
+    "viaProvider": "{{p}}でチャージ",
+    "col": {
+      "time": "時刻（北京）",
+      "kind": "種類",
+      "amount": "増減",
+      "balance": "変動後残高",
+      "reason": "理由",
+      "operator": "操作者"
+    },
+    "kind": {
+      "topup": "チャージ",
+      "spend": "消費",
+      "adjust": "管理者調整",
+      "refund": "返金"
+    },
+    "op": {
+      "user": "本人",
+      "admin": "管理者",
+      "provider": "決済チャネル"
+    },
+    "provider": {
+      "manual_admin": "管理者の手動入金",
+      "mock": "テストチャネル",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "サポーターバッジ",
+        "desc": "例示のみ：ポイントページにバッジを表示し、取引機能は解放しません。"
+      }
+    },
+    "admin": {
+      "title": "ポイント管理",
+      "sub": "ポイントの照会、手動調整（パスワード＋2FA、理由必須）、エクスポート。すべての操作は監査ログに記録されます。",
+      "search": "ユーザー名 / 表示名 / ID を検索",
+      "searchBtn": "検索",
+      "exportAll": "全履歴をエクスポート（CSV）",
+      "exportUser": "このユーザーの履歴をエクスポート（CSV）",
+      "verify": "照合",
+      "verifyOk": "照合OK：{{n}} 件、{{users}} アカウント",
+      "verifyBad": "照合で問題あり：{{list}}",
+      "user": "ユーザー",
+      "adjust": "ポイントを手動調整",
+      "adjustNote": "正の数で加算、負の数で減算。パスワードと2FAコード（またはリカバリーコード）を再入力してください。",
+      "amount": "数量",
+      "reason": "理由（必須）",
+      "code": "2FAコード / リカバリーコード",
+      "next": "次へ",
+      "confirm": "{{name}} のポイントを {{n}} 調整しますか？調整後残高：{{after}}。",
+      "confirmBtn": "調整を確定",
+      "done": "調整しました。現在の残高 {{balance}}"
+    },
+    "rule": {
+      "inApp": "ポイントはプラットフォーム内でのみ使えます（会員、機能解放）。",
+      "noWithdraw": "ポイントは出金できず、他のユーザーへの譲渡もできません。",
+      "separate": "ペーパートレードの損益は模擬資金にのみ影響し、ポイントは増減しません。"
     }
   }
 }

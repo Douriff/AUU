@@ -85,7 +85,23 @@
     "noShort": "Quantité à vendre insuffisante (spot long uniquement, pas de vente à découvert)",
     "tpslHeldOnly": "Quantité à vendre insuffisante (le TP/SL ne protège qu’une position existante)",
     "tooManyOpen": "{{n}} ordres ouverts au maximum",
-    "unknownSymbol": "Crypto non prise en charge : {{s}}"
+    "unknownSymbol": "Crypto non prise en charge : {{s}}",
+    "POINTS_2FA_REQUIRED": "Activez d'abord la validation en deux étapes dans les paramètres",
+    "POINTS_BAD_AMOUNT": "Nombre de points invalide",
+    "POINTS_REASON_REQUIRED": "Veuillez indiquer un motif",
+    "POINTS_REASON_TOO_LONG": "Le motif est limité à 200 caractères",
+    "POINTS_IDEMPOTENCY_REQUIRED": "Identifiant de requête manquant. Rechargez la page et réessayez",
+    "POINTS_IDEMPOTENCY_CONFLICT": "Cet identifiant a déjà servi pour une autre opération. Rechargez et réessayez",
+    "POINTS_INSUFFICIENT": "Points insuffisants",
+    "POINTS_TOO_LARGE": "Plafond de points dépassé",
+    "POINTS_TOPUP_CLOSED": "La recharge n'est pas encore disponible",
+    "POINTS_MANUAL_OFF": "La saisie manuelle admin est désactivée",
+    "POINTS_SHOP_OFF": "L'échange de points n'est pas encore disponible",
+    "POINTS_UNKNOWN_ITEM": "Article inconnu",
+    "POINTS_NOT_REFUNDABLE": "Cette écriture n'est pas remboursable",
+    "POINTS_REFUND_EXCEEDS": "Le remboursement dépasse le reste de cette écriture",
+    "POINTS_UNKNOWN_ORDER": "Commande introuvable",
+    "POINTS_BAD_REQUEST": "Requête invalide"
   },
   "common": {
     "submitting": "Envoi…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "Le mode local mono-utilisateur n’a pas de comptes. Avec AUU_AUTH=on, le classement par P&L papier s’affiche ici. Le moteur papier du système n’est pas compté.",
       "noteAuth": "Comptes papier des utilisateurs uniquement. Le moteur papier du système n’est pas compté. Ni dépôt, ni retrait, ni trading réel."
+    }
+  },
+  "points": {
+    "title": "Points",
+    "sub": "Les points s'utilisent uniquement sur la plateforme : abonnements et déblocages. Ils n'ont aucun lien avec les fonds simulés du trading papier.",
+    "balance": "Solde de points",
+    "topup": "Recharger",
+    "topupClosed": "La recharge n'est pas encore disponible",
+    "topupChannels": "Moyens disponibles : {{list}}",
+    "topupNote": "Une fois la recharge ouverte, les points ne sont crédités qu'après confirmation du prestataire de paiement, puis apparaissent ci-dessous.",
+    "unlocks": "Abonnement et déblocages",
+    "unlocksNote": "Toutes les fonctions existantes restent gratuites. Ci-dessous, un simple exemple.",
+    "example": "Exemple",
+    "cost": "{{n}} points",
+    "days": "{{n}} jours",
+    "permanent": "Permanent",
+    "activeUntil": "actif jusqu'au {{time}}",
+    "unlockBtn": "Débloquer avec des points",
+    "shopOff": "Pas encore disponible",
+    "unlocked": "Débloqué",
+    "history": "Historique des points",
+    "noEntries": "Aucun mouvement de points",
+    "unlock": "Déblocage : {{item}}",
+    "viaProvider": "Recharge via {{p}}",
+    "col": {
+      "time": "Heure (Pékin)",
+      "kind": "Type",
+      "amount": "Variation",
+      "balance": "Solde après",
+      "reason": "Motif",
+      "operator": "Par"
+    },
+    "kind": {
+      "topup": "Recharge",
+      "spend": "Dépense",
+      "adjust": "Ajustement admin",
+      "refund": "Remboursement"
+    },
+    "op": {
+      "user": "Vous",
+      "admin": "Admin",
+      "provider": "Canal de paiement"
+    },
+    "provider": {
+      "manual_admin": "saisie manuelle admin",
+      "mock": "canal de test",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "Badge de soutien",
+        "desc": "Exemple uniquement : affiche un badge sur la page des points, ne débloque aucune fonction de trading."
+      }
+    },
+    "admin": {
+      "title": "Gestion des points",
+      "sub": "Consulter, ajuster manuellement (mot de passe + 2FA, motif obligatoire) et exporter. Chaque action est journalisée.",
+      "search": "Rechercher nom / pseudo / ID",
+      "searchBtn": "Rechercher",
+      "exportAll": "Exporter tout le journal (CSV)",
+      "exportUser": "Exporter le journal de cet utilisateur (CSV)",
+      "verify": "Rapprochement",
+      "verifyOk": "Rapprochement ok : {{n}} écritures, {{users}} comptes",
+      "verifyBad": "Problèmes détectés : {{list}}",
+      "user": "Utilisateur",
+      "adjust": "Ajuster les points",
+      "adjustNote": "Positif ajoute, négatif retire. Ressaisissez mot de passe et code 2FA (ou code de secours).",
+      "amount": "Quantité",
+      "reason": "Motif (obligatoire)",
+      "code": "Code 2FA / code de secours",
+      "next": "Suivant",
+      "confirm": "Ajuster {{name}} de {{n}} points ? Solde après : {{after}}.",
+      "confirmBtn": "Confirmer l'ajustement",
+      "done": "Ajusté. Solde actuel {{balance}}"
+    },
+    "rule": {
+      "inApp": "Les points ne se dépensent que sur la plateforme (abonnement, fonctions).",
+      "noWithdraw": "Les points ne peuvent être ni retirés ni transférés à d'autres utilisateurs.",
+      "separate": "Les gains et pertes du trading papier n'affectent que les fonds simulés, jamais vos points."
     }
   }
 }

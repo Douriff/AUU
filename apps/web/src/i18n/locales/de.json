@@ -85,7 +85,23 @@
     "noShort": "Nicht genügend verkaufbare Menge (nur Spot-Long, kein Leerverkauf)",
     "tpslHeldOnly": "Nicht genügend verkaufbare Menge (TP/SL schützt nur bestehende Positionen)",
     "tooManyOpen": "Höchstens {{n}} offene Orders",
-    "unknownSymbol": "Nicht unterstützter Coin: {{s}}"
+    "unknownSymbol": "Nicht unterstützter Coin: {{s}}",
+    "POINTS_2FA_REQUIRED": "Aktivieren Sie zuerst die Zwei-Faktor-Anmeldung in den Einstellungen",
+    "POINTS_BAD_AMOUNT": "Ungültige Punktzahl",
+    "POINTS_REASON_REQUIRED": "Bitte einen Grund angeben",
+    "POINTS_REASON_TOO_LONG": "Der Grund darf höchstens 200 Zeichen haben",
+    "POINTS_IDEMPOTENCY_REQUIRED": "Anfrage-ID fehlt. Seite neu laden und erneut versuchen",
+    "POINTS_IDEMPOTENCY_CONFLICT": "Diese Anfrage-ID wurde bereits für einen anderen Vorgang verwendet. Neu laden und erneut versuchen",
+    "POINTS_INSUFFICIENT": "Nicht genug Punkte",
+    "POINTS_TOO_LARGE": "Punktelimit überschritten",
+    "POINTS_TOPUP_CLOSED": "Aufladen ist noch nicht verfügbar",
+    "POINTS_MANUAL_OFF": "Manuelle Admin-Buchung ist ausgeschaltet",
+    "POINTS_SHOP_OFF": "Einlösen ist noch nicht verfügbar",
+    "POINTS_UNKNOWN_ITEM": "Unbekannter Artikel",
+    "POINTS_NOT_REFUNDABLE": "Dieser Eintrag kann nicht erstattet werden",
+    "POINTS_REFUND_EXCEEDS": "Die Erstattung übersteigt den Restbetrag dieses Eintrags",
+    "POINTS_UNKNOWN_ORDER": "Bestellung nicht gefunden",
+    "POINTS_BAD_REQUEST": "Ungültige Anfrage"
   },
   "common": {
     "submitting": "Wird gesendet…",
@@ -1065,6 +1081,87 @@
     "board": {
       "noteLocal": "Im lokalen Einzelnutzermodus gibt es keine Konten. Mit AUU_AUTH=on wird hier nach Paper-G&V gerankt. Die System-Paper-Engine zählt nicht mit.",
       "noteAuth": "Nur Paper-Konten der Nutzer. Die System-Paper-Engine zählt nicht mit. Keine Einzahlungen, keine Auszahlungen, kein Live-Handel."
+    }
+  },
+  "points": {
+    "title": "Punkte",
+    "sub": "Punkte gelten nur innerhalb der Plattform: Mitgliedschaften und Freischaltungen. Mit dem simulierten Papierhandelskapital haben sie nichts zu tun.",
+    "balance": "Punktestand",
+    "topup": "Aufladen",
+    "topupClosed": "Aufladen ist noch nicht verfügbar",
+    "topupChannels": "Verfügbare Methoden: {{list}}",
+    "topupNote": "Nach Freigabe werden Punkte erst nach Bestätigung durch den Zahlungsanbieter gutgeschrieben und erscheinen dann unten im Verlauf.",
+    "unlocks": "Mitgliedschaft & Freischaltungen",
+    "unlocksNote": "Alle bestehenden Funktionen bleiben kostenlos. Unten ist nur ein Beispielschalter.",
+    "example": "Beispiel",
+    "cost": "{{n}} Punkte",
+    "days": "{{n}} Tage",
+    "permanent": "Dauerhaft",
+    "activeUntil": "gültig bis {{time}}",
+    "unlockBtn": "Mit Punkten freischalten",
+    "shopOff": "Noch nicht verfügbar",
+    "unlocked": "Freigeschaltet",
+    "history": "Punkteverlauf",
+    "noEntries": "Noch keine Punktebewegungen",
+    "unlock": "Freischaltung: {{item}}",
+    "viaProvider": "Aufladung über {{p}}",
+    "col": {
+      "time": "Zeit (Peking)",
+      "kind": "Art",
+      "amount": "Änderung",
+      "balance": "Saldo danach",
+      "reason": "Grund",
+      "operator": "Durch"
+    },
+    "kind": {
+      "topup": "Aufladung",
+      "spend": "Ausgabe",
+      "adjust": "Admin-Korrektur",
+      "refund": "Erstattung"
+    },
+    "op": {
+      "user": "Sie",
+      "admin": "Admin",
+      "provider": "Zahlungskanal"
+    },
+    "provider": {
+      "manual_admin": "manuelle Admin-Buchung",
+      "mock": "Testkanal",
+      "alipay": "Alipay",
+      "wechat_pay": "WeChat Pay",
+      "stripe": "Stripe"
+    },
+    "item": {
+      "example_badge": {
+        "name": "Unterstützer-Abzeichen",
+        "desc": "Nur ein Beispiel: zeigt ein Abzeichen auf der Punkteseite, schaltet keine Handelsfunktion frei."
+      }
+    },
+    "admin": {
+      "title": "Punkteverwaltung",
+      "sub": "Punkte abfragen, manuell korrigieren (Passwort + 2FA, Grund erforderlich) und exportieren. Jede Aktion wird protokolliert.",
+      "search": "Name / Anzeigename / ID suchen",
+      "searchBtn": "Suchen",
+      "exportAll": "Gesamtes Journal exportieren (CSV)",
+      "exportUser": "Journal dieses Nutzers exportieren (CSV)",
+      "verify": "Abgleich",
+      "verifyOk": "Abgleich ok: {{n}} Einträge, {{users}} Konten",
+      "verifyBad": "Abgleich fand Probleme: {{list}}",
+      "user": "Nutzer",
+      "adjust": "Punkte manuell korrigieren",
+      "adjustNote": "Positiv erhöht, negativ zieht ab. Passwort und 2FA-Code (oder Wiederherstellungscode) erneut eingeben.",
+      "amount": "Menge",
+      "reason": "Grund (Pflicht)",
+      "code": "2FA-Code / Wiederherstellungscode",
+      "next": "Weiter",
+      "confirm": "{{name}} um {{n}} Punkte korrigieren? Saldo danach: {{after}}.",
+      "confirmBtn": "Korrektur bestätigen",
+      "done": "Korrigiert. Saldo jetzt {{balance}}"
+    },
+    "rule": {
+      "inApp": "Punkte können nur in der Plattform ausgegeben werden (Mitgliedschaft, Funktionen).",
+      "noWithdraw": "Punkte können weder ausgezahlt noch an andere Nutzer übertragen werden.",
+      "separate": "Gewinne und Verluste im Papierhandel betreffen nur das simulierte Kapital, nie Ihre Punkte."
     }
   }
 }

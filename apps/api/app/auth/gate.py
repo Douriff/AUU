@@ -42,6 +42,7 @@ ADMIN_WRITE_PREFIXES = (
     "/api/v1/risk/",
     "/api/v1/pipeline/",
     "/api/v1/live/",
+    "/api/v1/admin/",
 )
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

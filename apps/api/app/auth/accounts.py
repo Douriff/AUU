@@ -412,6 +412,23 @@ def _reverify(user: dict[str, Any], password: str, code: str) -> None:
             raise ValueError("TOTP_BAD")
 
 
+def admin_step_up(user_id: str, password: str, code: str) -> None:
+    """Re-confirm an admin for points changes: 2FA must already be on, then password + a fresh
+    TOTP / recovery code (a TOTP step or recovery code is consumed, so it cannot be replayed)."""
+    from app.auth import security
+
+    user = user_by_id(user_id)
+    if user is None or not user.get("is_admin"):
+        raise ValueError("FORBIDDEN")
+    with _LOCK:
+        if not security.enabled(user):
+            raise ValueError("POINTS_2FA_REQUIRED")
+        if not (code or "").strip():
+            raise ValueError("TOTP_REQUIRED")
+        _reverify(user, password, code)
+        _save()
+
+
 def totp_setup(user_id: str, password: str) -> dict[str, Any]:
     """Start enabling 2FA: new secret kept as pending (encrypted) until one code is verified."""
     from app.auth import security
