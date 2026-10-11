@@ -76,11 +76,19 @@ class DecideTests(unittest.TestCase):
             self.assertEqual(v[3], 120)
             # banned for every endpoint while it lasts (account and IP)
             self.assertEqual(self.d(path="/api/v1/auth/me", now=1050)[1], "SCRAPE_SUSPECT")
-            self.assertEqual(self.d(path="/api/v1/auth/me", user=None, now=1050)[1], "SCRAPE_SUSPECT")
-            # other users on other IPs are not affected
+            # same office IP, other account / anonymous: not affected (account-level ban only)
+            self.assertIsNone(self.d(path="/api/v1/auth/me", user="u2", now=1050))
+            self.assertIsNone(self.d(path="/api/v1/auth/me", user=None, now=1050))
             self.assertIsNone(self.d(user="u9", ip="198.51.100.1", now=1050))
             # soft: expires
             self.assertIsNone(self.d(path="/api/v1/auth/me", now=1152 + 600))
+
+    def test_anonymous_crawl_bans_ip(self):
+        with mock.patch.dict(os.environ, {"AUU_RL_DISTINCT_10MIN": "10"}):
+            for i in range(10):
+                self.assertIsNone(self.d(path="/api/v1/news", query=f"page={i}", user=None, now=1000 + i))
+            self.assertEqual(self.d(path="/api/v1/news", query="page=99", user=None, now=1011)[1], "SCRAPE_SUSPECT")
+            self.assertEqual(self.d(path="/api/v1/auth/me", user=None, now=1012)[1], "SCRAPE_SUSPECT")
 
     def test_url_key_ignores_since_and_order(self):
         self.assertEqual(shield._url_key("/a", "b=1&since=5&a=2"), shield._url_key("/a", "a=2&b=1&since=9"))

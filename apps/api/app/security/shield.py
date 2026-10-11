@@ -14,7 +14,7 @@ Limits (sliding windows, one process, reset on restart):
 * data reads (market, strategy, news, points, leaderboard ...): a scraper check counts
   *distinct* URLs per account/IP in 10 minutes (polling the same URL does not count;
   ``since`` is ignored because the console poll changes it every tick). Over the limit the
-  key is soft-banned for ``AUU_RL_BAN_SEC`` (429 + Retry-After, nothing permanent);
+  account (or, for anonymous callers, the IP) is soft-banned for ``AUU_RL_BAN_SEC`` (429 + Retry-After, nothing permanent);
 * writes: per account;
 * obvious automation user agents (python-requests, curl, scrapy, Go, Java ...) and an
   empty UA get 403 on the gated API, except health/status.
@@ -206,12 +206,14 @@ def decide(*, path: str, method: str, query: str, ip: str, user_id: Optional[str
             return (429, "RATE_LIMIT", "操作过于频繁，请稍后再试", 60)
     if method == "GET" and any(path == p.rstrip("/") or path.startswith(p) for p in DATA_PREFIXES):
         item = _url_key(path, query)
-        for key in keys:
-            if STATE.distinct(f"d:{key}", item, 600.0, now) > cfg["distinct_per_10min"]:
-                STATE.ban(key, cfg["ban_sec"], now)
-                _LOG.warning("shield soft-ban %s for %ss (distinct data URLs > %s/10min)", key, cfg["ban_sec"],
-                             cfg["distinct_per_10min"])
-                return (429, "SCRAPE_SUSPECT", "请求过于频繁或疑似批量抓取，已临时限制，请稍后再试", cfg["ban_sec"])
+        # Signed-in: count and ban the account only, so one crawler behind a shared NAT/office IP
+        # does not lock out its neighbours. Anonymous: count by IP.
+        key = keys[-1]
+        if STATE.distinct(f"d:{key}", item, 600.0, now) > cfg["distinct_per_10min"]:
+            STATE.ban(key, cfg["ban_sec"], now)
+            _LOG.warning("shield soft-ban %s for %ss (distinct data URLs > %s/10min)", key, cfg["ban_sec"],
+                         cfg["distinct_per_10min"])
+            return (429, "SCRAPE_SUSPECT", "请求过于频繁或疑似批量抓取，已临时限制，请稍后再试", cfg["ban_sec"])
     return None
 
 
