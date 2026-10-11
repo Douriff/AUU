@@ -442,7 +442,8 @@
       "watch": "观察",
       "backtest": "回测",
       "alerts": "告警"
-    }
+    },
+    "pnl": "资产/盈亏"
   },
   "shell": {
     "source": "行情来源 {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "仅管理员可见（试运行）：普通用户看到的仍是「充值暂未开放」。"
     },
     "adminOnlyNote": "试运行中：充值通道目前只对管理员开放（AUU_TRC20_ADMIN_ONLY=on）。小额真实充值验证入账后，在服务器配置里关掉这个开关并重启即可对所有用户开放。"
+  },
+  "pnl": {
+    "title": "资产 / 盈亏",
+    "sub": "你自己的手动纸面账户（模拟资金，USDT 计价）。所有数字由服务器计算，每 10 秒刷新。",
+    "strategyLink": "策略纸面盘与 H2 表现",
+    "loginFirst": "登录后才能查看自己的盈亏。",
+    "login": "去登录",
+    "staleNote": "部分持仓的价格已超过 {{min}} 分钟没有更新，标「延迟」的数字可能不准。",
+    "priceMissingNote": "部分持仓暂时拿不到行情价格，按开仓均价计算（标「按成本」），浮动盈亏暂记为 0。",
+    "equity": "总资产（USDT）",
+    "cashLine": "其中现金 {{cash}}",
+    "today": "今日盈亏",
+    "unrealized": "浮动盈亏（未实现）",
+    "realized": "已实现盈亏",
+    "totalReturn": "累计收益率",
+    "curve": "净值曲线",
+    "range": {
+      "7d": "7天",
+      "30d": "30天",
+      "all": "全部"
+    },
+    "rangeChange": "区间变化",
+    "noCurve": "还没有足够的数据画净值曲线",
+    "approxNote": "部分时间点缺少历史价格，按开仓成本估算。",
+    "positions": "持仓（{{n}}）",
+    "updated": "更新于 {{time}}",
+    "noPositions": "还没有持仓",
+    "goTrade": "去交易",
+    "col": {
+      "symbol": "币种",
+      "qty": "数量",
+      "avg": "开仓均价",
+      "last": "现价",
+      "value": "市值（USDT）",
+      "pnl": "浮动盈亏",
+      "pct": "盈亏比例"
+    },
+    "staleTag": "延迟",
+    "costTag": "按成本",
+    "noPrice": "暂无价格",
+    "ageSec": "{{n}} 秒前的价格",
+    "ageMin": "{{n}} 分钟前的价格",
+    "footnote": "已实现盈亏已扣除手续费；今日盈亏 = 当前总资产 − 北京时间 0 点的总资产。这里只统计你的手动纸面交易，不含策略纸面盘和 H2。",
+    "stripAria": "查看我的资产与盈亏",
+    "details": "详情"
   }
 }

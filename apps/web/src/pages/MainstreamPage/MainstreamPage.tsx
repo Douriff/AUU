@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PnlStrip } from "@/pages/PnlPage/PnlStrip";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CoinBadge, CoinSwitcher, MarketList, Spark, fmtPct, fmtPx, fmtRate, fmtVol, pxWidths, tone } from "@/components/market/MarketList";
 import { Num } from "@/components/ui/Num";
@@ -343,6 +344,7 @@ export function MainstreamPage() {
 
   return (
     <div className="pro-page mainstream-page is-detail">
+      <PnlStrip />
       <section className="ms-panel">
         <div className="tk">
           <button type="button" className="ms-back" onClick={back} aria-label={tr("ms.backAria")}>

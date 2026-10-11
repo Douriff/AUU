@@ -70,7 +70,7 @@ import type {
   TraderSnapshot,
   TradingStateEvent,
   LiveStatus,
-  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus, Trc20Admin, Trc20Config, Trc20Order, Trc20Transfer
+  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus, Trc20Admin, Trc20Config, Trc20Order, Trc20Transfer, PnlSummary, PnlCurve
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -482,6 +482,15 @@ export class HttpWsProvider {
 
   adminPointsAdjust(body: { user_id: string; amount: number; reason: string; password: string; totp_code: string; idempotency_key: string }): Promise<{ balance: number; replayed: boolean }> {
     return postJson("/api/v1/admin/points/adjust", body);
+  }
+
+  // ---- 盈亏: own manual paper account only (server computes everything) ----
+  getPnlSummary(): Promise<PnlSummary> {
+    return getJson("/api/v1/pnl/summary");
+  }
+
+  getPnlCurve(range: "7d" | "30d" | "all"): Promise<PnlCurve> {
+    return getJson(`/api/v1/pnl/curve?range=${range}`);
   }
 
   // ---- USDT-TRC20 top-up (watch-only receive address; config comes from the server) ----

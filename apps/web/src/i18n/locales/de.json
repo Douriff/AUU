@@ -442,7 +442,8 @@
       "watch": "Beobachten",
       "backtest": "Backtest",
       "alerts": "Warnungen"
-    }
+    },
+    "pnl": "Vermögen/GuV"
   },
   "shell": {
     "source": "Datenquelle {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Nur für Admins (Testbetrieb): normale Nutzer sehen weiterhin „Aufladen noch nicht verfügbar“."
     },
     "adminOnlyNote": "Testbetrieb: Der Kanal ist nur für Admins offen (AUU_TRC20_ADMIN_ONLY=on). Nach einer geprüften kleinen echten Aufladung den Schalter in der Serverkonfiguration ausschalten und neu starten, um ihn für alle zu öffnen."
+  },
+  "pnl": {
+    "title": "Vermögen / GuV",
+    "sub": "Dein eigenes manuelles Papierkonto (simuliertes Geld, in USDT). Alle Zahlen werden auf dem Server berechnet und alle 10 s aktualisiert.",
+    "strategyLink": "Strategie-Papierdepot & H2",
+    "loginFirst": "Melde dich an, um deine GuV zu sehen.",
+    "login": "Anmelden",
+    "staleNote": "Einige Preise wurden seit über {{min}} Minuten nicht aktualisiert; mit „Verzögert“ markierte Werte können abweichen.",
+    "priceMissingNote": "Für einige Positionen gibt es gerade keinen Preis; sie werden zum Einstandspreis bewertet („Zum Einstand“), ihr unrealisierter Gewinn steht auf 0.",
+    "equity": "Gesamtvermögen (USDT)",
+    "cashLine": "Davon Bargeld {{cash}}",
+    "today": "Heutige GuV",
+    "unrealized": "Unrealisierte GuV",
+    "realized": "Realisierte GuV",
+    "totalReturn": "Gesamtrendite",
+    "curve": "Equity-Kurve",
+    "range": {
+      "7d": "7 T",
+      "30d": "30 T",
+      "all": "Alles"
+    },
+    "rangeChange": "Veränderung im Zeitraum",
+    "noCurve": "Noch nicht genug Daten für eine Equity-Kurve",
+    "approxNote": "Für einige Zeitpunkte fehlen historische Preise; sie sind zum Einstand geschätzt.",
+    "positions": "Positionen ({{n}})",
+    "updated": "Aktualisiert {{time}}",
+    "noPositions": "Noch keine Positionen",
+    "goTrade": "Zum Handel",
+    "col": {
+      "symbol": "Coin",
+      "qty": "Menge",
+      "avg": "Ø Einstieg",
+      "last": "Aktueller Preis",
+      "value": "Wert (USDT)",
+      "pnl": "Unrealisierte GuV",
+      "pct": "GuV %"
+    },
+    "staleTag": "Verzögert",
+    "costTag": "Zum Einstand",
+    "noPrice": "Kein Preis",
+    "ageSec": "Preis von vor {{n}} s",
+    "ageMin": "Preis von vor {{n}} Min.",
+    "footnote": "Realisierte GuV ist nach Gebühren; heutige GuV = Gesamtvermögen jetzt − Gesamtvermögen um 0:00 Uhr Pekinger Zeit. Gezählt werden nur deine manuellen Papiertrades, nicht das Strategie-Papierdepot oder H2.",
+    "stripAria": "Mein Vermögen und meine GuV ansehen",
+    "details": "Details"
   }
 }

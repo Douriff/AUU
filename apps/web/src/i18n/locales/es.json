@@ -442,7 +442,8 @@
       "watch": "Observar",
       "backtest": "Backtest",
       "alerts": "Alertas"
-    }
+    },
+    "pnl": "Activos/PyG"
   },
   "shell": {
     "source": "Fuente de datos {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Solo administradores (prueba): los usuarios siguen viendo «Recarga aún no disponible»."
     },
     "adminOnlyNote": "Prueba: el canal solo está abierto a administradores (AUU_TRC20_ADMIN_ONLY=on). Tras verificar una pequeña recarga real, desactiva el interruptor en la configuración del servidor y reinicia para abrirlo a todos."
+  },
+  "pnl": {
+    "title": "Activos / PyG",
+    "sub": "Tu propia cuenta de papel manual (fondos simulados, en USDT). Todas las cifras se calculan en el servidor y se actualizan cada 10 s.",
+    "strategyLink": "Cartera de papel de la estrategia y H2",
+    "loginFirst": "Inicia sesión para ver tus ganancias y pérdidas.",
+    "login": "Iniciar sesión",
+    "staleNote": "Algunos precios llevan más de {{min}} minutos sin actualizarse; las cifras marcadas «Retrasado» pueden no ser exactas.",
+    "priceMissingNote": "Algunas posiciones no tienen precio ahora y se valoran a su coste medio («A coste»); su PyG no realizada figura como 0.",
+    "equity": "Activos totales (USDT)",
+    "cashLine": "Efectivo {{cash}}",
+    "today": "PyG de hoy",
+    "unrealized": "PyG no realizada",
+    "realized": "PyG realizada",
+    "totalReturn": "Rentabilidad total",
+    "curve": "Curva de patrimonio",
+    "range": {
+      "7d": "7 d",
+      "30d": "30 d",
+      "all": "Todo"
+    },
+    "rangeChange": "Cambio en el periodo",
+    "noCurve": "Aún no hay datos suficientes para la curva",
+    "approxNote": "A algunos puntos les falta el precio histórico y se estiman a coste.",
+    "positions": "Posiciones ({{n}})",
+    "updated": "Actualizado {{time}}",
+    "noPositions": "Aún no hay posiciones",
+    "goTrade": "Ir a operar",
+    "col": {
+      "symbol": "Moneda",
+      "qty": "Cantidad",
+      "avg": "Precio medio",
+      "last": "Precio actual",
+      "value": "Valor (USDT)",
+      "pnl": "PyG no realizada",
+      "pct": "PyG %"
+    },
+    "staleTag": "Retrasado",
+    "costTag": "A coste",
+    "noPrice": "Sin precio",
+    "ageSec": "precio de hace {{n}} s",
+    "ageMin": "precio de hace {{n}} min",
+    "footnote": "La PyG realizada es neta de comisiones; PyG de hoy = activos totales ahora − activos totales a las 0:00 hora de Pekín. Solo se cuentan tus operaciones de papel manuales, no la cartera de la estrategia ni H2.",
+    "stripAria": "Ver mis activos y mi PyG",
+    "details": "Detalles"
   }
 }

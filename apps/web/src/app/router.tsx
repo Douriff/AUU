@@ -20,6 +20,7 @@ import { ObservePage } from "@/pages/ObservePage/ObservePage";
 import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
 import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
+import { PnlPage } from "@/pages/PnlPage/PnlPage";
 import { StatusPage } from "@/pages/StatusPage/StatusPage";
 import { NewsPage } from "@/pages/NewsPage/NewsPage";
 import { PointsPage } from "@/pages/PointsPage/PointsPage";
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       { path: "board", element: <LegacyOnly><BoardPage /></LegacyOnly> },
       { path: "console", element: <ConsolePage /> },
       { path: "performance", element: <PerformancePage /> },
+      { path: "pnl", element: <PnlPage /> },
       { path: "markets", element: <LegacyOnly><MarketsPage /></LegacyOnly> },
       { path: "market", element: <LegacyOnly><MarketPage /></LegacyOnly> },
       { path: "review", element: <LegacyOnly><ReviewPage /></LegacyOnly> },

@@ -442,7 +442,8 @@
       "watch": "Watch",
       "backtest": "Backtest",
       "alerts": "Alerts"
-    }
+    },
+    "pnl": "Assets/P&L"
   },
   "shell": {
     "source": "Data source {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Admins only (trial): regular users still see “Top-up not available yet”."
     },
     "adminOnlyNote": "Trial: the channel is open to admins only (AUU_TRC20_ADMIN_ONLY=on). After a small real top-up is verified, turn the switch off in the server config and restart to open it to everyone."
+  },
+  "pnl": {
+    "title": "Assets / P&L",
+    "sub": "Your own manual paper account (simulated funds, priced in USDT). All figures are computed on the server and refresh every 10 s.",
+    "strategyLink": "Strategy paper book & H2 performance",
+    "loginFirst": "Log in to see your P&L.",
+    "login": "Log in",
+    "staleNote": "Some prices have not updated for over {{min}} minutes; figures tagged “Delayed” may be off.",
+    "priceMissingNote": "Some positions have no price right now and are valued at their average cost (tagged “At cost”); their unrealized P&L shows as 0.",
+    "equity": "Total assets (USDT)",
+    "cashLine": "Cash {{cash}}",
+    "today": "Today's P&L",
+    "unrealized": "Unrealized P&L",
+    "realized": "Realized P&L",
+    "totalReturn": "Total return",
+    "curve": "Equity curve",
+    "range": {
+      "7d": "7D",
+      "30d": "30D",
+      "all": "All"
+    },
+    "rangeChange": "Change in range",
+    "noCurve": "Not enough data for an equity curve yet",
+    "approxNote": "Some points lack historical prices and are estimated at cost.",
+    "positions": "Positions ({{n}})",
+    "updated": "Updated {{time}}",
+    "noPositions": "No positions yet",
+    "goTrade": "Go trade",
+    "col": {
+      "symbol": "Coin",
+      "qty": "Quantity",
+      "avg": "Avg. entry",
+      "last": "Last price",
+      "value": "Value (USDT)",
+      "pnl": "Unrealized P&L",
+      "pct": "P&L %"
+    },
+    "staleTag": "Delayed",
+    "costTag": "At cost",
+    "noPrice": "No price",
+    "ageSec": "price from {{n}} s ago",
+    "ageMin": "price from {{n}} min ago",
+    "footnote": "Realized P&L is net of fees; today's P&L = total assets now − total assets at 00:00 Beijing time. Only your manual paper trades are counted, not the strategy paper book or H2.",
+    "stripAria": "View my assets and P&L",
+    "details": "Details"
   }
 }

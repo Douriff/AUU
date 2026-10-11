@@ -442,7 +442,8 @@
       "watch": "Observar",
       "backtest": "Backtest",
       "alerts": "Alertas"
-    }
+    },
+    "pnl": "Ativos/L&P"
   },
   "shell": {
     "source": "Fonte de dados {{src}}",
@@ -1243,5 +1244,50 @@
       "adminOnly": "Só administradores (teste): usuários comuns continuam vendo “Recarga ainda não disponível”."
     },
     "adminOnlyNote": "Teste: o canal está aberto só para administradores (AUU_TRC20_ADMIN_ONLY=on). Depois de verificar uma pequena recarga real, desligue a opção na configuração do servidor e reinicie para abrir a todos."
+  },
+  "pnl": {
+    "title": "Ativos / L&P",
+    "sub": "Sua própria conta de papel manual (fundos simulados, em USDT). Todos os números são calculados no servidor e atualizados a cada 10 s.",
+    "strategyLink": "Carteira de papel da estratégia e H2",
+    "loginFirst": "Entre para ver seus lucros e prejuízos.",
+    "login": "Entrar",
+    "staleNote": "Alguns preços estão há mais de {{min}} minutos sem atualização; números marcados “Atrasado” podem estar imprecisos.",
+    "priceMissingNote": "Algumas posições estão sem preço agora e são avaliadas pelo custo médio (“Pelo custo”); o L&P não realizado delas aparece como 0.",
+    "equity": "Ativos totais (USDT)",
+    "cashLine": "Caixa {{cash}}",
+    "today": "L&P de hoje",
+    "unrealized": "L&P não realizado",
+    "realized": "L&P realizado",
+    "totalReturn": "Retorno total",
+    "curve": "Curva de patrimônio",
+    "range": {
+      "7d": "7 d",
+      "30d": "30 d",
+      "all": "Tudo"
+    },
+    "rangeChange": "Variação no período",
+    "noCurve": "Ainda não há dados suficientes para a curva",
+    "approxNote": "Alguns pontos não têm preço histórico e são estimados pelo custo.",
+    "positions": "Posições ({{n}})",
+    "updated": "Atualizado {{time}}",
+    "noPositions": "Ainda não há posições",
+    "goTrade": "Ir negociar",
+    "col": {
+      "symbol": "Moeda",
+      "qty": "Quantidade",
+      "avg": "Preço médio",
+      "last": "Preço atual",
+      "value": "Valor (USDT)",
+      "pnl": "L&P não realizado",
+      "pct": "L&P %"
+    },
+    "staleTag": "Atrasado",
+    "costTag": "Pelo custo",
+    "noPrice": "Sem preço",
+    "ageSec": "preço de {{n}} s atrás",
+    "ageMin": "preço de {{n}} min atrás",
+    "footnote": "O L&P realizado é líquido de taxas; L&P de hoje = ativos totais agora − ativos totais às 0:00 no horário de Pequim. Só contam suas operações de papel manuais, não a carteira da estratégia nem o H2.",
+    "stripAria": "Ver meus ativos e L&P",
+    "details": "Detalhes"
   }
 }
