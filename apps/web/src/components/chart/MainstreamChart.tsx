@@ -21,6 +21,25 @@ import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed, intlLocale } from "@/i18n/format";
+import {
+  IND_COLORS,
+  bollinger,
+  closesOf,
+  ema,
+  kdj,
+  macd,
+  rsi,
+  sma,
+} from "@/components/chart/indicators";
+import {
+  DEFAULT_INDICATOR_PREFS,
+  INDICATOR_IDS,
+  type IndicatorId,
+  type IndicatorPrefs,
+  loadIndicatorPrefs,
+  saveIndicatorPrefs,
+  toggleIndicator,
+} from "@/components/chart/indicatorPrefs";
 
 /** lightweight-charts (Apache-2.0) candlestick + volume for the mainstream page. */
 
@@ -81,6 +100,68 @@ type OvRow = StrategyOverlay["series"][number];
 const MOM_COLORS = ["#f2c94c", "#bb86fc", "#4fc3f7"];
 const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`);
 
+type LineSeries = ISeriesApi<"Line">;
+type HistSeries = ISeriesApi<"Histogram">;
+
+type IndSeriesBag = {
+  ma: LineSeries[];
+  ema: LineSeries[];
+  boll: LineSeries[];
+  macd: (LineSeries | HistSeries)[];
+  rsi: LineSeries[];
+  kdj: LineSeries[];
+};
+
+const emptyIndBag = (): IndSeriesBag => ({ ma: [], ema: [], boll: [], macd: [], rsi: [], kdj: [] });
+
+function clearBag(chart: IChartApi, bag: IndSeriesBag) {
+  for (const key of INDICATOR_IDS) {
+    for (const s of bag[key]) {
+      try {
+        chart.removeSeries(s);
+      } catch {
+        /* already removed with chart */
+      }
+    }
+    bag[key] = [];
+  }
+}
+
+/** Stack volume / oscillator panes under the main candle scale. */
+function applyPaneMargins(
+  chart: IChartApi,
+  opts: { showVol: boolean; panes: ("macd" | "rsi" | "kdj")[]; showMom: boolean },
+) {
+  if (opts.showMom) {
+    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.08, bottom: 0.25 } });
+    return;
+  }
+  const paneH = 0.14;
+  const volH = opts.showVol ? 0.1 : 0;
+  const block = opts.panes.length * paneH + volH;
+  chart.priceScale("right").applyOptions({
+    scaleMargins: { top: 0.06, bottom: Math.min(0.55, block + (opts.panes.length || opts.showVol ? 0.02 : 0.22)) },
+  });
+  let bottom = 0;
+  if (opts.showVol) {
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 1 - volH - bottom, bottom } });
+    bottom += volH;
+  }
+  // panes from bottom up in reverse so first listed sits above volume
+  for (let i = opts.panes.length - 1; i >= 0; i--) {
+    const id = opts.panes[i];
+    chart.priceScale(id).applyOptions({ scaleMargins: { top: 1 - paneH - bottom, bottom } });
+    bottom += paneH;
+  }
+  if (!opts.panes.length && opts.showVol) {
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.08, bottom: 0.25 } });
+  }
+  if (!opts.panes.length && !opts.showVol) {
+    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } });
+  }
+}
+
 export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { symbol: string; tf: MainstreamTf; venue?: string | null; overlay?: boolean }) {
   const { t, i18n: i18nInst } = useTranslation();
   const lang = i18nInst.language;
@@ -93,6 +174,9 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const loadingOld = useRef(false);
   const exhausted = useRef(false);
   const gen = useRef(0);
+  const indBag = useRef<IndSeriesBag>(emptyIndBag());
+  const prefsRef = useRef<IndicatorPrefs>(DEFAULT_INDICATOR_PREFS);
+  const syncMetaRef = useRef({ overlay: true as boolean, sigOn: false, hasOv: false, tf: "1d" as MainstreamTf });
   const [legend, setLegend] = useState<Legend | null>(null);
   // strategy overlay (daily only): rebalance markers + TSMOM look-back return lines
   const [sigOn, setSigOn] = useState(false);
@@ -101,6 +185,11 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const ovRows = useRef<Map<number, OvRow>>(new Map());
   const momRefs = useRef<ISeriesApi<"Line">[]>([]);
   const [ovRow, setOvRow] = useState<OvRow | null>(null);
+  const [indPrefs, setIndPrefs] = useState<IndicatorPrefs>(() =>
+    typeof window !== "undefined" ? loadIndicatorPrefs() : { ...DEFAULT_INDICATOR_PREFS },
+  );
+  prefsRef.current = indPrefs;
+  syncMetaRef.current = { overlay, sigOn, hasOv: !!ov, tf };
   const [state, setState] = useState<{ loading: boolean; err: string; limited: boolean; retention?: number; count: number }>({
     loading: true,
     err: "",
@@ -113,13 +202,121 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     return d.length ? { c: d[d.length - 1], prev: d[d.length - 2] } : null;
   }, []);
 
-  const setAll = useCallback((rows: MainstreamCandle[]) => {
-    dataRef.current = rows;
-    byTs.current = new Map(rows.map((c, i) => [c.ts, i]));
-    candleRef.current?.setData(rows.map(bar));
-    volRef.current?.setData(rows.map(vol));
-    if (rows.length) candleRef.current?.applyOptions({ priceFormat: priceFormat(rows[rows.length - 1].close) });
+  const syncIndicators = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const rows = dataRef.current;
+    const prefs = prefsRef.current;
+    const meta = syncMetaRef.current;
+    const showMom = meta.overlay && meta.sigOn && meta.tf === "1d" && meta.hasOv;
+    clearBag(chart, indBag.current);
+
+    // Strategy overlay claims the bottom band — skip oscillator panes while it is on.
+    const allowPane = !showMom;
+    const src = closesOf(rows, toTime);
+    const lineOpts = (color: string, title: string, scaleId?: string) => ({
+      color,
+      lineWidth: 1 as const,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      title,
+      ...(scaleId ? { priceScaleId: scaleId } : {}),
+    });
+
+    if (prefs.ma && rows.length) {
+      const bag = indBag.current.ma;
+      for (const [period, color] of [
+        [7, IND_COLORS.ma7],
+        [25, IND_COLORS.ma25],
+        [99, IND_COLORS.ma99],
+      ] as const) {
+        const s = chart.addLineSeries(lineOpts(color, `MA${period}`));
+        s.setData(sma(src, period));
+        bag.push(s);
+      }
+    }
+    if (prefs.ema && rows.length) {
+      const bag = indBag.current.ema;
+      for (const [period, color] of [
+        [12, IND_COLORS.ema12],
+        [26, IND_COLORS.ema26],
+      ] as const) {
+        const s = chart.addLineSeries(lineOpts(color, `EMA${period}`));
+        s.setData(ema(src, period));
+        bag.push(s);
+      }
+    }
+    if (prefs.boll && rows.length) {
+      const bag = indBag.current.boll;
+      const { mid, upper, lower } = bollinger(src, 20, 2);
+      const midS = chart.addLineSeries(lineOpts(IND_COLORS.bollMid, "BOLL"));
+      const upS = chart.addLineSeries({ ...lineOpts(IND_COLORS.bollBand, "BOLL↑"), lineStyle: 2 });
+      const loS = chart.addLineSeries({ ...lineOpts(IND_COLORS.bollBand, "BOLL↓"), lineStyle: 2 });
+      midS.setData(mid);
+      upS.setData(upper);
+      loS.setData(lower);
+      bag.push(midS, upS, loS);
+    }
+
+    const panes: ("macd" | "rsi" | "kdj")[] = [];
+    if (allowPane && prefs.macd && rows.length) {
+      panes.push("macd");
+      const bag = indBag.current.macd;
+      const m = macd(src);
+      const macdS = chart.addLineSeries(lineOpts(IND_COLORS.macd, "MACD", "macd"));
+      const sigS = chart.addLineSeries(lineOpts(IND_COLORS.macdSignal, "Signal", "macd"));
+      const histS = chart.addHistogramSeries({
+        priceScaleId: "macd",
+        lastValueVisible: false,
+        priceLineVisible: false,
+        priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+      });
+      macdS.setData(m.macd);
+      sigS.setData(m.signal);
+      histS.setData(m.hist);
+      bag.push(macdS, sigS, histS);
+    }
+    if (allowPane && prefs.rsi && rows.length) {
+      panes.push("rsi");
+      const bag = indBag.current.rsi;
+      const s = chart.addLineSeries({
+        ...lineOpts(IND_COLORS.rsi, "RSI", "rsi"),
+        priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+      });
+      s.setData(rsi(src, 14));
+      s.createPriceLine({ price: 70, color: "rgba(255,255,255,0.2)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      s.createPriceLine({ price: 30, color: "rgba(255,255,255,0.2)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      bag.push(s);
+    }
+    if (allowPane && prefs.kdj && rows.length) {
+      panes.push("kdj");
+      const bag = indBag.current.kdj;
+      const kd = kdj(rows, toTime);
+      const kS = chart.addLineSeries({ ...lineOpts(IND_COLORS.k, "K", "kdj"), priceFormat: { type: "price", precision: 2, minMove: 0.01 } });
+      const dS = chart.addLineSeries({ ...lineOpts(IND_COLORS.d, "D", "kdj"), priceFormat: { type: "price", precision: 2, minMove: 0.01 } });
+      const jS = chart.addLineSeries({ ...lineOpts(IND_COLORS.j, "J", "kdj"), priceFormat: { type: "price", precision: 2, minMove: 0.01 } });
+      kS.setData(kd.k);
+      dS.setData(kd.d);
+      jS.setData(kd.j);
+      bag.push(kS, dS, jS);
+    }
+
+    const showVol = !showMom;
+    volRef.current?.applyOptions({ visible: showVol });
+    applyPaneMargins(chart, { showVol, panes, showMom });
   }, []);
+
+  const setAll = useCallback(
+    (rows: MainstreamCandle[]) => {
+      dataRef.current = rows;
+      byTs.current = new Map(rows.map((c, i) => [c.ts, i]));
+      candleRef.current?.setData(rows.map(bar));
+      volRef.current?.setData(rows.map(vol));
+      if (rows.length) candleRef.current?.applyOptions({ priceFormat: priceFormat(rows[rows.length - 1].close) });
+      syncIndicators();
+    },
+    [syncIndicators],
+  );
 
   // Chart instance: created once.
   useEffect(() => {
@@ -160,15 +357,21 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     const offColors = onColorPref(() => {
       candles.applyOptions(candleColors());
       volume.setData(dataRef.current.map(vol));
+      syncIndicators();
     });
+    // Seed indicators if data already present (HMR / remount).
+    syncIndicators();
     return () => {
       offColors();
       chart.unsubscribeCrosshairMove(onMove);
+      clearBag(chart, indBag.current);
       chart.remove();
       chartRef.current = null;
       candleRef.current = null;
       volRef.current = null;
     };
+    // syncIndicators identity changes with prefs/overlay; chart is created once — call via ref path on data updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastLegend]);
 
   // Axis / crosshair labels follow the interface language.
@@ -234,6 +437,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         .then((d) => {
           if (gen.current !== my) return;
           const last = dataRef.current[dataRef.current.length - 1];
+          let changed = false;
           for (const c of d.candles) {
             if (c.ts < last.ts) continue;
             candleRef.current?.update(bar(c));
@@ -244,13 +448,15 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
               byTs.current.set(c.ts, dataRef.current.length);
               dataRef.current.push(c);
             }
+            changed = true;
           }
+          if (changed) syncIndicators();
           setLegend((l) => (l && l.c.ts < dataRef.current[dataRef.current.length - 2]?.ts ? l : lastLegend()));
         })
         .catch(() => undefined);
     }, POLL_MS[tf]);
     return () => window.clearInterval(t);
-  }, [symbol, tf, venue, lastLegend]);
+  }, [symbol, tf, venue, lastLegend, syncIndicators]);
 
   // Buy/sell markers follow the 红涨绿跌 toggle too.
   const [colorRev, setColorRev] = useState(0);
@@ -284,10 +490,9 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     setOvRow(null);
     if (!showSig || !ov) {
       candles.setMarkers([]);
-      volRef.current?.applyOptions({ visible: true });
+      syncIndicators();
       return;
     }
-    volRef.current?.applyOptions({ visible: false }); // the bottom band shows the look-back returns instead
     ovRows.current = new Map(ov.series.map((r) => [r.ts, r]));
     momRefs.current = ov.lookbacks.map((L, k) => {
       const s = chart.addLineSeries({
@@ -315,12 +520,27 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
       text: `${f.side === "buy" ? i18n.t("chart.buy") : i18n.t("chart.sell")}→${fmtFixed(f.wTo * 100, 1)}%`,
     }));
     candles.setMarkers(markers);
-  }, [ov, showSig, colorRev, lang]);
+    syncIndicators();
+  }, [ov, showSig, colorRev, lang, syncIndicators]);
+
+  // Re-apply when user toggles indicator chips.
+  useEffect(() => {
+    syncIndicators();
+  }, [indPrefs, syncIndicators]);
+
+  const onToggleInd = (id: IndicatorId) => {
+    setIndPrefs((prev) => {
+      const next = toggleIndicator(prev, id);
+      saveIndicatorPrefs(next);
+      return next;
+    });
+  };
 
   const lg = legend;
   const d = lg ? priceFormat(lg.c.close).precision : 2;
   const chg = lg?.prev ? lg.c.close / lg.prev.close - 1 : lg ? lg.c.close / lg.c.open - 1 : 0;
   const tone = chg >= 0 ? "up" : "down";
+  const paneBlocked = showSig && !!ov;
 
   return (
     <div className="msc">
@@ -398,6 +618,25 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
           {state.limited ? ` · ${t("chart.earliest")}` : ""}
         </span>
         <span className="msc-actions">
+          <span className="msc-inds" role="group" aria-label={t("chart.ind.aria")}>
+            {INDICATOR_IDS.map((id) => {
+              const isPane = id === "macd" || id === "rsi" || id === "kdj";
+              const disabled = isPane && paneBlocked;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={indPrefs[id] && !disabled ? "is-on" : ""}
+                  aria-pressed={indPrefs[id] && !disabled}
+                  disabled={disabled}
+                  title={disabled ? t("chart.ind.paneBlocked") : t(`chart.ind.${id}Title`)}
+                  onClick={() => onToggleInd(id)}
+                >
+                  {t(`chart.ind.${id}`)}
+                </button>
+              );
+            })}
+          </span>
           {tf === "1d" && overlay ? (
             <button
               type="button"
