@@ -54,8 +54,6 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS airdrops_cat ON items (category);
 CREATE INDEX IF NOT EXISTS airdrops_status ON items (status);
 CREATE INDEX IF NOT EXISTS airdrops_pub ON items (published_at DESC);
-CREATE INDEX IF NOT EXISTS airdrops_origin ON items (origin);
-CREATE INDEX IF NOT EXISTS airdrops_source_url ON items (source_url);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -234,6 +232,13 @@ class AirdropStore:
         )
         self._db.execute(
             "UPDATE items SET origin='ingested' WHERE IFNULL(origin,'')='' AND (','||IFNULL(tags,'')||',') LIKE '%,ingested,%'"
+        )
+        self._db.execute("CREATE INDEX IF NOT EXISTS airdrops_origin ON items (origin)")
+        self._db.execute("CREATE INDEX IF NOT EXISTS airdrops_source_url ON items (source_url)")
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS fetch_log ("
+            "source TEXT PRIMARY KEY, last_attempt INTEGER, last_ok INTEGER, last_error TEXT, last_added INTEGER, "
+            "last_items INTEGER, fails INTEGER NOT NULL DEFAULT 0)"
         )
 
     def close(self) -> None:
