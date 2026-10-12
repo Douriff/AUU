@@ -18,6 +18,9 @@ class SeedTests(unittest.TestCase):
         self.assertGreaterEqual(len(SEED), 8)
         ids = {i["id"] for i in SEED}
         self.assertEqual(len(ids), len(SEED))
+        self.assertIn("meme", airdrops.CATEGORIES)
+        meme_n = sum(1 for i in SEED if i["category"] == "meme")
+        self.assertGreaterEqual(meme_n, 6)
         for i in SEED:
             self.assertIn(i["category"], airdrops.CATEGORIES)
             self.assertIn(i["status"], airdrops.STATUSES)
@@ -59,8 +62,12 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(len(all_page["items"]), len(SEED))
         major = self.store.list(category="major", size=50)
         community = self.store.list(category="community", size=50)
-        self.assertEqual(major["total"] + community["total"], all_page["total"])
+        meme = self.store.list(category="meme", size=50)
+        self.assertEqual(major["total"] + community["total"] + meme["total"], all_page["total"])
         self.assertTrue(all(i["category"] == "major" for i in major["items"]))
+        self.assertGreaterEqual(meme["total"], 6)
+        self.assertTrue(all(i["category"] == "meme" for i in meme["items"]))
+        self.assertTrue(all(i.get("sourceName") and (i.get("sourceUrl") or "").startswith("https://") for i in meme["items"]))
         ended = self.store.list(status="ended", size=50)
         self.assertTrue(ended["total"] >= 1)
         self.assertTrue(all(i["status"] == "ended" for i in ended["items"]))
@@ -175,6 +182,12 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(detail.status_code, 200)
         body = detail.json()["data"]["item"]
         self.assertEqual(body["id"], it["id"])
+        meme = self.c.get("/api/v1/airdrops?category=meme&size=50")
+        self.assertEqual(meme.status_code, 200, meme.text)
+        md = meme.json()["data"]
+        self.assertGreaterEqual(md["total"], 6)
+        self.assertTrue(all(i["category"] == "meme" for i in md["items"]))
+        self.assertIn("meme", md["categories"])
         self.assertEqual(self.c.get("/api/v1/airdrops?category=evil").status_code, 400)
         self.assertEqual(self.c.get("/api/v1/airdrops?status=nope").status_code, 400)
         self.assertEqual(self.c.get("/api/v1/airdrops/does-not-exist").status_code, 404)

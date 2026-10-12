@@ -592,7 +592,7 @@ export interface NewsQuery {
 }
 
 /** 空投雷达 (GET /api/v1/airdrops): curated info cards with source attribution. */
-export type AirdropCategory = "major" | "community";
+export type AirdropCategory = "major" | "community" | "meme";
 export type AirdropStatus = "active" | "upcoming" | "ended";
 export interface AirdropItem {
   id: string;

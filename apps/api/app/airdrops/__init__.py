@@ -1,4 +1,4 @@
-"""空投雷达: curated airdrop / points-program headlines (info only).
+"""空投雷达: curated airdrop / points-program headlines (info only), including meme-ecosystem notes.
 
 - P0 data lives in ``seed.json`` next to this module (title, summary, source attribution,
   original links). No scraping of sites that forbid it; no API keys.
@@ -25,7 +25,7 @@ log = logging.getLogger("auu.airdrops")
 
 LEDGER_NAME = "airdrops.sqlite"
 SEED_PATH = Path(__file__).resolve().parent / "seed.json"
-CATEGORIES = ("major", "community")
+CATEGORIES = ("major", "community", "meme")
 STATUSES = ("active", "upcoming", "ended")
 TITLE_MAX = 240
 SUMMARY_MAX = 800
