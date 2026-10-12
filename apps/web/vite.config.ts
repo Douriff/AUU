@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    include: ["buffer"],
+    include: ["buffer", "three", "3d-shape-particle-text"],
   },
   server: {
     port: 5173,
