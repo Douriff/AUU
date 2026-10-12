@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "Админ-консоль",
+    "badge": "Admin",
+    "sub": "Пользователи, журнал баллов, пополнения, P&L торговли баллами, выводы и feature flags — отдельно от торгового экрана.",
+    "navAria": "Навигация админки",
+    "backToBoard": "К торговому экрану",
+    "consoleLink": "Админ-консоль",
+    "open": "Открыть",
+    "forbiddenTitle": "Нет доступа",
+    "forbiddenSub": "Админ-консоль могут открывать только администраторы.",
+    "nav": {
+      "hub": "Обзор",
+      "users": "Пользователи",
+      "ledger": "Журнал баллов",
+      "topups": "Пополнения",
+      "trading": "P&L торговли баллами",
+      "withdrawals": "Выводы",
+      "flags": "Feature flags"
+    },
+    "usersDesc": "Смотреть балансы, корректировать с паролем + 2FA и журнал пользователя.",
+    "ledgerDesc": "Сверка полного журнала и экспорт CSV.",
+    "ledgerHint": "Детали по пользователю — в разделе Пользователи, выберите счёт.",
+    "topupsDesc": "Заказы USDT-TRC20, ожидающие on-chain переводы и ручное зачисление.",
+    "tradingDesc": "Капитал и P&L каждого счёта торговли баллами (отдельно от paper).",
+    "withdrawalsDesc": "Проверка выводов: отклонить (разморозить) или зарегистрировать tx hash TokenPocket.",
+    "flagsDesc": "Только чтение: сводка feature flags торговли баллами / вывода / TRC20.",
+    "flagsHint": "Флаги задаются переменными окружения сервера; здесь только текущее состояние."
   }
 }

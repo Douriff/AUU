@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "Admin console",
+    "badge": "Admin",
+    "sub": "Users, points ledger, top-ups, points-trading P&L, withdrawals and feature flags — a separate surface from the trading board.",
+    "navAria": "Admin navigation",
+    "backToBoard": "Back to board",
+    "consoleLink": "Admin console",
+    "open": "Open",
+    "forbiddenTitle": "Access denied",
+    "forbiddenSub": "Only administrators can open the admin console.",
+    "nav": {
+      "hub": "Overview",
+      "users": "Users",
+      "ledger": "Points ledger",
+      "topups": "Top-ups",
+      "trading": "Points trading P&L",
+      "withdrawals": "Withdrawals",
+      "flags": "Feature flags"
+    },
+    "usersDesc": "Look up balances, adjust with password + 2FA, and view that user's ledger.",
+    "ledgerDesc": "Reconcile the full ledger and export CSV.",
+    "ledgerHint": "To inspect one user's entries, open Users and select an account.",
+    "topupsDesc": "USDT-TRC20 orders, pending on-chain transfers and manual credit.",
+    "tradingDesc": "Equity and P&L of each user's points-trading account (separate from paper).",
+    "withdrawalsDesc": "Review withdrawals: reject to unfreeze, or register a TokenPocket tx hash.",
+    "flagsDesc": "Read-only summary of points trading / withdraw / TRC20 feature flags.",
+    "flagsHint": "Flags are controlled by server env vars; this page only shows the live state."
   }
 }

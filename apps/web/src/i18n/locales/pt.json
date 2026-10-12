@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "Console admin",
+    "badge": "Admin",
+    "sub": "Usuários, livro de pontos, recargas, P&L de trading de pontos, saques e feature flags — separado do painel de trading.",
+    "navAria": "Navegação admin",
+    "backToBoard": "Voltar ao painel",
+    "consoleLink": "Console admin",
+    "open": "Abrir",
+    "forbiddenTitle": "Acesso negado",
+    "forbiddenSub": "Somente administradores podem abrir o console admin.",
+    "nav": {
+      "hub": "Visão geral",
+      "users": "Usuários",
+      "ledger": "Livro de pontos",
+      "topups": "Recargas",
+      "trading": "P&L trading de pontos",
+      "withdrawals": "Saques",
+      "flags": "Feature flags"
+    },
+    "usersDesc": "Consultar saldos, ajustar com senha + 2FA e ver o livro desse usuário.",
+    "ledgerDesc": "Conciliar o livro completo e exportar CSV.",
+    "ledgerHint": "Para o detalhe de um usuário, abra Usuários e selecione uma conta.",
+    "topupsDesc": "Ordens USDT-TRC20, transferências on-chain pendentes e crédito manual.",
+    "tradingDesc": "Patrimônio e P&L de cada conta de trading de pontos (separado do paper).",
+    "withdrawalsDesc": "Revisar saques: rejeitar para descongelar, ou registrar um hash TokenPocket.",
+    "flagsDesc": "Resumo somente leitura dos feature flags de trading de pontos / saque / TRC20.",
+    "flagsHint": "Os flags são controlados por variáveis de ambiente do servidor; aqui só o estado atual."
   }
 }

@@ -5,13 +5,10 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PointsAccount, PointsUserRow } from "@/types/contracts";
 import { errText } from "@/i18n/errors";
 import { EntryTable, newIdemKey } from "@/pages/PointsPage/PointsPage";
-import { Trc20AdminPanel } from "@/pages/PointsPage/Trc20AdminPanel";
-import { AdminWithdrawPanel } from "@/pages/PointsPage/AdminWithdrawPanel";
-import { AdminTradingPanel } from "@/pages/PointsPage/AdminTradingPanel";
 
 type UserView = PointsAccount & { user: { id: string; name: string; display_name: string } };
 
-/** Admin: look up balances, adjust with password + 2FA and a required reason, export CSV, reconcile. */
+/** Admin Users section: look up balances, adjust with password + 2FA, view that user's ledger. */
 export function AdminPointsPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState("");
@@ -81,8 +78,8 @@ export function AdminPointsPage() {
   return (
     <div className="shell-page settings-page pro-page points-admin">
       <header className="pro-head">
-        <h1>{t("points.admin.title")}</h1>
-        <p>{t("points.admin.subFull")}</p>
+        <h1>{t("admin.nav.users")}</h1>
+        <p>{t("admin.usersDesc")}</p>
       </header>
       {err ? <div className="pro-alert">{err}</div> : null}
       <section className="settings-section">
@@ -100,6 +97,7 @@ export function AdminPointsPage() {
           <div className="pts-tools">
             <a className="td-link" href={marketProvider.adminPointsExportUrl()} download>{t("points.admin.exportAll")}</a>
             <button type="button" className="td-link" onClick={runVerify}>{t("points.admin.verify")}</button>
+            <Link className="td-link" to="/admin/ledger">{t("admin.nav.ledger")} ›</Link>
             <Link className="td-link" to="/points">{t("points.title")} ›</Link>
           </div>
         </div>
@@ -163,9 +161,6 @@ export function AdminPointsPage() {
           <EntryTable entries={sel.entries} admin />
         </section>
       ) : null}
-      <Trc20AdminPanel />
-      <AdminWithdrawPanel />
-      <AdminTradingPanel />
     </div>
   );
 }

@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "管理コンソール",
+    "badge": "Admin",
+    "sub": "ユーザー、ポイント台帳、入金、ポイント取引損益、出金、機能フラグ — 取引画面とは別の管理面。",
+    "navAria": "管理ナビ",
+    "backToBoard": "取引画面へ戻る",
+    "consoleLink": "管理コンソール",
+    "open": "開く",
+    "forbiddenTitle": "アクセス拒否",
+    "forbiddenSub": "管理コンソールを開けるのは管理者のみです。",
+    "nav": {
+      "hub": "概要",
+      "users": "ユーザー",
+      "ledger": "ポイント台帳",
+      "topups": "入金",
+      "trading": "ポイント取引損益",
+      "withdrawals": "出金",
+      "flags": "機能フラグ"
+    },
+    "usersDesc": "残高の照会、パスワード + 2FA での調整、そのユーザーの台帳表示。",
+    "ledgerDesc": "全台帳の照合と CSV エクスポート。",
+    "ledgerHint": "ユーザー単位の明細は「ユーザー」でアカウントを選んでください。",
+    "topupsDesc": "USDT-TRC20 注文、未照合のオンチェーン入金と手動入金。",
+    "tradingDesc": "各ユーザーのポイント取引口座の資産と損益（ペーパー口座とは別）。",
+    "withdrawalsDesc": "出金審査：却下で凍結解除、または TokenPocket の tx ハッシュ登録。",
+    "flagsDesc": "ポイント取引 / 出金 / TRC20 の機能フラグの読み取り専用サマリー。",
+    "flagsHint": "フラグはサーバー環境変数で制御されます。ここには現在の状態のみ表示。"
   }
 }

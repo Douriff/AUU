@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "Console admin",
+    "badge": "Admin",
+    "sub": "Utilisateurs, grand livre de points, recharges, P&L trading points, retraits et feature flags — séparé du tableau de trading.",
+    "navAria": "Navigation admin",
+    "backToBoard": "Retour au board",
+    "consoleLink": "Console admin",
+    "open": "Ouvrir",
+    "forbiddenTitle": "Accès refusé",
+    "forbiddenSub": "Seuls les administrateurs peuvent ouvrir la console admin.",
+    "nav": {
+      "hub": "Vue d'ensemble",
+      "users": "Utilisateurs",
+      "ledger": "Grand livre",
+      "topups": "Recharges",
+      "trading": "P&L trading points",
+      "withdrawals": "Retraits",
+      "flags": "Feature flags"
+    },
+    "usersDesc": "Consulter les soldes, ajuster avec mot de passe + 2FA, et voir le grand livre de l'utilisateur.",
+    "ledgerDesc": "Rapprocher le grand livre complet et exporter en CSV.",
+    "ledgerHint": "Pour le détail d'un utilisateur, ouvrez Utilisateurs et sélectionnez un compte.",
+    "topupsDesc": "Ordres USDT-TRC20, transferts on-chain en attente et crédit manuel.",
+    "tradingDesc": "Capitaux propres et P&L de chaque compte trading points (séparé du paper).",
+    "withdrawalsDesc": "Examiner les retraits : rejeter pour dégeler, ou enregistrer un hash TokenPocket.",
+    "flagsDesc": "Résumé en lecture seule des feature flags trading points / retrait / TRC20.",
+    "flagsHint": "Les flags sont contrôlés par les variables d'environnement serveur ; ici l'état actuel seulement."
   }
 }

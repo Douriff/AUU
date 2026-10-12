@@ -1,5 +1,6 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
+import { AdminShell } from "@/components/layout/AdminShell";
 import { BoardPage } from "@/pages/BoardPage/BoardPage";
 import { ConsolePage } from "@/pages/ConsolePage/ConsolePage";
 import { MarketsPage } from "@/pages/MarketsPage/MarketsPage";
@@ -25,9 +26,52 @@ import { StatusPage } from "@/pages/StatusPage/StatusPage";
 import { NewsPage } from "@/pages/NewsPage/NewsPage";
 import { PointsPage } from "@/pages/PointsPage/PointsPage";
 import { AdminPointsPage } from "@/pages/PointsPage/AdminPointsPage";
+import { Trc20AdminPanel } from "@/pages/PointsPage/Trc20AdminPanel";
+import { AdminWithdrawPanel } from "@/pages/PointsPage/AdminWithdrawPanel";
+import { AdminTradingPanel } from "@/pages/PointsPage/AdminTradingPanel";
+import { AdminHubPage } from "@/pages/AdminPage/AdminHubPage";
+import { AdminLedgerPage } from "@/pages/AdminPage/AdminLedgerPage";
+import { AdminFlagsPanel } from "@/pages/AdminPage/AdminFlagsPanel";
+import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
+  {
+    path: "/admin",
+    element: <AdminShell />,
+    children: [
+      { index: true, element: <AdminHubPage /> },
+      { path: "users", element: <AdminPointsPage /> },
+      { path: "ledger", element: <AdminLedgerPage /> },
+      {
+        path: "topups",
+        element: (
+          <AdminSectionPage>
+            <Trc20AdminPanel />
+          </AdminSectionPage>
+        ),
+      },
+      {
+        path: "trading",
+        element: (
+          <AdminSectionPage>
+            <AdminTradingPanel />
+          </AdminSectionPage>
+        ),
+      },
+      {
+        path: "withdrawals",
+        element: (
+          <AdminSectionPage>
+            <AdminWithdrawPanel />
+          </AdminSectionPage>
+        ),
+      },
+      { path: "flags", element: <AdminFlagsPanel /> },
+      // Back-compat: old /admin/points lived inside the trading shell
+      { path: "points", element: <Navigate to="/admin/users" replace /> },
+    ],
+  },
   {
     path: "/",
     element: <AppShell />,
@@ -59,7 +103,6 @@ export const router = createBrowserRouter([
       { path: "settings", element: <SettingsPage /> },
       { path: "status", element: <StatusPage /> },
       { path: "points", element: <PointsPage /> },
-      { path: "admin/points", element: <AdminPointsPage /> },
     ],
   },
 ]);
