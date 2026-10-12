@@ -24,6 +24,8 @@ import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
 import { PnlPage } from "@/pages/PnlPage/PnlPage";
 import { StatusPage } from "@/pages/StatusPage/StatusPage";
 import { NewsPage } from "@/pages/NewsPage/NewsPage";
+import { AirdropsPage } from "@/pages/AirdropsPage/AirdropsPage";
+import { AirdropDetailPage } from "@/pages/AirdropsPage/AirdropDetailPage";
 import { PointsPage } from "@/pages/PointsPage/PointsPage";
 import { AdminPointsPage } from "@/pages/PointsPage/AdminPointsPage";
 import { Trc20AdminPanel } from "@/pages/PointsPage/Trc20AdminPanel";
@@ -90,6 +92,8 @@ export const router = createBrowserRouter([
       { path: "trade/:mint", element: <LegacyOnly><TradingPage /></LegacyOnly> },
       { path: "majors", element: <MajorsPage /> },
       { path: "news", element: <NewsPage /> },
+      { path: "airdrops", element: <AirdropsPage /> },
+      { path: "airdrops/:id", element: <AirdropDetailPage /> },
       { path: "positions", element: <LegacyOnly><PositionsPage /></LegacyOnly> },
       { path: "leaderboard", element: <LeaderboardPage /> },
       { path: "login", element: <LoginPage /> },

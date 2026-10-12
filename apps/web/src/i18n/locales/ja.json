@@ -472,7 +472,8 @@
       "backtest": "バックテスト",
       "alerts": "アラート"
     },
-    "pnl": "資産/損益"
+    "pnl": "資産/損益",
+    "airdrops": "エアドロ"
   },
   "shell": {
     "source": "データソース {{src}}",
@@ -1420,5 +1421,42 @@
     "withdrawalsDesc": "出金審査：却下で凍結解除、または TokenPocket の tx ハッシュ登録。",
     "flagsDesc": "ポイント取引 / 出金 / TRC20 の機能フラグの読み取り専用サマリー。",
     "flagsHint": "フラグはサーバー環境変数で制御されます。ここには現在の状態のみ表示。"
+  },
+  "airdrops": {
+    "title": "Airdrop Radar",
+    "sub": "Major and community airdrop notes · every item shows its source; open for summary and original link",
+    "cantConnect": "Cannot connect",
+    "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
+    "filterCat": "Category",
+    "filterStatus": "Status",
+    "cat": {
+      "all": "All",
+      "major": "Major",
+      "community": "Community"
+    },
+    "status": {
+      "active": "Active",
+      "upcoming": "Upcoming",
+      "ended": "Ended"
+    },
+    "statusAll": "All statuses",
+    "source": "Source",
+    "sourceLabel": "Source: {{name}}",
+    "viewSource": "Source",
+    "viewOriginal": "View original",
+    "empty": "No airdrop notes yet",
+    "emptyHint": "Try another filter, or check back later.",
+    "pager": "Pagination",
+    "prev": "Prev",
+    "next": "Next",
+    "disclaimer": "For information only — not investment or participation advice. Verify official channels yourself.",
+    "back": "Back to Airdrop Radar",
+    "notFound": "Note not found",
+    "notFoundHint": "It may have been removed, or the link is wrong.",
+    "published": "Published",
+    "updated": "Updated",
+    "chains": "Chains",
+    "tags": "Tags",
+    "summary": "Summary"
   }
 }

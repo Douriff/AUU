@@ -591,6 +591,48 @@ export interface NewsQuery {
   source?: string;
 }
 
+/** 空投雷达 (GET /api/v1/airdrops): curated info cards with source attribution. */
+export type AirdropCategory = "major" | "community";
+export type AirdropStatus = "active" | "upcoming" | "ended";
+export interface AirdropItem {
+  id: string;
+  title: string;
+  projectName: string;
+  category: AirdropCategory;
+  sourceName: string;
+  sourceUrl: string | null;
+  summary: string;
+  chains: string[];
+  status: AirdropStatus;
+  publishedAt: number;
+  updatedAt: number;
+  externalUrl: string | null;
+  tags: string[];
+}
+export interface AirdropsPage {
+  items: AirdropItem[];
+  page: number;
+  size: number;
+  total: number;
+  pages: number;
+  seededAt: number | null;
+  enabled: boolean;
+  categories: AirdropCategory[];
+  statuses: AirdropStatus[];
+  note: string;
+}
+export interface AirdropDetail {
+  item: AirdropItem;
+  enabled: boolean;
+  note: string;
+}
+export interface AirdropsQuery {
+  category?: "all" | AirdropCategory;
+  status?: AirdropStatus;
+  page?: number;
+  size?: number;
+}
+
 /** GET /api/v1/mainstream/signal — AUU proprietary strategy signal (experimental). */
 export type AuuSignalSide = "long" | "short" | "flat";
 export type AuuSignalAction = "enter" | "hold" | "exit" | "none";

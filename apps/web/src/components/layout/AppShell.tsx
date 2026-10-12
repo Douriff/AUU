@@ -47,6 +47,7 @@ const mainstreamNav: NavItem[] = [
   { to: "/performance", label: "performance", icon: "rank", match: (p) => p.startsWith("/performance") },
   { to: "/majors", label: "majors", icon: "globe", match: (p) => p.startsWith("/majors") },
   { to: "/news", label: "news", icon: "news", match: (p) => p.startsWith("/news") },
+  { to: "/airdrops", label: "airdrops", icon: "radar", match: (p) => p.startsWith("/airdrops") },
 ];
 // mobile: 行情 · 交易 · 盈亏 · 策略 · 动态 · 我的 (绩效 is one tap away from the 盈亏 page)
 const mobileTabs: NavItem[] = [
@@ -55,7 +56,7 @@ const mobileTabs: NavItem[] = [
   mainstreamNav[2],
   mainstreamNav[3],
   mainstreamNav[6],
-  { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") },
+  { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") || p.startsWith("/airdrops") },
 ];
 
 function tradeHref(): string {
@@ -176,6 +177,14 @@ function Icon({ name }: { name: string }) {
         <path d="M5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v12.5a1.5 1.5 0 0 0 3 0V9h-3" />
         <path d="M5 4.5v14A1.5 1.5 0 0 0 6.5 20h14" />
         <path d="M8 8.5h6M8 12h6M8 15.5h4" />
+      </>
+    ),
+    radar: (
+      <>
+        <circle cx="12" cy="12" r="2.5" />
+        <path d="M12 5.5a6.5 6.5 0 0 1 6.5 6.5" />
+        <path d="M12 2.5a9.5 9.5 0 0 1 9.5 9.5" />
+        <path d="M12 8.2a3.8 3.8 0 0 1 3.8 3.8" />
       </>
     ),
   };
