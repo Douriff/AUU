@@ -1,12 +1,11 @@
-"""空投雷达: curated airdrop / points-program headlines (info only), including meme-ecosystem notes.
+"""空投雷达: curated seed + RSS-ingested airdrop / points-program headlines (info only).
 
-- P0 data lives in ``seed.json`` next to this module (title, summary, source attribution,
-  original links). No scraping of sites that forbid it; no API keys.
-- Rows are loaded into ``airdrops.sqlite`` on first open (or when the seed file is newer /
-  has new ids). The route only reads the local store.
-- Login required (same pattern as ``app.news``). Never touches points, trading, or withdraw.
-- Off switch: ``AUU_AIRDROPS=off``. Under the test runner (AUU_TEST=1) the store still works
-  when tests point it at a temp path; the env only gates optional background work (none in P0).
+- Curated cold-start: ``seed.json`` (manual attribution). Ongoing: keyword-filtered public RSS
+  (see ``app.airdrops.ingest``), reusing ``app.news`` parse/fetch. No HTML scraping; no API keys.
+- Rows live in ``airdrops.sqlite``. Ingest upserts without wiping curated rows; dedup by id and
+  source_url. Login required. Never touches points, trading, or withdraw.
+- Off switch: ``AUU_AIRDROPS=off``. Ingest: ``AUU_AIRDROPS_INGEST`` (default follows airdrops,
+  off under AUU_TEST=1).
 """
 from __future__ import annotations
 
@@ -49,14 +48,21 @@ CREATE TABLE IF NOT EXISTS items (
   updated_at INTEGER NOT NULL,
   external_url TEXT NOT NULL DEFAULT '',
   tags TEXT NOT NULL DEFAULT '',
-  seed_hash TEXT NOT NULL DEFAULT ''
+  seed_hash TEXT NOT NULL DEFAULT '',
+  origin TEXT NOT NULL DEFAULT 'curated'
 );
 CREATE INDEX IF NOT EXISTS airdrops_cat ON items (category);
 CREATE INDEX IF NOT EXISTS airdrops_status ON items (status);
 CREATE INDEX IF NOT EXISTS airdrops_pub ON items (published_at DESC);
+CREATE INDEX IF NOT EXISTS airdrops_origin ON items (origin);
+CREATE INDEX IF NOT EXISTS airdrops_source_url ON items (source_url);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fetch_log (
+  source TEXT PRIMARY KEY, last_attempt INTEGER, last_ok INTEGER, last_error TEXT, last_added INTEGER,
+  last_items INTEGER, fails INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -185,6 +191,8 @@ def _split_csv(s: str) -> list[str]:
 
 
 def _row_out(r: sqlite3.Row) -> dict[str, Any]:
+    keys = r.keys()
+    origin = r["origin"] if "origin" in keys else ("ingested" if "ingested" in _split_csv(r["tags"]) else "curated")
     return {
         "id": r["id"],
         "title": r["title"],
@@ -199,6 +207,7 @@ def _row_out(r: sqlite3.Row) -> dict[str, Any]:
         "updatedAt": r["updated_at"],
         "externalUrl": r["external_url"] or None,
         "tags": _split_csv(r["tags"]),
+        "origin": origin if origin in {"curated", "ingested"} else "curated",
     }
 
 
@@ -211,8 +220,21 @@ class AirdropStore:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
+        self._migrate()
         self._lock = threading.RLock()
         self.ensure_seeded()
+
+
+    def _migrate(self) -> None:
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(items)").fetchall()}
+        if "origin" not in cols:
+            self._db.execute("ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT 'curated'")
+        self._db.execute(
+            "UPDATE items SET origin='curated' WHERE IFNULL(origin,'')='' AND IFNULL(seed_hash,'')!=''"
+        )
+        self._db.execute(
+            "UPDATE items SET origin='ingested' WHERE IFNULL(origin,'')='' AND (','||IFNULL(tags,'')||',') LIKE '%,ingested,%'"
+        )
 
     def close(self) -> None:
         with self._lock:
@@ -241,12 +263,15 @@ class AirdropStore:
                 for i in items:
                     self._db.execute(
                         "INSERT INTO items(id, title, project_name, category, source_name, source_url, summary, chains, "
-                        "status, published_at, updated_at, external_url, tags, seed_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "status, published_at, updated_at, external_url, tags, seed_hash, origin) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         "ON CONFLICT(id) DO UPDATE SET title=excluded.title, project_name=excluded.project_name, "
                         "category=excluded.category, source_name=excluded.source_name, source_url=excluded.source_url, "
                         "summary=excluded.summary, chains=excluded.chains, status=excluded.status, "
                         "published_at=excluded.published_at, updated_at=excluded.updated_at, "
-                        "external_url=excluded.external_url, tags=excluded.tags, seed_hash=excluded.seed_hash",
+                        "external_url=excluded.external_url, tags=excluded.tags, seed_hash=excluded.seed_hash, "
+                        "origin='curated' "
+                        "WHERE items.origin='curated' OR items.seed_hash!='' OR items.origin IS NULL OR items.origin=''",
                         (
                             i["id"],
                             i["title"],
@@ -262,6 +287,7 @@ class AirdropStore:
                             i["external_url"],
                             i["tags"],
                             fp,
+                            "curated",
                         ),
                     )
                     n += 1
@@ -278,6 +304,7 @@ class AirdropStore:
         *,
         category: str = "all",
         status: Optional[str] = None,
+        origin: Optional[str] = None,
         page: int = 1,
         size: int = 20,
     ) -> dict[str, Any]:
@@ -289,6 +316,9 @@ class AirdropStore:
         if status:
             where.append("status = ?")
             args.append(status)
+        if origin in {"curated", "ingested"}:
+            where.append("origin = ?")
+            args.append(origin)
         w = (" WHERE " + " AND ".join(where)) if where else ""
         with self._lock:
             total = int(self._db.execute(f"SELECT COUNT(*) FROM items{w}", args).fetchone()[0])
@@ -297,6 +327,8 @@ class AirdropStore:
                 (*args, size, (page - 1) * size),
             ).fetchall()
             seeded_at = self._meta_get("seeded_at")
+            logs = {r["source"]: dict(r) for r in self._db.execute("SELECT * FROM fetch_log")}
+            last_ingest = self._meta_get("last_ingest_ok")
         items = [_row_out(r) for r in rows]
         return {
             "items": items,
@@ -305,7 +337,102 @@ class AirdropStore:
             "total": total,
             "pages": max(1, -(-total // size)) if total else 1,
             "seededAt": int(seeded_at) if seeded_at and seeded_at.isdigit() else None,
+            "lastIngestAt": int(last_ingest) if last_ingest and last_ingest.isdigit() else None,
+            "feeds": _feed_status(logs),
         }
+
+
+    def upsert_ingested(self, rows: list[dict[str, Any]]) -> tuple[int, int]:
+        """Insert/update ingested rows. Never overwrites curated. Dedup by id and source_url.
+        Returns (newly_inserted, skipped). Updates to existing ingested rows are not counted as inserted."""
+        if not rows:
+            return 0, 0
+        added = skipped = 0
+        with self._lock:
+            self._db.execute("BEGIN")
+            try:
+                for i in rows:
+                    url = i.get("source_url") or ""
+                    if url:
+                        hit = self._db.execute(
+                            "SELECT id, origin, seed_hash FROM items WHERE source_url=? LIMIT 1", (url,)
+                        ).fetchone()
+                        if hit is not None and hit["id"] != i["id"]:
+                            skipped += 1
+                            continue
+                    existing = self._db.execute(
+                        "SELECT origin, seed_hash FROM items WHERE id=?", (i["id"],)
+                    ).fetchone()
+                    if existing is not None and (
+                        existing["origin"] == "curated" or (existing["seed_hash"] or "")
+                    ):
+                        skipped += 1
+                        continue
+                    vals = (
+                        i["id"], i["title"], i["project_name"], i["category"], i["source_name"], i["source_url"],
+                        i["summary"], i.get("chains") or "", i["status"], int(i["published_at"]), int(i["updated_at"]),
+                        i["external_url"], i["tags"], "", "ingested",
+                    )
+                    if existing is None:
+                        self._db.execute(
+                            "INSERT INTO items(id, title, project_name, category, source_name, source_url, summary, chains, "
+                            "status, published_at, updated_at, external_url, tags, seed_hash, origin) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            vals,
+                        )
+                        added += 1
+                    else:
+                        self._db.execute(
+                            "UPDATE items SET title=?, project_name=?, category=?, source_name=?, source_url=?, summary=?, "
+                            "chains=?, status=?, published_at=?, updated_at=?, external_url=?, tags=?, origin='ingested' "
+                            "WHERE id=? AND origin='ingested' AND IFNULL(seed_hash,'')=''",
+                            (
+                                i["title"], i["project_name"], i["category"], i["source_name"], i["source_url"],
+                                i["summary"], i.get("chains") or "", i["status"], int(i["published_at"]),
+                                int(i["updated_at"]), i["external_url"], i["tags"], i["id"],
+                            ),
+                        )
+                        skipped += 1  # already known
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+        return added, skipped
+
+    def prune_ingested(self, now_ms: int) -> int:
+        """Drop old ingested rows only (curated kept)."""
+        from app.airdrops.ingest import RETAIN_INGESTED_DAYS, RETAIN_INGESTED_ROWS
+
+        with self._lock:
+            before = self._db.total_changes
+            cutoff = now_ms - RETAIN_INGESTED_DAYS * 86_400_000
+            self._db.execute(
+                "DELETE FROM items WHERE origin='ingested' AND IFNULL(seed_hash,'')='' AND published_at < ?",
+                (cutoff,),
+            )
+            # cap ingested count
+            self._db.execute(
+                "DELETE FROM items WHERE origin='ingested' AND IFNULL(seed_hash,'')='' AND id NOT IN ("
+                "SELECT id FROM items WHERE origin='ingested' AND IFNULL(seed_hash,'')='' "
+                "ORDER BY published_at DESC LIMIT ?)",
+                (RETAIN_INGESTED_ROWS,),
+            )
+            return self._db.total_changes - before
+
+    def log_fetch(self, source: str, *, now_ms: int, ok: bool, error: str = "", added: int = 0, items: int = 0) -> None:
+        with self._lock:
+            self._db.execute("INSERT OR IGNORE INTO fetch_log(source, fails) VALUES (?, 0)", (source,))
+            if ok:
+                self._db.execute(
+                    "UPDATE fetch_log SET last_attempt=?, last_ok=?, last_error=NULL, last_added=?, last_items=?, fails=0 WHERE source=?",
+                    (now_ms, now_ms, added, items, source),
+                )
+                self._meta_set("last_ingest_ok", str(now_ms))
+            else:
+                self._db.execute(
+                    "UPDATE fetch_log SET last_attempt=?, last_error=?, fails=fails+1 WHERE source=?",
+                    (now_ms, error[:200], source),
+                )
 
     def get(self, item_id: str) -> Optional[dict[str, Any]]:
         iid = (item_id or "").strip()
@@ -314,6 +441,28 @@ class AirdropStore:
         with self._lock:
             row = self._db.execute("SELECT * FROM items WHERE id=?", (iid,)).fetchone()
         return _row_out(row) if row else None
+
+
+
+def _feed_status(logs: dict[str, dict]) -> list[dict[str, Any]]:
+    try:
+        from app.airdrops.ingest import FEED_SOURCES, enabled_feeds
+    except Exception:
+        return []
+    out = []
+    for sid in enabled_feeds():
+        s, lg = FEED_SOURCES[sid], logs.get(sid) or {}
+        out.append({
+            "id": sid,
+            "name": s["name"],
+            "home": s["home"],
+            "lastOkAt": lg.get("last_ok"),
+            "lastAttemptAt": lg.get("last_attempt"),
+            "ok": bool(lg.get("last_ok")) and not lg.get("last_error"),
+            "fails": lg.get("fails") or 0,
+            "error": (lg.get("last_error") or "").split(":", 1)[0][:40] or None,
+        })
+    return out
 
 
 _STORE: Optional[AirdropStore] = None

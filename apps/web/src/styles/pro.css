@@ -1131,6 +1131,11 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .ad-badge.ad-st.is-active { background: var(--accent-bg); color: var(--accent); }
 .ad-badge.ad-st.is-upcoming { background: rgba(90, 160, 255, 0.12); color: #7eb6ff; }
 .ad-badge.ad-st.is-ended { background: var(--panel2); color: var(--muted); }
+.ad-badge.ad-ing { background: rgba(120, 180, 255, 0.14); color: #9ec5ff; }
+.ad-feeds { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ad-feed-st { display: inline-flex; align-items: center; gap: 5px; }
+.ad-feed-st a { color: var(--text2); text-decoration: none; }
+.ad-feed-st a:hover { color: var(--accent); }
 .ad-title { margin: 0 0 4px; font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--text); }
 .ad-card-link:hover .ad-title { color: var(--accent); }
 .ad-project { margin: 0 0 6px; font-size: 13px; color: var(--accent); font-weight: 600; }

@@ -594,6 +594,7 @@ export interface NewsQuery {
 /** 空投雷达 (GET /api/v1/airdrops): curated info cards with source attribution. */
 export type AirdropCategory = "major" | "community" | "meme";
 export type AirdropStatus = "active" | "upcoming" | "ended";
+export type AirdropOrigin = "curated" | "ingested";
 export interface AirdropItem {
   id: string;
   title: string;
@@ -608,6 +609,17 @@ export interface AirdropItem {
   updatedAt: number;
   externalUrl: string | null;
   tags: string[];
+  origin: AirdropOrigin;
+}
+export interface AirdropFeedStatus {
+  id: string;
+  name: string;
+  home: string;
+  lastOkAt: number | null;
+  lastAttemptAt: number | null;
+  ok: boolean;
+  fails: number;
+  error: string | null;
 }
 export interface AirdropsPage {
   items: AirdropItem[];
@@ -616,7 +628,11 @@ export interface AirdropsPage {
   total: number;
   pages: number;
   seededAt: number | null;
+  lastIngestAt: number | null;
+  feeds: AirdropFeedStatus[];
   enabled: boolean;
+  ingestEnabled: boolean;
+  ingestIntervalSec: number;
   categories: AirdropCategory[];
   statuses: AirdropStatus[];
   note: string;
@@ -629,6 +645,7 @@ export interface AirdropDetail {
 export interface AirdropsQuery {
   category?: "all" | AirdropCategory;
   status?: AirdropStatus;
+  origin?: AirdropOrigin;
   page?: number;
   size?: number;
 }

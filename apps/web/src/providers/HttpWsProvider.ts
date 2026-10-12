@@ -419,6 +419,7 @@ export class HttpWsProvider {
     p.set("size", String(q.size ?? 20));
     if (q.category) p.set("category", q.category);
     if (q.status) p.set("status", q.status);
+    if (q.origin) p.set("origin", q.origin);
     return getJson(`/api/v1/airdrops?${p}`);
   }
 

@@ -118,6 +118,10 @@ def _make_lifespan(legacy: bool):
 
             if news_enabled():
                 tasks.append(asyncio.create_task(news_loop(), name="news"))
+            from app.airdrops.ingest import ingest_enabled, run_loop as airdrops_ingest_loop
+
+            if ingest_enabled():
+                tasks.append(asyncio.create_task(airdrops_ingest_loop(), name="airdrops-ingest"))
         try:
             yield
         finally:
@@ -219,7 +223,7 @@ def root(legacy: bool = False):
                     "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
                     "auuSignal": "GET /api/v1/mainstream/signal?symbol=&tf=1d (auu_signal_v0 experimental overlay; shadow record-only)",
                     "news": "GET /api/v1/news?page=&size=&coin=&focus=&important= (行业动态: RSS headlines, login required)",
-                    "airdrops": "GET /api/v1/airdrops?category=all|major|community&status= (空投雷达: curated info, login required)",
+                    "airdrops": "GET /api/v1/airdrops?category=all|major|community|meme&status=&origin= (空投雷达: curated+RSS ingest, login required)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

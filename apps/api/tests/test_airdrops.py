@@ -174,6 +174,7 @@ class RouteTests(unittest.TestCase):
             "updatedAt",
             "externalUrl",
             "tags",
+            "origin",
         ):
             self.assertIn(key, it)
         self.assertTrue(it["sourceName"])
