@@ -1,21 +1,4 @@
-/** First-visit splash. Key is local so clearing site data re-shows it. */
-export const SPLASH_SEEN_KEY = "auu.splash.seen";
-
-export function splashSeen(): boolean {
-  try {
-    return window.localStorage.getItem(SPLASH_SEEN_KEY) === "1";
-  } catch {
-    return true; // storage blocked → skip splash
-  }
-}
-
-export function markSplashSeen(): void {
-  try {
-    window.localStorage.setItem(SPLASH_SEEN_KEY, "1");
-  } catch {
-    /* ignore */
-  }
-}
+/** Splash prefs — no persisted "seen" gate; every full page load shows intro. */
 
 export function prefersReducedMotion(): boolean {
   try {

@@ -1,23 +1,23 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { markSplashSeen, prefersReducedMotion, splashSeen } from "./splashPrefs";
+import { prefersReducedMotion } from "./splashPrefs";
 import "./splash.css";
 
 const SplashCanvas = lazy(() => import("./SplashCanvas"));
 
-const HOLD_AFTER_MORPH_MS = 2800;
+const HOLD_AFTER_MORPH_MS = 3500;
 const MORPH_MS = 2400;
 const FAILSAFE_MS = 12000;
 
 type Props = { children: React.ReactNode };
 
 /**
- * First-visit fullscreen intro. Does not block API/auth; overlays the app until
- * skip / enter / auto-finish, then unmounts WebGL.
+ * Fullscreen intro on every full page load. Skip/Enter dismiss for this load only
+ * (no localStorage). Does not block API/auth; unmounts WebGL on finish.
  */
 export function SplashIntro({ children }: Props) {
   const { t } = useTranslation();
-  const [show, setShow] = useState(() => !splashSeen());
+  const [show, setShow] = useState(true);
   const [useParticles, setUseParticles] = useState(false);
   const closing = useRef(false);
 
@@ -29,7 +29,6 @@ export function SplashIntro({ children }: Props) {
   const finish = useCallback(() => {
     if (closing.current) return;
     closing.current = true;
-    markSplashSeen();
     setShow(false);
     setUseParticles(false); // drop lazy canvas → dispose
   }, []);
