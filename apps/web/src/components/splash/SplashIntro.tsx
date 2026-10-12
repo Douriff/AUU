@@ -5,9 +5,9 @@ import "./splash.css";
 
 const SplashCanvas = lazy(() => import("./SplashCanvas"));
 
-const HOLD_AFTER_MORPH_MS = 3500;
-const MORPH_MS = 2400;
-const FAILSAFE_MS = 12000;
+const HOLD_AFTER_MORPH_MS = 3200;
+const MORPH_MS = 5800; // brain + spill + coalesce
+const FAILSAFE_MS = 16000;
 
 type Props = { children: React.ReactNode };
 

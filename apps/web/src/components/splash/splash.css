@@ -14,9 +14,14 @@
   overflow: hidden;
 }
 .auu-splash-canvas,
+.auu-splash-canvas-host,
 .auu-splash-stage > div {
   width: 100% !important;
   height: 100% !important;
+}
+.auu-splash-canvas-host {
+  position: absolute;
+  inset: 0;
 }
 .auu-splash-static {
   display: grid;

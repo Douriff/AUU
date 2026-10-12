@@ -1,16 +1,21 @@
-# Splash intro (every visit)
+# Splash intro — cyber-brain (every visit)
 
-Fullscreen particle morph (MIT `3d-shape-particle-text` + `three`) into **AUUTRADE**, with a short Chinese/English intro and always-visible enter/skip.
+Custom Three.js holographic **cyber-brain** intro: neural mesh + floating hex/digit data streams, mouse-reactive spill, then particles coalesce into **AUUTRADE**.
 
 ## Behaviour
 
-- Shows on **every full page load** (no `localStorage` / `sessionStorage` "seen" gate).
-- **Verify:** reload https://auutrade.com — splash plays again.
-- Skip / Enter / Esc / Enter key / auto after morph+hold (~6s) / 12s failsafe → unmount canvas (package cancels rAF and disposes Three.js resources). Dismiss lasts for this page load only.
+- Plays on **every full page load** (no storage gate).
+- Timeline: brain (~2.2s) → data spill (~1.4s) → morph to text (~2.2s) → hold, then auto-enter.
+- Mouse move scatters / overflows data while the brain is live.
+- Skip / Enter / Esc / failsafe → unmount canvas and dispose WebGL (rAF cancel + geometry/material/renderer dispose).
 - `prefers-reduced-motion: reduce` → static branded panel, no WebGL.
-- Mobile: lower `particleCount`, dpr cap, no globe wireframe.
+- Mobile: lower particle/digit counts, dpr ≤ 1.5.
 - Frontend-only; does not gate login or API.
+
+## Verify
+
+Reload https://auutrade.com — splash plays again with brain → spill → AUUTRADE.
 
 ## Chunk
 
-`SplashCanvas` is `React.lazy` so Three.js loads with the splash overlay each visit, then is disposed when the overlay closes.
+`SplashCanvas` is `React.lazy`; engine lives in `cyberBrainEngine.ts` (three only).
