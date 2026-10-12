@@ -121,7 +121,9 @@
     "no": "无",
     "cancel": "取消",
     "confirm": "确认",
-    "none": "暂无"
+    "none": "暂无",
+    "on": "开",
+    "off": "关"
   },
   "auth": {
     "email": "邮箱",
@@ -977,7 +979,8 @@
       "max": "超过单笔上限 {{v}} USDT",
       "cash": "可用资金不足",
       "posCap": "超过单币持仓上限 {{v}} USDT",
-      "noShort": "可卖数量不足（不能做空）"
+      "noShort": "可卖数量不足（不能做空）",
+      "points": "可用积分不足"
     },
     "msg": {
       "oco": "OCO 止盈止损",
@@ -988,7 +991,13 @@
       "filledSell": "纸面卖出 {{qty}} {{sym}} @ {{px}}，手续费 {{fee}} USDT",
       "limitBuy": "限价单已挂出：买 {{qty}} @ {{px}}",
       "limitSell": "限价单已挂出：卖 {{qty}} @ {{px}}"
-    }
+    },
+    "branch": "交易账户",
+    "branchPaper": "纸面/模拟",
+    "branchPoints": "积分交易",
+    "pointsOff": "积分交易暂未开放（AUU_POINTS_TRADING）",
+    "pts": "积分",
+    "limitsNotePoints": "可用 {{cash}} 积分（1 USDT = {{rate}} 积分）· 单笔上限 {{order}} USDT · 单币持仓上限 {{pos}} USDT"
   },
   "mode": {
     "paperTitle": "所有成交均为纸面模拟；实盘交易已锁定，不会动用真实资金",
@@ -1124,7 +1133,13 @@
       "topup": "充值",
       "spend": "消费",
       "adjust": "管理员调整",
-      "refund": "退款"
+      "refund": "退款",
+      "points_trade_buy": "积分交易买入",
+      "points_trade_sell": "积分交易卖出",
+      "points_trade_fee": "积分交易手续费",
+      "withdraw_freeze": "提现冻结",
+      "withdraw_unfreeze": "提现解冻",
+      "withdraw_complete": "提现完成"
     },
     "op": {
       "user": "本人",
@@ -1164,12 +1179,20 @@
       "next": "下一步",
       "confirm": "确认给 {{name}} 调整 {{n}} 积分？调整后余额 {{after}}。",
       "confirmBtn": "确认调整",
-      "done": "已调整，当前余额 {{balance}}"
+      "done": "已调整，当前余额 {{balance}}",
+      "subFull": "用户、积分流水、充值、积分交易盈亏、提现审核、功能开关。调整积分需密码 + 两步验证。",
+      "tradingTitle": "积分交易盈亏",
+      "tradingSub": "各用户积分交易账户的权益与盈亏（与纸面账户分开）。",
+      "tradingFlags": "开关 {{on}} · 仅管理员 {{adminOnly}} · 1 USDT = {{rate}} 积分",
+      "flagsLine": "功能开关：积分交易 {{trading}}（{{tradingAdmin}}）· 提现 {{withdraw}}（{{withdrawAdmin}}）· TRC20 充值 {{trc20}}"
     },
     "rule": {
       "inApp": "积分只能在平台内消费（开会员、解锁功能）。",
       "noWithdraw": "积分不能提现，也不能转让给其他用户。",
-      "separate": "纸面交易盈亏只影响模拟资金，不会增减积分。"
+      "separate": "纸面交易盈亏只影响模拟资金，不会增减积分。",
+      "withdrawOn": "提现已开放：申请后会先冻结积分，管理员人工打款 USDT-TRC20 并登记交易哈希。",
+      "tradingOn": "积分交易已开放：用可用积分作为本金，盈亏计入积分；与纸面账户完全分开。",
+      "tradingOff": "积分交易默认关闭；开启后也不会动用纸面模拟资金。"
     }
   },
   "usdt": {
@@ -1289,5 +1312,58 @@
     "footnote": "已实现盈亏已扣除手续费；今日盈亏 = 当前总资产 − 北京时间 0 点的总资产。这里只统计你的手动纸面交易，不含策略纸面盘和 H2。",
     "stripAria": "查看我的资产与盈亏",
     "details": "详情"
+  },
+  "withdraw": {
+    "title": "提现",
+    "closed": "提现暂未开放",
+    "intro": "把积分换成 USDT（TRC20）：1 USDT = {{rate}} 积分，单笔 {{min}}–{{max}} USDT，每天最多 {{daily}} USDT。",
+    "manualNote": "管理员用 TokenPocket 人工打款（私钥永不进服务器）。申请后积分先冻结；打款后登记交易哈希并链上校验。",
+    "amountLabel": "提现金额（USDT，{{min}}–{{max}} 的整数）",
+    "preview": "{{usdt}} USDT ← {{points}} 积分（将冻结）",
+    "address": "你的 TRC20 收款地址",
+    "agree": "我已了解：只支持 TRC20 网络；地址填错可能导致资产丢失；打款由管理员人工完成，不是自动转账。",
+    "apply": "申请提现",
+    "applied": "已申请，冻结 {{points}} 积分；当前余额 {{balance}}",
+    "history": "提现记录",
+    "noRequests": "还没有提现申请",
+    "col": {
+      "usdt": "金额（USDT）",
+      "status": "状态",
+      "tx": "链上交易"
+    },
+    "status": {
+      "pending": "待审核",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "admin": {
+      "title": "提现审核",
+      "sub": "先在 TokenPocket 向用户地址打 USDT-TRC20，再粘贴交易哈希；服务器只做链上校验，从不持有私钥。",
+      "flags": "开关 {{on}} · 仅管理员 {{adminOnly}} · 1 USDT = {{rate}} · 单笔 {{min}}–{{max}}",
+      "handle": "处理",
+      "payHint": "请先用 TokenPocket 完成打款，再粘贴 64 位交易哈希完成入账校验。拒绝将解冻积分。",
+      "txHash": "打款交易哈希",
+      "completeBtn": "校验并完成",
+      "rejectBtn": "拒绝并解冻",
+      "done": "已处理"
+    }
+  },
+  "errors": {
+    "WITHDRAW_OFF": "提现暂未开放",
+    "WITHDRAW_BAD_AMOUNT": "提现金额不在允许范围内",
+    "WITHDRAW_BAD_ADDRESS": "TRC20 地址不正确",
+    "WITHDRAW_TOO_MANY_PENDING": "待处理提现太多，请先等待审核",
+    "WITHDRAW_DAILY_LIMIT": "已超过今日提现上限",
+    "WITHDRAW_UNKNOWN": "没有这笔提现申请",
+    "WITHDRAW_NOT_PENDING": "这笔提现已处理过",
+    "WITHDRAW_BAD_TX": "交易哈希格式不正确",
+    "WITHDRAW_TX_USED": "这笔链上交易已用于另一笔提现",
+    "WITHDRAW_TX_NOT_FOUND": "链上找不到这笔 USDT 转账",
+    "WITHDRAW_TX_AMOUNT": "链上金额与提现申请不一致",
+    "WITHDRAW_TX_VERIFY": "链上校验不通过",
+    "POINTS_TRADING_OFF": "积分交易暂未开放",
+    "INSUFFICIENT_POINTS": "可用积分不足"
   }
 }

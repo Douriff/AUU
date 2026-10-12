@@ -224,7 +224,9 @@ class UserApiTests(_Api):
         self.assertEqual(me.status_code, 200, me.text)
         d = me.json()["data"]
         self.assertEqual((d["balance"], d["entries"], d["topup"]["open"]), (0, [], False))
-        self.assertEqual(d["rules"], {"withdraw": False, "transfer": False, "separateFromPaper": True})
+        self.assertEqual(d["rules"], {"withdraw": False, "transfer": False, "separateFromPaper": True, "pointsTrading": False})
+        self.assertFalse(d["withdraw"]["enabled"])
+        self.assertFalse(d["pointsTrading"]["enabled"])
         self.assertFalse(d["shop"]["enabled"])
         self.assertFalse(d["entitlements"]["example_badge"]["active"])
         r = self.user.post("/api/v1/points/topup", json={"provider": "alipay", "points": 100, "idempotency_key": K})
@@ -232,10 +234,14 @@ class UserApiTests(_Api):
         r = self.user.post("/api/v1/points/spend", json={"item": "example_badge", "idempotency_key": K})
         self.assertEqual(r.json()["error"]["code"], "POINTS_SHOP_OFF")
 
-    def test_no_withdraw_or_transfer_routes(self):
+    def test_no_transfer_routes_withdraw_default_off(self):
         paths = list(self.app.openapi()["paths"])
         self.assertTrue(any(p.startswith("/api/v1/points/") for p in paths))
-        self.assertFalse([p for p in paths if re.search(r"(?i)withdraw|transfer|cashout|payout", p)])
+        self.assertFalse([p for p in paths if re.search(r"(?i)transfer|cashout", p)])
+        # Withdrawal routes exist but are gated OFF by AUU_WITHDRAW_ENABLED (default).
+        self.assertTrue(any("withdraw" in p for p in paths))
+        r = self.user.post("/api/v1/points/withdraw", json={"usdt": 10, "address": "T" + "x" * 33, "idempotency_key": K})
+        self.assertIn(r.json()["error"]["code"], ("WITHDRAW_OFF", "WITHDRAW_BAD_ADDRESS", "POINTS_IDEMPOTENCY_REQUIRED"))
 
     def test_login_and_admin_required(self):
         anon = self.TC(self.app, headers=UA)
@@ -417,7 +423,11 @@ class SeparationTests(_Api):
 
     def test_points_code_does_not_import_paper_or_strategy(self):
         root = Path(__file__).resolve().parents[1] / "app"
+        # trading.py intentionally reuses paper fill helpers; paper code must still never import points.
+        skip = {"trading.py"}
         for p in list((root / "points").glob("*.py")) + [root / "routes" / "points.py"]:
+            if p.name in skip:
+                continue
             text = p.read_text(encoding="utf-8")
             self.assertNotRegex(text, r"from app\.(paper|strategies|legacy|backtest|live)|import app\.(paper|strategies|legacy)", p.name)
         for p in list((root / "paper").glob("*.py")):

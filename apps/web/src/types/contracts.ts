@@ -1373,7 +1373,7 @@ export interface PublicStatus {
 export interface PointsEntry {
   id: number;
   ts: number;
-  kind: "topup" | "spend" | "adjust" | "refund";
+  kind: "topup" | "spend" | "adjust" | "refund" | "points_trade_buy" | "points_trade_sell" | "points_trade_fee" | "withdraw_freeze" | "withdraw_unfreeze" | "withdraw_complete";
   amount: number;
   balance_after: number;
   reason: string;
@@ -1391,14 +1391,50 @@ export interface PointsTopupStatus {
   providers: { id: string; enabled: boolean; userInitiated: boolean; testOnly: boolean; implemented: boolean }[];
 }
 
+export interface PointsFeatureConfig {
+  enabled: boolean;
+  adminOnly?: boolean;
+  rate?: number;
+  min?: number;
+  max?: number;
+  dailyMax?: number;
+  maxPending?: number;
+  network?: string;
+  token?: string;
+  contract?: string;
+  manualPayout?: boolean;
+  privateKeyOnServer?: boolean;
+  currency?: string;
+  quote?: string;
+  manualOnly?: boolean;
+  autoStrategy?: boolean;
+}
+
+export interface WithdrawRequest {
+  id: string;
+  userId: string;
+  points: number;
+  usdt: number;
+  amountUsdt: string;
+  address: string;
+  status: "pending" | "approved" | "rejected" | "completed" | "cancelled";
+  createdAt: number;
+  updatedAt: number;
+  txHash?: string | null;
+  note?: string;
+  userName?: string;
+}
+
 export interface PointsAccount {
   balance: number;
   entries: PointsEntry[];
   hasMore: boolean;
   entitlements: Record<string, { active: boolean; until: number | null }>;
   shop: { enabled: boolean; items: { id: string; cost: number; days: number; example: boolean }[] };
-  rules: { withdraw: boolean; transfer: boolean; separateFromPaper: boolean };
+  rules: { withdraw: boolean; transfer: boolean; separateFromPaper: boolean; pointsTrading?: boolean };
   topup?: PointsTopupStatus;
+  withdraw?: PointsFeatureConfig;
+  pointsTrading?: PointsFeatureConfig;
 }
 
 export interface PointsUserRow {

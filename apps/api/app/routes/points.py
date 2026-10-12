@@ -6,7 +6,8 @@ Admin:  GET  /admin/points/users · GET /admin/points/user/{id} · GET /admin/po
         POST /admin/points/adjust · POST /admin/points/manual-topup · POST /admin/points/refund
 Every admin write needs password + 2FA (admin_step_up) and a reason; every write needs an
 idempotency key (header Idempotency-Key or body idempotency_key). All attempts are audited.
-There is no withdrawal and no transfer endpoint.
+Withdrawal and points-trading admin endpoints are gated by env flags (default off).
+There is no user-to-user transfer endpoint.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from app.auth.accounts import admin_step_up, allow_attempt, auth_enabled, list_users, user_by_id
-from app.points import providers, service, trc20
+from app.points import providers, service, trc20, trading as points_trading, withdraw as points_withdraw
 from app.points.ledger import PointsError, get_points_ledger
 from app.routes.auth import _ip, session_user
 from app.routes.envelope import err, ok
@@ -62,11 +63,26 @@ _MESSAGES = {
     "TRC20_BUSY": "该金额暂时无法下单，请换一个金额",
     "TRC20_UNKNOWN_TX": "没有这笔链上交易",
     "TRC20_NOT_PENDING": "这笔交易已处理过",
+    "WITHDRAW_OFF": "提现暂未开放",
+    "WITHDRAW_BAD_AMOUNT": "提现金额不在允许范围内",
+    "WITHDRAW_BAD_ADDRESS": "TRC20 地址不正确",
+    "WITHDRAW_TOO_MANY_PENDING": "待处理提现太多，请先等待审核",
+    "WITHDRAW_DAILY_LIMIT": "已超过今日提现上限",
+    "WITHDRAW_UNKNOWN": "没有这笔提现申请",
+    "WITHDRAW_NOT_PENDING": "这笔提现已处理过",
+    "WITHDRAW_BAD_TX": "交易哈希格式不正确",
+    "WITHDRAW_TX_USED": "这笔链上交易已用于另一笔提现",
+    "WITHDRAW_TX_NOT_FOUND": "链上找不到这笔 USDT 转账",
+    "WITHDRAW_TX_AMOUNT": "链上金额与提现申请不一致",
+    "WITHDRAW_TX_VERIFY": "链上校验不通过",
+    "POINTS_TRADING_OFF": "积分交易暂未开放",
 }
 _STATUS = {"TRC20_TOO_MANY_PENDING": 429, "TRC20_DAILY_LIMIT": 429, "TRC20_UNKNOWN_TX": 404, "TRC20_NOT_PENDING": 409,
            "AUTH_REQUIRED": 401, "BAD_LOGIN": 401, "TOTP_BAD": 401, "FORBIDDEN": 403, "POINTS_2FA_REQUIRED": 403,
            "UNKNOWN_USER": 404, "RATE_LIMIT": 429, "POINTS_IDEMPOTENCY_CONFLICT": 409, "POINTS_TOPUP_CLOSED": 403,
-           "POINTS_MANUAL_OFF": 403, "POINTS_SHOP_OFF": 403}
+           "POINTS_MANUAL_OFF": 403, "POINTS_SHOP_OFF": 403, "WITHDRAW_OFF": 403, "WITHDRAW_TOO_MANY_PENDING": 429,
+           "WITHDRAW_DAILY_LIMIT": 429, "WITHDRAW_UNKNOWN": 404, "WITHDRAW_NOT_PENDING": 409, "WITHDRAW_TX_USED": 409,
+           "WITHDRAW_TX_NOT_FOUND": 404, "POINTS_TRADING_OFF": 403}
 
 
 def _e(code: str):
@@ -112,7 +128,8 @@ def _text(raw: dict, key: str) -> str:
 
 def _safe_detail(raw: dict) -> dict:
     """Request fields worth keeping in the audit log (never the password or 2FA code)."""
-    return {k: raw.get(k) for k in ("user_id", "amount", "points", "reason", "entry_id", "item", "provider", "external_ref") if k in raw}
+    return {k: raw.get(k) for k in ("user_id", "amount", "points", "reason", "entry_id", "item", "provider", "external_ref",
+                                    "address", "usdt", "tx_hash", "request_id") if k in raw}
 
 
 # ---- user -------------------------------------------------------------------------------------------
@@ -121,8 +138,12 @@ def points_me(request: Request, limit: int = Query(50, ge=1, le=200), before: Op
     actor, bad = _who(request)
     if bad is not None:
         return bad
-    view = service.account_view(str(actor["id"]), limit=limit, before_id=before)
-    return ok({**view, "topup": providers.topup_status(bool(actor.get("is_admin"))), "liveEnabled": False})
+    is_admin = bool(actor.get("is_admin"))
+    view = service.account_view(str(actor["id"]), limit=limit, before_id=before, admin=is_admin)
+    # public_config for the caller (admin gets adminOnly channels)
+    view["withdraw"] = points_withdraw.public_config(is_admin)
+    view["pointsTrading"] = points_trading.public_config(is_admin)
+    return ok({**view, "topup": providers.topup_status(is_admin), "liveEnabled": False})
 
 
 @router.get("/points/topup")
@@ -451,3 +472,169 @@ async def admin_points_trc20_dismiss(request: Request):
         return _e(str(exc))
     _audit(request, f"admin:{aid}", "trc20_dismiss", "ok", tx, {"reason": raw.get("reason")})
     return ok({"transfer": trc20.tx_view(row)})
+
+
+# ---- withdrawal (default off) -------------------------------------------------------------------
+@router.get("/points/withdraw")
+def points_withdraw_status(request: Request):
+    actor, bad = _who(request)
+    if bad is not None:
+        return bad
+    is_admin = bool(actor.get("is_admin"))
+    rows = points_withdraw.user_requests(str(actor["id"]), 30)
+    return ok({"config": points_withdraw.public_config(is_admin),
+               "requests": [points_withdraw.request_view(r) for r in rows]})
+
+
+@router.post("/points/withdraw")
+async def points_withdraw_apply(request: Request):
+    actor, bad = _who(request)
+    if bad is not None:
+        return bad
+    raw = await _body(request)
+    if raw is None:
+        return _e("BAD_BODY")
+    uid = str(actor["id"])
+    if not allow_attempt(f"withdraw:{uid}"):
+        _audit(request, f"user:{uid}", "withdraw_apply", "RATE_LIMIT", uid)
+        return _e("RATE_LIMIT")
+    try:
+        row, replayed = await run_in_threadpool(
+            points_withdraw.apply, uid, raw.get("usdt"), raw.get("address"), _idem(request, raw),
+            is_admin=bool(actor.get("is_admin")))
+    except PointsError as exc:
+        _audit(request, f"user:{uid}", "withdraw_apply", str(exc), uid, _safe_detail(raw))
+        return _e(str(exc))
+    _audit(request, f"user:{uid}", "withdraw_apply", "replayed" if replayed else "ok", uid,
+           {"id": row.get("id"), "points": row.get("points")})
+    return ok({"request": points_withdraw.request_view(row), "replayed": replayed,
+               "balance": get_points_ledger().balance(uid)})
+
+
+@router.get("/admin/points/withdrawals")
+def admin_withdrawals(request: Request, status: str = Query("", max_length=32), limit: int = Query(200, ge=1, le=1000)):
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    st = status.strip() or None
+    if st and st not in ("pending", "approved", "rejected", "completed", "cancelled"):
+        return _e("BAD_BODY")
+    names = {u["id"]: u["name"] for u in list_users()}
+    items = []
+    for r in points_withdraw.all_requests(st, limit):
+        items.append({**points_withdraw.request_view(r, admin=True), "userName": names.get(r["user_id"], "")})
+    return ok({"config": points_withdraw.public_config(True), "items": items})
+
+
+@router.post("/admin/points/withdrawals/reject")
+async def admin_withdraw_reject(request: Request):
+    def pre(raw):
+        rid = _text(raw, "request_id").strip()
+        if not rid or points_withdraw.get_request(rid) is None:
+            raise PointsError("WITHDRAW_UNKNOWN")
+        service.parse_reason(raw.get("reason"))
+
+    def fn(aid, raw):
+        row = points_withdraw.reject(aid, _text(raw, "request_id").strip(), service.parse_reason(raw.get("reason")))
+        # shape like ledger write for _admin_write: fake entry from freeze user
+        return {"id": row.get("unfreeze_entry_id") or 0, "user_id": row["user_id"], "amount": int(row["points"]),
+                "kind": "withdraw_unfreeze", "balance_after": get_points_ledger().balance(row["user_id"]),
+                "reason": row.get("note") or "reject", "operator": f"admin:{aid}", "provider": "withdraw_trc20",
+                "ref": f"withdraw:{row['id']}", "hash": "", "ts": row["updated_at"]}, False
+
+    # _admin_write expects (row, replayed) from fn and public_entry — use custom handler instead
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    raw = await _body(request)
+    if raw is None:
+        return _e("BAD_BODY")
+    aid = str(actor["id"])
+    target = _text(raw, "request_id").strip()
+    if not allow_attempt(f"points-admin:{aid}"):
+        return _e("RATE_LIMIT")
+    try:
+        pre(raw)
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_reject", str(exc), target, _safe_detail(raw))
+        return _e(str(exc))
+    try:
+        await run_in_threadpool(admin_step_up, aid, _text(raw, "password"), _text(raw, "totp_code"))
+    except ValueError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_reject", f"step_up:{exc}", target)
+        return _e(str(exc))
+    try:
+        row = await run_in_threadpool(
+            points_withdraw.reject, aid, target, service.parse_reason(raw.get("reason")))
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_reject", str(exc), target)
+        return _e(str(exc))
+    _audit(request, f"admin:{aid}", "withdraw_reject", "ok", row["user_id"], {"id": row["id"]})
+    return ok({"request": points_withdraw.request_view(row, admin=True),
+               "balance": get_points_ledger().balance(row["user_id"])})
+
+
+@router.post("/admin/points/withdrawals/complete")
+async def admin_withdraw_complete(request: Request):
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    raw = await _body(request)
+    if raw is None:
+        return _e("BAD_BODY")
+    aid = str(actor["id"])
+    target = _text(raw, "request_id").strip()
+    if not allow_attempt(f"points-admin:{aid}"):
+        return _e("RATE_LIMIT")
+    try:
+        if not target or points_withdraw.get_request(target) is None:
+            raise PointsError("WITHDRAW_UNKNOWN")
+        service.parse_reason(raw.get("reason"))
+        tx = _text(raw, "tx_hash").strip().lower().removeprefix("0x")
+        if len(tx) != 64 or any(c not in "0123456789abcdef" for c in tx):
+            raise PointsError("WITHDRAW_BAD_TX")
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_complete", str(exc), target, _safe_detail(raw))
+        return _e(str(exc))
+    try:
+        await run_in_threadpool(admin_step_up, aid, _text(raw, "password"), _text(raw, "totp_code"))
+    except ValueError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_complete", f"step_up:{exc}", target)
+        return _e(str(exc))
+    skip = bool(raw.get("skip_chain"))  # tests only; ignored unless AUU_WITHDRAW_SKIP_CHAIN=on
+    import os
+    if skip and os.getenv("AUU_WITHDRAW_SKIP_CHAIN", "").strip().lower() not in {"1", "true", "on", "yes"}:
+        skip = False
+    try:
+        row = await run_in_threadpool(
+            points_withdraw.complete, aid, target, _text(raw, "tx_hash"),
+            service.parse_reason(raw.get("reason")), skip_chain=skip)
+    except PointsError as exc:
+        _audit(request, f"admin:{aid}", "withdraw_complete", str(exc), target, _safe_detail(raw))
+        return _e(str(exc))
+    _audit(request, f"admin:{aid}", "withdraw_complete", "ok", row["user_id"],
+           {"id": row["id"], "tx": row.get("tx_hash")})
+    return ok({"request": points_withdraw.request_view(row, admin=True),
+               "balance": get_points_ledger().balance(row["user_id"])})
+
+
+@router.get("/admin/points/flags")
+def admin_feature_flags(request: Request):
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    return ok({
+        "withdraw": points_withdraw.public_config(True),
+        "pointsTrading": points_trading.public_config(True),
+        "trc20Topup": trc20.public_config(True),
+        "shop": {"enabled": __import__("app.points.catalog", fromlist=["shop_enabled"]).shop_enabled()},
+        "manualTopup": providers.REGISTRY["manual_admin"].enabled(),
+    })
+
+
+@router.get("/admin/points/trading")
+def admin_points_trading(request: Request, limit: int = Query(100, ge=1, le=500)):
+    actor, bad = _who(request, admin=True)
+    if bad is not None:
+        return bad
+    return ok({"config": points_trading.public_config(True), "items": points_trading.admin_pnl_board(limit)})

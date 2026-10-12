@@ -6,6 +6,8 @@ import type { PointsAccount, PointsUserRow } from "@/types/contracts";
 import { errText } from "@/i18n/errors";
 import { EntryTable, newIdemKey } from "@/pages/PointsPage/PointsPage";
 import { Trc20AdminPanel } from "@/pages/PointsPage/Trc20AdminPanel";
+import { AdminWithdrawPanel } from "@/pages/PointsPage/AdminWithdrawPanel";
+import { AdminTradingPanel } from "@/pages/PointsPage/AdminTradingPanel";
 
 type UserView = PointsAccount & { user: { id: string; name: string; display_name: string } };
 
@@ -80,7 +82,7 @@ export function AdminPointsPage() {
     <div className="shell-page settings-page pro-page points-admin">
       <header className="pro-head">
         <h1>{t("points.admin.title")}</h1>
-        <p>{t("points.admin.sub")}</p>
+        <p>{t("points.admin.subFull")}</p>
       </header>
       {err ? <div className="pro-alert">{err}</div> : null}
       <section className="settings-section">
@@ -162,6 +164,8 @@ export function AdminPointsPage() {
         </section>
       ) : null}
       <Trc20AdminPanel />
+      <AdminWithdrawPanel />
+      <AdminTradingPanel />
     </div>
   );
 }

@@ -4,7 +4,7 @@ Rules enforced here (never trusted from the client):
   * amounts are whole positive integers within fixed bounds (strings like "1e3", floats, bools refused);
   * every write carries an idempotency key (scoped per action and actor) and a request fingerprint;
   * spending prices come from catalog.ITEMS; refunds never exceed what is left of the entry;
-  * a balance never goes below zero; there is no withdrawal and no transfer between users.
+  * a balance never goes below zero; transfer between users stays forbidden; withdrawal exists only when AUU_WITHDRAW_ENABLED is on (freeze → admin manual payout).
 """
 from __future__ import annotations
 
@@ -90,13 +90,23 @@ def account_view(user_id: str, *, limit: int = 50, before_id: Optional[int] = No
     rows = led.entries(user_id, limit=lim + 1, before_id=before_id)
     all_rows = led.iter_all(user_id)
     refunded = _refunded_map(all_rows)
+    from app.points import trading as points_trading
+    from app.points import withdraw as points_withdraw
+
     return {
         "balance": led.balance(user_id),
         "entries": [public_entry(r, admin=admin) for r in rows[:lim]],
         "hasMore": len(rows) > lim,
         "entitlements": catalog.entitlements(all_rows, refunded),
         "shop": {"enabled": catalog.shop_enabled(), "items": catalog.catalog_view()},
-        "rules": {"withdraw": False, "transfer": False, "separateFromPaper": True},
+        "rules": {
+            "withdraw": points_withdraw.enabled(),
+            "transfer": False,
+            "separateFromPaper": True,
+            "pointsTrading": points_trading.enabled(),
+        },
+        "withdraw": points_withdraw.public_config(admin),
+        "pointsTrading": points_trading.public_config(admin),
     }
 
 

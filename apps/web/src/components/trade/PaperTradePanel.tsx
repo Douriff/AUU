@@ -10,6 +10,7 @@ import { fmtDate, fmtFixed } from "@/i18n/format";
 
 type Side = "buy" | "sell";
 type OType = "market" | "limit" | "tpsl";
+type TradeMode = "paper" | "points";
 
 const POLL_MS = 5_000;
 
@@ -43,6 +44,8 @@ const typeLabel = (t: string) => (i18n.exists(`trade.type.${t}`) ? i18n.t(`trade
 
 export function PaperTradePanel({ symbol, price }: { symbol: string; price: number | null | undefined }) {
   const { t } = useTranslation();
+  const [mode, setMode] = useState<TradeMode>("paper");
+  const [pointsOn, setPointsOn] = useState(false);
   const [acct, setAcct] = useState<PaperAccount | null>(null);
   const [loadErr, setLoadErr] = useState("");
   const [side, setSide] = useState<Side>("buy");
@@ -57,15 +60,25 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
   const [tab, setTab] = useState<"open" | "history">("history");
   const pendingId = useRef<string | null>(null);
 
-  const refresh = useCallback(() => {
+  useEffect(() => {
     marketProvider
-      .getPaperAccount(symbol)
+      .getPointsTradingConfig()
+      .then((c) => {
+        setPointsOn(Boolean(c.enabled));
+        if (!c.enabled && mode === "points") setMode("paper");
+      })
+      .catch(() => setPointsOn(false));
+  }, [mode]);
+
+  const refresh = useCallback(() => {
+    const req = mode === "points" ? marketProvider.getPointsTradingAccount(symbol) : marketProvider.getPaperAccount(symbol);
+    req
       .then((a) => {
         setAcct(a);
         setLoadErr("");
       })
       .catch((e: unknown) => setLoadErr(errText(e, "common.loadFailed")));
-  }, [symbol]);
+  }, [symbol, mode]);
 
   useEffect(() => {
     refresh();
@@ -120,16 +133,20 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
     }
     if (notional < lim.minOrderUsdt) return t("trade.chk.min", { v: n(lim.minOrderUsdt, 0) });
     if (notional > lim.maxOrderUsdt) return t("trade.chk.max", { v: n(lim.maxOrderUsdt, 0) });
-    if (side === "buy" && total > acct.availableCash) return t("trade.chk.cash");
+    if (side === "buy") {
+      const room = mode === "points" ? acct.availableCash / Math.max(1, acct.rate ?? 100) : acct.availableCash;
+      if (total > room) return mode === "points" ? t("trade.chk.points") : t("trade.chk.cash");
+    }
     if (side === "buy" && (pos?.value ?? 0) + notional > lim.maxPositionUsdt) return t("trade.chk.posCap", { v: n(lim.maxPositionUsdt, 0) });
     if (side === "sell" && qty > (pos?.available ?? 0) + 1e-12) return t("trade.chk.noShort");
     return "";
-  }, [acct, lim, qty, otype, lp, notional, side, total, pos, tpsl, tp, sl, last, t]);
+  }, [acct, lim, qty, otype, lp, notional, side, total, pos, tpsl, tp, sl, last, t, mode]);
 
   const setPct = (pct: number) => {
     if (!acct || !(refPx > 0)) return;
     if (side === "buy") {
-      const room = Math.min(acct.availableCash / (1 + feeRate + slipRate), lim?.maxOrderUsdt ?? Infinity);
+      const cashUsdt = mode === "points" ? acct.availableCash / Math.max(1, acct.rate ?? 100) : acct.availableCash;
+      const room = Math.min(cashUsdt / (1 + feeRate + slipRate), lim?.maxOrderUsdt ?? Infinity);
       const v = room * pct;
       setAmount(unit === "usdt" ? v.toFixed(2) : (v / refPx).toFixed(6));
     } else {
@@ -145,10 +162,12 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
     // one id per intended order: a retry after a network error reuses it, so it can't double-fill
     pendingId.current = pendingId.current ?? newId();
     try {
-      const o = await marketProvider.placePaperOrder({
+      const place = mode === "points" ? marketProvider.placePointsOrder.bind(marketProvider) : marketProvider.placePaperOrder.bind(marketProvider);
+      const o = await place({
         client_order_id: pendingId.current,
         symbol,
         side,
+        mode,
         ...(unit === "coin" ? { qty: amt } : { notional: amt }),
         ...(tpsl
           ? tp > 0 && sl > 0
@@ -191,7 +210,8 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
 
   const cancel = async (id: string) => {
     try {
-      await marketProvider.cancelPaperOrder(id);
+      if (mode === "points") await marketProvider.cancelPointsOrder(id);
+      else await marketProvider.cancelPaperOrder(id);
       refresh();
     } catch (e: unknown) {
       setMsg({ ok: false, text: errText(e, "trade.cancelFailed") });
@@ -213,8 +233,22 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
     <aside className="pt" aria-label={t("trade.title")}>
       <div className="pt-head">
         <b>{t("trade.title")}</b>
-        <span className="pt-paper">PAPER</span>
+        <span className="pt-paper">{mode === "points" ? "POINTS" : "PAPER"}</span>
         <span className="pt-lock" title={t("trade.liveLockTitle", { reason: acct.live.reason })}>🔒 {t("trade.liveOff")}</span>
+      </div>
+      <div className="pt-row pt-types" role="tablist" aria-label={t("trade.branch")}>
+        <button type="button" className={mode === "paper" ? "is-on" : ""} onClick={() => { setMode("paper"); setAcct(null); setMsg(null); }}>
+          {t("trade.branchPaper")}
+        </button>
+        <button
+          type="button"
+          className={mode === "points" ? "is-on" : ""}
+          disabled={!pointsOn}
+          title={pointsOn ? undefined : t("trade.pointsOff")}
+          onClick={() => { if (pointsOn) { setMode("points"); setAcct(null); setMsg(null); } }}
+        >
+          {t("trade.branchPoints")}
+        </button>
       </div>
 
       <div className="pt-sides" role="tablist">
@@ -299,7 +333,14 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
         </p>
       ) : null}
       <p className="muted pt-note">
-        {t("trade.limitsNote", { cash: n(acct.availableCash), order: n(acct.limits.maxOrderUsdt, 0), pos: n(acct.limits.maxPositionUsdt, 0) })}
+        {mode === "points"
+          ? t("trade.limitsNotePoints", {
+              cash: n(acct.availableCash, 0),
+              rate: acct.rate ?? 100,
+              order: n(acct.limits.maxOrderUsdt, 0),
+              pos: n(acct.limits.maxPositionUsdt, 0),
+            })
+          : t("trade.limitsNote", { cash: n(acct.availableCash), order: n(acct.limits.maxOrderUsdt, 0), pos: n(acct.limits.maxPositionUsdt, 0) })}
       </p>
 
       <div className="pt-box">
@@ -316,8 +357,8 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
           <p className="muted pt-note">{t("trade.noPos")}{pos && pos.realized ? ` · ${t("trade.realizedShort", { v: signed(pos.realized) })}` : ""}</p>
         )}
         <dl className="pt-est num pt-acct">
-          <div><dt>{t("trade.equity")}</dt><dd>{n(acct.equity)} USDT</dd></div>
-          <div><dt>{t("trade.totalPnl")}</dt><dd className={tone(acct.pnl)}>{signed(acct.pnl)} ({signed(acct.pnlPct * 100)}%)</dd></div>
+          <div><dt>{t("trade.equity")}</dt><dd>{mode === "points" ? `${n(acct.equity, 0)} ${t("trade.pts")}` : `${n(acct.equity)} USDT`}</dd></div>
+          <div><dt>{t("trade.totalPnl")}</dt><dd className={tone(acct.pnl)}>{mode === "points" ? `${signed(acct.pnl, 0)} ${t("trade.pts")}` : `${signed(acct.pnl)} (${signed((acct.pnlPct ?? 0) * 100)}%)`}</dd></div>
         </dl>
       </div>
 

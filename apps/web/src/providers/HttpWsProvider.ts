@@ -70,7 +70,9 @@ import type {
   TraderSnapshot,
   TradingStateEvent,
   LiveStatus,
-  LiveLimits, PointsAccount, PointsUserRow, PointsTopupStatus, Trc20Admin, Trc20Config, Trc20Order, Trc20Transfer, PnlSummary, PnlCurve
+  LiveLimits, PointsAccount,
+  PointsFeatureConfig,
+  WithdrawRequest, PointsUserRow, PointsTopupStatus, Trc20Admin, Trc20Config, Trc20Order, Trc20Transfer, PnlSummary, PnlCurve
 } from "@/types/contracts";
 
 export type Channel = "candles" | "book" | "trades" | "signals" | "fills" | "risk";
@@ -347,6 +349,23 @@ export class HttpWsProvider {
     return postJson(`/api/v1/mainstream/paper/orders/${encodeURIComponent(id)}/cancel`, {});
   }
 
+  getPointsTradingConfig(): Promise<{ enabled: boolean; adminOnly: boolean; rate: number }> {
+    return getJson("/api/v1/points/trading/config");
+  }
+
+  getPointsTradingAccount(symbol?: string): Promise<PaperAccount> {
+    const q = new URLSearchParams(symbol ? { symbol } : {});
+    return getJson(`/api/v1/points/trading/account?${q}`);
+  }
+
+  placePointsOrder(body: PaperOrderRequest): Promise<PaperOrder> {
+    return postJson("/api/v1/points/trading/orders", { ...body, mode: "points" });
+  }
+
+  cancelPointsOrder(id: string): Promise<PaperOrder> {
+    return postJson(`/api/v1/points/trading/orders/${encodeURIComponent(id)}/cancel`, {});
+  }
+
   getPublicStatus(): Promise<PublicStatus> {
     return getJson("/api/v1/status");
   }
@@ -520,6 +539,35 @@ export class HttpWsProvider {
 
   adminPointsExportUrl(userId = ""): string {
     return `${apiBase()}/api/v1/admin/points/export.csv${userId ? `?user_id=${encodeURIComponent(userId)}` : ""}`;
+  }
+
+  getWithdraw(): Promise<{ config: PointsFeatureConfig; requests: WithdrawRequest[] }> {
+    return getJson("/api/v1/points/withdraw");
+  }
+
+  applyWithdraw(body: { usdt: number; address: string; idempotency_key: string }): Promise<{ request: WithdrawRequest; replayed: boolean; balance: number }> {
+    return postJson("/api/v1/points/withdraw", body);
+  }
+
+  adminWithdrawals(status = ""): Promise<{ config: PointsFeatureConfig; items: WithdrawRequest[] }> {
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    return getJson(`/api/v1/admin/points/withdrawals${q}`);
+  }
+
+  adminWithdrawReject(body: { request_id: string; reason: string; password: string; totp_code: string }): Promise<{ request: WithdrawRequest; balance: number }> {
+    return postJson("/api/v1/admin/points/withdrawals/reject", body);
+  }
+
+  adminWithdrawComplete(body: { request_id: string; tx_hash: string; reason: string; password: string; totp_code: string }): Promise<{ request: WithdrawRequest; balance: number }> {
+    return postJson("/api/v1/admin/points/withdrawals/complete", body);
+  }
+
+  adminPointsFlags(): Promise<{ withdraw: PointsFeatureConfig; pointsTrading: PointsFeatureConfig; trc20Topup: PointsFeatureConfig; shop: { enabled: boolean }; manualTopup: boolean }> {
+    return getJson("/api/v1/admin/points/flags");
+  }
+
+  adminPointsTrading(): Promise<{ config: PointsFeatureConfig; items: { userId: string; name: string; displayName: string; pointsBalance: number; equityPoints: number; pnlPoints: number; pnlUsdt: number; positions: number }[] }> {
+    return getJson("/api/v1/admin/points/trading");
   }
 
   /** Save the interface language on the account (any logged-in user). */
