@@ -16,7 +16,6 @@
     "@solana/wallet-adapter-react-ui": "^0.9.40",
     "@solana/wallet-adapter-solflare": "^0.6.34",
     "@solana/web3.js": "^1.99.0",
-    "3d-shape-particle-text": "^1.0.4",
     "buffer": "^6.0.3",
     "i18next": "^23.16.8",
     "lightweight-charts": "^4.2.1",
