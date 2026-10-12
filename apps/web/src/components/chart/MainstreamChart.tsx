@@ -40,6 +40,8 @@ import {
   saveIndicatorPrefs,
   toggleIndicator,
 } from "@/components/chart/indicatorPrefs";
+import { loadAuuSignalPref, saveAuuSignalPref } from "@/components/chart/auuSignalPrefs";
+import type { AuuSignalOverlay, AuuSignalPoint } from "@/types/mainstream";
 
 /** lightweight-charts (Apache-2.0) candlestick + volume for the mainstream page. */
 
@@ -130,7 +132,7 @@ function clearBag(chart: IChartApi, bag: IndSeriesBag) {
 /** Stack volume / oscillator panes under the main candle scale. */
 function applyPaneMargins(
   chart: IChartApi,
-  opts: { showVol: boolean; panes: ("macd" | "rsi" | "kdj")[]; showMom: boolean },
+  opts: { showVol: boolean; panes: ("macd" | "rsi" | "kdj" | "auuSig")[]; showMom: boolean },
 ) {
   if (opts.showMom) {
     chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.08, bottom: 0.25 } });
@@ -176,7 +178,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const gen = useRef(0);
   const indBag = useRef<IndSeriesBag>(emptyIndBag());
   const prefsRef = useRef<IndicatorPrefs>(DEFAULT_INDICATOR_PREFS);
-  const syncMetaRef = useRef({ overlay: true as boolean, sigOn: false, hasOv: false, tf: "1d" as MainstreamTf });
+  const syncMetaRef = useRef({ overlay: true as boolean, sigOn: false, hasOv: false, auuOn: false, hasAuu: false, tf: "1d" as MainstreamTf });
   const [legend, setLegend] = useState<Legend | null>(null);
   // strategy overlay (daily only): rebalance markers + TSMOM look-back return lines
   const [sigOn, setSigOn] = useState(false);
@@ -185,11 +187,18 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const ovRows = useRef<Map<number, OvRow>>(new Map());
   const momRefs = useRef<ISeriesApi<"Line">[]>([]);
   const [ovRow, setOvRow] = useState<OvRow | null>(null);
+  // AUU proprietary signal (experimental) — separate from M3 strategy overlay + generic TA
+  const [auuOn, setAuuOn] = useState(() => (typeof window !== "undefined" ? loadAuuSignalPref() : false));
+  const [auu, setAuu] = useState<AuuSignalOverlay | null>(null);
+  const [auuErr, setAuuErr] = useState("");
+  const auuRows = useRef<Map<number, AuuSignalPoint>>(new Map());
+  const auuScoreRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const [auuHover, setAuuHover] = useState<AuuSignalPoint | null>(null);
   const [indPrefs, setIndPrefs] = useState<IndicatorPrefs>(() =>
     typeof window !== "undefined" ? loadIndicatorPrefs() : { ...DEFAULT_INDICATOR_PREFS },
   );
   prefsRef.current = indPrefs;
-  syncMetaRef.current = { overlay, sigOn, hasOv: !!ov, tf };
+  syncMetaRef.current = { overlay, sigOn, hasOv: !!ov, auuOn, hasAuu: !!auu, tf };
   const [state, setState] = useState<{ loading: boolean; err: string; limited: boolean; retention?: number; count: number }>({
     loading: true,
     err: "",
@@ -258,7 +267,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
       bag.push(midS, upS, loS);
     }
 
-    const panes: ("macd" | "rsi" | "kdj")[] = [];
+    const panes: ("macd" | "rsi" | "kdj" | "auuSig")[] = [];
     if (allowPane && prefs.macd && rows.length) {
       panes.push("macd");
       const bag = indBag.current.macd;
@@ -303,7 +312,9 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
 
     const showVol = !showMom;
     volRef.current?.applyOptions({ visible: showVol });
-    applyPaneMargins(chart, { showVol, panes, showMom });
+    const showAuuPane = !showMom && meta.auuOn && meta.hasAuu;
+    const panesWithAuu: ("macd" | "rsi" | "kdj" | "auuSig")[] = showAuuPane ? [...panes, "auuSig"] : panes;
+    applyPaneMargins(chart, { showVol, panes: panesWithAuu, showMom });
   }, []);
 
   const setAll = useCallback(
@@ -348,6 +359,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         return;
       }
       setOvRow(ovRows.current.get(fromTime(p.time)) ?? null);
+      setAuuHover(auuRows.current.get(fromTime(p.time)) ?? null);
       const i = byTs.current.get(fromTime(p.time));
       if (i == null) return;
       setLegend({ c: dataRef.current[i], prev: dataRef.current[i - 1] });
@@ -480,6 +492,23 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     };
   }, [showSig, symbol]);
 
+  // AUU proprietary signal (experimental): fetch whenever toggle is on.
+  useEffect(() => {
+    if (!auuOn) {
+      setAuu(null);
+      setAuuErr("");
+      return;
+    }
+    let live = true;
+    marketProvider
+      .getAuuSignal(symbol, tf, tf === "1d" ? 500 : 400)
+      .then((d) => live && (setAuu(d), setAuuErr("")))
+      .catch((e: unknown) => live && (setAuu(null), setAuuErr(errText(e, "common.loadFailed"))));
+    return () => {
+      live = false;
+    };
+  }, [auuOn, symbol, tf]);
+
   useEffect(() => {
     const chart = chartRef.current;
     const candles = candleRef.current;
@@ -522,6 +551,70 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     candles.setMarkers(markers);
     syncIndicators();
   }, [ov, showSig, colorRev, lang, syncIndicators]);
+
+  // AUU signal markers + soft score band (experimental). Markers only for enter/exit.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candles = candleRef.current;
+    if (!chart || !candles) return;
+    if (auuScoreRef.current) {
+      try {
+        chart.removeSeries(auuScoreRef.current);
+      } catch {
+        /* gone */
+      }
+      auuScoreRef.current = null;
+    }
+    auuRows.current = new Map();
+    setAuuHover(null);
+
+    // When M3 strategy overlay owns markers, do not clobber them; AUU yields markers.
+    const m3OwnsMarkers = showSig && !!ov;
+    if (!auuOn || !auu) {
+      if (!m3OwnsMarkers) candles.setMarkers([]);
+      syncIndicators();
+      return;
+    }
+    auuRows.current = new Map(auu.series.map((r) => [r.asof_ts, r]));
+    const showMom = overlay && sigOn && tf === "1d" && !!ov;
+    if (!showMom) {
+      const scoreSeries = chart.addLineSeries({
+        color: "rgba(242, 201, 76, 0.55)",
+        lineWidth: 1,
+        priceScaleId: "auuSig",
+        lastValueVisible: false,
+        priceLineVisible: false,
+        priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+        title: t("chart.auuScore"),
+      });
+      scoreSeries.setData(
+        auu.series.map((r): LineData => ({ time: toTime(r.asof_ts), value: r.score * 100 })),
+      );
+      scoreSeries.createPriceLine({ price: 0, color: "rgba(255,255,255,0.2)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      scoreSeries.createPriceLine({ price: 25, color: "rgba(255,255,255,0.12)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      scoreSeries.createPriceLine({ price: -25, color: "rgba(255,255,255,0.12)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+      auuScoreRef.current = scoreSeries;
+    }
+    if (!m3OwnsMarkers) {
+      const col = chartColors();
+      const markers: SeriesMarker<Time>[] = auu.series
+        .filter((r) => r.action === "enter" || r.action === "exit")
+        .map((r) => {
+          const enter = r.action === "enter";
+          return {
+            time: toTime(r.asof_ts),
+            position: enter ? (r.side === "short" ? "aboveBar" : "belowBar") : "aboveBar",
+            color: enter ? (r.side === "short" ? col.down : col.up) : "rgba(255,255,255,0.55)",
+            shape: enter ? (r.side === "short" ? "arrowDown" : "arrowUp") : "circle",
+            text: enter
+              ? `${r.side === "short" ? t("chart.auuShort") : t("chart.auuLong")}·${t("chart.auuExpShort")}`
+              : t("chart.auuExit"),
+          };
+        });
+      candles.setMarkers(markers);
+    }
+    syncIndicators();
+  }, [auu, auuOn, showSig, ov, overlay, sigOn, tf, colorRev, lang, t, syncIndicators]);
 
   // Re-apply when user toggles indicator chips.
   useEffect(() => {
@@ -596,6 +689,38 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
           )}
         </div>
       ) : null}
+      {auuOn ? (
+        <div className="msc-legend msc-sig num">
+          {auu ? (
+            <>
+              <span className="bad">{t("chart.auuExpBadge")}</span>
+              <span className="muted">{auu.version}</span>
+              {(() => {
+                const row = auuHover ?? auu.latest ?? auu.series[auu.series.length - 1];
+                if (!row) return <span className="muted">—</span>;
+                return (
+                  <>
+                    <span>
+                      {t("chart.auuSide")} <b>{row.side}</b>
+                    </span>
+                    <span>
+                      {t("chart.auuScore")} <b>{fmtFixed(row.score * 100, 1)}</b>
+                    </span>
+                    <span>
+                      {t("chart.auuAction")} <b>{row.action}</b>
+                    </span>
+                    {row.reason_tags?.length ? (
+                      <span className="muted">{row.reason_tags.join(" · ")}</span>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </>
+          ) : (
+            <span className="muted">{auuErr || t("chart.auuLoading")}</span>
+          )}
+        </div>
+      ) : null}
       <div className="msc-stage">
         <div ref={hostRef} className="msc-host" />
         {state.loading ? (
@@ -648,6 +773,21 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
               {t("chart.sig")}
             </button>
           ) : null}
+          <button
+            type="button"
+            className={auuOn ? "is-on" : ""}
+            aria-pressed={auuOn}
+            title={t("chart.auuTitle")}
+            onClick={() =>
+              setAuuOn((v) => {
+                const next = !v;
+                saveAuuSignalPref(next);
+                return next;
+              })
+            }
+          >
+            {t("chart.auuSig")}
+          </button>
           <button type="button" onClick={() => chartRef.current?.timeScale().fitContent()}>{t("chart.all")}</button>
           <button type="button" onClick={() => chartRef.current?.timeScale().scrollToRealTime()}>{t("chart.latest")}</button>
         </span>

@@ -247,7 +247,18 @@
       "rsiTitle": "RSI(14)",
       "kdjTitle": "KDJ(9, 3, 3)",
       "paneBlocked": "Les oscillateurs cèdent la place aux lignes de lookback du signal stratégie tant que cet overlay est actif"
-    }
+    },
+    "auuSig": "AUU signal (experimental)",
+    "auuTitle": "AUU proprietary strategy signal (experimental). Markers for enter/exit; soft score band below. Record-only — does not trade.",
+    "auuExpBadge": "experimental",
+    "auuExpShort": "exp",
+    "auuScore": "Score",
+    "auuSide": "Side",
+    "auuAction": "Action",
+    "auuLong": "Long",
+    "auuShort": "Short",
+    "auuExit": "Exit",
+    "auuLoading": "Loading AUU signal…"
   },
   "console": {
     "sub": "Exécution fictive de la stratégie de tendance, contrôle des risques et journal d’exécution",

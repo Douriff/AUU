@@ -247,7 +247,18 @@
       "rsiTitle": "RSI(14)",
       "kdjTitle": "KDJ(9, 3, 3)",
       "paneBlocked": "عند تفعيل إشارة الاستراتيجية تتنازل لوحات المذبذبات عن المنطقة السفلية"
-    }
+    },
+    "auuSig": "AUU signal (experimental)",
+    "auuTitle": "AUU proprietary strategy signal (experimental). Markers for enter/exit; soft score band below. Record-only — does not trade.",
+    "auuExpBadge": "experimental",
+    "auuExpShort": "exp",
+    "auuScore": "Score",
+    "auuSide": "Side",
+    "auuAction": "Action",
+    "auuLong": "Long",
+    "auuShort": "Short",
+    "auuExit": "Exit",
+    "auuLoading": "Loading AUU signal…"
   },
   "console": {
     "sub": "تشغيل ورقي لاستراتيجية الاتجاه وإدارة المخاطر وسجل التنفيذ",

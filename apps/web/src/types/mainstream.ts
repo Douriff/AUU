@@ -590,3 +590,28 @@ export interface NewsQuery {
   important?: boolean;
   source?: string;
 }
+
+/** GET /api/v1/mainstream/signal — AUU proprietary strategy signal (experimental). */
+export type AuuSignalSide = "long" | "short" | "flat";
+export type AuuSignalAction = "enter" | "hold" | "exit" | "none";
+export type AuuSignalPoint = {
+  asof_ts: number;
+  side: AuuSignalSide;
+  /** API contract: [-1, 1]. Chart may display ×100. */
+  score: number;
+  action: AuuSignalAction;
+  reason_tags: string[];
+  factors?: { momentum: number | null; volume_imbalance: number | null; funding: number | null };
+};
+export type AuuSignalOverlay = {
+  version: string;
+  experimental: boolean;
+  label: string;
+  symbol: string;
+  tf: string;
+  series: AuuSignalPoint[];
+  latest: AuuSignalPoint | null;
+  shadowWritten?: number;
+  shadowCount?: number;
+};
+
