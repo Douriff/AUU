@@ -472,7 +472,8 @@
       "backtest": "Backtest",
       "alerts": "Warnungen"
     },
-    "pnl": "Vermögen/GuV"
+    "pnl": "Vermögen/GuV",
+    "airdrops": "Airdrops"
   },
   "shell": {
     "source": "Datenquelle {{src}}",
@@ -1420,5 +1421,42 @@
     "withdrawalsDesc": "Auszahlungen prüfen: ablehnen (freigeben) oder TokenPocket-Tx-Hash eintragen.",
     "flagsDesc": "Nur-Lese-Übersicht der Feature-Flags für Punktehandel / Auszahlung / TRC20.",
     "flagsHint": "Flags werden per Server-Umgebungsvariablen gesteuert; hier nur der aktuelle Stand."
+  },
+  "airdrops": {
+    "title": "Airdrop Radar",
+    "sub": "Major and community airdrop notes · every item shows its source; open for summary and original link",
+    "cantConnect": "Cannot connect",
+    "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
+    "filterCat": "Category",
+    "filterStatus": "Status",
+    "cat": {
+      "all": "All",
+      "major": "Major",
+      "community": "Community"
+    },
+    "status": {
+      "active": "Active",
+      "upcoming": "Upcoming",
+      "ended": "Ended"
+    },
+    "statusAll": "All statuses",
+    "source": "Source",
+    "sourceLabel": "Source: {{name}}",
+    "viewSource": "Source",
+    "viewOriginal": "View original",
+    "empty": "No airdrop notes yet",
+    "emptyHint": "Try another filter, or check back later.",
+    "pager": "Pagination",
+    "prev": "Prev",
+    "next": "Next",
+    "disclaimer": "For information only — not investment or participation advice. Verify official channels yourself.",
+    "back": "Back to Airdrop Radar",
+    "notFound": "Note not found",
+    "notFoundHint": "It may have been removed, or the link is wrong.",
+    "published": "Published",
+    "updated": "Updated",
+    "chains": "Chains",
+    "tags": "Tags",
+    "summary": "Summary"
   }
 }

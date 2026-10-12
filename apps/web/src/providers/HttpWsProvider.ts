@@ -10,6 +10,7 @@ import type {
   StrategySummary,
   ShadowH2Summary, ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
   NewsPage, NewsQuery,
+  AirdropsPage, AirdropsQuery, AirdropDetail,
   PaperOrder,
   PaperOrderRequest,
   AuuSignalOverlay
@@ -410,6 +411,19 @@ export class HttpWsProvider {
     if (q.important) p.set("important", "true");
     if (q.source) p.set("source", q.source);
     return getJson(`/api/v1/news?${p}`);
+  }
+
+  getAirdrops(q: AirdropsQuery = {}): Promise<AirdropsPage> {
+    const p = new URLSearchParams();
+    p.set("page", String(q.page ?? 1));
+    p.set("size", String(q.size ?? 20));
+    if (q.category) p.set("category", q.category);
+    if (q.status) p.set("status", q.status);
+    return getJson(`/api/v1/airdrops?${p}`);
+  }
+
+  getAirdrop(id: string): Promise<AirdropDetail> {
+    return getJson(`/api/v1/airdrops/${encodeURIComponent(id)}`);
   }
 
   getShadowS3(): Promise<ShadowS3Summary> {

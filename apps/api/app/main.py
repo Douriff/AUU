@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.gate import AuthGateMiddleware
 from app.security.shield import ApiHeadersMiddleware, ShieldMiddleware, reset_shield
 from app.legacy import legacy_pump_enabled
-from app.routes import auth, events, health, live, mainstream, mainstream_paper, pnl, mainstream_shadow, mainstream_signal, mainstream_strategy, majors, news, points, points_trading, stats, status, ws
+from app.routes import airdrops, auth, events, health, live, mainstream, mainstream_paper, pnl, mainstream_shadow, mainstream_signal, mainstream_strategy, majors, news, points, points_trading, stats, status, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -184,7 +184,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, points, points_trading):
+    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, airdrops, points, points_trading):
         app.include_router(mod.router)
     if legacy:
         for mod in _legacy_routers():
@@ -219,6 +219,7 @@ def root(legacy: bool = False):
                     "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
                     "auuSignal": "GET /api/v1/mainstream/signal?symbol=&tf=1d (auu_signal_v0 experimental overlay; shadow record-only)",
                     "news": "GET /api/v1/news?page=&size=&coin=&focus=&important= (行业动态: RSS headlines, login required)",
+                    "airdrops": "GET /api/v1/airdrops?category=all|major|community&status= (空投雷达: curated info, login required)",
                     "majors": "GET /api/v1/majors",
                     "paperPerformance": "GET /api/v1/stats/paper-performance",
                     "events": "GET /api/v1/events",

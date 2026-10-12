@@ -61,6 +61,7 @@ function MainstreamSettingsPage() {
       <nav className="set-links" aria-label={t("settings.more")}>
         <Link to="/majors">{t("nav.majors")} ›</Link>
         <Link to="/news">{t("news.title")} ›</Link>
+        <Link to="/airdrops">{t("airdrops.title")} ›</Link>
         <Link to="/leaderboard">{t("nav.leaderboard")} ›</Link>
         <Link to="/points">{t("points.title")} ›</Link>
         {isAdmin ? <Link to="/admin">{t("admin.consoleLink")} ›</Link> : null}
