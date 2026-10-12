@@ -247,7 +247,18 @@
       "rsiTitle": "RSI(14)",
       "kdjTitle": "KDJ(9, 3, 3)",
       "paneBlocked": "전략 신호가 켜져 있으면 보조지표 창이 하단 영역을 양보합니다"
-    }
+    },
+    "auuSig": "AUU 신호(실험)",
+    "auuTitle": "AUU 자체 전략 신호(실험 중). 진입/청산 마커와 점수 밴드. 기록만 하며 주문하지 않습니다.",
+    "auuExpBadge": "실험 중",
+    "auuExpShort": "실험",
+    "auuScore": "점수",
+    "auuSide": "방향",
+    "auuAction": "동작",
+    "auuLong": "롱",
+    "auuShort": "숏",
+    "auuExit": "청산",
+    "auuLoading": "AUU 신호 로딩…"
   },
   "console": {
     "sub": "추세 전략 모의 운용, 리스크 관리 및 실행 로그",

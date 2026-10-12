@@ -12,6 +12,7 @@ import type {
   NewsPage, NewsQuery,
   PaperOrder,
   PaperOrderRequest,
+  AuuSignalOverlay
 } from "@/types/mainstream";
 import type {
   BookSnapshot,
@@ -372,6 +373,16 @@ export class HttpWsProvider {
 
   getStrategyOverlay(symbol: string): Promise<StrategyOverlay> {
     return getJson(`/api/v1/mainstream/strategy/overlay?symbol=${encodeURIComponent(symbol)}`);
+  }
+
+  getAuuSignal(symbol: string, tf = "1d", limit = 400): Promise<AuuSignalOverlay> {
+    const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
+    return getJson(`/api/v1/mainstream/signal?${q}`);
+  }
+
+  getAuuSignalLatest(symbol: string, tf = "1d"): Promise<Pick<AuuSignalOverlay, "version" | "experimental" | "symbol" | "tf" | "latest" | "label">> {
+    const q = new URLSearchParams({ symbol, tf });
+    return getJson(`/api/v1/mainstream/signal/latest?${q}`);
   }
 
   getStrategySummary(): Promise<StrategySummary> {

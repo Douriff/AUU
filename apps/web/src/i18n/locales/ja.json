@@ -247,7 +247,18 @@
       "rsiTitle": "RSI(14)",
       "kdjTitle": "KDJ(9, 3, 3)",
       "paneBlocked": "戦略シグナル表示中は、サブチャート指標は下部エリアを譲ります"
-    }
+    },
+    "auuSig": "AUUシグナル（実験）",
+    "auuTitle": "AUU独自の戦略シグナル（実験中）。進出マーカーとスコア帯。記録のみ・発注しません。",
+    "auuExpBadge": "実験中",
+    "auuExpShort": "実験",
+    "auuScore": "スコア",
+    "auuSide": "方向",
+    "auuAction": "アクション",
+    "auuLong": "ロング",
+    "auuShort": "ショート",
+    "auuExit": "決済",
+    "auuLoading": "AUUシグナル読込中…"
   },
   "console": {
     "sub": "トレンド戦略のペーパー運用・リスク管理・執行ログ",
