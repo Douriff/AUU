@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate } from "@/i18n/format";
 
-type Cat = "all" | "major" | "community";
+type Cat = "all" | "major" | "community" | "meme";
 
 function bj(ms: number | null | undefined) {
   if (!ms) return "—";
@@ -116,6 +116,7 @@ export function AirdropsPage() {
               ["all", t("airdrops.cat.all")],
               ["major", t("airdrops.cat.major")],
               ["community", t("airdrops.cat.community")],
+              ["meme", t("airdrops.cat.meme")],
             ] as [Cat, string][]
           ).map(([m, label]) => (
             <button key={m} type="button" role="tab" aria-selected={category === m} className={category === m ? "is-active" : ""} onClick={() => pick(() => setCategory(m))}>

@@ -11,7 +11,7 @@ from app.routes.mainstream_paper import _uid
 router = APIRouter(prefix="/api/v1/airdrops", tags=["airdrops"])
 
 NOTE = (
-    "空投与积分资讯来自公开来源的编辑整理，每条均标注来源；点击可查看站内摘要并跳转原文。"
+    "空投、积分与模因生态社区奖励资讯来自公开来源的编辑整理，每条均标注来源；点击可查看站内摘要并跳转原文。"
     "仅供参考，不构成投资、参与或收益建议；请自行核实官方渠道，警惕钓鱼链接。"
 )
 
