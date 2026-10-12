@@ -1424,7 +1424,7 @@
   },
   "airdrops": {
     "title": "空投雷达",
-    "sub": "大项目、社区与模因生态空投资讯 · 每条标注来源，点击查看摘要与原文",
+    "sub": "聚合公开资讯与人工精选 · 大项目 / 社区 / 模因 · 每条标注来源",
     "cantConnect": "无法连接",
     "loadFailed": "空投雷达暂时无法加载：{{err}}（主站其它功能不受影响）",
     "filterCat": "分类",
@@ -1458,6 +1458,13 @@
     "updated": "更新",
     "chains": "链",
     "tags": "标签",
-    "summary": "摘要"
+    "summary": "摘要",
+    "filterOrigin": "来源类型",
+    "originAll": "全部类型",
+    "origin": {
+      "ingested": "资讯",
+      "curated": "精选"
+    },
+    "feeds": "资讯源："
   }
 }

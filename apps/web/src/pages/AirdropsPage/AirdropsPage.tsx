@@ -28,6 +28,7 @@ function Card({ it }: { it: AirdropItem }) {
         <div className="ad-meta">
           <span className={`ad-badge ad-cat`}>{t(`airdrops.cat.${it.category}`)}</span>
           <span className={`ad-badge ad-st ${statusClass(it.status)}`}>{t(`airdrops.status.${it.status}`)}</span>
+          {it.origin === "ingested" ? <span className="ad-badge ad-ing">{t("airdrops.origin.ingested")}</span> : null}
           <time dateTime={new Date(it.publishedAt).toISOString()}>{bj(it.publishedAt)}</time>
         </div>
         <h2 className="ad-title">{it.title}</h2>
@@ -61,6 +62,7 @@ export function AirdropsPage() {
   const { t } = useTranslation();
   const [category, setCategory] = useState<Cat>("all");
   const [status, setStatus] = useState<"" | AirdropStatus>("");
+  const [originFilter, setOriginFilter] = useState<"" | "curated" | "ingested">("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AirdropsData | null>(null);
   const [err, setErr] = useState("");
@@ -75,6 +77,7 @@ export function AirdropsPage() {
       size: PAGE_SIZE,
       category,
       status: status || undefined,
+      origin: originFilter || undefined,
     };
     return marketProvider
       .getAirdrops(q)
@@ -84,7 +87,7 @@ export function AirdropsPage() {
       })
       .catch((e: unknown) => setErr(errText(e, "airdrops.cantConnect")))
       .finally(() => setLoading(false));
-  }, [page, category, status]);
+  }, [page, category, status, originFilter]);
 
   useEffect(() => {
     void load();
@@ -138,6 +141,19 @@ export function AirdropsPage() {
             </button>
           ))}
         </div>
+        <div className="ad-chips" aria-label={t("airdrops.filterOrigin")}>
+          {(
+            [
+              ["", t("airdrops.originAll")],
+              ["ingested", t("airdrops.origin.ingested")],
+              ["curated", t("airdrops.origin.curated")],
+            ] as ["" | "curated" | "ingested", string][]
+          ).map(([o, label]) => (
+            <button key={o || "all"} type="button" className={`ad-chip-btn${originFilter === o ? " is-active" : ""}`} onClick={() => pick(() => setOriginFilter(o))}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {err ? <div className="pro-alert">{t("airdrops.loadFailed", { err })}</div> : null}
@@ -169,6 +185,19 @@ export function AirdropsPage() {
       ) : null}
 
       <footer className="ad-foot-note">
+        {(data?.feeds?.length ?? 0) > 0 ? (
+          <div className="ad-feeds">
+            {t("airdrops.feeds")}
+            {data!.feeds.map((f) => (
+              <span key={f.id} className="ad-feed-st">
+                <i className={`st-dot ${f.ok ? "ok" : f.lastAttemptAt ? "bad" : ""}`} aria-hidden="true" />
+                <a href={f.home} target="_blank" rel="noopener noreferrer nofollow">
+                  {f.name}
+                </a>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <p className="muted">{data?.note ?? t("airdrops.disclaimer")}</p>
       </footer>
     </div>

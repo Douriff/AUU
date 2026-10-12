@@ -66,6 +66,7 @@ export function AirdropDetailPage() {
           <div className="ad-meta">
             <span className="ad-badge ad-cat">{t(`airdrops.cat.${item.category}`)}</span>
             <span className={`ad-badge ad-st is-${item.status}`}>{t(`airdrops.status.${item.status}`)}</span>
+            {item.origin === "ingested" ? <span className="ad-badge ad-ing">{t("airdrops.origin.ingested")}</span> : null}
           </div>
           <h1 className="ad-detail-title">{item.title}</h1>
           <p className="ad-project">{item.projectName}</p>

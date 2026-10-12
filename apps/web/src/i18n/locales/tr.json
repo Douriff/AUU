@@ -1424,7 +1424,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Major, community, and meme-ecosystem airdrop notes · every item shows its source",
+    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1458,6 +1458,13 @@
     "updated": "Updated",
     "chains": "Chains",
     "tags": "Tags",
-    "summary": "Summary"
+    "summary": "Summary",
+    "filterOrigin": "Origin",
+    "originAll": "All origins",
+    "origin": {
+      "ingested": "Feed",
+      "curated": "Curated"
+    },
+    "feeds": "Feeds:"
   }
 }

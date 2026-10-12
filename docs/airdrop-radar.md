@@ -1,39 +1,60 @@
 # 空投雷达（Airdrop Radar）
 
-站内资讯栏目：整理**大项目**、**社区**与**模因（meme）**生态相关空投 / 积分 / 社区奖励公开信息。每条卡片展示 **来源（source_name）**，详情页提供摘要与「查看原文」外链。
+站内资讯栏目：汇总**市场公开空投 / 积分 / 社区奖励相关新闻**，便于用户跨项目发现机会。人工精选 seed 仅作冷启动；线上通过公开 RSS 关键词持续入库。
 
 ## 范围
 
 - **仅资讯**：列表 + 详情。不涉及积分领取、抽奖、充值、余额、交易或提现。
-- 登录可见（与「行业动态」相同的鉴权门控）。
-- 文案保持中性，不承诺收益或空投结果。
-- 分类：`major`（大项目）/ `community`（社区）/ `meme`（模因，含 Solana meme、pump.fun 周边、模因发射台与社区奖励等公开报道）。
+- 登录可见（与「行业动态」相同鉴权）。
+- 文案中性，不承诺收益或空投结果。
+- 分类：`major` / `community` / `meme`；来源类型：`curated`（精选）/ `ingested`（资讯）。
 
 ## API
 
 | Method | Path | Query |
 |--------|------|--------|
-| GET | `/api/v1/airdrops` | `category=all\|major\|community\|meme`，可选 `status=active\|upcoming\|ended`，`page` / `size` |
+| GET | `/api/v1/airdrops` | `category=all\|major\|community\|meme`，可选 `status=`、`origin=curated\|ingested`，`page` / `size` |
 | GET | `/api/v1/airdrops/{id}` | — |
 
-响应字段含 `sourceName` / `sourceUrl` / `externalUrl` 等；前端路由 `/airdrops`、`/airdrops/:id`。
+每条含 `sourceName` / `sourceUrl` / `origin`；前端 `/airdrops`。
 
-## 数据与更新
+## 数据
 
-- 权威数据源是仓库内 curated 文件：`apps/api/app/airdrops/seed.json`。
-- 进程首次打开 store 时写入本地 `airdrops.sqlite`（`AUU_DATA_DIR`）；seed 指纹变化时自动 upsert。
-- **如何增补**：编辑 `seed.json`（必填 `id/title/project_name/category/source_name/source_url/summary/status/published_at`），重启 API 即可（指纹变化会 upsert）。
-- 每条必须有可核对的公开 `source_url`（DefiLlama、官方博客/文档、信誉媒体等）。禁止把禁止抓取站点的内容批量刮入仓库；本模块 **不** 做上游抓取，也 **不** 存放 API key。
-- 模因条目建议 `category=meme`，并可在 `tags` 中保留 `meme` 便于检索。
+### 精选 seed
+
+- 文件：`apps/api/app/airdrops/seed.json`
+- 首次打开 store 时 upsert；指纹变化时更新。**不会**删除已入库的 RSS 资讯行。
+
+### RSS 入库（持续）
+
+- 模块：`apps/api/app/airdrops/ingest.py`
+- 复用 `app.news` 的 `http_fetch` / `parse_feed`（只取标题+摘要+原文链接，不抓正文 HTML）。
+- 默认源（与行业动态相同的公开 RSS，官方出口）：
+  - CoinDesk `https://www.coindesk.com/arc/outboundfeeds/rss`
+  - Cointelegraph `https://cointelegraph.com/rss`
+- 关键词过滤（标题/摘要）：`airdrop` / `空投` / `stakedrop` / `retrodrop` / `points program` / `holder rewards` / `TGE` / `claim portal` 等。
+- 分类启发式：模因关键词 → `meme`；主流协议/ETF 等 → `major`；否则 `community`。
+- 入库字段：`origin=ingested`，`tags` 含 `ingested`，`source_url`=文章 URL；按 id + `source_url` 去重；**不覆盖**精选行。
+- 后台：`AUU_AIRDROPS_INGEST`（默认跟随 `AUU_AIRDROPS`，测试下默认关），间隔 `AUU_AIRDROPS_INTERVAL_SEC`（默认 900，夹在 300–3600）。
+- 可选 `AUU_AIRDROPS_FEEDS=coindesk,cointelegraph` 限制源。
+- 单源失败只记 `fetch_log`，不影响列表 API。
+
+### 如何加源
+
+1. 确认目标站提供**公开 RSS/Atom**且允许聚合（禁止抓取 HTML / 需密钥的接口不要加）。
+2. 在 `FEED_SOURCES` 增加 `id → {name, home, url}`。
+3. 用现有关键词或扩展 `AIRDROP_KEYWORDS`；补测试夹具。
+4. 部署后看 `/api/v1/airdrops` 的 `feeds[]` 与 `lastIngestAt`。
 
 ## 开关
 
-- `AUU_AIRDROPS=off` 可在元数据中标记关闭（列表仍可读已有 seed；不跑后台任务）。
+- `AUU_AIRDROPS=off` — 功能元数据关闭（已有数据仍可读）。
+- `AUU_AIRDROPS_INGEST=off` — 停后台拉取。
 
 ## 自测
 
 ```bash
-cd apps/api && .venv/bin/python -m unittest tests.test_airdrops -v
-# 登录后 GET /api/v1/airdrops?category=meme
-# 前端 /airdrops：筛选「全部 / 大项目 / 社区 / 模因」，点卡片进详情，「查看原文」新标签打开且 rel=noopener
+cd apps/api && .venv/bin/python -m unittest tests.test_airdrops tests.test_airdrops_ingest -v
+# 登录后 GET /api/v1/airdrops?origin=ingested
+# UI：模因 / 资讯 筛选；卡片显示来源与「资讯」徽章
 ```
