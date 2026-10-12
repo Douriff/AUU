@@ -121,7 +121,9 @@
     "no": "なし",
     "cancel": "キャンセル",
     "confirm": "確認",
-    "none": "なし"
+    "none": "なし",
+    "on": "on",
+    "off": "off"
   },
   "auth": {
     "email": "メールアドレス",
@@ -977,7 +979,8 @@
       "max": "1注文あたりの上限 {{v}} USDT を超えています",
       "cash": "利用可能残高が不足しています",
       "posCap": "1銘柄あたりのポジション上限 {{v}} USDT を超えています",
-      "noShort": "売却できる保有数量が不足しています（空売り不可）"
+      "noShort": "売却できる保有数量が不足しています（空売り不可）",
+      "points": "Not enough available points"
     },
     "msg": {
       "oco": "OCO 利確/損切",
@@ -988,7 +991,13 @@
       "filledSell": "{{qty}} {{sym}} @ {{px}} をペーパー売り、手数料 {{fee}} USDT",
       "limitBuy": "指値注文を発注しました：{{qty}} @ {{px}} で買い",
       "limitSell": "指値注文を発注しました：{{qty}} @ {{px}} で売り"
-    }
+    },
+    "branch": "Trading account",
+    "branchPaper": "Paper / sim",
+    "branchPoints": "Points trading",
+    "pointsOff": "Points trading is off (AUU_POINTS_TRADING)",
+    "pts": "pts",
+    "limitsNotePoints": "Available {{cash}} pts (1 USDT = {{rate}} pts) · max order {{order}} USDT · max position {{pos}} USDT"
   },
   "mode": {
     "paperTitle": "すべての取引はペーパー（シミュレーション）です。実取引はロックされ、実資金は使用しません",
@@ -1124,7 +1133,13 @@
       "topup": "チャージ",
       "spend": "消費",
       "adjust": "管理者調整",
-      "refund": "返金"
+      "refund": "返金",
+      "points_trade_buy": "Points trade buy",
+      "points_trade_sell": "Points trade sell",
+      "points_trade_fee": "Points trade fee",
+      "withdraw_freeze": "Withdraw freeze",
+      "withdraw_unfreeze": "Withdraw unfreeze",
+      "withdraw_complete": "Withdraw complete"
     },
     "op": {
       "user": "本人",
@@ -1164,12 +1179,20 @@
       "next": "次へ",
       "confirm": "{{name}} のポイントを {{n}} 調整しますか？調整後残高：{{after}}。",
       "confirmBtn": "調整を確定",
-      "done": "調整しました。現在の残高 {{balance}}"
+      "done": "調整しました。現在の残高 {{balance}}",
+      "subFull": "Users, ledger, top-ups, points-trading P&L, withdrawal review, feature flags. Adjustments need password + 2FA.",
+      "tradingTitle": "Points trading P&L",
+      "tradingSub": "Equity and P&L of each user's points-trading account (separate from paper).",
+      "tradingFlags": "Flag {{on}} · admin-only {{adminOnly}} · 1 USDT = {{rate}} pts",
+      "flagsLine": "Flags: points trading {{trading}} ({{tradingAdmin}}) · withdraw {{withdraw}} ({{withdrawAdmin}}) · TRC20 top-up {{trc20}}"
     },
     "rule": {
       "inApp": "ポイントはプラットフォーム内でのみ使えます（会員、機能解放）。",
       "noWithdraw": "ポイントは出金できず、他のユーザーへの譲渡もできません。",
-      "separate": "ペーパートレードの損益は模擬資金にのみ影響し、ポイントは増減しません。"
+      "separate": "ペーパートレードの損益は模擬資金にのみ影響し、ポイントは増減しません。",
+      "withdrawOn": "Withdrawal is on: applying freezes points; an admin pays USDT-TRC20 manually and registers the tx hash.",
+      "tradingOn": "Points trading is on: available points are capital; P&L credits/debits points. Separate from the paper account.",
+      "tradingOff": "Points trading is off by default; enabling it never touches paper sim funds."
     }
   },
   "usdt": {
@@ -1289,5 +1312,58 @@
     "footnote": "実現損益は手数料控除後です。本日の損益 = 現在の総資産 − 北京時間 0 時の総資産。集計対象はあなたの手動ペーパー取引のみで、戦略ペーパー口座と H2 は含みません。",
     "stripAria": "自分の資産と損益を見る",
     "details": "詳細"
+  },
+  "withdraw": {
+    "title": "Withdraw",
+    "closed": "Withdrawal is not open yet",
+    "intro": "Convert points to USDT (TRC20): 1 USDT = {{rate}} pts, {{min}}–{{max}} USDT per order, max {{daily}} USDT / Beijing day.",
+    "manualNote": "An admin pays from TokenPocket (private key never on the server). Applying freezes points; after payout they paste the tx hash for on-chain verify.",
+    "amountLabel": "Amount (USDT, integer {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT ← {{points}} pts (will freeze)",
+    "address": "Your TRC20 receive address",
+    "agree": "I understand: TRC20 only; a wrong address may lose funds; payout is manual by an admin, not auto-transfer.",
+    "apply": "Apply to withdraw",
+    "applied": "Applied; froze {{points}} pts; balance now {{balance}}",
+    "history": "Withdrawal history",
+    "noRequests": "No withdrawals yet",
+    "col": {
+      "usdt": "Amount (USDT)",
+      "status": "Status",
+      "tx": "On-chain tx"
+    },
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "admin": {
+      "title": "Withdrawal review",
+      "sub": "Pay USDT-TRC20 from TokenPocket to the user, then paste the tx hash. The server only verifies on-chain and never holds a private key.",
+      "flags": "Flag {{on}} · admin-only {{adminOnly}} · 1 USDT = {{rate}} · {{min}}–{{max}} / order",
+      "handle": "Review",
+      "payHint": "Pay first in TokenPocket, then paste the 64-hex tx hash. Reject unfreezes points.",
+      "txHash": "Payout tx hash",
+      "completeBtn": "Verify & complete",
+      "rejectBtn": "Reject & unfreeze",
+      "done": "Done"
+    }
+  },
+  "errors": {
+    "WITHDRAW_OFF": "Withdrawal is not open yet",
+    "WITHDRAW_BAD_AMOUNT": "Withdrawal amount is outside the allowed range",
+    "WITHDRAW_BAD_ADDRESS": "Invalid TRC20 address",
+    "WITHDRAW_TOO_MANY_PENDING": "Too many pending withdrawals",
+    "WITHDRAW_DAILY_LIMIT": "Daily withdrawal limit reached",
+    "WITHDRAW_UNKNOWN": "Withdrawal request not found",
+    "WITHDRAW_NOT_PENDING": "This withdrawal was already processed",
+    "WITHDRAW_BAD_TX": "Invalid transaction hash",
+    "WITHDRAW_TX_USED": "This on-chain tx was already used for another withdrawal",
+    "WITHDRAW_TX_NOT_FOUND": "No matching USDT transfer found on-chain",
+    "WITHDRAW_TX_AMOUNT": "On-chain amount does not match the request",
+    "WITHDRAW_TX_VERIFY": "On-chain verification failed",
+    "POINTS_TRADING_OFF": "Points trading is not open yet",
+    "INSUFFICIENT_POINTS": "Not enough available points"
   }
 }

@@ -1,9 +1,11 @@
 """Append-only points ledger (one sqlite file, separate from every paper ledger).
 
-* ``points_ledger``: one row per change (topup / spend / adjust / refund) with reason, operator,
-  time, idempotency key and a hash chain. UPDATE and DELETE are refused by triggers.
+* ``points_ledger``: one row per change with reason, operator, time, idempotency key and a hash
+  chain. UPDATE and DELETE are refused by triggers. Kinds cover top-up / spend / adjust / refund,
+  points trading (buy / sell / fee), and withdrawal (freeze / unfreeze / complete marker).
 * Balance = SUM(amount) per user; ``balance_after`` is a convenience copy that ``verify()``
   reconciles against the running sum, together with the hash chain and the per-kind sign rules.
+  ``withdraw_complete`` is a zero-amount marker (points already left on freeze).
 * ``points_audit``: append-only log of every points action and refusal (admin and user).
 * ``points_orders``: top-up orders of the payment channels (status only moves pending -> paid/failed).
 """
@@ -20,18 +22,22 @@ from typing import Any, Callable, Optional
 
 from app.data_paths import data_dir, guarded_path
 
-KINDS = ("topup", "spend", "adjust", "refund")
-MAX_ENTRY = 10_000_000  # |amount| of one row
+KINDS = (
+    "topup", "spend", "adjust", "refund",
+    "points_trade_buy", "points_trade_sell", "points_trade_fee",
+    "withdraw_freeze", "withdraw_unfreeze", "withdraw_complete",
+)
+_KIND_SQL = ",".join(f"'{k}'" for k in KINDS)
+MAX_ENTRY = 10_000_000  # |amount| of one row (withdraw_complete uses 0)
 MAX_BALANCE = 1_000_000_000
 GENESIS = "0" * 64
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS points_ledger (
+_LEDGER_DDL = f"""
+CREATE TABLE points_ledger (
   id INTEGER PRIMARY KEY,
   user_id TEXT NOT NULL,
   ts INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('topup','spend','adjust','refund')),
-  amount INTEGER NOT NULL CHECK (amount <> 0 AND abs(amount) <= 10000000),
+  kind TEXT NOT NULL CHECK (kind IN ({_KIND_SQL})),
+  amount INTEGER NOT NULL CHECK ((amount <> 0 OR kind = 'withdraw_complete') AND abs(amount) <= 10000000),
   balance_after INTEGER NOT NULL CHECK (balance_after >= 0),
   reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 200),
   operator TEXT NOT NULL,
@@ -47,7 +53,12 @@ CREATE TRIGGER IF NOT EXISTS points_ledger_no_update BEFORE UPDATE ON points_led
 BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS points_ledger_no_delete BEFORE DELETE ON points_ledger
 BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
+"""
 
+_LEDGER_INIT = _LEDGER_DDL.replace("CREATE TABLE points_ledger", "CREATE TABLE IF NOT EXISTS points_ledger", 1)
+
+_SCHEMA = f"""
+{_LEDGER_INIT}
 CREATE TABLE IF NOT EXISTS points_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts INTEGER NOT NULL,
@@ -98,11 +109,30 @@ def entry_hash(row: dict[str, Any]) -> str:
 
 
 def _sign_ok(kind: str, amount: int) -> bool:
-    if kind == "topup":
+    if kind in ("topup", "points_trade_sell", "withdraw_unfreeze"):
         return amount > 0
-    if kind == "spend":
+    if kind in ("spend", "points_trade_buy", "points_trade_fee", "withdraw_freeze"):
         return amount < 0
-    return amount != 0  # adjust: either way; refund: opposite of the refunded entry (checked on write)
+    if kind == "withdraw_complete":
+        return amount == 0  # marker: points already left the balance on freeze
+    return amount != 0  # adjust / refund
+
+
+def _migrate_ledger_kinds(db: sqlite3.Connection) -> None:
+    """Widen kind/amount CHECKs on existing DBs (CREATE IF NOT EXISTS cannot alter them)."""
+    row = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='points_ledger'").fetchone()
+    if row is None:
+        return
+    sql = row[0] or ""
+    if "withdraw_freeze" in sql and "withdraw_complete" in sql:
+        return
+    # isolation_level=None (autocommit): rename → recreate → copy → drop. Triggers on the old
+    # table move with the rename; drop removes them. Fresh DDL recreates constraints + triggers.
+    db.execute("ALTER TABLE points_ledger RENAME TO points_ledger_old")
+    db.executescript(_LEDGER_DDL)
+    cols = ",".join(_ENTRY_COLS) + ",hash"
+    db.execute(f"INSERT INTO points_ledger({cols}) SELECT {cols} FROM points_ledger_old")
+    db.execute("DROP TABLE points_ledger_old")
 
 
 def store_path() -> Path:
@@ -118,6 +148,7 @@ class PointsLedger:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
+        _migrate_ledger_kinds(self._db)
         try:
             os.chmod(self.path, 0o600)
         except OSError:
@@ -137,7 +168,9 @@ class PointsLedger:
         returns the stored row (replayed=True); same key with a different request is a conflict."""
         if kind not in KINDS:
             raise PointsError("POINTS_BAD_KIND")
-        if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0 or abs(amount) > MAX_ENTRY or not _sign_ok(kind, amount):
+        if isinstance(amount, bool) or not isinstance(amount, int) or abs(amount) > MAX_ENTRY or not _sign_ok(kind, amount):
+            raise PointsError("POINTS_BAD_AMOUNT")
+        if amount == 0 and kind != "withdraw_complete":
             raise PointsError("POINTS_BAD_AMOUNT")
         reason = (reason or "").strip()
         if not (1 <= len(reason) <= 200):

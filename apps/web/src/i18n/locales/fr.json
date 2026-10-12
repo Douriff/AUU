@@ -121,7 +121,9 @@
     "no": "Non",
     "cancel": "Annuler",
     "confirm": "Confirmer",
-    "none": "Aucun"
+    "none": "Aucun",
+    "on": "on",
+    "off": "off"
   },
   "auth": {
     "email": "E-mail",
@@ -977,7 +979,8 @@
       "max": "Dépasse la limite par ordre de {{v}} USDT",
       "cash": "Solde disponible insuffisant",
       "posCap": "Dépasse la limite de position par crypto de {{v}} USDT",
-      "noShort": "Quantité à vendre insuffisante (pas de vente à découvert)"
+      "noShort": "Quantité à vendre insuffisante (pas de vente à découvert)",
+      "points": "Not enough available points"
     },
     "msg": {
       "oco": "OCO TP/SL",
@@ -988,7 +991,13 @@
       "filledSell": "Vente fictive de {{qty}} {{sym}} @ {{px}}, frais {{fee}} USDT",
       "limitBuy": "Ordre limite placé : achat {{qty}} @ {{px}}",
       "limitSell": "Ordre limite placé : vente {{qty}} @ {{px}}"
-    }
+    },
+    "branch": "Trading account",
+    "branchPaper": "Paper / sim",
+    "branchPoints": "Points trading",
+    "pointsOff": "Points trading is off (AUU_POINTS_TRADING)",
+    "pts": "pts",
+    "limitsNotePoints": "Available {{cash}} pts (1 USDT = {{rate}} pts) · max order {{order}} USDT · max position {{pos}} USDT"
   },
   "mode": {
     "paperTitle": "Toutes les exécutions sont des simulations fictives ; le trading réel est verrouillé et aucun fonds réel n’est utilisé",
@@ -1124,7 +1133,13 @@
       "topup": "Recharge",
       "spend": "Dépense",
       "adjust": "Ajustement admin",
-      "refund": "Remboursement"
+      "refund": "Remboursement",
+      "points_trade_buy": "Points trade buy",
+      "points_trade_sell": "Points trade sell",
+      "points_trade_fee": "Points trade fee",
+      "withdraw_freeze": "Withdraw freeze",
+      "withdraw_unfreeze": "Withdraw unfreeze",
+      "withdraw_complete": "Withdraw complete"
     },
     "op": {
       "user": "Vous",
@@ -1164,12 +1179,20 @@
       "next": "Suivant",
       "confirm": "Ajuster {{name}} de {{n}} points ? Solde après : {{after}}.",
       "confirmBtn": "Confirmer l'ajustement",
-      "done": "Ajusté. Solde actuel {{balance}}"
+      "done": "Ajusté. Solde actuel {{balance}}",
+      "subFull": "Users, ledger, top-ups, points-trading P&L, withdrawal review, feature flags. Adjustments need password + 2FA.",
+      "tradingTitle": "Points trading P&L",
+      "tradingSub": "Equity and P&L of each user's points-trading account (separate from paper).",
+      "tradingFlags": "Flag {{on}} · admin-only {{adminOnly}} · 1 USDT = {{rate}} pts",
+      "flagsLine": "Flags: points trading {{trading}} ({{tradingAdmin}}) · withdraw {{withdraw}} ({{withdrawAdmin}}) · TRC20 top-up {{trc20}}"
     },
     "rule": {
       "inApp": "Les points ne se dépensent que sur la plateforme (abonnement, fonctions).",
       "noWithdraw": "Les points ne peuvent être ni retirés ni transférés à d'autres utilisateurs.",
-      "separate": "Les gains et pertes du trading papier n'affectent que les fonds simulés, jamais vos points."
+      "separate": "Les gains et pertes du trading papier n'affectent que les fonds simulés, jamais vos points.",
+      "withdrawOn": "Withdrawal is on: applying freezes points; an admin pays USDT-TRC20 manually and registers the tx hash.",
+      "tradingOn": "Points trading is on: available points are capital; P&L credits/debits points. Separate from the paper account.",
+      "tradingOff": "Points trading is off by default; enabling it never touches paper sim funds."
     }
   },
   "usdt": {
@@ -1289,5 +1312,58 @@
     "footnote": "Le P&L réalisé est net de frais ; P&L du jour = actifs totaux actuels − actifs totaux à 0 h (heure de Pékin). Seuls vos trades papier manuels sont comptés, pas le portefeuille de la stratégie ni H2.",
     "stripAria": "Voir mes actifs et mon P&L",
     "details": "Détails"
+  },
+  "withdraw": {
+    "title": "Withdraw",
+    "closed": "Withdrawal is not open yet",
+    "intro": "Convert points to USDT (TRC20): 1 USDT = {{rate}} pts, {{min}}–{{max}} USDT per order, max {{daily}} USDT / Beijing day.",
+    "manualNote": "An admin pays from TokenPocket (private key never on the server). Applying freezes points; after payout they paste the tx hash for on-chain verify.",
+    "amountLabel": "Amount (USDT, integer {{min}}–{{max}})",
+    "preview": "{{usdt}} USDT ← {{points}} pts (will freeze)",
+    "address": "Your TRC20 receive address",
+    "agree": "I understand: TRC20 only; a wrong address may lose funds; payout is manual by an admin, not auto-transfer.",
+    "apply": "Apply to withdraw",
+    "applied": "Applied; froze {{points}} pts; balance now {{balance}}",
+    "history": "Withdrawal history",
+    "noRequests": "No withdrawals yet",
+    "col": {
+      "usdt": "Amount (USDT)",
+      "status": "Status",
+      "tx": "On-chain tx"
+    },
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "admin": {
+      "title": "Withdrawal review",
+      "sub": "Pay USDT-TRC20 from TokenPocket to the user, then paste the tx hash. The server only verifies on-chain and never holds a private key.",
+      "flags": "Flag {{on}} · admin-only {{adminOnly}} · 1 USDT = {{rate}} · {{min}}–{{max}} / order",
+      "handle": "Review",
+      "payHint": "Pay first in TokenPocket, then paste the 64-hex tx hash. Reject unfreezes points.",
+      "txHash": "Payout tx hash",
+      "completeBtn": "Verify & complete",
+      "rejectBtn": "Reject & unfreeze",
+      "done": "Done"
+    }
+  },
+  "errors": {
+    "WITHDRAW_OFF": "Withdrawal is not open yet",
+    "WITHDRAW_BAD_AMOUNT": "Withdrawal amount is outside the allowed range",
+    "WITHDRAW_BAD_ADDRESS": "Invalid TRC20 address",
+    "WITHDRAW_TOO_MANY_PENDING": "Too many pending withdrawals",
+    "WITHDRAW_DAILY_LIMIT": "Daily withdrawal limit reached",
+    "WITHDRAW_UNKNOWN": "Withdrawal request not found",
+    "WITHDRAW_NOT_PENDING": "This withdrawal was already processed",
+    "WITHDRAW_BAD_TX": "Invalid transaction hash",
+    "WITHDRAW_TX_USED": "This on-chain tx was already used for another withdrawal",
+    "WITHDRAW_TX_NOT_FOUND": "No matching USDT transfer found on-chain",
+    "WITHDRAW_TX_AMOUNT": "On-chain amount does not match the request",
+    "WITHDRAW_TX_VERIFY": "On-chain verification failed",
+    "POINTS_TRADING_OFF": "Points trading is not open yet",
+    "INSUFFICIENT_POINTS": "Not enough available points"
   }
 }

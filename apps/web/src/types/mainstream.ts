@@ -102,13 +102,18 @@ export type PaperPosition = {
 };
 
 export type PaperAccount = {
-  mode: "paper";
+  mode: "paper" | "points";
   cash: number;
   availableCash: number;
   startCash: number;
   equity: number;
   pnl: number;
-  pnlPct: number;
+  pnlPct?: number;
+  rate?: number;
+  pointsBalance?: number;
+  availablePoints?: number;
+  equityUsdt?: number;
+  pnlUsdt?: number;
   positions: PaperPosition[];
   openOrders: PaperOrder[];
   orders: PaperOrder[];
@@ -128,6 +133,7 @@ export type PaperOrderRequest = {
   trigger_price?: number;
   take_profit_price?: number;
   stop_loss_price?: number;
+  mode?: "paper" | "points";
 };
 
 /** M3 daily paper runner (GET /api/v1/mainstream/strategy). */

@@ -7,6 +7,7 @@ import { errText } from "@/i18n/errors";
 import { fmtDate } from "@/i18n/format";
 import { Empty, Sk } from "@/components/ui/Skeleton";
 import { Trc20Topup } from "@/pages/PointsPage/Trc20Topup";
+import { WithdrawPanel } from "@/pages/PointsPage/WithdrawPanel";
 
 /** 积分: balance, append-only history, top-up (USDT-TRC20 when the server has a receive address), example unlock. */
 
@@ -111,8 +112,9 @@ export function PointsPage() {
         </div>
         <ul className="pts-rules">
           <li>{t("points.rule.inApp")}</li>
-          <li>{t("points.rule.noWithdraw")}</li>
+          <li>{acct?.withdraw?.enabled ? t("points.rule.withdrawOn") : t("points.rule.noWithdraw")}</li>
           <li>{t("points.rule.separate")}</li>
+          <li>{acct?.pointsTrading?.enabled ? t("points.rule.tradingOn") : t("points.rule.tradingOff")}</li>
         </ul>
         {me?.user?.is_admin ? (
           <Link className="td-link" to="/admin/points">{t("points.admin.title")} ›</Link>
@@ -125,6 +127,7 @@ export function PointsPage() {
         {acct && topupOpen && !acct.topup?.channels.includes("usdt_trc20") ? <p className="muted">{t("points.topupChannels", { list: acct.topup?.channels.join(", ") })}</p> : null}
         <p className="muted">{t("points.topupNote")}</p>
       </section>
+      {acct ? <WithdrawPanel onDone={load} /> : null}
       <section className="settings-section">
         <h2>{t("points.unlocks")}</h2>
         <p className="muted">{t("points.unlocksNote")}</p>
