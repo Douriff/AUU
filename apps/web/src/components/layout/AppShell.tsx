@@ -310,7 +310,7 @@ function DataDot({ f, provider }: { f: MainstreamFreshness | null; provider: str
 }
 
 
-function UserMenu({ who, authOn, onLogout }: { who: string; authOn: boolean; onLogout: () => void }) {
+function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boolean; isAdmin: boolean; onLogout: () => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -342,6 +342,7 @@ function UserMenu({ who, authOn, onLogout }: { who: string; authOn: boolean; onL
           <Link role="menuitem" to="/settings">{t("shell.settings")}</Link>
           <Link role="menuitem" to="/leaderboard">{t("nav.leaderboard")}</Link>
           {authOn && who ? <Link role="menuitem" to="/points">{t("points.title")}</Link> : null}
+          {isAdmin ? <Link role="menuitem" to="/admin">{t("admin.consoleLink")}</Link> : null}
           <div className="um-sep" />
           <div className="um-label">{t("color.label")}</div>
           <ColorToggle />
@@ -449,7 +450,7 @@ function ShellFrame({
           <DataDot f={fresh} provider={provider} />
           <ModeBadge liveOff={liveOff} />
           <LangSwitch compact />
-          <UserMenu who={who} authOn={authOn} onLogout={onLogout} />
+          <UserMenu who={who} authOn={authOn} isAdmin={isAdmin} onLogout={onLogout} />
         </div>
       </header>
       <main className="main pro-main">

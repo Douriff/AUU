@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "Admin-Konsole",
+    "badge": "Admin",
+    "sub": "Benutzer, Punktekonto, Einzahlungen, Punktehandels-GuV, Auszahlungen und Feature-Flags — getrennt vom Handelsboard.",
+    "navAria": "Admin-Navigation",
+    "backToBoard": "Zurück zum Board",
+    "consoleLink": "Admin-Konsole",
+    "open": "Öffnen",
+    "forbiddenTitle": "Kein Zugriff",
+    "forbiddenSub": "Nur Administratoren können die Admin-Konsole öffnen.",
+    "nav": {
+      "hub": "Übersicht",
+      "users": "Benutzer",
+      "ledger": "Punktekonto",
+      "topups": "Einzahlungen",
+      "trading": "Punktehandels-GuV",
+      "withdrawals": "Auszahlungen",
+      "flags": "Feature-Flags"
+    },
+    "usersDesc": "Salden abfragen, mit Passwort + 2FA anpassen und das Konto des Nutzers einsehen.",
+    "ledgerDesc": "Gesamtes Konto abstimmen und als CSV exportieren.",
+    "ledgerHint": "Einzeleinträge eines Nutzers: unter Benutzer ein Konto wählen.",
+    "topupsDesc": "USDT-TRC20-Aufträge, ausstehende On-Chain-Transfers und manuelle Gutschrift.",
+    "tradingDesc": "Eigenkapital und GuV jedes Punktehandelskontos (getrennt vom Paper).",
+    "withdrawalsDesc": "Auszahlungen prüfen: ablehnen (freigeben) oder TokenPocket-Tx-Hash eintragen.",
+    "flagsDesc": "Nur-Lese-Übersicht der Feature-Flags für Punktehandel / Auszahlung / TRC20.",
+    "flagsHint": "Flags werden per Server-Umgebungsvariablen gesteuert; hier nur der aktuelle Stand."
   }
 }

@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "链上校验不通过",
     "POINTS_TRADING_OFF": "积分交易暂未开放",
     "INSUFFICIENT_POINTS": "可用积分不足"
+  },
+  "admin": {
+    "title": "管理后台",
+    "badge": "Admin",
+    "sub": "用户、积分流水、充值、积分交易盈亏、提现审核与功能开关。与交易盘面分开的独立控制台。",
+    "navAria": "管理后台导航",
+    "backToBoard": "返回盘面",
+    "consoleLink": "管理后台",
+    "open": "打开",
+    "forbiddenTitle": "无权限",
+    "forbiddenSub": "只有管理员可以进入管理后台。",
+    "nav": {
+      "hub": "总览",
+      "users": "用户",
+      "ledger": "积分流水",
+      "topups": "充值",
+      "trading": "积分交易盈亏",
+      "withdrawals": "提现",
+      "flags": "功能开关"
+    },
+    "usersDesc": "查询用户积分、手工调整（密码 + 两步验证），查看该用户流水。",
+    "ledgerDesc": "全站流水对账与 CSV 导出。",
+    "ledgerHint": "按用户查看明细流水请到「用户」页选中账户。",
+    "topupsDesc": "USDT-TRC20 充值订单、待核对链上转入与人工入账。",
+    "tradingDesc": "各用户积分交易账户的权益与盈亏（与纸面账户分开）。",
+    "withdrawalsDesc": "审核提现申请：驳回解冻，或登记 TokenPocket 交易哈希。",
+    "flagsDesc": "积分交易 / 提现 / TRC20 充值等功能开关只读摘要。",
+    "flagsHint": "开关由服务器环境变量控制；此处仅展示当前生效状态。"
   }
 }

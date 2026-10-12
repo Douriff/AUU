@@ -36,6 +36,7 @@ function MainstreamSettingsPage() {
   const [md, setMd] = useState<MainstreamFreshness | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
     marketProvider
       .getHealth()
@@ -44,6 +45,10 @@ function MainstreamSettingsPage() {
     marketProvider
       .getLiveStatus()
       .then((st) => setLive(st))
+      .catch(() => undefined);
+    marketProvider
+      .getMe()
+      .then((me) => setIsAdmin(!me.auth_enabled || Boolean(me.user?.is_admin)))
       .catch(() => undefined);
   }, []);
   const blocked = md ? Object.keys(md.blocked || {}) : [];
@@ -58,6 +63,7 @@ function MainstreamSettingsPage() {
         <Link to="/news">{t("news.title")} ›</Link>
         <Link to="/leaderboard">{t("nav.leaderboard")} ›</Link>
         <Link to="/points">{t("points.title")} ›</Link>
+        {isAdmin ? <Link to="/admin">{t("admin.consoleLink")} ›</Link> : null}
       </nav>
       <section className="settings-section">
         <h2>{t("settings.display")}</h2>
@@ -79,6 +85,18 @@ function MainstreamSettingsPage() {
           <ColorToggle />
         </div>
       </section>
+      {isAdmin ? (
+        <section className="settings-section">
+          <h2>{t("admin.badge")}</h2>
+          <div className="set-row">
+            <div>
+              <b>{t("admin.consoleLink")}</b>
+              <p className="muted">{t("admin.sub")}</p>
+            </div>
+            <Link className="td-link" to="/admin">{t("admin.open")} ›</Link>
+          </div>
+        </section>
+      ) : null}
       <AccountSection />
       <section className="settings-section">
         <h2>{t("settings.modeData")}</h2>

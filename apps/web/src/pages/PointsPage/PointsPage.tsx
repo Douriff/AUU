@@ -117,7 +117,7 @@ export function PointsPage() {
           <li>{acct?.pointsTrading?.enabled ? t("points.rule.tradingOn") : t("points.rule.tradingOff")}</li>
         </ul>
         {me?.user?.is_admin ? (
-          <Link className="td-link" to="/admin/points">{t("points.admin.title")} ›</Link>
+          <Link className="td-link" to="/admin">{t("admin.consoleLink")} ›</Link>
         ) : null}
       </section>
       <section className="settings-section" id="topup">

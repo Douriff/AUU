@@ -1365,5 +1365,33 @@
     "WITHDRAW_TX_VERIFY": "On-chain verification failed",
     "POINTS_TRADING_OFF": "Points trading is not open yet",
     "INSUFFICIENT_POINTS": "Not enough available points"
+  },
+  "admin": {
+    "title": "لوحة الإدارة",
+    "badge": "Admin",
+    "sub": "المستخدمون ودفتر النقاط والشحن وربح/خسارة تداول النقاط والسحب وأعلام الميزات — منفصلة عن لوحة التداول.",
+    "navAria": "تنقل الإدارة",
+    "backToBoard": "العودة إلى اللوحة",
+    "consoleLink": "لوحة الإدارة",
+    "open": "فتح",
+    "forbiddenTitle": "تم رفض الوصول",
+    "forbiddenSub": "يمكن للمسؤولين فقط فتح لوحة الإدارة.",
+    "nav": {
+      "hub": "نظرة عامة",
+      "users": "المستخدمون",
+      "ledger": "دفتر النقاط",
+      "topups": "الشحن",
+      "trading": "ربح/خسارة تداول النقاط",
+      "withdrawals": "السحب",
+      "flags": "أعلام الميزات"
+    },
+    "usersDesc": "الاطلاع على الأرصدة والتعديل بكلمة المرور و2FA وعرض دفتر ذلك المستخدم.",
+    "ledgerDesc": "مطابقة الدفتر الكامل وتصدير CSV.",
+    "ledgerHint": "لتفاصيل مستخدم، افتح المستخدمون واختر حسابًا.",
+    "topupsDesc": "طلبات USDT-TRC20 والتحويلات على السلسلة المعلقة والإيداع اليدوي.",
+    "tradingDesc": "حقوق الملكية وربح/خسارة كل حساب تداول نقاط (منفصل عن الورقي).",
+    "withdrawalsDesc": "مراجعة السحب: الرفض لإلغاء التجميد، أو تسجيل تجزئة TokenPocket.",
+    "flagsDesc": "ملخص للقراءة فقط لأعلام تداول النقاط / السحب / TRC20.",
+    "flagsHint": "تُتحكم الأعلام بمتغيرات بيئة الخادم؛ هنا الحالة الحالية فقط."
   }
 }

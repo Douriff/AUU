@@ -5,11 +5,10 @@ import type { PointsFeatureConfig } from "@/types/contracts";
 import { errText } from "@/i18n/errors";
 import { fmtFixed } from "@/i18n/format";
 
-/** Admin: points-trading P&L board + feature flag readout. */
+/** Admin: points-trading P&L board (feature flags live under /admin/flags). */
 export function AdminTradingPanel() {
   const { t } = useTranslation();
   const [cfg, setCfg] = useState<PointsFeatureConfig | null>(null);
-  const [flags, setFlags] = useState<string>("");
   const [rows, setRows] = useState<{ userId: string; name: string; displayName: string; pointsBalance: number; equityPoints: number; pnlPoints: number; pnlUsdt: number; positions: number }[]>([]);
   const [err, setErr] = useState("");
 
@@ -21,21 +20,7 @@ export function AdminTradingPanel() {
         setRows(r.items);
       })
       .catch((e: unknown) => setErr(errText(e, "common.loadFailed")));
-    marketProvider
-      .adminPointsFlags()
-      .then((f) => {
-        setFlags(
-          t("points.admin.flagsLine", {
-            trading: f.pointsTrading.enabled ? "on" : "off",
-            tradingAdmin: f.pointsTrading.adminOnly ? "admin" : "all",
-            withdraw: f.withdraw.enabled ? "on" : "off",
-            withdrawAdmin: f.withdraw.adminOnly ? "admin" : "all",
-            trc20: f.trc20Topup.enabled ? "on" : "off",
-          }),
-        );
-      })
-      .catch(() => undefined);
-  }, [t]);
+  }, []);
   useEffect(() => {
     load();
   }, [load]);
@@ -44,7 +29,6 @@ export function AdminTradingPanel() {
     <section className="settings-section">
       <h2>{t("points.admin.tradingTitle")}</h2>
       <p className="muted">{t("points.admin.tradingSub")}</p>
-      {flags ? <p className="td-note">{flags}</p> : null}
       {cfg ? (
         <p className="muted">
           {t("points.admin.tradingFlags", {
