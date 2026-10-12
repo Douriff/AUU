@@ -8,6 +8,7 @@ import "@/styles.css";
 import "@/styles/pro.css";
 import { applyColorPref } from "@/theme/colorPref";
 import { initI18n } from "@/i18n";
+import { SplashIntro } from "@/components/splash/SplashIntro";
 
 applyColorPref();
 
@@ -15,7 +16,9 @@ applyColorPref();
 void initI18n().finally(() => ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <WalletProviders>
-      <RouterProvider router={router} />
+      <SplashIntro>
+        <RouterProvider router={router} />
+      </SplashIntro>
     </WalletProviders>
   </React.StrictMode>
 ));

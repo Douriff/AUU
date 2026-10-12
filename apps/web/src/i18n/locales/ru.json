@@ -1466,5 +1466,12 @@
       "curated": "Curated"
     },
     "feeds": "Feeds:"
+  },
+  "splash": {
+    "aria": "Welcome to AUUTRADE",
+    "tag": "AUUTRADE",
+    "lead": "Mainstream-coin quant and paper trading terminal. Markets, strategy signals, and Airdrop Radar news — for information only, not investment advice.",
+    "enter": "Enter",
+    "skip": "Skip intro"
   }
 }

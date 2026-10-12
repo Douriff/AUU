@@ -1,0 +1,103 @@
+.auu-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background: #0b0d10;
+  color: var(--text, #eaecef);
+  font-family: var(--sans, system-ui, sans-serif);
+}
+.auu-splash-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+.auu-splash-canvas,
+.auu-splash-stage > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+.auu-splash-static {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 40%, rgba(240, 165, 49, 0.12), transparent 55%), #0b0d10;
+}
+.auu-splash-word {
+  font-size: clamp(2rem, 8vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text, #eaecef);
+}
+.auu-splash-word span {
+  color: var(--accent, #f0a531);
+}
+.auu-splash-copy {
+  position: relative;
+  z-index: 2;
+  padding: 18px 20px 28px;
+  text-align: center;
+  background: linear-gradient(180deg, transparent, rgba(11, 13, 16, 0.92) 28%, #0b0d10);
+}
+.auu-splash-tag {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent, #f0a531);
+  font-weight: 600;
+}
+.auu-splash-lead {
+  margin: 0 auto 16px;
+  max-width: 34rem;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text2, #b7bdc6);
+}
+.auu-splash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 148px;
+  height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent, #f0a531);
+  color: #111;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.auu-splash-btn:hover {
+  filter: brightness(1.06);
+}
+.auu-splash-skip {
+  display: block;
+  margin: 10px auto 0;
+  border: 0;
+  background: none;
+  color: var(--muted, #8a919d);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auu-splash-skip:hover {
+  color: var(--accent, #f0a531);
+}
+@media (max-width: 720px) {
+  .auu-splash-copy {
+    padding: 14px 16px 22px;
+  }
+  .auu-splash-lead {
+    font-size: 13.5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auu-splash-stage {
+    min-height: 42vh;
+  }
+}
