@@ -231,7 +231,23 @@
     "sigTitle": "Superposer la stratégie M3 : points d’achat/vente des rééquilibrages fictifs (flèches + pondération cible) et courbes de rendement rétrospectif sur 20/60/120 jours (lecture seule)",
     "sig": "Signaux de stratégie",
     "all": "Tout",
-    "latest": "Récent"
+    "latest": "Récent",
+    "ind": {
+      "aria": "Indicateurs",
+      "ma": "MA",
+      "ema": "EMA",
+      "boll": "BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "SMA MA7 / MA25 / MA99",
+      "emaTitle": "EMA12 / EMA26",
+      "bollTitle": "Bandes de Bollinger (20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "RSI(14)",
+      "kdjTitle": "KDJ(9, 3, 3)",
+      "paneBlocked": "Les oscillateurs cèdent la place aux lignes de lookback du signal stratégie tant que cet overlay est actif"
+    }
   },
   "console": {
     "sub": "Exécution fictive de la stratégie de tendance, contrôle des risques et journal d’exécution",

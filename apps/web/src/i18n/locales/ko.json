@@ -231,7 +231,23 @@
     "sigTitle": "M3 전략 겹쳐 보기: 모의 리밸런싱 매수/매도 지점(화살표 + 목표 비중)과 20/60/120일 수익률 선(보기 전용)",
     "sig": "전략 신호",
     "all": "전체",
-    "latest": "최신"
+    "latest": "최신",
+    "ind": {
+      "aria": "보조지표",
+      "ma": "이동평균 MA",
+      "ema": "EMA",
+      "boll": "볼린저 BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "단순이동평균 MA7 / MA25 / MA99",
+      "emaTitle": "EMA12 / EMA26",
+      "bollTitle": "볼린저 밴드 (20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "RSI(14)",
+      "kdjTitle": "KDJ(9, 3, 3)",
+      "paneBlocked": "전략 신호가 켜져 있으면 보조지표 창이 하단 영역을 양보합니다"
+    }
   },
   "console": {
     "sub": "추세 전략 모의 운용, 리스크 관리 및 실행 로그",

@@ -231,7 +231,23 @@
     "sigTitle": "Sobrepor a estratégia M3: pontos de compra/venda dos rebalanceamentos simulados (setas + peso-alvo) e linhas de retorno retrospectivo de 20/60/120 dias (somente leitura)",
     "sig": "Sinais da estratégia",
     "all": "Tudo",
-    "latest": "Recente"
+    "latest": "Recente",
+    "ind": {
+      "aria": "Indicadores",
+      "ma": "MA",
+      "ema": "EMA",
+      "boll": "BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "SMA MA7 / MA25 / MA99",
+      "emaTitle": "EMA12 / EMA26",
+      "bollTitle": "Bandas de Bollinger (20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "RSI(14)",
+      "kdjTitle": "KDJ(9, 3, 3)",
+      "paneBlocked": "Os osciladores cedem espaço às linhas de lookback do sinal de estratégia enquanto esse overlay está ativo"
+    }
   },
   "console": {
     "sub": "Execução simulada da estratégia de tendência, controle de risco e registro de execução",

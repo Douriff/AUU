@@ -231,7 +231,23 @@
     "sigTitle": "叠加 M3 策略：纸面调仓买卖点（箭头 + 目标仓位）和 20/60/120 日回看收益线（只读）",
     "sig": "策略信号",
     "all": "全部",
-    "latest": "最新"
+    "latest": "最新",
+    "ind": {
+      "aria": "技术指标",
+      "ma": "均线 MA",
+      "ema": "EMA",
+      "boll": "布林 BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "简单均线 MA7 / MA25 / MA99",
+      "emaTitle": "指数均线 EMA12 / EMA26",
+      "bollTitle": "布林带 BOLL(20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "相对强弱 RSI(14)",
+      "kdjTitle": "随机指标 KDJ(9, 3, 3)",
+      "paneBlocked": "已开启策略信号时，副图指标暂时让出底部区域"
+    }
   },
   "console": {
     "sub": "趋势策略纸面运行、风控与执行记录",

@@ -231,7 +231,23 @@
     "sigTitle": "M3 stratejisini göster: sanal yeniden dengeleme al/sat noktaları (oklar + hedef ağırlık) ve 20/60/120 günlük geriye dönük getiri çizgileri (salt okunur)",
     "sig": "Strateji sinyalleri",
     "all": "Tümü",
-    "latest": "En yeni"
+    "latest": "En yeni",
+    "ind": {
+      "aria": "Göstergeler",
+      "ma": "MA",
+      "ema": "EMA",
+      "boll": "BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "SMA MA7 / MA25 / MA99",
+      "emaTitle": "EMA12 / EMA26",
+      "bollTitle": "Bollinger Bantları (20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "RSI(14)",
+      "kdjTitle": "KDJ(9, 3, 3)",
+      "paneBlocked": "Strateji sinyali açıkken osilatör panelleri lookback çizgilerine yer bırakır"
+    }
   },
   "console": {
     "sub": "Trend stratejisinin sanal çalışması, risk kontrolü ve işlem kaydı",

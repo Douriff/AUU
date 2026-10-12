@@ -231,7 +231,23 @@
     "sigTitle": "Overlay the M3 strategy: paper rebalance buy/sell points (arrows + target weight) and 20/60/120-day lookback return lines (read-only)",
     "sig": "Strategy signals",
     "all": "All",
-    "latest": "Latest"
+    "latest": "Latest",
+    "ind": {
+      "aria": "Indicators",
+      "ma": "MA",
+      "ema": "EMA",
+      "boll": "BOLL",
+      "macd": "MACD",
+      "rsi": "RSI",
+      "kdj": "KDJ",
+      "maTitle": "SMA MA7 / MA25 / MA99",
+      "emaTitle": "EMA12 / EMA26",
+      "bollTitle": "Bollinger Bands (20, 2)",
+      "macdTitle": "MACD(12, 26, 9)",
+      "rsiTitle": "RSI(14)",
+      "kdjTitle": "KDJ(9, 3, 3)",
+      "paneBlocked": "Oscillator panes yield to strategy-signal lookback lines while that overlay is on"
+    }
   },
   "console": {
     "sub": "Trend strategy paper run, risk control and execution log",
