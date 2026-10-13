@@ -48,6 +48,7 @@ const mainstreamNav: NavItem[] = [
   { to: "/majors", label: "majors", icon: "globe", match: (p) => p.startsWith("/majors") },
   { to: "/news", label: "news", icon: "news", match: (p) => p.startsWith("/news") },
   { to: "/airdrops", label: "airdrops", icon: "radar", match: (p) => p.startsWith("/airdrops") },
+  { to: "/exchange", label: "exchange", icon: "swap", match: (p) => p.startsWith("/exchange") },
 ];
 // mobile: 行情 · 交易 · 盈亏 · 策略 · 动态 · 我的 (绩效 is one tap away from the 盈亏 page)
 const mobileTabs: NavItem[] = [
@@ -56,7 +57,7 @@ const mobileTabs: NavItem[] = [
   mainstreamNav[2],
   mainstreamNav[3],
   mainstreamNav[6],
-  { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/leaderboard") || p.startsWith("/majors") || p.startsWith("/airdrops") },
+  { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/exchange") || p.startsWith("/leaderboard") || p.startsWith("/majors") || p.startsWith("/airdrops") },
 ];
 
 function tradeHref(): string {
@@ -351,6 +352,7 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
           <Link role="menuitem" to="/settings">{t("shell.settings")}</Link>
           <Link role="menuitem" to="/leaderboard">{t("nav.leaderboard")}</Link>
           {authOn && who ? <Link role="menuitem" to="/points">{t("points.title")}</Link> : null}
+          {who ? <Link role="menuitem" to="/exchange">{t("nav.exchange")}</Link> : null}
           {isAdmin ? <Link role="menuitem" to="/admin">{t("admin.consoleLink")}</Link> : null}
           <div className="um-sep" />
           <div className="um-label">{t("color.label")}</div>
@@ -426,7 +428,7 @@ function ShellFrame({
   const halted = healthState && !["ACTIVE", "active"].includes(healthState);
   const nav = legacy
     ? primary.map((i) => ({ to: i.to, label: `legacy.${i.label}`, icon: i.icon, match: (p: string) => ("end" in i && i.end ? p === i.to : p.startsWith(i.to)) }))
-    : mainstreamNav;
+    : mainstreamNav.filter((i) => i.label !== "exchange" || Boolean(who));
   const href = (i: NavItem) => (i.label === "trade" && !legacy ? tradeHref() : i.to);
 
   return (

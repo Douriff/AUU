@@ -172,7 +172,7 @@ export function ExchangePage() {
           {cfg.killSwitch ? <div className="pro-alert">管理员已开启紧急停止：暂停所有新订单，撤单仍可使用。</div> : null}
           <section className="settings-section">
             <h2>选择交易所</h2>
-            <div className="set-row">
+            <div className="exch-pick">
               {cfg.exchanges.map((x) => (
                 <label key={x} className="pts-agree">
                   <input type="radio" name="exch" checked={ex === x} onChange={() => setEx(x)} />
@@ -247,7 +247,7 @@ export function ExchangePage() {
               <section className="settings-section">
                 <h2>下单（现货）</h2>
                 <p className="muted">单笔金额上限 {fmt(cfg.maxOrderUsdt, 2)} USDT。只支持 XXX/USDT。{!bound.perms.trade ? "这个 Key 没有交易权限，只能查看。" : ""}</p>
-                <div className="pts-form">
+                <div className="exch-form">
                   <label className="pt-field"><span>交易对</span>
                     <input value={order.symbol} onChange={(e) => setOrder({ ...order, symbol: e.target.value.toUpperCase() })} maxLength={24} />
                   </label>
@@ -269,11 +269,11 @@ export function ExchangePage() {
                   <label className="pt-field"><span>数量（{order.symbol.split("/")[0] || "币"}）</span>
                     <input inputMode="decimal" value={order.amount} onChange={(e) => setOrder({ ...order, amount: e.target.value })} maxLength={20} />
                   </label>
-                  {order.type === "limit" && orderValid ? <p className="muted">约 {fmt(amountN * priceN, 2)} USDT</p> : null}
+                  {order.type === "limit" && orderValid ? <p className="muted exch-full">约 {fmt(amountN * priceN, 2)} USDT</p> : null}
                   {!confirmOrder ? (
-                    <button type="button" className="td-submit" disabled={!orderValid || busy || cfg.killSwitch || !bound.perms.trade} onClick={() => setConfirmOrder(true)}>下单</button>
+                    <div className="exch-full"><button type="button" className="td-submit" disabled={!orderValid || busy || cfg.killSwitch || !bound.perms.trade} onClick={() => setConfirmOrder(true)}>下单</button></div>
                   ) : (
-                    <div className="pro-alert">
+                    <div className="pro-alert exch-full">
                       确认在 {NAMES[ex]} 真实{order.side === "buy" ? "买入" : "卖出"} {order.amount} {order.symbol}
                       {order.type === "limit" ? `，价格 ${order.price}` : "（市价）"}？{" "}
                       <button type="button" className="td-submit" disabled={busy} onClick={doPlace}>{busy ? "提交中…" : "确认下单"}</button>{" "}
@@ -304,7 +304,7 @@ export function ExchangePage() {
 
               <section className="settings-section">
                 <h2>历史订单</h2>
-                <div className="set-row">
+                <div className="exch-hist">
                   <label className="pt-field"><span>交易对{ex === "binance" ? "（币安必填）" : "（可留空）"}</span>
                     <input value={histSym} onChange={(e) => setHistSym(e.target.value.toUpperCase())} maxLength={24} />
                   </label>
