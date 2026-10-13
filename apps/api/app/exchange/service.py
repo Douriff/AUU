@@ -48,7 +48,7 @@ def access(user: dict[str, Any]) -> tuple[bool, str]:
     s = store.settings()
     if not s["enabled"]:
         return False, "EXCHANGE_OFF"
-    if s["allowlistOnly"] and str(user.get("id")) not in set(s["allowlist"]):
+    if s["allowlistOnly"] and not user.get("is_admin") and str(user.get("id")) not in set(s["allowlist"]):
         return False, "EXCHANGE_NOT_ALLOWED"
     return True, ""
 

@@ -63,7 +63,7 @@ export function AdminExchangePanel() {
               <button type="button" className="td-link" onClick={() => put({ enabled: !s.enabled }, s.enabled ? "关闭交易所接入？" : "打开交易所接入？")}>{s.enabled ? "关闭" : "打开"}</button>
             </div>
             <div className="set-row">
-              <div><b>仅白名单用户：{s.allowlistOnly ? "是" : "否（所有登录用户）"}</b></div>
+              <div><b>仅白名单用户：{s.allowlistOnly ? "是" : "否（所有登录用户）"}</b><p className="muted">{s.enabled ? (s.allowlistOnly ? "当前只有白名单用户和管理员能用；普通用户看到「暂未开通」。" : "已对所有登录用户开放。") : "总开关关闭时所有人都看不到绑定入口。"}</p></div>
               <button type="button" className="td-link" onClick={() => put({ allowlistOnly: !s.allowlistOnly }, s.allowlistOnly ? "对所有登录用户开放？" : "改回仅白名单？")}>{s.allowlistOnly ? "对所有人开放" : "改回仅白名单"}</button>
             </div>
             <div className="set-row">
