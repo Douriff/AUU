@@ -1189,3 +1189,12 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .exch-guide li { margin: 3px 0; line-height: 1.6; }
 .exch-hist { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
 @media (max-width: 640px) { .exchange-page select { height: 44px; font-size: 16px; } .exch-admin .exch-inline input { width: 100%; } }
+.exch-tabs { display: flex; gap: 6px; margin: 0 0 10px; }
+.exch-tabs button { padding: 6px 18px; border-radius: 4px; border: 1px solid var(--border2, rgba(255,255,255,0.12)); background: transparent; color: var(--text); font-weight: 600; cursor: pointer; }
+.exch-tabs button.is-on { background: var(--accent); color: #111; border-color: var(--accent); }
+.fut-modal { max-width: 520px; }
+.fut-modal p { margin: 6px 0; line-height: 1.6; }
+.fut-modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.exchange-page td.up { color: var(--up, #2ebd85); } .exchange-page td.down { color: var(--down, #f6465d); }
+.fut-ack .pts-agree { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.fut-ack .td-submit { margin-top: 8px; }

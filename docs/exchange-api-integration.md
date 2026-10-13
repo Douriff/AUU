@@ -210,3 +210,11 @@
 - 与 paper、`app/live`（liveEnabled=false）完全独立，策略不接入。standby 节点拒绝 `/api/v1/exchange/` 写操作。
 - 前端：`/exchange`（用户页 + 使用指南），`/admin/exchange`（管理）。
 - 未做：WebSocket 推送、定时对账、合约、Bybit/Bitget、KMS 托管主密钥、交易所侧 cancel-all-after。
+
+## 11. 第二期：USDT 本位永续（2026-10-13）
+- Binance USD-M（ccxt defaultType=future）、OKX SWAP（defaultType=swap），合约符号 `BTC/USDT:USDT`。
+- 接口 `/api/v1/exchange/futures/ack`、`/{ex}/futures/{positions,orders/open,funding,leverage,orders,orders/cancel,close}`；管理 `/api/v1/admin/exchange/close-all`。
+- 首次风险确认必需；杠杆 ≤ maxLeverage（默认 5，可调 1–20）；合约单笔名义上限 maxFuturesUsdt（默认 50，与现货分开，可按用户覆盖），只限制开仓；紧急停止阻止开仓，reduceOnly 平仓/撤单仍可用。
+- TP/SL：开仓成交请求后，另下 reduceOnly 条件单（ccxt takeProfitPrice / stopLossPrice）。
+- 绑定：接受合约权限（Binance enableFutures；OKX trade），仍拒绝提现 / 内部划转 / 万向划转。
+- store 改为每线程一个 SQLite 连接（修复并发读取报错）。

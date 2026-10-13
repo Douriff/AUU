@@ -26,8 +26,11 @@ class FakeClient:
     okx_perm = {"perm": "read_only,trade", "ip": "156.227.238.242"}
     create_exc: Exception | None = None
 
-    def __init__(self, exchange, creds):
-        self.exchange, self.creds = exchange, creds
+    positions = []
+
+    def __init__(self, exchange, creds, market="spot"):
+        self.exchange, self.creds, self.market_type = exchange, creds, market
+        self.leverage = []
         self.options = {}
         self.created: list = []
         self.cancelled: list = []
@@ -63,6 +66,24 @@ class FakeClient:
     def fetch_order(self, oid, symbol, params):
         return {"id": "found", "clientOrderId": params["clientOrderId"], "symbol": symbol, "status": "open"}
 
+    def market(self, sym):
+        return {"contractSize": 0.01 if self.exchange == "okx" else 1}
+
+    def fetch_positions(self, symbols=None):
+        return list(FakeClient.positions)
+
+    def fetch_funding_rate(self, sym):
+        return {"fundingRate": 0.0001, "fundingTimestamp": 1, "markPrice": 100.0}
+
+    def set_margin_mode(self, mode, sym, params=None):
+        self.leverage.append(("mode", mode, sym, params))
+
+    def set_leverage(self, lev, sym, params=None):
+        self.leverage.append(("lev", lev, sym, params))
+
+    def cancel_all_orders(self, sym):
+        self.cancelled.append(("all", sym))
+
     def cancel_order(self, oid, symbol):
         self.cancelled.append((oid, symbol))
         return {"id": oid, "symbol": symbol, "status": "canceled"}
@@ -72,8 +93,8 @@ class RequestTimeout(Exception):
     pass
 
 
-def fake_make(exchange, creds=None):
-    return FakeClient(exchange, creds)
+def fake_make(exchange, creds=None, market="spot"):
+    return FakeClient(exchange, creds, market)
 
 
 class ExchangeApiTests(unittest.TestCase):
@@ -90,7 +111,7 @@ class ExchangeApiTests(unittest.TestCase):
         for k in ("AUU_INVITE_CODE", "AUU_ADMIN_USER", "AUU_ROLE"):
             os.environ.pop(k, None)
         reset_accounts(); store.reset(); svc.reset_rate()
-        FakeClient.instances = []; FakeClient.create_exc = None
+        FakeClient.instances = []; FakeClient.create_exc = None; FakeClient.positions = []
         FakeClient.restrictions = {"enableReading": True, "enableSpotAndMarginTrading": True, "enableWithdrawals": False, "ipRestrict": True}
         FakeClient.okx_perm = {"perm": "read_only,trade", "ip": "156.227.238.242"}
         self.p1 = mock.patch.object(connector, "make_client", side_effect=fake_make)
@@ -230,6 +251,76 @@ class ExchangeApiTests(unittest.TestCase):
         self._open_for_user(); self._bind()
         codes = [self.user.get("/api/v1/exchange/accounts").status_code for _ in range(svc.READ_LIMIT + 2)]
         self.assertIn(429, codes)
+
+    def _creates(self):
+        return [x for c in FakeClient.instances for x in c.created]
+
+    def test_futures_ack_leverage_cap_tpsl_kill(self):
+        self._open_for_user(); self._bind()
+        sym = "BTC/USDT:USDT"
+        self.assertEqual(self.user.get("/api/v1/exchange/binance/futures/positions").json()["error"]["code"], "FUTURES_ACK_REQUIRED")
+        self.assertTrue(self.user.post("/api/v1/exchange/futures/ack").json()["data"]["futuresAck"])
+        self.assertTrue(self.user.get("/api/v1/exchange/config").json()["data"]["futuresAck"])
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/leverage", json={"symbol": sym, "leverage": 6, "marginMode": "cross"}).json()["error"]["code"], "LEVERAGE_TOO_HIGH")
+        r = self.user.post("/api/v1/exchange/okx/futures/leverage", json={"symbol": "BTC", "leverage": 3, "marginMode": "isolated"})
+        self.assertEqual(r.json()["error"]["code"], "NOT_BOUND")
+        r = self.user.post("/api/v1/exchange/binance/futures/leverage", json={"symbol": "BTC", "leverage": 3, "marginMode": "isolated"})
+        self.assertEqual(r.json()["data"], {"symbol": sym, "leverage": 3, "marginMode": "isolated"})
+        self.admin.put("/api/v1/admin/exchange", json={"maxLeverage": 10})
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/leverage", json={"symbol": sym, "leverage": 8, "marginMode": "cross"}).status_code, 200)
+        base = {"clientOrderId": "fut000000001", "symbol": sym, "side": "buy", "type": "limit", "amount": 0.4, "price": 100, "takeProfit": 120, "stopLoss": 90}
+        r = self.user.post("/api/v1/exchange/binance/futures/orders", json=base).json()["data"]
+        self.assertEqual([t["kind"] for t in r["tpsl"]], ["takeProfit", "stopLoss"])
+        made = self._creates()
+        self.assertEqual(len(made), 3)
+        self.assertTrue(made[1][5]["reduceOnly"]); self.assertEqual(made[1][5]["takeProfitPrice"], 120); self.assertEqual(made[2][5]["stopLossPrice"], 90)
+        self.assertTrue(self.user.post("/api/v1/exchange/binance/futures/orders", json=base).json()["data"]["duplicate"])
+        self.assertEqual(len(self._creates()), 3)
+        bad = {**base, "clientOrderId": "fut000000002", "takeProfit": 80}
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=bad).json()["error"]["code"], "BAD_TPSL")
+        big = {**base, "clientOrderId": "fut000000003", "amount": 1, "takeProfit": None, "stopLoss": None}
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=big).json()["error"]["code"], "ORDER_TOO_LARGE")
+        self.admin.put("/api/v1/admin/exchange", json={"maxFuturesUsdt": 500})
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=big).status_code, 200)
+        # spot cap unchanged (50)
+        spot = {"clientOrderId": "spot00000009", "symbol": "BTC/USDT", "side": "buy", "type": "limit", "amount": 1, "price": 100}
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/orders", json=spot).json()["error"]["code"], "ORDER_TOO_LARGE")
+        self.admin.put("/api/v1/admin/exchange", json={"killSwitch": True})
+        k = {**base, "clientOrderId": "fut000000004", "takeProfit": None, "stopLoss": None}
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=k).json()["error"]["code"], "KILL_SWITCH")
+        ro = {**k, "clientOrderId": "fut000000005", "side": "sell", "reduceOnly": True, "amount": 5}
+        self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=ro).status_code, 200)  # close allowed, cap n/a
+        f = self.user.get("/api/v1/exchange/binance/futures/funding?symbol=BTC").json()["data"]
+        self.assertEqual(f["fundingRate"], 0.0001)
+
+    def test_futures_positions_close_and_admin_close_all(self):
+        self._open_for_user(); self._bind()
+        self.user.post("/api/v1/exchange/futures/ack")
+        FakeClient.positions = [
+            {"symbol": "BTC/USDT:USDT", "side": "long", "contracts": 0.2, "entryPrice": 100, "markPrice": 101, "liquidationPrice": 60, "unrealizedPnl": 0.2, "leverage": 3, "marginMode": "cross"},
+            {"symbol": "ETH/USDT:USDT", "side": "short", "contracts": 1, "entryPrice": 10, "markPrice": 9, "liquidationPrice": 14, "unrealizedPnl": 1, "leverage": 2, "marginMode": "isolated"},
+            {"symbol": "SOL/USDT:USDT", "side": "long", "contracts": 0},
+        ]
+        items = self.user.get("/api/v1/exchange/binance/futures/positions").json()["data"]["items"]
+        self.assertEqual([p["symbol"] for p in items], ["BTC/USDT:USDT", "ETH/USDT:USDT"])
+        self.assertEqual(items[0]["liquidationPrice"], 60)
+        self.user.post("/api/v1/exchange/binance/futures/close", json={"symbol": "ETH/USDT:USDT"})
+        last = self._creates()[-1]
+        self.assertEqual((last[0], last[1], last[2], last[3]), ("ETH/USDT:USDT", "market", "buy", 1.0)); self.assertTrue(last[5]["reduceOnly"])
+        self.assertEqual(self.user.post("/api/v1/admin/exchange/close-all", json={"user": "exuser"}).status_code, 403)
+        rep = self.admin.post("/api/v1/admin/exchange/close-all", json={"user": "exuser"}).json()["data"]["report"]
+        self.assertEqual(sorted(r["symbol"] for r in rep), ["BTC/USDT:USDT", "ETH/USDT:USDT"])
+        self.assertTrue(all(r["ok"] for r in rep), rep)
+        self.assertIn("admin_close_all", self.admin.get("/api/v1/admin/exchange/audit").text)
+
+    def test_bind_futures_perm_ok_transfer_rejected(self):
+        self._open_for_user()
+        FakeClient.restrictions = {**FakeClient.restrictions, "enableFutures": True}
+        r = self._bind(); self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["data"]["perms"]["futures"])
+        self.user.delete("/api/v1/exchange/binance/bind")
+        FakeClient.restrictions = {**FakeClient.restrictions, "permitsUniversalTransfer": True}
+        self.assertEqual(self._bind().json()["error"]["code"], "KEY_HAS_WITHDRAW")
 
     def test_standby_blocks_writes(self):
         self._open_for_user()

@@ -16,7 +16,7 @@ _SYMBOL = re.compile(r"^[A-Z0-9]{2,15}/USDT$")
 _COID = re.compile(r"^[A-Za-z0-9]{8,28}$")
 
 # per-user rate limits (in-process): reads and writes per 60s
-READ_LIMIT, WRITE_LIMIT, WINDOW = 30, 10, 60.0
+READ_LIMIT, WRITE_LIMIT, WINDOW = 60, 20, 60.0
 _HITS: dict[tuple[str, str], deque] = defaultdict(deque)
 _RLOCK = threading.Lock()
 
@@ -66,6 +66,12 @@ def user_cap(user_id: str) -> float:
     return float(v) if v is not None else float(s["maxOrderUsdt"])
 
 
+def futures_cap(user_id: str) -> float:
+    s = store.settings()
+    v = s["userFuturesCaps"].get(user_id)
+    return float(v) if v is not None else float(s["maxFuturesUsdt"])
+
+
 def public_config(user: Optional[dict[str, Any]]) -> dict[str, Any]:
     s = store.settings()
     okay, code = access(user) if user else (False, "AUTH_REQUIRED")
@@ -77,8 +83,12 @@ def public_config(user: Optional[dict[str, Any]]) -> dict[str, Any]:
         "exchanges": list(EXCHANGES),
         "serverIps": SERVER_IPS,
         "maxOrderUsdt": user_cap(str(user["id"])) if user else float(s["maxOrderUsdt"]),
+        "maxFuturesUsdt": futures_cap(str(user["id"])) if user else float(s["maxFuturesUsdt"]),
+        "maxLeverage": int(s["maxLeverage"]),
+        "futuresAck": bool(user and str(user["id"]) in s["futuresAcks"]),
         "cryptoReady": crypto.available(),
         "market": "spot",
+        "markets": ["spot", "swap"],
         "quotes": list(ALLOWED_QUOTES),
     }
 
@@ -130,7 +140,7 @@ def unbind(user_id: str, exchange: str, actor: str = "") -> bool:
     return gone
 
 
-def _client(user_id: str, exchange: str):
+def _client(user_id: str, exchange: str, market: str = "spot"):
     ex = _ex(exchange)
     row = store.get_cred(user_id, ex)
     if not row:
@@ -141,7 +151,7 @@ def _client(user_id: str, exchange: str):
         raise ServiceError("CRYPTO_UNAVAILABLE", "服务器加密密钥未配置", 503) from None
     except Exception:  # noqa: BLE001
         raise ServiceError("CRED_UNREADABLE", "保存的密钥无法解密，请解绑后重新绑定", 500) from None
-    return ex, row, user_client(ex, creds)
+    return ex, row, user_client(ex, creds, market)
 
 
 def _call(fn, *a, **kw):
