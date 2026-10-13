@@ -473,7 +473,8 @@
       "alerts": "Alertas"
     },
     "pnl": "Ativos/L&P",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "Fonte de dados {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "Recargas",
       "trading": "P&L trading de pontos",
       "withdrawals": "Saques",
-      "flags": "Feature flags"
+      "flags": "Feature flags",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "Consultar saldos, ajustar com senha + 2FA e ver o livro desse usuário.",
     "ledgerDesc": "Conciliar o livro completo e exportar CSV.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "Patrimônio e P&L de cada conta de trading de pontos (separado do paper).",
     "withdrawalsDesc": "Revisar saques: rejeitar para descongelar, ou registrar um hash TokenPocket.",
     "flagsDesc": "Resumo somente leitura dos feature flags de trading de pontos / saque / TRC20.",
-    "flagsHint": "Os flags são controlados por variáveis de ambiente do servidor; aqui só o estado atual."
+    "flagsHint": "Os flags são controlados por variáveis de ambiente do servidor; aqui só o estado atual.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

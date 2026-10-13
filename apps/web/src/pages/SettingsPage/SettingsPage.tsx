@@ -64,6 +64,7 @@ function MainstreamSettingsPage() {
         <Link to="/airdrops">{t("airdrops.title")} ›</Link>
         <Link to="/leaderboard">{t("nav.leaderboard")} ›</Link>
         <Link to="/points">{t("points.title")} ›</Link>
+        <Link to="/exchange">{t("nav.exchange")} ›</Link>
         {isAdmin ? <Link to="/admin">{t("admin.consoleLink")} ›</Link> : null}
       </nav>
       <section className="settings-section">

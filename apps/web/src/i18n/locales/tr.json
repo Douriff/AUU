@@ -473,7 +473,8 @@
       "alerts": "Uyarılar"
     },
     "pnl": "Varlık/K&Z",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "Veri kaynağı {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "Yüklemeler",
       "trading": "Puan ticareti K/Z",
       "withdrawals": "Çekimler",
-      "flags": "Özellik bayrakları"
+      "flags": "Özellik bayrakları",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "Bakiyeleri sorgula, şifre + 2FA ile ayarla ve kullanıcının defterini gör.",
     "ledgerDesc": "Tüm defteri mutabık kıl ve CSV dışa aktar.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "Her puan ticareti hesabının özsermaye ve K/Z'si (paper'dan ayrı).",
     "withdrawalsDesc": "Çekimleri incele: reddedip çöz veya TokenPocket tx hash kaydet.",
     "flagsDesc": "Puan ticareti / çekim / TRC20 özellik bayraklarının salt okunur özeti.",
-    "flagsHint": "Bayraklar sunucu ortam değişkenleriyle yönetilir; burada yalnızca canlı durum."
+    "flagsHint": "Bayraklar sunucu ortam değişkenleriyle yönetilir; burada yalnızca canlı durum.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

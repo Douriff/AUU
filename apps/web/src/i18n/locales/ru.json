@@ -473,7 +473,8 @@
       "alerts": "Оповещения"
     },
     "pnl": "Активы/PnL",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "Источник данных {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "Пополнения",
       "trading": "P&L торговли баллами",
       "withdrawals": "Выводы",
-      "flags": "Feature flags"
+      "flags": "Feature flags",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "Смотреть балансы, корректировать с паролем + 2FA и журнал пользователя.",
     "ledgerDesc": "Сверка полного журнала и экспорт CSV.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "Капитал и P&L каждого счёта торговли баллами (отдельно от paper).",
     "withdrawalsDesc": "Проверка выводов: отклонить (разморозить) или зарегистрировать tx hash TokenPocket.",
     "flagsDesc": "Только чтение: сводка feature flags торговли баллами / вывода / TRC20.",
-    "flagsHint": "Флаги задаются переменными окружения сервера; здесь только текущее состояние."
+    "flagsHint": "Флаги задаются переменными окружения сервера; здесь только текущее состояние.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

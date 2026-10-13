@@ -137,6 +137,17 @@ export class ApiError extends Error {
 }
 
 /** Fired when the API answers 401 (session missing/expired) so the shell can show the login page. */
+export type ExchangeConfig = {
+  enabled: boolean; access: boolean; reason: string | null; killSwitch: boolean; exchanges: string[];
+  serverIps: { primary: string; standby: string }; maxOrderUsdt: number; cryptoReady: boolean; market: string; quotes: string[];
+};
+export type ExchangeAccount = { exchange: string; masked: string; perms: { read: boolean; trade: boolean; withdraw: boolean; ipRestricted: boolean }; createdTs?: number };
+export type ExchangeOrder = { id: string; clientOrderId?: string; symbol: string; side: string; type: string; price?: number | null; average?: number | null; amount?: number | null; filled?: number | null; cost?: number | null; status: string; timestamp?: number | null };
+export type AdminExchange = {
+  enabled: boolean; allowlistOnly: boolean; allowlist: string[]; killSwitch: boolean; maxOrderUsdt: number; userCaps: Record<string, number>;
+  allowlistUsers: { id: string; name: string; capUsdt?: number | null }[]; boundCounts: Record<string, number>; serverIps: { primary: string; standby: string }; cryptoReady: boolean;
+};
+
 export const AUTH_REQUIRED_EVENT = "auu:auth-required";
 
 function noteAuth(res: Response): void {
@@ -586,6 +597,47 @@ export class HttpWsProvider {
 
   adminWithdrawComplete(body: { request_id: string; tx_hash: string; reason: string; password: string; totp_code: string }): Promise<{ request: WithdrawRequest; balance: number }> {
     return postJson("/api/v1/admin/points/withdrawals/complete", body);
+  }
+
+  // ---- exchange connect (Binance / OKX spot, per-user keys) ----
+  exchangeConfig(): Promise<ExchangeConfig> {
+    return getJson("/api/v1/exchange/config");
+  }
+  exchangeAccounts(): Promise<{ items: ExchangeAccount[] }> {
+    return getJson("/api/v1/exchange/accounts");
+  }
+  exchangeBind(ex: string, body: { apiKey: string; secret: string; passphrase?: string }): Promise<ExchangeAccount> {
+    return postJson(`/api/v1/exchange/${ex}/bind`, body);
+  }
+  exchangeUnbind(ex: string): Promise<{ deleted: boolean }> {
+    return delJson(`/api/v1/exchange/${ex}/bind`);
+  }
+  exchangeBalances(ex: string): Promise<{ items: { asset: string; total: number; free: number; used: number }[] }> {
+    return getJson(`/api/v1/exchange/${ex}/balances`);
+  }
+  exchangeOpenOrders(ex: string, symbol?: string): Promise<{ items: ExchangeOrder[] }> {
+    return getJson(`/api/v1/exchange/${ex}/orders/open${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`);
+  }
+  exchangeHistory(ex: string, symbol?: string): Promise<{ items: ExchangeOrder[] }> {
+    return getJson(`/api/v1/exchange/${ex}/orders/history${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`);
+  }
+  exchangePlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null }): Promise<{ order: ExchangeOrder; duplicate: boolean }> {
+    return postJson(`/api/v1/exchange/${ex}/orders`, body);
+  }
+  exchangeCancel(ex: string, orderId: string, symbol: string): Promise<ExchangeOrder> {
+    return postJson(`/api/v1/exchange/${ex}/orders/cancel`, { orderId, symbol });
+  }
+  adminExchange(): Promise<AdminExchange> {
+    return getJson("/api/v1/admin/exchange");
+  }
+  adminExchangeSet(body: Partial<{ enabled: boolean; allowlistOnly: boolean; killSwitch: boolean; maxOrderUsdt: number }>): Promise<AdminExchange> {
+    return putJson("/api/v1/admin/exchange", body);
+  }
+  adminExchangeAllow(body: { user: string; allow: boolean; capUsdt?: number }): Promise<AdminExchange> {
+    return postJson("/api/v1/admin/exchange/allowlist", body);
+  }
+  adminExchangeAudit(user?: string): Promise<{ items: { ts: number; userId: string; actor: string; action: string; detail: Record<string, unknown> }[] }> {
+    return getJson(`/api/v1/admin/exchange/audit${user ? `?user=${encodeURIComponent(user)}` : ""}`);
   }
 
   adminPointsFlags(): Promise<{ withdraw: PointsFeatureConfig; pointsTrading: PointsFeatureConfig; trc20Topup: PointsFeatureConfig; shop: { enabled: boolean }; manualTopup: boolean }> {

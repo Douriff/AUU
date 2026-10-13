@@ -473,7 +473,8 @@
       "alerts": "Alerts"
     },
     "pnl": "Assets/P&L",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "Data source {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "Top-ups",
       "trading": "Points trading P&L",
       "withdrawals": "Withdrawals",
-      "flags": "Feature flags"
+      "flags": "Feature flags",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "Look up balances, adjust with password + 2FA, and view that user's ledger.",
     "ledgerDesc": "Reconcile the full ledger and export CSV.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "Equity and P&L of each user's points-trading account (separate from paper).",
     "withdrawalsDesc": "Review withdrawals: reject to unfreeze, or register a TokenPocket tx hash.",
     "flagsDesc": "Read-only summary of points trading / withdraw / TRC20 feature flags.",
-    "flagsHint": "Flags are controlled by server env vars; this page only shows the live state."
+    "flagsHint": "Flags are controlled by server env vars; this page only shows the live state.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

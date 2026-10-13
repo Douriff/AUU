@@ -8,6 +8,7 @@ const sections = [
   { to: "/admin/trading", label: "trading", desc: "tradingDesc" },
   { to: "/admin/withdrawals", label: "withdrawals", desc: "withdrawalsDesc" },
   { to: "/admin/flags", label: "flags", desc: "flagsDesc" },
+  { to: "/admin/exchange", label: "exchange", desc: "exchangeDesc" },
 ] as const;
 
 /** Admin console home — section cards into dedicated panels. */

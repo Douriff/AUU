@@ -473,7 +473,8 @@
       "alerts": "告警"
     },
     "pnl": "资产/盈亏",
-    "airdrops": "空投"
+    "airdrops": "空投",
+    "exchange": "交易所接入"
   },
   "shell": {
     "source": "行情来源 {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "充值",
       "trading": "积分交易盈亏",
       "withdrawals": "提现",
-      "flags": "功能开关"
+      "flags": "功能开关",
+      "exchange": "交易所接入"
     },
     "usersDesc": "查询用户积分、手工调整（密码 + 两步验证），查看该用户流水。",
     "ledgerDesc": "全站流水对账与 CSV 导出。",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "各用户积分交易账户的权益与盈亏（与纸面账户分开）。",
     "withdrawalsDesc": "审核提现申请：驳回解冻，或登记 TokenPocket 交易哈希。",
     "flagsDesc": "积分交易 / 提现 / TRC20 充值等功能开关只读摘要。",
-    "flagsHint": "开关由服务器环境变量控制；此处仅展示当前生效状态。"
+    "flagsHint": "开关由服务器环境变量控制；此处仅展示当前生效状态。",
+    "exchangeDesc": "Binance / OKX 用户 API：总开关、白名单、紧急停止、单笔上限、审计。"
   },
   "airdrops": {
     "title": "空投雷达",
