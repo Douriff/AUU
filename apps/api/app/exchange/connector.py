@@ -22,10 +22,14 @@ class ConnectorError(Exception):
         self.message = message
 
 
-def make_client(exchange: str, creds: Optional[dict[str, str]] = None):
+MARKET_TYPES = {"spot": {"binance": "spot", "okx": "spot"}, "swap": {"binance": "future", "okx": "swap"}}
+
+
+def make_client(exchange: str, creds: Optional[dict[str, str]] = None, market: str = "spot"):
     import ccxt  # MIT
 
-    opts: dict[str, Any] = {"enableRateLimit": True, "timeout": 15000, "options": {"defaultType": "spot"}}
+    dtype = MARKET_TYPES.get(market, MARKET_TYPES["spot"])[exchange]
+    opts: dict[str, Any] = {"enableRateLimit": True, "timeout": 15000, "options": {"defaultType": dtype}}
     if creds:
         opts["apiKey"] = creds["apiKey"]
         opts["secret"] = creds["secret"]
@@ -34,21 +38,22 @@ def make_client(exchange: str, creds: Optional[dict[str, str]] = None):
     return getattr(ccxt, exchange)(opts)
 
 
-def _shared_markets(exchange: str):
+def _shared_markets(exchange: str, market: str = "spot"):
     with _MLOCK:
-        hit = _MARKETS.get(exchange)
+        key = f"{exchange}:{market}"
+        hit = _MARKETS.get(key)
         if hit and time.time() - hit[0] < MARKETS_TTL:
             return hit[1], hit[2]
-        c = make_client(exchange)
+        c = make_client(exchange, None, market)
         c.load_markets()
-        _MARKETS[exchange] = (time.time(), c.markets, c.currencies)
+        _MARKETS[key] = (time.time(), c.markets, c.currencies)
         return c.markets, c.currencies
 
 
-def user_client(exchange: str, creds: dict[str, str]):
-    c = make_client(exchange, creds)
+def user_client(exchange: str, creds: dict[str, str], market: str = "spot"):
+    c = make_client(exchange, creds, market)
     try:
-        markets, currencies = _shared_markets(exchange)
+        markets, currencies = _shared_markets(exchange, market)
         c.set_markets(markets, currencies)
     except Exception:  # noqa: BLE001 - fall back to the client's own lazy load
         pass
@@ -82,7 +87,8 @@ def check_permissions(exchange: str, client) -> dict[str, Any]:
             return {
                 "read": truthy(r.get("enableReading")),
                 "trade": truthy(r.get("enableSpotAndMarginTrading")),
-                "withdraw": truthy(r.get("enableWithdrawals")) or truthy(r.get("enableInternalTransfer")),
+                "futures": truthy(r.get("enableFutures")),
+                "withdraw": truthy(r.get("enableWithdrawals")) or truthy(r.get("enableInternalTransfer")) or truthy(r.get("permitsUniversalTransfer")),
                 "ipRestricted": truthy(r.get("ipRestrict")),
             }
         if exchange == "okx":
@@ -92,6 +98,7 @@ def check_permissions(exchange: str, client) -> dict[str, Any]:
             return {
                 "read": "read_only" in perm or bool(perm),
                 "trade": "trade" in perm,
+                "futures": "trade" in perm,
                 "withdraw": "withdraw" in perm,
                 "ipRestricted": bool(str(row.get("ip") or "").strip()),
             }
@@ -134,3 +141,21 @@ def norm_balance(b: dict[str, Any]) -> list[dict[str, Any]]:
         out.append({"asset": asset, "total": tv, "free": float(free.get(asset) or 0), "used": float(used.get(asset) or 0)})
     out.sort(key=lambda r: r["asset"])
     return out
+
+
+def norm_position(p: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "symbol": p.get("symbol"),
+        "side": p.get("side"),
+        "contracts": p.get("contracts"),
+        "contractSize": p.get("contractSize"),
+        "notional": p.get("notional"),
+        "entryPrice": p.get("entryPrice"),
+        "markPrice": p.get("markPrice"),
+        "liquidationPrice": p.get("liquidationPrice"),
+        "unrealizedPnl": p.get("unrealizedPnl"),
+        "leverage": p.get("leverage"),
+        "marginMode": p.get("marginMode"),
+        "initialMargin": p.get("initialMargin"),
+        "percentage": p.get("percentage"),
+    }

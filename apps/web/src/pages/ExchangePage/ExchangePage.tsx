@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { marketProvider, type ExchangeAccount, type ExchangeConfig, type ExchangeOrder } from "@/providers/HttpWsProvider";
 import { errText } from "@/i18n/errors";
 import { ExchangeGuide } from "./ExchangeGuide";
+import { FuturesPanel } from "./FuturesPanel";
 
 const NAMES: Record<string, string> = { binance: "Binance 币安", okx: "OKX 欧易" };
 
@@ -34,6 +35,7 @@ export function ExchangePage() {
   const [coid, setCoid] = useState(newCoid());
   const [confirmOrder, setConfirmOrder] = useState(false);
   const [riskOk, setRiskOk] = useState(false);
+  const [tab, setTab] = useState<"spot" | "swap">("spot");
 
   const bound = accounts.find((a) => a.exchange === ex);
 
@@ -147,7 +149,7 @@ export function ExchangePage() {
   return (
     <div className="shell-page settings-page pro-page exchange-page">
       <header className="pro-head">
-        <h1>交易所接入（Binance / OKX 现货）</h1>
+        <h1>交易所接入（Binance / OKX · 现货 + 合约）</h1>
         <p>用你自己的 API Key 查看余额、挂单、历史订单，并手动下现货单。<a href="#guide">不会操作？看下方使用指南 ↓</a></p>
       </header>
 
@@ -218,7 +220,7 @@ export function ExchangePage() {
                   <div>
                     <b>{bound.masked}</b>
                     <p className="muted">
-                      权限：读取 {bound.perms.read ? "✓" : "✗"} · 现货交易 {bound.perms.trade ? "✓" : "✗"} · 提现 ✗ · IP 白名单 {bound.perms.ipRestricted ? "✓" : "✗"}
+                      权限：读取 {bound.perms.read ? "✓" : "✗"} · 现货交易 {bound.perms.trade ? "✓" : "✗"} · 合约 {bound.perms.futures ? "✓" : "✗"} · 提现 ✗ · IP 白名单 {bound.perms.ipRestricted ? "✓" : "✗"}
                     </p>
                   </div>
                   <div>
@@ -228,6 +230,13 @@ export function ExchangePage() {
                 </div>
               </section>
 
+              <div className="exch-tabs" role="tablist">
+                <button type="button" role="tab" aria-selected={tab === "spot"} className={tab === "spot" ? "is-on" : ""} onClick={() => setTab("spot")}>现货</button>
+                <button type="button" role="tab" aria-selected={tab === "swap"} className={tab === "swap" ? "is-on" : ""} onClick={() => setTab("swap")}>合约</button>
+              </div>
+              {tab === "swap" ? (
+                <FuturesPanel ex={ex} exName={NAMES[ex] ?? ex} cfg={cfg} bound={bound} onCfg={loadCfg} setErr={setErr} setMsg={setMsg} />
+              ) : (<>
               <section className="settings-section">
                 <h2>余额</h2>
                 {balances.length === 0 ? <p className="muted">没有余额或还在加载。</p> : (
@@ -325,6 +334,7 @@ export function ExchangePage() {
                   </div>
                 )}
               </section>
+              </>)}
             </>
           )}
         </>

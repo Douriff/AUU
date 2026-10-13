@@ -12,17 +12,8 @@ from typing import Any, Optional
 from app.data_paths import data_dir
 
 _LOCK = threading.RLock()
-_CONN: Optional[sqlite3.Connection] = None
-_PATH: Optional[str] = None
-
-DEFAULTS: dict[str, Any] = {
-    "enabled": False,          # global feature toggle, DEFAULT OFF
-    "allowlistOnly": True,     # when enabled, only allowlisted users unless turned off
-    "allowlist": [],           # user ids
-    "killSwitch": False,       # true = no new orders anywhere (cancel still allowed)
-    "maxOrderUsdt": 50.0,      # default per-order notional cap (USDT)
-    "userCaps": {},            # user id -> cap override (USDT)
-}
+_TLS = threading.local()
+_GEN = 0  # bumped by reset() so every thread reopens
 
 
 def _path() -> str:
@@ -30,38 +21,63 @@ def _path() -> str:
     return raw or str(Path(data_dir()) / "exchange.sqlite")
 
 
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS creds(user_id TEXT, exchange TEXT, blob TEXT, masked TEXT,
+  perms TEXT, created_ts INTEGER, PRIMARY KEY(user_id, exchange));
+CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS orders(user_id TEXT, exchange TEXT, coid TEXT, symbol TEXT,
+  request TEXT, status TEXT, result TEXT, ts INTEGER, PRIMARY KEY(user_id, exchange, coid));
+CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER,
+  user_id TEXT, actor TEXT, action TEXT, detail TEXT);
+"""
+
+
 def conn() -> sqlite3.Connection:
-    global _CONN, _PATH
+    """One SQLite connection per thread (FastAPI runs sync routes in a threadpool)."""
+    p = _path()
+    c = getattr(_TLS, "conn", None)
+    if c is not None and getattr(_TLS, "path", None) == p and getattr(_TLS, "gen", -1) == _GEN:
+        return c
+    if c is not None:
+        try:
+            c.close()
+        except Exception:  # noqa: BLE001
+            pass
+    Path(p).parent.mkdir(parents=True, exist_ok=True)
+    c = sqlite3.connect(p, timeout=10, isolation_level=None)
+    c.execute("PRAGMA busy_timeout=10000")
     with _LOCK:
-        p = _path()
-        if _CONN is None or _PATH != p:
-            Path(p).parent.mkdir(parents=True, exist_ok=True)
-            _CONN = sqlite3.connect(p, check_same_thread=False, isolation_level=None)
-            _PATH = p
-            _CONN.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS creds(user_id TEXT, exchange TEXT, blob TEXT, masked TEXT,
-                  perms TEXT, created_ts INTEGER, PRIMARY KEY(user_id, exchange));
-                CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
-                CREATE TABLE IF NOT EXISTS orders(user_id TEXT, exchange TEXT, coid TEXT, symbol TEXT,
-                  request TEXT, status TEXT, result TEXT, ts INTEGER, PRIMARY KEY(user_id, exchange, coid));
-                CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER,
-                  user_id TEXT, actor TEXT, action TEXT, detail TEXT);
-                """
-            )
-            try:
-                os.chmod(p, 0o600)
-            except OSError:
-                pass
-        return _CONN
+        c.executescript(_SCHEMA)
+    try:
+        os.chmod(p, 0o600)
+    except OSError:
+        pass
+    _TLS.conn, _TLS.path, _TLS.gen = c, p, _GEN
+    return c
 
 
 def reset() -> None:
-    global _CONN, _PATH
+    global _GEN
     with _LOCK:
-        if _CONN is not None:
-            _CONN.close()
-        _CONN, _PATH = None, None
+        _GEN += 1
+        c = getattr(_TLS, "conn", None)
+        if c is not None:
+            c.close()
+            _TLS.conn = None
+
+
+DEFAULTS: dict[str, Any] = {
+    "enabled": False,          # global feature toggle, DEFAULT OFF
+    "allowlistOnly": True,     # when enabled, only allowlisted users unless turned off
+    "allowlist": [],           # user ids
+    "killSwitch": False,       # true = no new orders anywhere (cancel / reduce-only close still allowed)
+    "maxOrderUsdt": 50.0,      # default per-order notional cap (USDT)
+    "userCaps": {},            # user id -> cap override (USDT)
+    "maxLeverage": 5,          # futures: max leverage a user may set
+    "maxFuturesUsdt": 50.0,    # futures: default per-order notional cap (USDT), separate from spot
+    "userFuturesCaps": {},     # user id -> futures cap override (USDT)
+    "futuresAcks": {},         # user id -> ts of first-time futures risk acknowledgement
+}
 
 
 def now_ms() -> int:

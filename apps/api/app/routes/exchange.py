@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.accounts import auth_enabled, find_user, user_by_id
 from app.exchange import service as svc
+from app.exchange import futures as fut
 from app.exchange import store
 from app.exchange.service import ServiceError
 from app.routes.auth import session_user
@@ -154,6 +155,105 @@ def cancel(exchange: str, request: Request, body: CancelBody):
         return _fail(e)
 
 
+# ---- futures (USDT perpetual) ----
+class FutOrderBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clientOrderId: str = Field(max_length=40)
+    symbol: str = Field(max_length=32)
+    side: str = Field(max_length=8)
+    type: str = Field(max_length=8)
+    amount: float
+    price: Optional[float] = None
+    reduceOnly: bool = False
+    takeProfit: Optional[float] = None
+    stopLoss: Optional[float] = None
+
+
+class LeverageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(max_length=32)
+    leverage: int
+    marginMode: str = Field(max_length=10)
+
+
+class SymBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(max_length=32)
+
+
+@router.post("/api/v1/exchange/futures/ack")
+def futures_ack(request: Request):
+    try:
+        u = _need(request, kind="write")
+        fut.ack(str(u["id"]))
+        return ok({"futuresAck": True})
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.get("/api/v1/exchange/{exchange}/futures/positions")
+def futures_positions(exchange: str, request: Request):
+    try:
+        u = _need(request)
+        return ok({"items": fut.positions(str(u["id"]), exchange)})
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.get("/api/v1/exchange/{exchange}/futures/orders/open")
+def futures_open(exchange: str, request: Request, symbol: Optional[str] = Query(None, max_length=32)):
+    try:
+        u = _need(request)
+        return ok({"items": fut.open_orders(str(u["id"]), exchange, symbol)})
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.get("/api/v1/exchange/{exchange}/futures/funding")
+def futures_funding(exchange: str, request: Request, symbol: str = Query(..., max_length=32)):
+    try:
+        u = _need(request)
+        return ok(fut.funding(str(u["id"]), exchange, symbol))
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.post("/api/v1/exchange/{exchange}/futures/leverage")
+def futures_leverage(exchange: str, request: Request, body: LeverageBody):
+    try:
+        u = _need(request, kind="write")
+        return ok(fut.set_leverage(str(u["id"]), exchange, body.symbol, body.leverage, body.marginMode))
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.post("/api/v1/exchange/{exchange}/futures/orders")
+def futures_place(exchange: str, request: Request, body: FutOrderBody):
+    try:
+        u = _need(request, kind="write")
+        return ok(fut.place(str(u["id"]), exchange, body.model_dump()))
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.post("/api/v1/exchange/{exchange}/futures/orders/cancel")
+def futures_cancel(exchange: str, request: Request, body: CancelBody):
+    try:
+        u = _need(request, kind="write")
+        return ok(fut.cancel(str(u["id"]), exchange, body.orderId, body.symbol))
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.post("/api/v1/exchange/{exchange}/futures/close")
+def futures_close(exchange: str, request: Request, body: SymBody):
+    try:
+        u = _need(request, kind="write")
+        return ok(fut.close_position(str(u["id"]), exchange, body.symbol))
+    except ServiceError as e:
+        return _fail(e)
+
+
 # ---- admin ----
 class AdminSettingsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -161,6 +261,8 @@ class AdminSettingsBody(BaseModel):
     allowlistOnly: Optional[bool] = None
     killSwitch: Optional[bool] = None
     maxOrderUsdt: Optional[float] = Field(None, gt=0, le=100000)
+    maxFuturesUsdt: Optional[float] = Field(None, gt=0, le=100000)
+    maxLeverage: Optional[int] = Field(None, ge=1, le=20)
 
 
 class AllowBody(BaseModel):
@@ -168,6 +270,12 @@ class AllowBody(BaseModel):
     user: str = Field(max_length=64)
     allow: bool = True
     capUsdt: Optional[float] = Field(None, gt=0, le=100000)
+    futuresCapUsdt: Optional[float] = Field(None, gt=0, le=100000)
+
+
+class CloseAllBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user: str = Field(max_length=64)
 
 
 def _admin_view():
@@ -175,7 +283,7 @@ def _admin_view():
     allow = []
     for uid in s["allowlist"]:
         row = user_by_id(uid) or {}
-        allow.append({"id": uid, "name": row.get("name") or "?", "capUsdt": s["userCaps"].get(uid)})
+        allow.append({"id": uid, "name": row.get("name") or "?", "capUsdt": s["userCaps"].get(uid), "futuresCapUsdt": s["userFuturesCaps"].get(uid), "futuresAck": uid in s["futuresAcks"]})
     return {**s, "allowlistUsers": allow, "boundCounts": store.count_creds(), "serverIps": svc.SERVER_IPS, "cryptoReady": svc.crypto.available()}
 
 
@@ -214,16 +322,33 @@ def admin_allow(request: Request, body: AllowBody):
     s = store.settings()
     allow = [x for x in s["allowlist"] if x != uid]
     caps = dict(s["userCaps"])
+    fcaps = dict(s["userFuturesCaps"])
     if body.allow:
         allow.append(uid)
         if body.capUsdt is not None:
             caps[uid] = body.capUsdt
+        if body.futuresCapUsdt is not None:
+            fcaps[uid] = body.futuresCapUsdt
     else:
         caps.pop(uid, None)
+        fcaps.pop(uid, None)
     store.set_setting("allowlist", allow)
     store.set_setting("userCaps", caps)
-    store.audit(uid, str(a["id"]), "admin_allowlist", {"allow": body.allow, "capUsdt": body.capUsdt})
+    store.set_setting("userFuturesCaps", fcaps)
+    store.audit(uid, str(a["id"]), "admin_allowlist", {"allow": body.allow, "capUsdt": body.capUsdt, "futuresCapUsdt": body.futuresCapUsdt})
     return ok(_admin_view())
+
+
+@router.post("/api/v1/admin/exchange/close-all")
+def admin_close_all(request: Request, body: CloseAllBody):
+    try:
+        a = _admin(request)
+    except ServiceError as e:
+        return _fail(e)
+    target = find_user(body.user) or user_by_id(body.user)
+    if not target:
+        return err("USER_NOT_FOUND", "找不到这个用户", 404)
+    return ok(fut.close_all(str(target["id"]), str(a["id"])))
 
 
 @router.get("/api/v1/admin/exchange/audit")

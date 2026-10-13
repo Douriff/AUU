@@ -140,12 +140,14 @@ export class ApiError extends Error {
 export type ExchangeConfig = {
   enabled: boolean; access: boolean; reason: string | null; killSwitch: boolean; exchanges: string[];
   serverIps: { primary: string; standby: string }; maxOrderUsdt: number; cryptoReady: boolean; market: string; quotes: string[];
+  maxFuturesUsdt: number; maxLeverage: number; futuresAck: boolean; markets?: string[];
 };
-export type ExchangeAccount = { exchange: string; masked: string; perms: { read: boolean; trade: boolean; withdraw: boolean; ipRestricted: boolean }; createdTs?: number };
+export type ExchangePosition = { symbol: string; side: string; contracts: number; contractSize?: number | null; notional?: number | null; entryPrice?: number | null; markPrice?: number | null; liquidationPrice?: number | null; unrealizedPnl?: number | null; leverage?: number | null; marginMode?: string | null; percentage?: number | null };
+export type ExchangeAccount = { exchange: string; masked: string; perms: { read: boolean; trade: boolean; futures?: boolean; withdraw: boolean; ipRestricted: boolean }; createdTs?: number };
 export type ExchangeOrder = { id: string; clientOrderId?: string; symbol: string; side: string; type: string; price?: number | null; average?: number | null; amount?: number | null; filled?: number | null; cost?: number | null; status: string; timestamp?: number | null };
 export type AdminExchange = {
   enabled: boolean; allowlistOnly: boolean; allowlist: string[]; killSwitch: boolean; maxOrderUsdt: number; userCaps: Record<string, number>;
-  allowlistUsers: { id: string; name: string; capUsdt?: number | null }[]; boundCounts: Record<string, number>; serverIps: { primary: string; standby: string }; cryptoReady: boolean;
+  allowlistUsers: { id: string; name: string; capUsdt?: number | null; futuresCapUsdt?: number | null; futuresAck?: boolean }[]; maxLeverage: number; maxFuturesUsdt: number; boundCounts: Record<string, number>; serverIps: { primary: string; standby: string }; cryptoReady: boolean;
 };
 
 export const AUTH_REQUIRED_EVENT = "auu:auth-required";
@@ -627,13 +629,40 @@ export class HttpWsProvider {
   exchangeCancel(ex: string, orderId: string, symbol: string): Promise<ExchangeOrder> {
     return postJson(`/api/v1/exchange/${ex}/orders/cancel`, { orderId, symbol });
   }
+  exchangeFuturesAck(): Promise<{ futuresAck: boolean }> {
+    return postJson("/api/v1/exchange/futures/ack", {});
+  }
+  exchangeFuturesPositions(ex: string): Promise<{ items: ExchangePosition[] }> {
+    return getJson(`/api/v1/exchange/${ex}/futures/positions`);
+  }
+  exchangeFuturesOpen(ex: string): Promise<{ items: ExchangeOrder[] }> {
+    return getJson(`/api/v1/exchange/${ex}/futures/orders/open`);
+  }
+  exchangeFuturesFunding(ex: string, symbol: string): Promise<{ symbol: string; fundingRate?: number | null; nextFundingTime?: number | null; markPrice?: number | null; indexPrice?: number | null; interval?: string | null }> {
+    return getJson(`/api/v1/exchange/${ex}/futures/funding?symbol=${encodeURIComponent(symbol)}`);
+  }
+  exchangeFuturesLeverage(ex: string, body: { symbol: string; leverage: number; marginMode: string }): Promise<{ symbol: string; leverage: number; marginMode: string }> {
+    return postJson(`/api/v1/exchange/${ex}/futures/leverage`, body);
+  }
+  exchangeFuturesPlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null; reduceOnly?: boolean; takeProfit?: number | null; stopLoss?: number | null }): Promise<{ order: ExchangeOrder; duplicate: boolean; tpsl: { kind: string; ok: boolean; message?: string }[] }> {
+    return postJson(`/api/v1/exchange/${ex}/futures/orders`, body);
+  }
+  exchangeFuturesCancel(ex: string, orderId: string, symbol: string): Promise<ExchangeOrder> {
+    return postJson(`/api/v1/exchange/${ex}/futures/orders/cancel`, { orderId, symbol });
+  }
+  exchangeFuturesClose(ex: string, symbol: string): Promise<{ closed: ExchangeOrder[] }> {
+    return postJson(`/api/v1/exchange/${ex}/futures/close`, { symbol });
+  }
+  adminExchangeCloseAll(user: string): Promise<{ report: { exchange: string; symbol?: string; ok: boolean; message?: string }[] }> {
+    return postJson("/api/v1/admin/exchange/close-all", { user });
+  }
   adminExchange(): Promise<AdminExchange> {
     return getJson("/api/v1/admin/exchange");
   }
-  adminExchangeSet(body: Partial<{ enabled: boolean; allowlistOnly: boolean; killSwitch: boolean; maxOrderUsdt: number }>): Promise<AdminExchange> {
+  adminExchangeSet(body: Partial<{ enabled: boolean; allowlistOnly: boolean; killSwitch: boolean; maxOrderUsdt: number; maxFuturesUsdt: number; maxLeverage: number }>): Promise<AdminExchange> {
     return putJson("/api/v1/admin/exchange", body);
   }
-  adminExchangeAllow(body: { user: string; allow: boolean; capUsdt?: number }): Promise<AdminExchange> {
+  adminExchangeAllow(body: { user: string; allow: boolean; capUsdt?: number; futuresCapUsdt?: number }): Promise<AdminExchange> {
     return postJson("/api/v1/admin/exchange/allowlist", body);
   }
   adminExchangeAudit(user?: string): Promise<{ items: { ts: number; userId: string; actor: string; action: string; detail: Record<string, unknown> }[] }> {

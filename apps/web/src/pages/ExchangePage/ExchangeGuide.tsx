@@ -25,7 +25,8 @@ export function ExchangeGuide({ primaryIp, standbyIp }: { primaryIp: string; sta
             <ul>
               <li>勾选「启用读取」（Enable Reading）——默认已勾选。</li>
               <li>勾选「启用现货及杠杆交易」（Enable Spot &amp; Margin Trading）。</li>
-              <li><b>不要</b>勾选「允许提现」（Enable Withdrawals）、「允许万向划转」（Permits Universal Transfer）、合约、杠杆借贷等其他选项。</li>
+              <li>想用<b>合约</b>：先在币安开通 U 本位合约账户（第一次进入「合约」页面按提示开通并答题），再勾选「允许合约」（Enable Futures）。只用现货可以不勾。</li>
+              <li><b>不要</b>勾选「允许提现」（Enable Withdrawals）、「允许万向划转」（Permits Universal Transfer）、「允许内部划转」、杠杆借贷等其他选项。</li>
               <li>IP 访问限制选「仅限受信任的 IP」（Restrict access to trusted IPs only），依次填入 <code>{primaryIp}</code> 和 <code>{standbyIp}</code>，点确认。</li>
             </ul>
           </li>
@@ -40,7 +41,8 @@ export function ExchangeGuide({ primaryIp, standbyIp }: { primaryIp: string; sta
           <li>登录 okx.com → 右上角头像 →「API」（API and connections）→「创建 API Key」。手机 App：菜单 → API → 创建 API Key。</li>
           <li>用途选「API 交易」，名字填 AUUTRADE。</li>
           <li>IP 白名单填：<code>{ips}</code>（两个 IP 中间用空格或逗号隔开）。</li>
-          <li>权限只勾「读取」和「交易」，<b>不要</b>勾「提现」。</li>
+          <li>权限只勾「读取」和「交易」，<b>不要</b>勾「提现」。（OKX 的「交易」权限同时包含现货和合约。）</li>
+          <li>想用合约：OKX 账户模式需要是「合约模式」或「跨币种/组合保证金」，在 交易设置 → 账户模式 里切换（简单模式只能现货）。</li>
           <li>设置一个 <b>Passphrase</b>（口令，自己记住，OKX 找不回），完成安全验证。</li>
           <li>复制 <b>API Key</b>、<b>Secret Key</b>，以及刚设置的 <b>Passphrase</b>。</li>
         </ol>
@@ -69,6 +71,18 @@ export function ExchangeGuide({ primaryIp, standbyIp }: { primaryIp: string; sta
       </details>
 
       <details>
+        <summary><b>第 3 步（合约）：开仓、设置止盈止损、平仓</b></summary>
+        <ol>
+          <li>绑定后点上方「合约」标签。第一次会出现<b>合约风险确认</b>，逐条勾选后才能使用。</li>
+          <li>填合约（如 BTC/USDT:USDT，直接填 BTC 也行），选「逐仓」（推荐新手）和杠杆（本站有最高杠杆限制，默认 5 倍），点「应用杠杆/模式」。</li>
+          <li>填方向（开多/开空）、限价或市价、数量（OKX 单位是「张」，BTC 每张 0.01 BTC），<b>建议同时填止损价</b>，止盈可选。</li>
+          <li>点「开仓下单」，在弹窗里看清楚，输入「确认」两个字再提交。</li>
+          <li>「合约持仓」会显示开仓价、标记价、<b>强平价</b>、未实现盈亏。点「市价平仓」即可平掉；也可以勾「只减仓」手动下平仓单。</li>
+          <li>止盈/止损单会出现在「合约挂单」里，平仓后记得把没用的止盈止损单撤掉。</li>
+        </ol>
+      </details>
+
+      <details>
         <summary><b>第 4 步：不用了怎么解绑、删除 Key</b></summary>
         <ol>
           <li>在本页点「解绑」：本站立即删除保存的加密 Key。</li>
@@ -85,7 +99,10 @@ export function ExchangeGuide({ primaryIp, standbyIp }: { primaryIp: string; sta
           <li><b>“余额不足” / “交易所拒绝订单”</b>：金额太小（低于最小下单额）、价格精度不对或余额不够。</li>
           <li><b>“下单结果未知”</b>：网络抖动。直接再点一次同一笔下单，系统会按同一个订单号去交易所查，不会重复下单。</li>
           <li><b>“紧急停止已开启”</b>：管理员暂停了所有新单，你仍可以撤单。</li>
-          <li>只支持现货 XXX/USDT，不支持合约、杠杆、提现、划转。本站策略/模拟盘<b>不会</b>自动用你的 Key 下单，所有真实订单都由你自己点击。</li>
+          <li><b>合约爆仓风险</b>：价格走到「强平价」时交易所会强制平仓。杠杆越高、强平价离现价越近。逐仓最多亏光这个仓位的保证金；全仓可能亏掉合约账户里全部保证金。资金费率每 8 小时左右结算一次（正数时多头付钱给空头）。</li>
+          <li><b>提示“没有合约权限”</b>：币安要勾选「允许合约」并先开通合约账户；OKX 要把账户模式切到合约模式。</li>
+          <li>只支持现货 XXX/USDT 和 USDT 本位永续合约，不支持币本位合约、期权、提现、划转。本站策略/模拟盘<b>不会</b>自动用你的 Key 下单，所有真实订单都由你自己点击。</li>
+          <li>管理员可以开启紧急停止（只能平仓不能开仓），必要时也可以一键帮你平掉所有合约持仓。</li>
           <li>真实交易有亏损风险，市价单可能有滑点；本站不提供投资建议，盈亏由你自己承担。部分国家/地区不允许使用某些交易所，请遵守当地法律和交易所条款。</li>
           <li>服务器在东京，香港是备用节点；节点切换过程中可能短暂只能查看、不能下单。</li>
         </ul>
