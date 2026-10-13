@@ -474,7 +474,7 @@
     },
     "pnl": "Varlık/K&Z",
     "airdrops": "Airdrops",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "Veri kaynağı {{src}}",

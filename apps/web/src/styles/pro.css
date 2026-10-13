@@ -1169,3 +1169,23 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
   .ad-bar .seg { width: 100%; }
   .ad-detail-title { font-size: 17px; }
 }
+
+/* exchange connect */
+.exchange-page .exch-risk { display: block; line-height: 1.7; }
+.exch-pick { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+.exch-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; align-items: end; }
+.exch-form .exch-full { grid-column: 1 / -1; }
+.exchange-page select, .exch-admin input, .exch-admin select {
+  height: 38px; background: var(--panel2); color: var(--text); border: 1px solid var(--border2, rgba(255,255,255,0.12));
+  border-radius: 4px; padding: 0 10px; font: 500 14px var(--mono);
+}
+.exchange-page select:focus, .exch-admin input:focus { border-color: var(--accent); outline: none; }
+.exch-admin .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 0; }
+.exch-admin .exch-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.exch-admin .exch-inline input { width: 180px; }
+.exch-admin td code { white-space: normal; word-break: break-all; font-size: 11.5px; }
+.exch-guide details { margin: 8px 0; }
+.exch-guide summary { cursor: pointer; padding: 4px 0; }
+.exch-guide li { margin: 3px 0; line-height: 1.6; }
+.exch-hist { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+@media (max-width: 640px) { .exchange-page select { height: 44px; font-size: 16px; } .exch-admin .exch-inline input { width: 100%; } }

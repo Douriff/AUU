@@ -474,7 +474,7 @@
     },
     "pnl": "Vermögen/GuV",
     "airdrops": "Airdrops",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "Datenquelle {{src}}",

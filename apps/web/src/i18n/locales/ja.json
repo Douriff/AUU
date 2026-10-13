@@ -474,7 +474,7 @@
     },
     "pnl": "資産/損益",
     "airdrops": "エアドロ",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "データソース {{src}}",

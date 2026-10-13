@@ -474,7 +474,7 @@
     },
     "pnl": "الأصول/الربح",
     "airdrops": "Airdrops",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "مصدر البيانات {{src}}",

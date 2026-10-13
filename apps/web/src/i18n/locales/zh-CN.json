@@ -474,7 +474,7 @@
     },
     "pnl": "资产/盈亏",
     "airdrops": "空投",
-    "exchange": "交易所接入"
+    "exchange": "交易所"
   },
   "shell": {
     "source": "行情来源 {{src}}",

@@ -474,7 +474,7 @@
     },
     "pnl": "Assets/P&L",
     "airdrops": "Airdrops",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "Data source {{src}}",

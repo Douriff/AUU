@@ -474,7 +474,7 @@
     },
     "pnl": "자산/손익",
     "airdrops": "에어드롭",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "데이터 소스 {{src}}",

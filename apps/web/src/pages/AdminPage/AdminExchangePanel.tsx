@@ -32,7 +32,7 @@ export function AdminExchangePanel() {
   };
 
   return (
-    <div className="shell-page settings-page pro-page">
+    <div className="shell-page settings-page pro-page exch-admin">
       <header className="pro-head">
         <h1>交易所接入</h1>
         <p>用户自带 Binance / OKX 现货 API Key。与模拟盘、liveEnabled 完全独立。默认关闭。</p>
@@ -56,8 +56,8 @@ export function AdminExchangePanel() {
             </div>
             <div className="set-row">
               <div><b>默认单笔上限：{s.maxOrderUsdt} USDT</b></div>
-              <span>
-                <input inputMode="decimal" value={defCap} onChange={(e) => setDefCap(e.target.value)} placeholder="USDT" maxLength={10} style={{ width: 90 }} />{" "}
+              <span className="exch-inline">
+                <input inputMode="decimal" value={defCap} onChange={(e) => setDefCap(e.target.value)} placeholder="USDT" maxLength={10} style={{ width: 110 }} />
                 <button type="button" className="td-link" disabled={!(Number(defCap) > 0)} onClick={() => put({ maxOrderUsdt: Number(defCap) })}>保存</button>
               </span>
             </div>
@@ -65,7 +65,7 @@ export function AdminExchangePanel() {
           </section>
           <section className="settings-section">
             <h2>白名单用户</h2>
-            <div className="set-row">
+            <div className="exch-inline">
               <input value={who} onChange={(e) => setWho(e.target.value)} placeholder="用户名" maxLength={64} />
               <input inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="单笔上限 USDT（可空）" maxLength={10} />
               <button type="button" className="td-link" disabled={!who.trim()} onClick={() => allow(who.trim(), true)}>加入 / 更新</button>

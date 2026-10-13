@@ -474,7 +474,7 @@
     },
     "pnl": "Ativos/L&P",
     "airdrops": "Airdrops",
-    "exchange": "Exchange connect"
+    "exchange": "Exchange"
   },
   "shell": {
     "source": "Fonte de dados {{src}}",
