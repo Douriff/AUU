@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import sqlite3
@@ -100,6 +101,49 @@ def _clean_url(u: Optional[str]) -> str:
     return u[:URL_MAX]
 
 
+# Known RSS/Atom feed endpoints -> the publisher homepage. A feed URL is never a valid
+# "查看原文" target (it opens raw XML), so these are rewritten/hidden everywhere.
+FEED_URL_HOMES: dict[str, str] = {
+    "https://www.coindesk.com/arc/outboundfeeds/rss": "https://www.coindesk.com/",
+    "https://cointelegraph.com/rss": "https://cointelegraph.com/",
+}
+_FEED_PATH = re.compile(r"(?:/rss(?:\.xml)?|/feed(?:\.xml)?|/atom(?:\.xml)?|/outboundfeeds/[^?#]*|\.rss|\.xml)/?$", re.I)
+
+
+def _norm_feed_key(u: str) -> str:
+    return (u or "").strip().split("#", 1)[0].split("?", 1)[0].rstrip("/").lower()
+
+
+def is_feed_url(u: Optional[str]) -> bool:
+    """True for a known RSS feed URL or an obvious feed endpoint path."""
+    k = _norm_feed_key(u or "")
+    if not k:
+        return False
+    if k in {_norm_feed_key(x) for x in FEED_URL_HOMES}:
+        return True
+    try:
+        from urllib.parse import urlsplit
+
+        path = urlsplit(k).path
+    except ValueError:
+        return False
+    return bool(_FEED_PATH.search(path))
+
+
+def feed_home(u: Optional[str]) -> str:
+    k = _norm_feed_key(u or "")
+    for f, home in FEED_URL_HOMES.items():
+        if _norm_feed_key(f) == k:
+            return home
+    return ""
+
+
+def _article_url(u: Optional[str]) -> str:
+    """Cleaned URL, or '' when it is a feed endpoint."""
+    c = _clean_url(u)
+    return "" if is_feed_url(c) else c
+
+
 def _csv_list(vals: Any, *, limit: int, max_items: int = 12) -> str:
     if not vals:
         return ""
@@ -125,8 +169,8 @@ def normalize_seed_item(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     if category not in CATEGORIES or status not in STATUSES:
         return None
-    source_url = _clean_url(raw.get("source_url"))
-    external_url = _clean_url(raw.get("external_url")) or source_url
+    source_url = _article_url(raw.get("source_url")) or feed_home(raw.get("source_url"))
+    external_url = _article_url(raw.get("external_url")) or source_url
     summary = str(raw.get("summary") or "").strip()[:SUMMARY_MAX]
     pub = _parse_ts(raw.get("published_at"))
     upd = _parse_ts(raw.get("updated_at")) or pub
@@ -197,13 +241,13 @@ def _row_out(r: sqlite3.Row) -> dict[str, Any]:
         "projectName": r["project_name"],
         "category": r["category"],
         "sourceName": r["source_name"],
-        "sourceUrl": r["source_url"] or None,
+        "sourceUrl": _article_url(r["source_url"]) or feed_home(r["source_url"]) or None,
         "summary": r["summary"],
         "chains": _split_csv(r["chains"]),
         "status": r["status"],
         "publishedAt": r["published_at"],
         "updatedAt": r["updated_at"],
-        "externalUrl": r["external_url"] or None,
+        "externalUrl": _article_url(r["external_url"]) or _article_url(r["source_url"]) or feed_home(r["source_url"]) or None,
         "tags": _split_csv(r["tags"]),
         "origin": origin if origin in {"curated", "ingested"} else "curated",
     }
@@ -233,6 +277,7 @@ class AirdropStore:
         self._db.execute(
             "UPDATE items SET origin='ingested' WHERE IFNULL(origin,'')='' AND (','||IFNULL(tags,'')||',') LIKE '%,ingested,%'"
         )
+        self.repair_feed_urls()
         self._db.execute("CREATE INDEX IF NOT EXISTS airdrops_origin ON items (origin)")
         self._db.execute("CREATE INDEX IF NOT EXISTS airdrops_source_url ON items (source_url)")
         self._db.execute(
@@ -240,6 +285,30 @@ class AirdropStore:
             "source TEXT PRIMARY KEY, last_attempt INTEGER, last_ok INTEGER, last_error TEXT, last_added INTEGER, "
             "last_items INTEGER, fails INTEGER NOT NULL DEFAULT 0)"
         )
+
+    def repair_feed_urls(self) -> int:
+        """Backfill: rows whose source/external URL is a feed endpoint get the publisher
+        homepage (or the other, non-feed URL) instead. Ingested rows whose own URL is a
+        feed and have no article link are dropped (they are re-ingested with the real
+        <link> on the next tick). Returns rows changed."""
+        n = 0
+        rows = self._db.execute("SELECT id, origin, source_url, external_url FROM items").fetchall()
+        for r in rows:
+            su, eu = r["source_url"] or "", r["external_url"] or ""
+            if not (is_feed_url(su) or is_feed_url(eu)):
+                continue
+            new_su = _article_url(su) or _article_url(eu) or feed_home(su) or feed_home(eu)
+            new_eu = _article_url(eu) or _article_url(su) or new_su
+            if r["origin"] == "ingested" and not (_article_url(su) or _article_url(eu)):
+                self._db.execute("DELETE FROM items WHERE id=?", (r["id"],))
+            else:
+                self._db.execute(
+                    "UPDATE items SET source_url=?, external_url=? WHERE id=?", (new_su, new_eu, r["id"])
+                )
+            n += 1
+        if n:
+            log.warning("airdrops: repaired %d feed-URL rows", n)
+        return n
 
     def close(self) -> None:
         with self._lock:
