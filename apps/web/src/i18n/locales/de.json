@@ -473,7 +473,8 @@
       "alerts": "Warnungen"
     },
     "pnl": "Vermögen/GuV",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "Datenquelle {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "Einzahlungen",
       "trading": "Punktehandels-GuV",
       "withdrawals": "Auszahlungen",
-      "flags": "Feature-Flags"
+      "flags": "Feature-Flags",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "Salden abfragen, mit Passwort + 2FA anpassen und das Konto des Nutzers einsehen.",
     "ledgerDesc": "Gesamtes Konto abstimmen und als CSV exportieren.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "Eigenkapital und GuV jedes Punktehandelskontos (getrennt vom Paper).",
     "withdrawalsDesc": "Auszahlungen prüfen: ablehnen (freigeben) oder TokenPocket-Tx-Hash eintragen.",
     "flagsDesc": "Nur-Lese-Übersicht der Feature-Flags für Punktehandel / Auszahlung / TRC20.",
-    "flagsHint": "Flags werden per Server-Umgebungsvariablen gesteuert; hier nur der aktuelle Stand."
+    "flagsHint": "Flags werden per Server-Umgebungsvariablen gesteuert; hier nur der aktuelle Stand.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

@@ -18,6 +18,7 @@ const adminNav = [
   { to: "/admin/trading", label: "trading" },
   { to: "/admin/withdrawals", label: "withdrawals" },
   { to: "/admin/flags", label: "flags" },
+  { to: "/admin/exchange", label: "exchange" },
 ] as const;
 
 /** Dedicated admin product surface — no market ticker, trade panel, or paper/points switch. */

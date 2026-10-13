@@ -34,6 +34,8 @@ import { AdminTradingPanel } from "@/pages/PointsPage/AdminTradingPanel";
 import { AdminHubPage } from "@/pages/AdminPage/AdminHubPage";
 import { AdminLedgerPage } from "@/pages/AdminPage/AdminLedgerPage";
 import { AdminFlagsPanel } from "@/pages/AdminPage/AdminFlagsPanel";
+import { AdminExchangePanel } from "@/pages/AdminPage/AdminExchangePanel";
+import { ExchangePage } from "@/pages/ExchangePage/ExchangePage";
 import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
@@ -70,6 +72,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "flags", element: <AdminFlagsPanel /> },
+      { path: "exchange", element: <AdminExchangePanel /> },
       // Back-compat: old /admin/points lived inside the trading shell
       { path: "points", element: <Navigate to="/admin/users" replace /> },
     ],
@@ -93,6 +96,7 @@ export const router = createBrowserRouter([
       { path: "majors", element: <MajorsPage /> },
       { path: "news", element: <NewsPage /> },
       { path: "airdrops", element: <AirdropsPage /> },
+      { path: "exchange", element: <ExchangePage /> },
       { path: "airdrops/:id", element: <AirdropDetailPage /> },
       { path: "positions", element: <LegacyOnly><PositionsPage /></LegacyOnly> },
       { path: "leaderboard", element: <LeaderboardPage /> },

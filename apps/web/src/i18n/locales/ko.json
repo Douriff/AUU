@@ -473,7 +473,8 @@
       "alerts": "알림"
     },
     "pnl": "자산/손익",
-    "airdrops": "에어드롭"
+    "airdrops": "에어드롭",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "데이터 소스 {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "충전",
       "trading": "포인트 거래 손익",
       "withdrawals": "출금",
-      "flags": "기능 플래그"
+      "flags": "기능 플래그",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "잔액 조회, 비밀번호 + 2FA 조정, 해당 사용자 원장 보기.",
     "ledgerDesc": "전체 원장 대사 및 CSV 내보내기.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "각 사용자 포인트 거래 계정의 자산과 손익(페이퍼와 분리).",
     "withdrawalsDesc": "출금 심사: 거부로 동결 해제, 또는 TokenPocket tx 해시 등록.",
     "flagsDesc": "포인트 거래 / 출금 / TRC20 기능 플래그 읽기 전용 요약.",
-    "flagsHint": "플래그는 서버 환경 변수로 제어됩니다. 여기에는 현재 상태만 표시됩니다."
+    "flagsHint": "플래그는 서버 환경 변수로 제어됩니다. 여기에는 현재 상태만 표시됩니다.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

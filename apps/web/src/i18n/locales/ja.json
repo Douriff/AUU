@@ -473,7 +473,8 @@
       "alerts": "アラート"
     },
     "pnl": "資産/損益",
-    "airdrops": "エアドロ"
+    "airdrops": "エアドロ",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "データソース {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "入金",
       "trading": "ポイント取引損益",
       "withdrawals": "出金",
-      "flags": "機能フラグ"
+      "flags": "機能フラグ",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "残高の照会、パスワード + 2FA での調整、そのユーザーの台帳表示。",
     "ledgerDesc": "全台帳の照合と CSV エクスポート。",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "各ユーザーのポイント取引口座の資産と損益（ペーパー口座とは別）。",
     "withdrawalsDesc": "出金審査：却下で凍結解除、または TokenPocket の tx ハッシュ登録。",
     "flagsDesc": "ポイント取引 / 出金 / TRC20 の機能フラグの読み取り専用サマリー。",
-    "flagsHint": "フラグはサーバー環境変数で制御されます。ここには現在の状態のみ表示。"
+    "flagsHint": "フラグはサーバー環境変数で制御されます。ここには現在の状態のみ表示。",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",

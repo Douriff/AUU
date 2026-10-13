@@ -473,7 +473,8 @@
       "alerts": "التنبيهات"
     },
     "pnl": "الأصول/الربح",
-    "airdrops": "Airdrops"
+    "airdrops": "Airdrops",
+    "exchange": "Exchange connect"
   },
   "shell": {
     "source": "مصدر البيانات {{src}}",
@@ -1411,7 +1412,8 @@
       "topups": "الشحن",
       "trading": "ربح/خسارة تداول النقاط",
       "withdrawals": "السحب",
-      "flags": "أعلام الميزات"
+      "flags": "أعلام الميزات",
+      "exchange": "Exchange connect"
     },
     "usersDesc": "الاطلاع على الأرصدة والتعديل بكلمة المرور و2FA وعرض دفتر ذلك المستخدم.",
     "ledgerDesc": "مطابقة الدفتر الكامل وتصدير CSV.",
@@ -1420,7 +1422,8 @@
     "tradingDesc": "حقوق الملكية وربح/خسارة كل حساب تداول نقاط (منفصل عن الورقي).",
     "withdrawalsDesc": "مراجعة السحب: الرفض لإلغاء التجميد، أو تسجيل تجزئة TokenPocket.",
     "flagsDesc": "ملخص للقراءة فقط لأعلام تداول النقاط / السحب / TRC20.",
-    "flagsHint": "تُتحكم الأعلام بمتغيرات بيئة الخادم؛ هنا الحالة الحالية فقط."
+    "flagsHint": "تُتحكم الأعلام بمتغيرات بيئة الخادم؛ هنا الحالة الحالية فقط.",
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
   },
   "airdrops": {
     "title": "Airdrop Radar",
