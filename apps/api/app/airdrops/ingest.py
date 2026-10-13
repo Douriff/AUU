@@ -132,10 +132,22 @@ def ingested_id(source_id: str, url: str, guid: str = "") -> str:
     return f"ing-{source_id[:12]}-{h}"
 
 
+def article_link(item: dict[str, Any]) -> str:
+    """The item's own article URL: <link>, else a http(s) <guid> permalink. Never the
+    feed endpoint itself (that opens raw XML for 查看原文)."""
+    from app.airdrops import is_feed_url
+
+    for cand in (item.get("url"), item.get("guid")):
+        c = (str(cand or "")).strip()
+        if c.startswith(("http://", "https://")) and not is_feed_url(c):
+            return c
+    return ""
+
+
 def feed_item_to_row(item: dict[str, Any], *, source_id: str, source_name: str, now_ms: int) -> Optional[dict[str, Any]]:
     title = (item.get("title") or "").strip()
     summary = (item.get("summary") or "").strip()
-    url = (item.get("url") or "").strip()
+    url = article_link(item)
     if not title or not url or not matches_airdrop(title, summary):
         return None
     cat = guess_category(title, summary)

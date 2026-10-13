@@ -224,7 +224,7 @@
     "status": "active",
     "published_at": "2026-10-10T00:00:00+08:00",
     "updated_at": "2026-10-10T00:00:00+08:00",
-    "external_url": "https://www.coindesk.com/arc/outboundfeeds/rss",
+    "external_url": "https://www.coindesk.com/",
     "tags": [
       "media",
       "howto",
@@ -243,7 +243,7 @@
     "status": "active",
     "published_at": "2026-10-10T00:00:00+08:00",
     "updated_at": "2026-10-10T00:00:00+08:00",
-    "external_url": "https://cointelegraph.com/rss",
+    "external_url": "https://cointelegraph.com/",
     "tags": [
       "media",
       "rss",
