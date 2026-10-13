@@ -330,3 +330,12 @@ class ExchangeApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdminBypassTests(ExchangeApiTests):
+    def test_admin_access_without_allowlist(self):
+        self.admin.put("/api/v1/admin/exchange", json={"enabled": True})
+        self.assertTrue(self.admin.get("/api/v1/exchange/config").json()["data"]["access"])
+        self.assertFalse(self.user.get("/api/v1/exchange/config").json()["data"]["access"])
+        self.admin.put("/api/v1/admin/exchange", json={"allowlistOnly": False})
+        self.assertTrue(self.user.get("/api/v1/exchange/config").json()["data"]["access"])

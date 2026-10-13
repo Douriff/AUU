@@ -154,7 +154,7 @@ export function ExchangePage() {
       </header>
 
       <div className="pro-alert exch-risk">
-        <b>风险提示：</b>这里下的是<b>真实订单</b>，使用你在交易所的真实资金，可能亏损。只接受“读取 + 现货交易”权限、<b>禁止提现</b>的 API Key，并且必须设置 IP 白名单：
+        <b>风险提示：</b>这里下的是<b>真实订单</b>（现货和合约），使用你在交易所的真实资金，可能亏损；合约有杠杆，可能被强制平仓。API Key 只需要「读取 + 现货交易」，要用合约再开「合约」权限；<b>禁止提现、内部划转、万向划转</b>权限（有这些权限的 Key 会被拒绝）。必须设置 IP 白名单：
         <b> {primaryIp}</b>（东京主节点）、<b>{standbyIp}</b>（香港备用）。本站策略和模拟盘不会自动使用你的 Key。
       </div>
 
@@ -165,7 +165,7 @@ export function ExchangePage() {
         <section className="settings-section exch-disabled" aria-disabled="true">
           <h2>功能暂未开放</h2>
           <p className="muted">
-            {!cfg.enabled ? "交易所接入功能目前已关闭（管理员开关）。开放后这里会出现绑定入口。" : "交易所接入正在内测，你的账号暂未开通。"}
+            {!cfg.enabled ? "交易所接入功能目前已关闭（管理员开关）。开放后这里会出现绑定入口。" : "交易所接入目前只对白名单用户开放（内测中），你的账号还不在白名单里，请联系管理员开通。"}
             你可以先阅读下方指南，提前在交易所创建好 API Key。
           </p>
         </section>
@@ -205,7 +205,7 @@ export function ExchangePage() {
                 ) : null}
                 <label className="pts-agree">
                   <input type="checkbox" checked={riskOk} onChange={(e) => setRiskOk(e.target.checked)} />
-                  <span>我已确认这个 Key 没有提现权限，已设置 IP 白名单 {primaryIp}、{standbyIp}，并了解真实交易风险。</span>
+                  <span>我已确认这个 Key 没有提现/划转权限，已设置 IP 白名单 {primaryIp}、{standbyIp}，并了解真实交易风险。</span>
                 </label>
                 <button type="submit" className="td-submit" disabled={busy || !riskOk || !bindForm.apiKey || !bindForm.secret || (ex === "okx" && !bindForm.passphrase)}>
                   {busy ? "验证中…" : "验证并绑定"}
