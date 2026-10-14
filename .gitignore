@@ -34,3 +34,9 @@ apps/api/data/*.lock
 .env.round*
 *.bak-[0-9]*
 api.err.log
+api.log
+*.err.log
+apps/post-sync-api*.log
+*.tsbuildinfo
+data-backup-*.tgz
+docs/splash-preview*.png
