@@ -40,3 +40,4 @@ apps/post-sync-api*.log
 *.tsbuildinfo
 data-backup-*.tgz
 docs/splash-preview*.png
+executability-*
