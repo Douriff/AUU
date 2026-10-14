@@ -41,3 +41,10 @@ apps/post-sync-api*.log
 data-backup-*.tgz
 docs/splash-preview*.png
 executability-*
+/*.log
+/*.stderr
+/*.stdout
+/round[0-9]*
+/paper-go-*
+/paper_go_*
+/tightened*
