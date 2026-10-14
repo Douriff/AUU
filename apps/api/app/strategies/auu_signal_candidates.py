@@ -26,6 +26,13 @@ CANDIDATES: dict[str, dict] = {
     "cand_B": {"base": "auu_signal_v0", "long_only": True, "imb_dir_bars": 5,
                "weights": {"momentum": 0.5, "volume_imbalance": 0.3},
                "enter_th": 0.25, "exit_th": 0.10, "tf": "1d"},
+    # registered 2026-10-15 (same day): long/short symmetric versions
+    "cand_A_ls": {"base": "auu_signal_v0", "long_only": False, "imb_dir_bars": 5,
+                  "weights": {"momentum": 0.5, "volume_imbalance": 0.3, "funding": 0.2},
+                  "enter_th": 0.25, "exit_th": 0.10, "tf": "1d"},
+    "cand_B_ls": {"base": "auu_signal_v0", "long_only": False, "imb_dir_bars": 5,
+                  "weights": {"momentum": 0.5, "volume_imbalance": 0.3},
+                  "enter_th": 0.25, "exit_th": 0.10, "tf": "1d"},
 }
 COST_PER_SIDE = 0.0007
 
@@ -66,11 +73,14 @@ def compute_candidate(
             parts.append((w["funding"], fund))
         parts = [(a, b) for a, b in parts if b is not None]
         score = sum(a * b for a, b in parts) / sum(a for a, _ in parts) if (parts and mom is not None) else 0.0
+        en, ex, ls = p["enter_th"], p["exit_th"], not p["long_only"]
         if prev == "flat":
-            side = "long" if score >= p["enter_th"] else "flat"
-        else:
-            side = "flat" if score < p["exit_th"] else "long"
-        action = "enter" if side != prev and side == "long" else "exit" if side != prev else "none"
+            side = "long" if score >= en else ("short" if ls and score <= -en else "flat")
+        elif prev == "long":
+            side = "short" if ls and score <= -en else ("flat" if score < ex else "long")
+        else:  # short: symmetric (exit when score >= -exit_th, flip when >= enter_th)
+            side = "long" if score >= en else ("flat" if score > -ex else "short")
+        action = "enter" if side != prev and side != "flat" else "exit" if side != prev else "none"
         out.append({"asof_ts": int(ts[t]), "side": side, "score": round(score, 6), "action": action,
                     "reason_tags": [], "factors": {"momentum": mom, "volume_imbalance": None if imb is None else round(imb, 6),
                                                     "funding": fund if "funding" in w else None}})
