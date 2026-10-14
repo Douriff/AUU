@@ -330,14 +330,22 @@ def record_candidates(svc: Any, ex: str, store: SignalShadowStore) -> None:
 
 def forward_nav(bysym: dict, *, bar_ms: int, since_ts: int, cost: float = 0.0007) -> list[tuple[int, float, float, int, int, int]]:
     """Equal-weight daily NAV: side at bar t held open[t+1]->open[t+2]; cost on change; funding on longs/shorts.
-    Only bars t >= since_ts; prior position before since_ts counts as flat (forward-only)."""
+    Only bars t >= since_ts; a position carried in from before since_ts counts as flat until the
+    signal changes side (matches hypothetical_trades / docs)."""
     days: dict[int, list[tuple[float, int]]] = {}
     for rows, opens, fr in bysym.values():
         prev = 0
+        carry: Optional[str] = None  # side held into registration; counts as flat until the signal changes
+        started = False
         for r in rows:
             t = int(r["asof_ts"])
             if t < since_ts:
+                carry = r["side"]
                 continue
+            if not started:
+                if carry is not None and carry != "flat" and r["side"] == carry:
+                    continue
+                started = True
             o1, o2 = opens.get(t + bar_ms), opens.get(t + 2 * bar_ms)
             if o1 is None or o2 is None:
                 break
