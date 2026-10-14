@@ -12,7 +12,7 @@ Code: `apps/api/app/strategies/auu_signal_candidates.py`. Tables `cand_bars`, `c
 | cand_A | v0 factors, long-only, volume-imbalance direction = sign(close[t]−close[t−5]), weights mom .5 / vol .3 / funding .2, enter ≥ 0.25, exit < 0.10, 1d | `6f2f7dea6d308afe` |
 | cand_B | same as cand_A without the funding term (mom .5 / vol .3, renormalised), enter ≥ 0.25, exit < 0.10, 1d. **This is the IS-selected candidate (2021–2023 ret/DD).** | `25fad2f2e60c7325` |
 
-| cand_A_ls | cand_A made long/short symmetric: short entry at score ≤ −0.25, short exit at score ≥ −0.10, flip at ±0.25. Registered 2026-10-15. | `3587d21c0a98d883` |
+| cand_A_ls | cand_A made long/short symmetric: short entry at score ≤ −0.25, short exit at score > −0.10 (mirror of the long rule, exit < 0.10), flip at ±0.25. Registered 2026-10-15. | `3587d21c0a98d883` |
 | cand_B_ls | cand_B made long/short symmetric, with the same short rules. Registered 2026-10-15. | `1ee21f59d7664055` |
 
 The parameters are frozen. Any change needs a new id and a new registration date; never edit an existing one in place.
