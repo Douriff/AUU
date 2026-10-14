@@ -24,3 +24,27 @@ apps/api/data/evidence/
 # Mainstream market-data store + archived legacy pump ledger (runtime data)
 apps/api/data/*.sqlite*
 apps/api/data/archive/
+
+# local backup/scratch artifacts (never commit)
+apps/api/data.bak-*/
+apps/api/data.wiped-*/
+apps/api/data/*.lock
+.env.bak-*
+.env.*backup*
+.env.round*
+*.bak-[0-9]*
+api.err.log
+api.log
+*.err.log
+apps/post-sync-api*.log
+*.tsbuildinfo
+data-backup-*.tgz
+docs/splash-preview*.png
+executability-*
+/*.log
+/*.stderr
+/*.stdout
+/round[0-9]*
+/paper-go-*
+/paper_go_*
+/tightened*

@@ -23,7 +23,7 @@ The parameters are frozen. Any change needs a new id and a new registration date
 - Cost: 7 bps per side.
 - Funding: settled funding, paid by longs.
 - NAV is equal-weight across the strategy universe.
-- Trades and NAV only count positions whose signal bar is ≥ REG_TS. A position carried in from before REG_TS counts as flat until the signal changes side. This applies to all candidates and to v0; the NAV side was fixed in PR #107.
+- Trades and NAV only count positions whose signal bar is ≥ REG_TS. A position carried in from before REG_TS counts as flat until the signal changes side. This applies to all candidates and to v0; the NAV side was fixed in PR #108.
 
 ## Pre-registration backtest
 Backtest setup: 19 coins, Binance spot 1d OHLCV, Binance funding. IS covers 2021–2023, OOS covers 2024-01 to 2026-10.
