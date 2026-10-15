@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Official announcements + media + curated notes · same campaign merged across sources · every item shows its sources and verification",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Verification",
+    "verify": {
+      "all": "All verification",
+      "confirmed": "Confirmed",
+      "unverified": "Unverified"
+    },
+    "verifyTip": {
+      "confirmed": "Has an official source, or is reported by at least 2 independent sources",
+      "unverified": "Only one non-official source — verify on the project's official channels"
+    },
+    "sourceCount": "{{n}} source(s)",
+    "sourcesTitle": "Sources",
+    "kind": {
+      "official": "Official",
+      "media": "Media",
+      "curated": "Curated"
+    },
+    "riskTitle": "Risk warning",
+    "riskShort": "Risk warning: beware of scams and phishing. Never send funds first or share your seed phrase / private key; rely on the project's official channels. For information only, not investment advice.",
+    "riskLong": "Airdrop, points and token campaigns are often used for scams and phishing. Verify only through the project's official channels, and never join anything that asks you to send funds first, grant approvals first, or share a seed phrase or private key. This site only aggregates information and is not investment advice.",
+    "feedsOfficial": "Official sources: ",
+    "feedsMedia": "Media sources: ",
+    "verifyCounts": "Confirmed {{c}} · Unverified {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

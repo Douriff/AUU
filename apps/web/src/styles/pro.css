@@ -1132,6 +1132,21 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .ad-badge.ad-st.is-upcoming { background: rgba(90, 160, 255, 0.12); color: #7eb6ff; }
 .ad-badge.ad-st.is-ended { background: var(--panel2); color: var(--muted); }
 .ad-badge.ad-ing { background: rgba(120, 180, 255, 0.14); color: #9ec5ff; }
+.ad-badge.ad-ver.is-confirmed { background: rgba(60, 200, 130, 0.14); color: #4fd08d; }
+.ad-badge.ad-ver.is-unverified { background: rgba(240, 180, 60, 0.14); color: #f0b43c; }
+.ad-badge.ad-kind.is-official { background: rgba(60, 200, 130, 0.14); color: #4fd08d; }
+.ad-badge.ad-kind.is-media { background: rgba(120, 180, 255, 0.14); color: #9ec5ff; }
+.ad-badge.ad-kind.is-curated { background: var(--panel2); color: var(--muted); }
+.ad-srcn { color: var(--muted); font-size: 12px; }
+.ad-risk { margin: 8px 0 0; padding-top: 7px; border-top: 1px dashed var(--border); font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.ad-risk-box { margin: 16px 0 0; padding: 10px 12px; border: 1px solid rgba(240, 180, 60, 0.35); border-radius: 6px; background: rgba(240, 180, 60, 0.06); color: var(--text2); font-size: 12.5px; }
+.ad-risk-box p { margin: 4px 0 0; }
+.ad-verify-tip { margin: 0 0 12px; font-size: 12.5px; color: var(--text2); }
+.ad-body + .ad-body { margin-top: 16px; }
+.ad-sources ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ad-sources li { font-size: 13px; }
+.ad-sources a { color: var(--accent); text-decoration: none; }
+.ad-counts { margin: 0 0 6px; font-family: var(--mono); font-size: 12px; color: var(--text2); }
 .ad-feeds { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ad-feed-st { display: inline-flex; align-items: center; gap: 5px; }
 .ad-feed-st a { color: var(--text2); text-decoration: none; }

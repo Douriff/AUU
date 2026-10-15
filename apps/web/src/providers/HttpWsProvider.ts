@@ -501,6 +501,7 @@ export class HttpWsProvider {
     if (q.category) p.set("category", q.category);
     if (q.status) p.set("status", q.status);
     if (q.origin) p.set("origin", q.origin);
+    if (q.verification) p.set("verification", q.verification);
     return getJson(`/api/v1/airdrops?${p}`);
   }
 

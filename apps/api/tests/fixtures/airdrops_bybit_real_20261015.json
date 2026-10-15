@@ -1,0 +1,94 @@
+{
+ "retCode": 0,
+ "retMsg": "OK",
+ "result": {
+  "list": [
+   {
+    "title": "KII Alpha Token Splash— Grab a share of the 2,000,000 KII prize pool .",
+    "description": "Join our KII Token Splash event to share from  2,000,000 KII !!!",
+    "type": {
+     "key": "new_crypto",
+     "title": "New Listings"
+    },
+    "tags": [
+     "Spot",
+     "Spot Listings"
+    ],
+    "url": "https://announcements.bybit.com/en-US/article/kii-token-splash-grab-a-share-of-the-2-000-000-kii-prize-pool--art7e7ad2c47e8d/",
+    "dateTimestamp": 1791432152000,
+    "startDateTimestamp": 1791432152000,
+    "endDateTimestamp": 1791432152000,
+    "publishTime": 1791453609000
+   },
+   {
+    "title": "New: Bybit Odds Launches U.S. Midterm Election Contracts (Nov 6, 2026)",
+    "description": "Bybit Odds: U.S. Midterm Contracts",
+    "type": {
+     "key": "latest_bybit_news",
+     "title": "Latest Bybit News"
+    },
+    "tags": [
+     "Latest Updates"
+    ],
+    "url": "https://announcements.bybit.com/en-US/article/new-bybit-odds-launches-u-s-midterm-election-contracts-nov-6-2026--artd9ed5bfe3567/",
+    "dateTimestamp": 1792022400000,
+    "startDateTimestamp": 1792022400000,
+    "endDateTimestamp": 1793404800000,
+    "publishTime": 1792062835000
+   },
+   {
+    "title": "Bybit Expands Beyond Crypto With Direct Access to U.S. Stocks & ETFs",
+    "description": "Disclaimer: This is a general announcement. Products and services referred here may not be available in your region. Terms and Conditions apply.",
+    "type": {
+     "key": "latest_activities",
+     "title": "Latest Campaigns"
+    },
+    "tags": [
+     "Latest Updates"
+    ],
+    "url": "https://announcements.bybit.com/en-US/article/bybit-expands-beyond-crypto-with-direct-access-to-u-s-stocks-etfs--art55453cbc5bf2/",
+    "dateTimestamp": 1791763200000,
+    "startDateTimestamp": 1791763200000,
+    "endDateTimestamp": 1793404800000,
+    "publishTime": 1791797660000
+   },
+   {
+    "title": "[Exclusive Launch] Full Stocks Ahead: Share 150,000 USDC",
+    "description": "[Exclusive Launch] Full Stocks Ahead: Share 150,000 USDC",
+    "type": {
+     "key": "latest_activities",
+     "title": "Latest Campaigns"
+    },
+    "tags": [
+     "USDC"
+    ],
+    "url": "https://announcements.bybit.com/en-US/article/exclusive-launch-full-stocks-ahead-share-150-000-usdc--art6a5cd5beed87/",
+    "dateTimestamp": 1791763200000,
+    "startDateTimestamp": 1791763200000,
+    "endDateTimestamp": 1793404800000,
+    "publishTime": 1791964494000
+   },
+   {
+    "title": "Bybit AI Now Supports Main Account Operations",
+    "description": "Bybit AI Now Supports Main Account Operations",
+    "type": {
+     "key": "latest_bybit_news",
+     "title": "Latest Bybit News"
+    },
+    "tags": [
+     "Spot",
+     "Latest Updates",
+     "Upgrades"
+    ],
+    "url": "https://announcements.bybit.com/en-US/article/bybit-ai-now-supports-main-account-operations--art91af7ea2483b/",
+    "dateTimestamp": 1790568000000,
+    "startDateTimestamp": 1790568000000,
+    "endDateTimestamp": 1798675200000,
+    "publishTime": 1791539169000
+   }
+  ],
+  "total": 9000
+ },
+ "retExtInfo": {},
+ "time": 1792076417169
+}

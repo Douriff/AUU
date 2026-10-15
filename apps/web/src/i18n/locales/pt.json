@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Anúncios oficiais + mídia + seleção editorial · a mesma campanha é unificada entre fontes · cada item mostra fontes e status de verificação",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Verificação",
+    "verify": {
+      "all": "Toda verificação",
+      "confirmed": "Confirmado",
+      "unverified": "Não verificado"
+    },
+    "verifyTip": {
+      "confirmed": "Tem fonte oficial ou é noticiado por pelo menos 2 fontes independentes",
+      "unverified": "Apenas uma fonte não oficial — verifique nos canais oficiais do projeto"
+    },
+    "sourceCount": "{{n}} fonte(s)",
+    "sourcesTitle": "Fontes",
+    "kind": {
+      "official": "Oficial",
+      "media": "Mídia",
+      "curated": "Seleção"
+    },
+    "riskTitle": "Aviso de risco",
+    "riskShort": "Aviso de risco: cuidado com golpes e phishing. Nunca envie fundos primeiro nem compartilhe sua frase-semente / chave privada; confie apenas nos canais oficiais. Apenas informativo, não é aconselhamento de investimento.",
+    "riskLong": "Campanhas de airdrop, pontos e tokens costumam ser usadas para golpes e phishing. Verifique apenas pelos canais oficiais do projeto e não participe de nada que peça para enviar fundos primeiro, conceder aprovações primeiro ou informar uma frase-semente ou chave privada. Este site apenas agrega informações e não é aconselhamento de investimento.",
+    "feedsOfficial": "Fontes oficiais: ",
+    "feedsMedia": "Fontes de mídia: ",
+    "verifyCounts": "Confirmado {{c}} · Não verificado {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

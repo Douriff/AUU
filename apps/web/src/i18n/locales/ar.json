@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "إعلانات رسمية + وسائل إعلام + اختيارات تحريرية · دمج الحملة نفسها من عدة مصادر · كل عنصر يعرض مصادره وحالة التحقق",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "حالة التحقق",
+    "verify": {
+      "all": "كل الحالات",
+      "confirmed": "مؤكَّد",
+      "unverified": "غير موثَّق"
+    },
+    "verifyTip": {
+      "confirmed": "لديه مصدر رسمي أو أبلغ عنه مصدران مستقلان على الأقل",
+      "unverified": "مصدر واحد غير رسمي فقط — تحقق عبر القنوات الرسمية للمشروع"
+    },
+    "sourceCount": "{{n}} مصدر",
+    "sourcesTitle": "المصادر",
+    "kind": {
+      "official": "رسمي",
+      "media": "إعلام",
+      "curated": "مختار"
+    },
+    "riskTitle": "تحذير من المخاطر",
+    "riskShort": "تحذير: احذر الاحتيال والتصيّد. لا ترسل أموالًا أولًا ولا تشارك عبارة الاسترداد / المفتاح الخاص؛ اعتمد على القنوات الرسمية. للمعلومات فقط وليس نصيحة استثمارية.",
+    "riskLong": "غالبًا ما تُستخدم حملات الإيردروب والنقاط والرموز في الاحتيال والتصيّد. تحقق فقط عبر القنوات الرسمية للمشروع، ولا تشارك في أي حملة تطلب منك إرسال أموال أولًا أو منح أذونات أولًا أو مشاركة عبارة الاسترداد أو المفتاح الخاص. يجمع هذا الموقع المعلومات فقط وليس نصيحة استثمارية.",
+    "feedsOfficial": "المصادر الرسمية: ",
+    "feedsMedia": "مصادر الإعلام: ",
+    "verifyCounts": "مؤكَّد {{c}} · غير موثَّق {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Resmî duyurular + medya + editör seçkisi · aynı kampanya kaynaklar arasında birleştirilir · her kayıt kaynaklarını ve doğrulama durumunu gösterir",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Doğrulama",
+    "verify": {
+      "all": "Tüm doğrulamalar",
+      "confirmed": "Onaylı",
+      "unverified": "Doğrulanmadı"
+    },
+    "verifyTip": {
+      "confirmed": "Resmî kaynağı var veya en az 2 bağımsız kaynak haber yaptı",
+      "unverified": "Yalnızca bir resmî olmayan kaynak — projenin resmî kanallarından doğrulayın"
+    },
+    "sourceCount": "{{n}} kaynak",
+    "sourcesTitle": "Kaynaklar",
+    "kind": {
+      "official": "Resmî",
+      "media": "Medya",
+      "curated": "Seçki"
+    },
+    "riskTitle": "Risk uyarısı",
+    "riskShort": "Risk uyarısı: dolandırıcılık ve oltalamaya dikkat edin. Asla önce para göndermeyin, kurtarma ifadenizi / özel anahtarınızı paylaşmayın; yalnızca resmî kanallara güvenin. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.",
+    "riskLong": "Airdrop, puan ve token kampanyaları sıklıkla dolandırıcılık ve oltalama için kullanılır. Yalnızca projenin resmî kanallarından doğrulayın; önce para göndermenizi, önce onay vermenizi veya kurtarma ifadesi ya da özel anahtar paylaşmanızı isteyen hiçbir şeye katılmayın. Bu site yalnızca bilgi derler ve yatırım tavsiyesi değildir.",
+    "feedsOfficial": "Resmî kaynaklar: ",
+    "feedsMedia": "Medya kaynakları: ",
+    "verifyCounts": "Onaylı {{c}} · Doğrulanmadı {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

@@ -10,9 +10,12 @@ from app.routes.mainstream_paper import _uid
 
 router = APIRouter(prefix="/api/v1/airdrops", tags=["airdrops"])
 
+from app.airdrops.quality import RISK_NOTICE
+
 NOTE = (
-    "空投、积分与模因生态相关资讯来自公开 RSS 关键词筛选与编辑整理，每条均标注来源；"
-    "点击可查看站内摘要并跳转原文。仅供参考，不构成投资、参与或收益建议；请自行核实官方渠道，警惕钓鱼链接。"
+    "空投、积分与模因生态资讯来自交易所公开公告接口、项目官方博客 RSS、媒体 RSS 与编辑整理，每条均标注来源并链接原文，"
+    "只展示标题与简短摘要。「已确认」= 含官方来源或至少 2 个独立来源；其余为「未核实」。"
+    "含保证收益、先转账等字样的条目不收录。仅供参考，不构成投资、参与或收益建议。"
 )
 
 
@@ -22,6 +25,7 @@ def airdrops_list(
     category: str = Query("all", max_length=16),
     status: Optional[str] = Query(None, max_length=16),
     origin: Optional[str] = Query(None, max_length=16),
+    verification: Optional[str] = Query(None, max_length=16),
     page: int = Query(1, ge=1, le=1000),
     size: int = Query(20, ge=1, le=50),
 ):
@@ -39,6 +43,9 @@ def airdrops_list(
     org = (origin or "").strip().lower() or None
     if org is not None and org not in {"curated", "ingested"}:
         return err("BAD_ORIGIN", "不支持的来源类型", 400)
+    ver = (verification or "").strip().lower() or None
+    if ver is not None and ver not in {"confirmed", "unverified"}:
+        return err("BAD_VERIFICATION", "不支持的核实状态", 400)
     meta = {
         "enabled": airdrops_enabled(),
         "ingestEnabled": ingest_enabled(),
@@ -46,6 +53,7 @@ def airdrops_list(
         "categories": list(CATEGORIES),
         "statuses": list(STATUSES),
         "note": NOTE,
+        "riskNotice": RISK_NOTICE,
     }
     try:
         store = peek_store()
@@ -58,14 +66,15 @@ def airdrops_list(
                 "pages": 1,
                 "seededAt": None,
                 "lastIngestAt": None,
+                "verificationCounts": {"confirmed": 0, "unverified": 0},
                 "feeds": [
-                    {"id": k, "name": FEED_SOURCES[k]["name"], "home": FEED_SOURCES[k]["home"],
+                    {"id": k, "name": FEED_SOURCES[k]["name"], "home": FEED_SOURCES[k]["home"], "tier": FEED_SOURCES[k].get("tier", "media"),
                      "lastOkAt": None, "lastAttemptAt": None, "ok": False, "fails": 0, "error": None}
                     for k in enabled_feeds()
                 ],
             }
         else:
-            data = store.list(category=cat, status=st, origin=org, page=page, size=size)
+            data = store.list(category=cat, status=st, origin=org, verification=ver, page=page, size=size)
     except Exception:
         return err("AIRDROPS_UNAVAILABLE", "空投雷达暂时不可用", 503)
     return ok({**data, **meta})
@@ -87,4 +96,4 @@ def airdrop_detail(request: Request, item_id: str):
         return err("AIRDROPS_UNAVAILABLE", "空投雷达暂时不可用", 503)
     if item is None:
         return err("NOT_FOUND", "未找到该空投资讯", 404)
-    return ok({"item": item, "enabled": airdrops_enabled(), "note": NOTE})
+    return ok({"item": item, "enabled": airdrops_enabled(), "note": NOTE, "riskNotice": RISK_NOTICE})

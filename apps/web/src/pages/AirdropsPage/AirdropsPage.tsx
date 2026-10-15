@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { Empty, SkCards } from "@/components/ui/Skeleton";
-import type { AirdropItem, AirdropStatus, AirdropsPage as AirdropsData, AirdropsQuery } from "@/types/mainstream";
+import type { AirdropItem, AirdropStatus, AirdropVerification, AirdropsPage as AirdropsData, AirdropsQuery } from "@/types/mainstream";
 import { useTranslation } from "react-i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate } from "@/i18n/format";
@@ -29,6 +29,9 @@ function Card({ it }: { it: AirdropItem }) {
           <span className={`ad-badge ad-cat`}>{t(`airdrops.cat.${it.category}`)}</span>
           <span className={`ad-badge ad-st ${statusClass(it.status)}`}>{t(`airdrops.status.${it.status}`)}</span>
           {it.origin === "ingested" ? <span className="ad-badge ad-ing">{t("airdrops.origin.ingested")}</span> : null}
+          <span className={`ad-badge ad-ver is-${it.verification}`} title={t(`airdrops.verifyTip.${it.verification}`)}>
+            {t(`airdrops.verify.${it.verification}`)}
+          </span>
           <time dateTime={new Date(it.publishedAt).toISOString()}>{bj(it.publishedAt)}</time>
         </div>
         <h2 className="ad-title">{it.title}</h2>
@@ -39,6 +42,7 @@ function Card({ it }: { it: AirdropItem }) {
         <span className="ad-src" title={t("airdrops.source")}>
           {t("airdrops.sourceLabel", { name: it.sourceName })}
         </span>
+        <span className="ad-srcn">{t("airdrops.sourceCount", { n: it.sourceCount })}</span>
         {it.chains.length ? (
           <span className="ad-chains">
             {it.chains.slice(0, 4).map((c) => (
@@ -54,6 +58,10 @@ function Card({ it }: { it: AirdropItem }) {
           </a>
         ) : null}
       </div>
+      <p className="ad-risk" role="note">
+        <span aria-hidden="true">⚠ </span>
+        {t("airdrops.riskShort")}
+      </p>
     </article>
   );
 }
@@ -63,6 +71,7 @@ export function AirdropsPage() {
   const [category, setCategory] = useState<Cat>("all");
   const [status, setStatus] = useState<"" | AirdropStatus>("");
   const [originFilter, setOriginFilter] = useState<"" | "curated" | "ingested">("");
+  const [verifyFilter, setVerifyFilter] = useState<"" | AirdropVerification>("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AirdropsData | null>(null);
   const [err, setErr] = useState("");
@@ -78,6 +87,7 @@ export function AirdropsPage() {
       category,
       status: status || undefined,
       origin: originFilter || undefined,
+      verification: verifyFilter || undefined,
     };
     return marketProvider
       .getAirdrops(q)
@@ -87,7 +97,7 @@ export function AirdropsPage() {
       })
       .catch((e: unknown) => setErr(errText(e, "airdrops.cantConnect")))
       .finally(() => setLoading(false));
-  }, [page, category, status, originFilter]);
+  }, [page, category, status, originFilter, verifyFilter]);
 
   useEffect(() => {
     void load();
@@ -141,6 +151,19 @@ export function AirdropsPage() {
             </button>
           ))}
         </div>
+        <div className="ad-chips" aria-label={t("airdrops.filterVerify")}>
+          {(
+            [
+              ["", t("airdrops.verify.all")],
+              ["confirmed", t("airdrops.verify.confirmed")],
+              ["unverified", t("airdrops.verify.unverified")],
+            ] as ["" | AirdropVerification, string][]
+          ).map(([v, label]) => (
+            <button key={v || "all"} type="button" className={`ad-chip-btn ad-ver-btn${verifyFilter === v ? " is-active" : ""}`} onClick={() => pick(() => setVerifyFilter(v))}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="ad-chips" aria-label={t("airdrops.filterOrigin")}>
           {(
             [
@@ -185,19 +208,25 @@ export function AirdropsPage() {
       ) : null}
 
       <footer className="ad-foot-note">
-        {(data?.feeds?.length ?? 0) > 0 ? (
-          <div className="ad-feeds">
-            {t("airdrops.feeds")}
-            {data!.feeds.map((f) => (
-              <span key={f.id} className="ad-feed-st">
-                <i className={`st-dot ${f.ok ? "ok" : f.lastAttemptAt ? "bad" : ""}`} aria-hidden="true" />
-                <a href={f.home} target="_blank" rel="noopener noreferrer nofollow">
-                  {f.name}
-                </a>
-              </span>
-            ))}
-          </div>
+        {data?.verificationCounts ? (
+          <p className="ad-counts">{t("airdrops.verifyCounts", { c: data.verificationCounts.confirmed, u: data.verificationCounts.unverified })}</p>
         ) : null}
+        {(["official", "media"] as const).map((tier) => {
+          const fs = (data?.feeds ?? []).filter((f) => (f.tier ?? "media") === tier);
+          return fs.length > 0 ? (
+            <div key={tier} className="ad-feeds">
+              {t(tier === "official" ? "airdrops.feedsOfficial" : "airdrops.feedsMedia")}
+              {fs.map((f) => (
+                <span key={f.id} className="ad-feed-st">
+                  <i className={`st-dot ${f.ok ? "ok" : f.lastAttemptAt ? "bad" : ""}`} aria-hidden="true" />
+                  <a href={f.home} target="_blank" rel="noopener noreferrer nofollow">
+                    {f.name}
+                  </a>
+                </span>
+              ))}
+            </div>
+          ) : null;
+        })}
         <p className="muted">{data?.note ?? t("airdrops.disclaimer")}</p>
       </footer>
     </div>

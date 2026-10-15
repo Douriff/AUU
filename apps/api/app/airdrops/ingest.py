@@ -1,9 +1,16 @@
-"""空投雷达 RSS ingest: keyword-filtered public feeds -> airdrops.sqlite (info only).
+"""空投雷达 ingest: keyword-filtered public sources -> airdrops.sqlite (info only).
 
-Reuses ``app.news`` RSS parse/fetch (CoinDesk / Cointelegraph public outbound feeds already
-used by 行业动态). Never fetches article HTML bodies. Failures are per-source and never
-propagate to the API. Curated seed rows are never wiped; ingest upserts by id and skips
-URLs already present.
+Two tiers (``FEED_SOURCES[...]["tier"]``):
+
+* ``official`` – exchange announcement APIs (OKX ``/api/v5/support/announcements``, Bybit
+  ``/v5/announcements/index``: documented, public, key-less endpoints) and project / exchange
+  blog RSS feeds that the sites themselves advertise. Shown as 已确认. Binance is NOT fetched
+  (its only key-less endpoint is disallowed by robots.txt, the official one needs an API key).
+* ``media`` – CoinDesk / Cointelegraph public RSS (reuses ``app.news`` parse/fetch).
+
+Only title, a short summary (<= 220 chars) and the article link are kept; article bodies are never
+fetched or stored. Failures are per-source (logged, backed off, old rows kept) and never reach the
+API. Curated seed rows are never wiped. Standby nodes (``AUU_ROLE=standby``) never fetch.
 """
 from __future__ import annotations
 
@@ -13,23 +20,88 @@ import os
 import re
 import threading
 import time
+import json
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-from app.airdrops import CATEGORIES, AirdropStore, get_store
+from app.airdrops import CATEGORIES, AirdropStore, get_store, quality
 
 log = logging.getLogger("auu.airdrops.ingest")
 
-# Same public feeds as app.news (official RSS; titles+summaries only).
-FEED_SOURCES: dict[str, dict[str, str]] = {
+EXCHANGE_MIN_INTERVAL = 1800  # exchange APIs: 1 request / 30 min / source (OKX allows 5 req / 2 s)
+BLOG_MIN_INTERVAL = 1800
+
+# id -> definition. ``hosts``: link host suffixes accepted for official sources (a feed cannot
+# smuggle a foreign link into an "official" card). ``min_interval``: seconds between requests.
+FEED_SOURCES: dict[str, dict[str, Any]] = {
+    # --- media (existing) ---
     "coindesk": {
-        "name": "CoinDesk",
-        "home": "https://www.coindesk.com/",
-        "url": "https://www.coindesk.com/arc/outboundfeeds/rss",
+        "name": "CoinDesk", "home": "https://www.coindesk.com/", "url": "https://www.coindesk.com/arc/outboundfeeds/rss",
+        "kind": "rss", "tier": "media", "min_interval": 0,
     },
     "cointelegraph": {
-        "name": "Cointelegraph",
-        "home": "https://cointelegraph.com/",
-        "url": "https://cointelegraph.com/rss",
+        "name": "Cointelegraph", "home": "https://cointelegraph.com/", "url": "https://cointelegraph.com/rss",
+        "kind": "rss", "tier": "media", "min_interval": 0,
+    },
+    # --- official: exchange announcement APIs ---
+    "okx": {
+        "name": "OKX 公告", "project": "OKX", "home": "https://www.okx.com/help/category/announcements",
+        "url": "https://www.okx.com/api/v5/support/announcements?page=1",
+        "kind": "okx", "tier": "official", "min_interval": EXCHANGE_MIN_INTERVAL, "hosts": ("okx.com",),
+        "keywords": "exchange",
+    },
+    "bybit": {
+        "name": "Bybit 公告", "project": "Bybit", "home": "https://announcements.bybit.com/",
+        "url": "https://api.bybit.com/v5/announcements/index?locale=en-US&limit=50&page=1",
+        "kind": "bybit", "tier": "official", "min_interval": EXCHANGE_MIN_INTERVAL, "hosts": ("bybit.com",),
+        "keywords": "exchange",
+    },
+    # --- official: project / exchange blogs (RSS the sites advertise) ---
+    "ethereum": {
+        "name": "Ethereum Foundation Blog", "project": "Ethereum", "home": "https://blog.ethereum.org/",
+        "url": "https://blog.ethereum.org/en/feed.xml", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("ethereum.org",),
+    },
+    "solana": {
+        "name": "Solana News", "project": "Solana", "home": "https://solana.com/news",
+        "url": "https://solana.com/news/rss.xml", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("solana.com",),
+    },
+    "arbitrum": {
+        "name": "Arbitrum Blog", "project": "Arbitrum", "home": "https://blog.arbitrum.io/",
+        "url": "https://blog.arbitrum.io/rss/", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("arbitrum.io",),
+    },
+    "optimism": {
+        "name": "Optimism Blog", "project": "Optimism", "home": "https://optimism.mirror.xyz/",
+        "url": "https://optimism.mirror.xyz/feed/atom", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("mirror.xyz", "optimism.io"),
+    },
+    "eigen": {
+        "name": "Eigen Labs Blog", "project": "EigenLayer", "home": "https://www.eigenlabs.org/blog/",
+        "url": "https://www.eigenlabs.org/blog/rss/", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("eigenlabs.org", "eigencloud.xyz", "eigenlayer.xyz"),
+    },
+    "lido": {
+        "name": "Lido Blog", "project": "Lido", "home": "https://blog.lido.fi/",
+        "url": "https://blog.lido.fi/rss/", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("lido.fi",),
+    },
+    "sui": {
+        "name": "Sui Blog", "project": "Sui", "home": "https://www.sui.io/blog",
+        "url": "https://www.sui.io/blog/rss.xml", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("sui.io",),
+    },
+    "layerzero": {
+        "name": "LayerZero (Medium)", "project": "LayerZero", "home": "https://medium.com/layerzero-official",
+        "url": "https://medium.com/feed/layerzero-official", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("medium.com", "layerzero.network", "layerzero.foundation"),
+    },
+    "kraken": {
+        "name": "Kraken Blog", "project": "Kraken", "home": "https://blog.kraken.com/",
+        "url": "https://blog.kraken.com/feed", "kind": "rss", "tier": "official",
+        "min_interval": BLOG_MIN_INTERVAL, "hosts": ("kraken.com",),
     },
 }
 
@@ -40,6 +112,14 @@ AIRDROP_KEYWORDS = re.compile(
     r"\bcommunity\s+(?:rewards?|allocation|drop)\b|\bair\s*drop\b",
     re.I,
 )
+
+# Exchange announcement streams are mostly listings/maintenance; keep launch-style campaigns too.
+EXCHANGE_KEYWORDS = re.compile(
+    AIRDROP_KEYWORDS.pattern + r"|\bjumpstart\b|\blaunchpool\b|\blaunchpad\b|\btoken\s+splash\b|\bmegadrops?\b|\bhodler\b",
+    re.I,
+)
+SUMMARY_SHORT = 220
+MAX_AGE_DAYS = 90
 
 MEME_HINT = re.compile(
     r"\bpump\.?fun\b|\bbonk\b|\bwif\b|\bdoge(?:coin)?\b|\bpepe\b|\bmeme(?:coin)?s?\b|"
@@ -53,7 +133,7 @@ MAJOR_HINT = re.compile(
     re.I,
 )
 
-USER_AGENT = "AUUTRADE-airdrops/1.0 (+https://auutrade.com; RSS reader, headlines only)"
+USER_AGENT = "AUUTRADE-airdrops/2.0 (+https://auutrade.com; headlines + links only, low frequency)"
 RETAIN_INGESTED_DAYS = 90
 RETAIN_INGESTED_ROWS = 2000
 
@@ -61,7 +141,11 @@ FetchFn = Callable[[str], bytes]
 
 
 def ingest_enabled() -> bool:
-    """Ingest follows AUU_AIRDROPS unless AUU_AIRDROPS_INGEST is set explicitly."""
+    """Ingest follows AUU_AIRDROPS unless AUU_AIRDROPS_INGEST is set explicitly; always off on a standby."""
+    from app.role import is_standby
+
+    if is_standby():  # the primary fetches; a standby never duplicates the requests (AUU_ROLE=standby)
+        return False
     raw = os.getenv("AUU_AIRDROPS_INGEST")
     if raw is None:
         from app.airdrops import airdrops_enabled
@@ -87,9 +171,9 @@ def enabled_feeds() -> list[str]:
     return [s for s in (x.strip().lower() for x in raw.split(",")) if s in FEED_SOURCES]
 
 
-def matches_airdrop(title: str, summary: str = "") -> bool:
+def matches_airdrop(title: str, summary: str = "", *, exchange: bool = False) -> bool:
     text = f"{title or ''} {summary or ''}"
-    return bool(AIRDROP_KEYWORDS.search(text))
+    return bool((EXCHANGE_KEYWORDS if exchange else AIRDROP_KEYWORDS).search(text))
 
 
 def guess_category(title: str, summary: str = "") -> str:
@@ -144,35 +228,148 @@ def article_link(item: dict[str, Any]) -> str:
     return ""
 
 
-def feed_item_to_row(item: dict[str, Any], *, source_id: str, source_name: str, now_ms: int) -> Optional[dict[str, Any]]:
+_TRACKING_PARAMS = ("utm_", "ref", "source", "fbclid", "gclid", "mc_", "_hs")
+
+
+def strip_tracking(url: str) -> str:
+    """Drop tracking query params (Medium adds ?source=rss-...) but keep the path and other params."""
+    try:
+        p = urlsplit(url)
+    except ValueError:
+        return url
+    q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not k.lower().startswith(_TRACKING_PARAMS)]
+    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), ""))
+
+
+def host_allowed(url: str, hosts: tuple[str, ...]) -> bool:
+    try:
+        h = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return any(h == d or h.endswith("." + d) for d in hosts)
+
+
+def short_summary(text: str, limit: int = SUMMARY_SHORT) -> str:
+    t = re.sub(r"\s+", " ", text or "").strip()
+    if len(t) <= limit:
+        return t
+    return t[: limit - 1].rstrip() + "…"
+
+
+def feed_item_to_row(
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    source_name: str,
+    now_ms: int,
+    meta: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Feed/API item -> store row, or None (no link, off-topic, scam wording, too old, foreign host)."""
+    meta = meta or FEED_SOURCES.get(source_id) or {}
+    tier = meta.get("tier", "media")
     title = (item.get("title") or "").strip()
-    summary = (item.get("summary") or "").strip()
+    summary = short_summary(item.get("summary") or "")
     url = article_link(item)
-    if not title or not url or not matches_airdrop(title, summary):
+    if not title or not url:
+        return None
+    if tier == "official":
+        url = strip_tracking(url)
+        if not url.startswith("https://") or not host_allowed(url, tuple(meta.get("hosts") or ())):
+            return None
+    if not matches_airdrop(title, summary, exchange=meta.get("keywords") == "exchange"):
+        return None
+    if quality.blocked_reason(title, summary):
+        return None
+    pub = int(item.get("published_at") or now_ms)
+    if now_ms - pub > MAX_AGE_DAYS * 86_400_000:
         return None
     cat = guess_category(title, summary)
     if cat not in CATEGORIES:
         cat = "community"
-    pub = int(item.get("published_at") or now_ms)
-    tags = ["ingested", "rss", source_id]
+    tags = ["ingested", "rss" if meta.get("kind", "rss") == "rss" else "api", source_id]
+    if tier == "official":
+        tags.append("official")
     if cat == "meme":
         tags.append("meme")
+    project = (meta.get("project") if tier == "official" else None) or guess_project(title)
+    status = item.get("status") if item.get("status") in {"active", "upcoming", "ended"} else "active"
     return {
         "id": ingested_id(source_id, url, str(item.get("guid") or "")),
         "title": title[:240],
-        "project_name": guess_project(title),
+        "project_name": project,
         "category": cat,
         "source_name": source_name[:120],
         "source_url": url[:1000],
-        "summary": summary[:800],
+        "summary": summary,
         "chains": "",
-        "status": "active",
+        "status": status,
         "published_at": pub,
         "updated_at": now_ms,
         "external_url": url[:1000],
         "tags": ",".join(tags),
         "origin": "ingested",
+        "source_id": source_id,
+        "kind": "official" if tier == "official" else "media",
     }
+
+
+# ---- exchange announcement APIs (documented public endpoints) -> item dicts like app.news.parse_feed ----
+def parse_okx(raw: bytes, now_ms: int) -> list[dict[str, Any]]:
+    d = json.loads(raw.decode("utf-8", "replace"))
+    if str(d.get("code")) != "0":
+        raise ValueError(f"okx code {d.get('code')}")
+    out = []
+    for page in d.get("data") or []:
+        for a in page.get("details") or []:
+            title = str(a.get("title") or "").strip()
+            url = str(a.get("url") or "").strip()
+            try:
+                pub = int(a.get("pTime") or 0)
+            except (TypeError, ValueError):
+                pub = 0
+            if not title or not url or pub <= 0:
+                continue
+            out.append({"title": title, "url": url, "guid": url, "summary": "", "published_at": min(pub, now_ms + 300_000),
+                        "ann_type": str(a.get("annType") or "")})
+    return out
+
+
+def parse_bybit(raw: bytes, now_ms: int) -> list[dict[str, Any]]:
+    d = json.loads(raw.decode("utf-8", "replace"))
+    if int(d.get("retCode", -1)) != 0:
+        raise ValueError(f"bybit retCode {d.get('retCode')}")
+    out = []
+    for a in (d.get("result") or {}).get("list") or []:
+        title = str(a.get("title") or "").strip()
+        url = str(a.get("url") or "").strip()
+        pub = int(a.get("publishTime") or a.get("dateTimestamp") or 0)
+        if not title or not url or pub <= 0:
+            continue
+        desc = str(a.get("description") or "").strip()
+        if desc == title or desc.lower().startswith("disclaimer"):
+            desc = ""
+        status = "active"
+        if (a.get("type") or {}).get("key") == "latest_activities":
+            st, en = int(a.get("startDateTimestamp") or 0), int(a.get("endDateTimestamp") or 0)
+            if st and st > now_ms:
+                status = "upcoming"
+            elif en and en < now_ms:
+                status = "ended"
+        out.append({"title": title, "url": url, "guid": url, "summary": desc, "published_at": min(pub, now_ms + 300_000),
+                    "status": status})
+    return out
+
+
+def http_fetch_ex(url: str, *, accept: str = "*/*", timeout: float = 10.0, max_bytes: int = 3_000_000) -> bytes:
+    """Plain GET with our own User-Agent (no cookies, no auth, no redirects to other schemes)."""
+    from urllib.request import Request, urlopen
+
+    req = Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept})
+    with urlopen(req, timeout=timeout) as resp:
+        raw = resp.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ValueError(f"response larger than {max_bytes} bytes")
+    return raw
 
 
 class AirdropFetcher:
@@ -183,35 +380,74 @@ class AirdropFetcher:
         fetch: Optional[FetchFn] = None,
         now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
     ):
-        from app.news import http_fetch
-
         self.store = store
-        self.fetch = fetch or http_fetch
+        self._injected = fetch
         self.now_ms = now_ms
         self._lock = threading.Lock()
 
-    def tick(self) -> dict[str, Any]:
-        """Fetch every enabled feed once. Never raises."""
+    def fetch(self, meta: dict[str, Any]) -> bytes:
+        if self._injected is not None:
+            return self._injected(meta["url"])
+        accept = "application/json" if meta.get("kind") in {"okx", "bybit"} else "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8"
+        return http_fetch_ex(meta["url"], accept=accept)
+
+    def _parse(self, meta: dict[str, Any], sid: str, raw: bytes, now: int) -> list[dict[str, Any]]:
+        kind = meta.get("kind", "rss")
+        if kind == "okx":
+            return parse_okx(raw, now)
+        if kind == "bybit":
+            return parse_bybit(raw, now)
+        from app.news import parse_feed
+
+        return parse_feed(raw, sid, now)
+
+    def _due(self, sid: str, meta: dict[str, Any], now: int) -> bool:
+        """Per-source politeness: min interval, doubling (up to x16, 4 h cap) after consecutive failures."""
+        base = int(meta.get("min_interval") or 0)
+        lg = self.store.fetch_state(sid)
+        if not lg or not lg.get("last_attempt"):
+            return True
+        fails = int(lg.get("fails") or 0)
+        wait = base * (2 ** min(fails, 4)) if fails else base
+        if fails:
+            wait = max(wait, 300)
+        wait = min(wait, 4 * 3600) if base else wait
+        return now - int(lg["last_attempt"]) >= wait * 1000
+
+    def tick(self, *, force: bool = False) -> dict[str, Any]:
+        """Fetch every enabled, due source once. Never raises. A standby node does nothing."""
+        from app.role import is_standby
+
+        if is_standby():
+            return {"standby": True}
         if not self._lock.acquire(blocking=False):
             return {}
         out: dict[str, Any] = {}
         try:
-            from app.news import parse_feed
-
             for sid in enabled_feeds():
                 meta = FEED_SOURCES[sid]
                 now = self.now_ms()
                 try:
-                    raw = self.fetch(meta["url"])
-                    parsed = parse_feed(raw, sid, now)
+                    if not force and not self._due(sid, meta, now):
+                        out[sid] = {"ok": True, "skipped": "interval"}
+                        continue
+                    raw = self.fetch(meta)
+                    parsed = self._parse(meta, sid, raw, now)
                     rows = []
+                    blocked_pre = 0
+                    ex = meta.get("keywords") == "exchange"
                     for it in parsed:
-                        row = feed_item_to_row(it, source_id=sid, source_name=meta["name"], now_ms=now)
+                        if matches_airdrop(it.get("title") or "", it.get("summary") or "", exchange=ex) and quality.blocked_reason(
+                            it.get("title"), it.get("summary")
+                        ):
+                            blocked_pre += 1
+                        row = feed_item_to_row(it, source_id=sid, source_name=meta["name"], now_ms=now, meta=meta)
                         if row:
                             rows.append(row)
-                    added, skipped = self.store.upsert_ingested(rows)
-                    self.store.log_fetch(sid, now_ms=now, ok=True, added=added, items=len(rows))
-                    out[sid] = {"ok": True, "matched": len(rows), "added": added, "skipped": skipped, "feedItems": len(parsed)}
+                    res = self.store.merge_ingested(rows)
+                    self.store.log_fetch(sid, now_ms=now, ok=True, added=res["added"], items=len(rows))
+                    out[sid] = {"ok": True, "matched": len(rows), "added": res["added"], "merged": res["merged"],
+                                "skipped": res["skipped"] + res["merged"], "blocked": res["blocked"] + blocked_pre, "feedItems": len(parsed)}
                 except Exception as exc:
                     msg = _reason(exc)
                     try:
@@ -219,7 +455,7 @@ class AirdropFetcher:
                     except Exception:
                         pass
                     out[sid] = {"ok": False, "error": msg}
-                    log.warning("airdrops ingest %s failed: %s", sid, msg)
+                    log.warning("airdrops ingest %s failed (old rows kept, backing off): %s", sid, msg)
             try:
                 out["pruned"] = self.store.prune_ingested(self.now_ms())
             except Exception as exc:
@@ -240,6 +476,8 @@ def _reason(exc: BaseException) -> str:
         return "network: unreachable or timeout"
     if isinstance(exc, ET.ParseError):
         return "parse: invalid XML"
+    if isinstance(exc, json.JSONDecodeError):
+        return "parse: invalid JSON"
     return f"{type(exc).__name__}: {str(exc)[:120]}"
 
 

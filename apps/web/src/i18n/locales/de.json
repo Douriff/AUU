@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Offizielle Ankündigungen + Medien + redaktionelle Auswahl · gleiche Aktion aus mehreren Quellen zusammengeführt · jede Meldung zeigt Quellen und Prüfstatus",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Prüfstatus",
+    "verify": {
+      "all": "Alle Prüfstatus",
+      "confirmed": "Bestätigt",
+      "unverified": "Ungeprüft"
+    },
+    "verifyTip": {
+      "confirmed": "Mit offizieller Quelle oder von mindestens 2 unabhängigen Quellen gemeldet",
+      "unverified": "Nur eine nicht offizielle Quelle – bitte über die offiziellen Kanäle prüfen"
+    },
+    "sourceCount": "{{n}} Quelle(n)",
+    "sourcesTitle": "Quellen",
+    "kind": {
+      "official": "Offiziell",
+      "media": "Medien",
+      "curated": "Kuratiert"
+    },
+    "riskTitle": "Risikohinweis",
+    "riskShort": "Risikohinweis: Vorsicht vor Betrug und Phishing. Niemals zuerst Geld senden oder Seed-Phrase / privaten Schlüssel preisgeben; nur offizielle Projektkanäle nutzen. Nur zur Information, keine Anlageberatung.",
+    "riskLong": "Airdrop-, Punkte- und Token-Aktionen werden oft für Betrug und Phishing missbraucht. Prüfe nur über die offiziellen Kanäle des Projekts und nimm an nichts teil, wofür du zuerst Geld senden, zuerst Freigaben erteilen oder eine Seed-Phrase bzw. einen privaten Schlüssel nennen sollst. Diese Seite sammelt nur Informationen und ist keine Anlageberatung.",
+    "feedsOfficial": "Offizielle Quellen: ",
+    "feedsMedia": "Medienquellen: ",
+    "verifyCounts": "Bestätigt {{c}} · Ungeprüft {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",
