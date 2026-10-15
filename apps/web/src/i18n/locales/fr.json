@@ -315,6 +315,19 @@
         "syncingTitle": "Enregistrement de vos dessins dans votre compte",
         "syncedTitle": "Dessins enregistrés dans votre compte et disponibles sur vos autres appareils",
         "errorTitle": "Serveur injoignable ; dessins conservés localement, synchro automatique au retour"
+      },
+      "auuFibExt": "Extension Fib",
+      "auuPitchfork": "Fourche",
+      "auuFibChannel": "Canal Fib",
+      "auuMeasure": "Mesure",
+      "auuPriceRange": "Plage de prix",
+      "auuDateRange": "Plage de dates",
+      "hintN": "Cliquez / touchez {{n}} points sur le graphique (Échap pour annuler)",
+      "measure": {
+        "bars": "{{n}} bougies",
+        "unitD": "j",
+        "unitH": "h",
+        "unitM": "min"
       }
     },
     "auuEnterTh": "Seuil d'entrée",

@@ -10,6 +10,7 @@ import { fmtDate, fmtFixed } from "@/i18n/format";
 import { loadAuuRegimePref, loadAuuSignalPref, saveAuuRegimePref, saveAuuSignalPref } from "@/components/chart/auuSignalPrefs";
 import { useKChart } from "@/components/chart/kline/useKChart";
 import { useDrawings } from "@/components/chart/kline/useDrawings";
+import { TOOL_POINTS } from "@/components/chart/kline/drawings";
 import { useTouchScroll } from "@/components/chart/kline/useTouchScroll";
 import { DrawToolbar } from "@/components/chart/kline/DrawToolbar";
 import { IndicatorPanel } from "@/components/chart/kline/IndicatorPanel";
@@ -541,7 +542,7 @@ export function MainstreamChart({
         <div className={`msc-stage${drawings.active || drawings.selected || alerts.picking ? " kc-touchlock" : ""}${alerts.picking ? " is-picking" : ""}`}>
           <div ref={hostRef} className="msc-host" />
           {ghostX != null ? <div className="kc-ghost" style={{ left: ghostX }} data-testid="kc-ghost" aria-hidden /> : null}
-          {drawings.active ? <div className="kc-hint">{t("chart.draw.hint")}</div> : null}
+          {drawings.active ? <div className="kc-hint" data-testid="draw-hint">{TOOL_POINTS[drawings.active] ? t("chart.draw.hintN", { n: TOOL_POINTS[drawings.active] }) : t("chart.draw.hint")}</div> : null}
           {alerts.picking ? (
             <div className="kc-hint kc-hint-btn">
               {t("chart.alert.pickHint")}

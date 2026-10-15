@@ -315,6 +315,19 @@
         "syncingTitle": "正在把画线保存到你的账号",
         "syncedTitle": "画线已保存到你的账号，换设备登录也能看到",
         "errorTitle": "暂时无法连接服务器，画线已存在本机，联网后自动重试"
+      },
+      "auuFibExt": "斐波扩展",
+      "auuPitchfork": "安德鲁斯叉",
+      "auuFibChannel": "斐波通道",
+      "auuMeasure": "测量",
+      "auuPriceRange": "价格区间",
+      "auuDateRange": "时间区间",
+      "hintN": "在图上依次点击/轻点 {{n}} 个点（Esc 取消）",
+      "measure": {
+        "bars": "{{n}} 根K线",
+        "unitD": "天",
+        "unitH": "时",
+        "unitM": "分"
       }
     },
     "auuEnterTh": "入场阈值",

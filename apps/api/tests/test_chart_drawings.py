@@ -24,6 +24,24 @@ class ValidateTests(unittest.TestCase):
             self.assertEqual(out[0]["name"], name)
             self.assertLessEqual(len(out[0]["extendData"]), cd.MAX_TEXT)
 
+    def test_advanced_tools_whitelisted_and_legacy_kept(self):
+        legacy = {"segment", "rayLine", "horizontalStraightLine", "verticalStraightLine", "fibonacciLine", "auuRect", "parallelStraightLine", "auuText"}
+        adv = {"auuFibExt", "auuPitchfork", "auuFibChannel", "auuMeasure", "auuPriceRange", "auuDateRange"}
+        self.assertTrue(legacy <= cd.ALLOWED_TOOLS, "step 1-2 tools must stay valid (stored documents)")
+        self.assertTrue(adv <= cd.ALLOWED_TOOLS)
+        self.assertEqual(cd.ALLOWED_TOOLS, legacy | adv)  # nothing else sneaks in
+
+    def test_three_point_advanced_tool_roundtrip(self):
+        pts = [{"timestamp": T0 + i * 3_600_000, "value": 100.0 + i} for i in range(3)]
+        out = cd.validate_drawings([{"name": "auuPitchfork", "points": pts}, {"name": "auuMeasure", "points": pts[:2]}])
+        self.assertEqual([d["name"] for d in out], ["auuPitchfork", "auuMeasure"])
+        self.assertEqual(len(out[0]["points"]), 3)
+
+    def test_unknown_tool_still_rejected(self):
+        for name in ("auuFibExtX", "eval", "", None, "AUUMEASURE", "brush"):
+            with self.assertRaises(cd.DrawingsError):
+                cd.validate_drawings([{"name": name, "points": [{"timestamp": T0, "value": 1}]}])
+
     def test_rejects_bad_payloads(self):
         bad = [
             "x",

@@ -8,6 +8,7 @@
 import { registerIndicator, registerOverlay, type IndicatorCreate, type KLineData } from "klinecharts";
 import { chartColors } from "@/theme/colorPref";
 import { MOM_COLORS } from "@/components/chart/kline/theme";
+import { registerAdvOverlays } from "@/components/chart/kline/advOverlays";
 
 export type MarkerShape = "arrow" | "dot";
 export type RegimeData = { color: string };
@@ -18,6 +19,7 @@ let done = false;
 export function registerAuuKline(): void {
   if (done) return;
   done = true;
+  registerAdvOverlays();
 
   registerOverlay({
     name: "auuRect",

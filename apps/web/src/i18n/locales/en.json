@@ -315,6 +315,19 @@
         "syncingTitle": "Saving your drawings to your account",
         "syncedTitle": "Drawings are saved to your account and follow you to other devices",
         "errorTitle": "Server unreachable for now; drawings are safe locally and will sync when back online"
+      },
+      "auuFibExt": "Fib extension",
+      "auuPitchfork": "Pitchfork",
+      "auuFibChannel": "Fib channel",
+      "auuMeasure": "Measure",
+      "auuPriceRange": "Price range",
+      "auuDateRange": "Date range",
+      "hintN": "Click / tap {{n}} points on the chart (Esc to cancel)",
+      "measure": {
+        "bars": "{{n}} bars",
+        "unitD": "d",
+        "unitH": "h",
+        "unitM": "m"
       }
     },
     "auuEnterTh": "Enter threshold",

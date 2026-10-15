@@ -25,8 +25,11 @@ from app.data_paths import data_dir
 
 LEDGER_NAME = "chart_drawings.sqlite"
 
+# Step 1-2 tools, then the step-5 advanced tools (Fib extension, pitchfork, Fib channel, measure, price/date range).
+# Additive only: documents saved before the advanced tools existed stay valid.
 ALLOWED_TOOLS = frozenset(
     {"segment", "rayLine", "horizontalStraightLine", "verticalStraightLine", "fibonacciLine", "auuRect", "parallelStraightLine", "auuText"}
+    | {"auuFibExt", "auuPitchfork", "auuFibChannel", "auuMeasure", "auuPriceRange", "auuDateRange"}
 )
 ALLOWED_TF = frozenset({"", "1m", "5m", "15m", "1h", "4h", "1d"})
 MAX_DRAWINGS = 200

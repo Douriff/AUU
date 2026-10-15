@@ -315,6 +315,19 @@
         "syncingTitle": "Çizimleriniz hesabınıza kaydediliyor",
         "syncedTitle": "Çizimler hesabınıza kaydedildi ve diğer cihazlarda da görünür",
         "errorTitle": "Sunucuya şu an ulaşılamıyor; çizimler yerelde güvende, bağlantı gelince senkronize edilir"
+      },
+      "auuFibExt": "Fib uzantısı",
+      "auuPitchfork": "Pitchfork",
+      "auuFibChannel": "Fib kanalı",
+      "auuMeasure": "Ölç",
+      "auuPriceRange": "Fiyat aralığı",
+      "auuDateRange": "Tarih aralığı",
+      "hintN": "Grafikte {{n}} noktaya tıkla / dokun (Esc iptal)",
+      "measure": {
+        "bars": "{{n}} mum",
+        "unitD": "g",
+        "unitH": "sa",
+        "unitM": "dk"
       }
     },
     "auuEnterTh": "Giriş eşiği",

@@ -315,6 +315,19 @@
         "syncingTitle": "Guardando tus dibujos en tu cuenta",
         "syncedTitle": "Los dibujos están guardados en tu cuenta y te siguen a otros dispositivos",
         "errorTitle": "Servidor no disponible; los dibujos están a salvo en local y se sincronizarán al volver"
+      },
+      "auuFibExt": "Extensión Fib",
+      "auuPitchfork": "Horquilla",
+      "auuFibChannel": "Canal Fib",
+      "auuMeasure": "Medir",
+      "auuPriceRange": "Rango de precio",
+      "auuDateRange": "Rango de fechas",
+      "hintN": "Haz clic / toca {{n}} puntos en el gráfico (Esc para cancelar)",
+      "measure": {
+        "bars": "{{n}} velas",
+        "unitD": "d",
+        "unitH": "h",
+        "unitM": "min"
       }
     },
     "auuEnterTh": "Umbral de entrada",
