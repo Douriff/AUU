@@ -107,7 +107,14 @@
     "TRC20_DAILY_LIMIT": "Das heutige Aufladelimit ist erreicht",
     "TRC20_BUSY": "Dieser Betrag ist gerade nicht möglich – bitte wähle einen anderen",
     "TRC20_UNKNOWN_TX": "Keine solche Transaktion auf der Blockchain",
-    "TRC20_NOT_PENDING": "Diese Transaktion wurde bereits bearbeitet"
+    "TRC20_NOT_PENDING": "Diese Transaktion wurde bereits bearbeitet",
+    "ALERT_LIMIT": "Du kannst höchstens 20 aktive Preisalarme haben. Lösche zuerst einige.",
+    "ALERT_DUPLICATE": "Du hast bereits denselben Preisalarm",
+    "ALREADY_REACHED": "Der Preis hat dieses Niveau bereits erreicht. Wähle einen anderen Preis oder eine andere Richtung.",
+    "STANDBY": "Dieser Knoten ist vorübergehend nicht verfügbar, bitte später erneut versuchen",
+    "RATE_LIMITED": "Zu viele Anfragen, bitte langsamer",
+    "BAD_DIRECTION": "Ungültige Auslöserichtung",
+    "BAD_NOTE": "Ungültige Notiz"
   },
   "common": {
     "submitting": "Wird gesendet…",
@@ -326,7 +333,46 @@
     "auuRunSince": "seit {{date}} · {{n}} Kerzen",
     "auuRunTitle": "Wie lange der aktuelle Long/Short-Zustand anhält (experimentell, nur Aufzeichnung, keine Orders)",
     "auuRegime": "Regime",
-    "auuRegimeTitle": "Hintergrund der Kerzen einfärben, wo das AUU-Signal long / short ist"
+    "auuRegimeTitle": "Hintergrund der Kerzen einfärben, wo das AUU-Signal long / short ist",
+    "alert": {
+      "title": "Preisalarme",
+      "btn": "Alarme",
+      "btnTitle": "Preisalarme ({{n}} aktiv für diese Münze)",
+      "unread": "{{n}} ungelesene Alarme",
+      "close": "Schließen",
+      "login": "Melde dich an, um Preisalarme zu nutzen.",
+      "unavailable": "Preisalarme sind auf diesem Knoten nicht verfügbar (der primäre Knoten bearbeitet sie). Bitte später erneut versuchen.",
+      "last": "Letzter {{p}}",
+      "cap": "{{n}}/{{max}} aktiv",
+      "price": "Alarmpreis",
+      "pricePlaceholder": "Alarmpreis, z. B. 65000",
+      "pick": "Im Chart wählen",
+      "picking": "Chart anklicken…",
+      "pickTitle": "Klicke auf eine Höhe im Chart, um den Preis zu übernehmen",
+      "pickHint": "Chart anklicken, um den Alarmpreis zu wählen",
+      "direction": "Auslöserichtung",
+      "dir": {
+        "above": "Steigt auf",
+        "below": "Fällt auf",
+        "cross": "Kreuzt"
+      },
+      "note": "Notiz",
+      "notePlaceholder": "Notiz (optional)",
+      "add": "Hinzufügen",
+      "active": "Aktive Alarme",
+      "allCoins": "Alle Münzen",
+      "empty": "Noch keine Preisalarme. Gib einen Preis ein oder nutze „Im Chart wählen“.",
+      "recent": "Zuletzt ausgelöst",
+      "clearHistory": "Verlauf löschen",
+      "firedAt": "{{time}} · erreicht bei {{p}}",
+      "new": "Neu",
+      "emailOn": "Bei Auslösung erhältst du eine E-Mail an deine registrierte Adresse und hier einen Hinweis.",
+      "emailOff": "Keine E-Mail im Konto: Auslösungen werden nur auf der Website angezeigt.",
+      "badPrice": "Gib einen gültigen Preis ein (Zahl über 0)",
+      "failed": "Etwas ist schiefgelaufen, bitte erneut versuchen",
+      "toastUp": "{{sym}} ist auf {{p}} gestiegen",
+      "toastDown": "{{sym}} ist auf {{p}} gefallen"
+    }
   },
   "console": {
     "sub": "Paper-Lauf der Trendstrategie, Risikomanagement und Ausführungsprotokoll",

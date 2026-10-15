@@ -107,7 +107,14 @@
     "TRC20_DAILY_LIMIT": "已超过今日充值上限",
     "TRC20_BUSY": "该金额暂时无法下单，请换一个金额",
     "TRC20_UNKNOWN_TX": "没有这笔链上交易",
-    "TRC20_NOT_PENDING": "这笔交易已处理过"
+    "TRC20_NOT_PENDING": "这笔交易已处理过",
+    "ALERT_LIMIT": "最多同时保留 20 条生效中的价格提醒，请先删除不需要的",
+    "ALERT_DUPLICATE": "已经有一条相同的价格提醒",
+    "ALREADY_REACHED": "当前价格已经到达该价位，请换一个价格或方向",
+    "STANDBY": "当前节点暂不可用，请稍后再试",
+    "RATE_LIMITED": "操作太频繁，请稍后再试",
+    "BAD_DIRECTION": "触发方向不正确",
+    "BAD_NOTE": "备注不正确"
   },
   "common": {
     "submitting": "提交中…",
@@ -326,7 +333,46 @@
     "auuRunSince": "自 {{date}} 起，已持续 {{n}} 根",
     "auuRunTitle": "最新的多/空状态已连续持续多久（实验信号，仅记录，不下单）",
     "auuRegime": "多空底色",
-    "auuRegimeTitle": "在 K 线背后用淡色标出 AUU 信号的多头/空头区间"
+    "auuRegimeTitle": "在 K 线背后用淡色标出 AUU 信号的多头/空头区间",
+    "alert": {
+      "title": "价格提醒",
+      "btn": "提醒",
+      "btnTitle": "价格提醒（本币种生效中 {{n}} 条）",
+      "unread": "{{n}} 条未读提醒",
+      "close": "关闭",
+      "login": "登录后才能使用价格提醒。",
+      "unavailable": "当前节点暂不提供价格提醒（由主节点处理），请稍后再试。",
+      "last": "最新价 {{p}}",
+      "cap": "生效中 {{n}}/{{max}}",
+      "price": "提醒价格",
+      "pricePlaceholder": "提醒价格，如 65000",
+      "pick": "在图上选价",
+      "picking": "点击图表…",
+      "pickTitle": "点击图表上的位置，把该价格填入表单",
+      "pickHint": "点击图表选择提醒价格",
+      "direction": "触发方向",
+      "dir": {
+        "above": "涨到",
+        "below": "跌到",
+        "cross": "穿越"
+      },
+      "note": "备注",
+      "notePlaceholder": "备注（可选）",
+      "add": "添加",
+      "active": "生效中的提醒",
+      "allCoins": "全部币种",
+      "empty": "还没有价格提醒。输入价格，或点“在图上选价”。",
+      "recent": "最近触发",
+      "clearHistory": "清空记录",
+      "firedAt": "{{time}} 触发于 {{p}}",
+      "new": "新",
+      "emailOn": "触发时会发邮件到您的注册邮箱，并在这里提示。",
+      "emailOff": "账号未绑定邮箱：触发时只在站内提示。",
+      "badPrice": "请输入有效的价格（大于 0 的数字）",
+      "failed": "操作失败，请稍后再试",
+      "toastUp": "{{sym}} 已涨到 {{p}}",
+      "toastDown": "{{sym}} 已跌到 {{p}}"
+    }
   },
   "console": {
     "sub": "趋势策略纸面运行、风控与执行记录",

@@ -11,6 +11,7 @@ import { MOM_COLORS } from "@/components/chart/kline/theme";
 
 export type MarkerShape = "arrow" | "dot";
 export type RegimeData = { color: string };
+export type AlertLineData = { color: string; label: string };
 export type MarkerData = { ts: number; shape: MarkerShape; color: string; text: string; side: "low" | "high" };
 
 let done = false;
@@ -85,6 +86,30 @@ export function registerAuuKline(): void {
         });
       }
       return figs;
+    },
+  });
+
+  // Price alert: a dashed full-width line at the alert price with a bell label (not editable, not saved as a drawing)
+  registerOverlay<AlertLineData>({
+    name: "auuAlertLine",
+    totalStep: 1,
+    lock: true,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: true,
+    createPointFigures: ({ coordinates, overlay, bounding }) => {
+      const a = overlay.extendData;
+      if (!a || !coordinates.length) return [];
+      const y = coordinates[0].y;
+      return [
+        { type: "line", attrs: { coordinates: [{ x: 0, y }, { x: bounding.width, y }] }, styles: { style: "dashed", color: a.color, size: 1, dashedValue: [6, 4] }, ignoreEvent: true },
+        {
+          type: "text",
+          attrs: { x: bounding.width - 58, y: y - 3, text: a.label, align: "right", baseline: "bottom" },
+          styles: { style: "fill", color: a.color, size: 11, backgroundColor: "transparent", borderSize: 0, paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0 },
+          ignoreEvent: true,
+        },
+      ];
     },
   });
 

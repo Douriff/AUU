@@ -153,6 +153,36 @@ export type AdminExchange = {
   allowlistUsers: { id: string; name: string; capUsdt?: number | null; futuresCapUsdt?: number | null; futuresAck?: boolean }[]; maxLeverage: number; maxFuturesUsdt: number; boundCounts: Record<string, number>; serverIps: { primary: string; standby: string }; cryptoReady: boolean;
 };
 
+export type PriceAlertDirection = "above" | "below" | "cross";
+export type PriceAlert = {
+  id: number;
+  symbol: string;
+  venue: string;
+  price: number;
+  direction: PriceAlertDirection;
+  createdAt: number;
+  triggeredAt: number | null;
+  note: string;
+  status: "active" | "triggered" | "cancelled";
+  triggerPrice: number | null;
+};
+export type PriceAlertEvent = {
+  id: number;
+  alertId: number;
+  symbol: string;
+  venue: string;
+  target: number;
+  direction: PriceAlertDirection;
+  firedDir: "up" | "down";
+  triggerPrice: number;
+  note: string;
+  createdAt: number;
+  read: boolean;
+  email: string;
+};
+export type PriceAlertCaps = { active: number; maxActive: number; triggered: number };
+export type PriceAlertList = { alerts: PriceAlert[]; caps: PriceAlertCaps; unread: number; now: number; emailOn: boolean };
+
 export type ChartDrawingsDoc = { symbol: string; tf: string; drawings: { name: string; points: { timestamp: number; value: number }[]; extendData?: string; styles?: unknown }[]; updatedAt: number };
 
 export const AUTH_REQUIRED_EVENT = "auu:auth-required";
@@ -406,6 +436,30 @@ export class HttpWsProvider {
 
   putChartDrawings(symbol: string, drawings: unknown[], baseUpdatedAt: number, tf = ""): Promise<ChartDrawingsDoc> {
     return putJson("/api/v1/chart/drawings", { symbol, ...(tf ? { tf } : {}), drawings, baseUpdatedAt });
+  }
+
+  getPriceAlerts(): Promise<PriceAlertList> {
+    return getJson("/api/v1/chart/alerts");
+  }
+
+  createPriceAlert(body: { symbol: string; price: number; direction: PriceAlertDirection; note?: string }): Promise<{ alert: PriceAlert; caps: PriceAlertCaps; last: number | null }> {
+    return postJson("/api/v1/chart/alerts", body);
+  }
+
+  deletePriceAlert(id: number): Promise<{ deleted: number; caps: PriceAlertCaps }> {
+    return delJson(`/api/v1/chart/alerts/${id}`);
+  }
+
+  clearPriceAlertHistory(): Promise<{ cleared: number; caps: PriceAlertCaps }> {
+    return delJson("/api/v1/chart/alerts?scope=history");
+  }
+
+  getPriceAlertEvents(unread = false): Promise<{ events: PriceAlertEvent[]; unread: number; now: number }> {
+    return getJson(`/api/v1/chart/alerts/notifications?${unread ? "unread=1&" : ""}limit=50`);
+  }
+
+  markPriceAlertEventsRead(ids?: number[]): Promise<{ marked: number; unread: number }> {
+    return postJson("/api/v1/chart/alerts/notifications/read", ids ? { ids } : {});
   }
 
   getAuuSignalLatest(symbol: string, tf = "1d"): Promise<Pick<AuuSignalOverlay, "version" | "experimental" | "symbol" | "tf" | "latest" | "label">> {

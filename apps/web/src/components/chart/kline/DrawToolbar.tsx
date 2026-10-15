@@ -13,10 +13,12 @@ type Props = {
   onMagnet: () => void;
   onDelete: () => void;
   onClear: () => void;
+  /** price alerts: bell button with unread badge; the panel itself is rendered by the chart */
+  alerts?: { open: boolean; unread: number; active: number; onToggle: () => void };
 };
 
 /** Left toolbar on desktop; on phones a collapsible strip above the chart. */
-export function DrawToolbar({ active, hasSelection, count, sync, magnet, onPick, onMagnet, onDelete, onClear }: Props) {
+export function DrawToolbar({ active, hasSelection, count, sync, magnet, onPick, onMagnet, onDelete, onClear, alerts }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const pick = (id: ToolId) => {
@@ -25,9 +27,27 @@ export function DrawToolbar({ active, hasSelection, count, sync, magnet, onPick,
   };
   return (
     <div className={`kc-tools${open ? " is-open" : ""}${active ? " is-drawing" : ""}`} role="toolbar" aria-label={t("chart.draw.aria")}>
-      <button type="button" className="kc-tools-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={t("chart.draw.aria")}>
-        <span aria-hidden>✎</span> {active ? t(`chart.draw.${active}`) : t("chart.draw.toggle")}
-      </button>
+      <div className="kc-tools-head">
+        <button type="button" className="kc-tools-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={t("chart.draw.aria")}>
+          <span aria-hidden>✎</span> {active ? t(`chart.draw.${active}`) : t("chart.draw.toggle")}
+        </button>
+        {alerts ? (
+          <button
+            type="button"
+            className={`kc-tool kc-bell${alerts.open ? " is-on" : ""}`}
+            aria-pressed={alerts.open}
+            aria-label={t("chart.alert.title")}
+            title={t("chart.alert.btnTitle", { n: alerts.active })}
+            data-tool="alert"
+            data-testid="alert-btn"
+            onClick={alerts.onToggle}
+          >
+            <span className="kc-glyph" aria-hidden>🔔</span>
+            <span className="kc-tool-label">{t("chart.alert.btn")}</span>
+            {alerts.unread ? <i className="kc-badge" data-testid="alert-badge" aria-label={t("chart.alert.unread", { n: alerts.unread })}>{alerts.unread > 9 ? "9+" : alerts.unread}</i> : null}
+          </button>
+        ) : null}
+      </div>
       <div className="kc-tools-list">
         {DRAW_TOOLS.map((d) => (
           <button

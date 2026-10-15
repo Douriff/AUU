@@ -13,6 +13,9 @@ import { useDrawings } from "@/components/chart/kline/useDrawings";
 import { useTouchScroll } from "@/components/chart/kline/useTouchScroll";
 import { DrawToolbar } from "@/components/chart/kline/DrawToolbar";
 import { IndicatorPanel } from "@/components/chart/kline/IndicatorPanel";
+import { AlertPanel } from "@/components/chart/kline/AlertPanel";
+import { usePriceAlerts } from "@/components/chart/kline/usePriceAlerts";
+import { lineSpecs } from "@/components/chart/kline/priceAlerts";
 import { MOM_COLORS, priceFormat } from "@/components/chart/kline/theme";
 import { auuScoreIndicator, releaseIndicatorData, stratMomIndicator, type MarkerData } from "@/components/chart/kline/register";
 import { regimeRuns, setMarkers, setRegimes } from "@/components/chart/kline/markers";
@@ -70,7 +73,24 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const hostRef = useRef<HTMLDivElement>(null);
   const chart = useKChart(hostRef);
   const drawings = useDrawings(chart, symbol);
-  useTouchScroll(hostRef, !!(drawings.active || drawings.selected));
+  const getLast = useCallback(() => {
+    const list = chart?.getDataList();
+    const k = list && list.length ? list[list.length - 1] : null;
+    return k ? { price: k.close, ts: k.timestamp } : null;
+  }, [chart]);
+  const alerts = usePriceAlerts(chart, symbol, getLast);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const toggleAlerts = () => {
+    if (alertOpen) {
+      alerts.setPicking(false);
+      alerts.clearFresh();
+    } else {
+      drawings.cancel();
+      void alerts.openSeen();
+    }
+    setAlertOpen(!alertOpen);
+  };
+  useTouchScroll(hostRef, !!(drawings.active || drawings.selected || alerts.picking));
 
   const params = useRef({ symbol, tf, venue });
   const gen = useRef(0);
@@ -455,11 +475,48 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
           onMagnet={() => drawings.setMagnet((v) => !v)}
           onDelete={drawings.removeSelected}
           onClear={drawings.clearAll}
+          alerts={{ open: alertOpen, unread: alerts.unread, active: lineSpecs(alerts.alerts, symbol).length, onToggle: toggleAlerts }}
         />
         {/* touch-action:none only while a tool is active / a drawing is selected, so page scroll still works otherwise */}
-        <div className={`msc-stage${drawings.active || drawings.selected ? " kc-touchlock" : ""}`}>
+        <div className={`msc-stage${drawings.active || drawings.selected || alerts.picking ? " kc-touchlock" : ""}${alerts.picking ? " is-picking" : ""}`}>
           <div ref={hostRef} className="msc-host" />
           {drawings.active ? <div className="kc-hint">{t("chart.draw.hint")}</div> : null}
+          {alerts.picking ? (
+            <div className="kc-hint kc-hint-btn">
+              {t("chart.alert.pickHint")}
+              <button type="button" onClick={() => alerts.setPicking(false)}>{t("chart.draw.cancel")}</button>
+            </div>
+          ) : null}
+          {alerts.toast ? (
+            <div className="kc-alert-toast" role="status" data-testid="alert-toast">
+              <span>
+                🔔 {t(alerts.toast.firedDir === "up" ? "chart.alert.toastUp" : "chart.alert.toastDown", { sym: alerts.toast.symbol, p: fmt(alerts.toast.target, priceFormat(alerts.toast.target).precision) })}
+              </span>
+              <button type="button" onClick={alerts.dismissToast} aria-label={t("chart.alert.close")}>✕</button>
+            </div>
+          ) : null}
+          {alertOpen ? (
+            <AlertPanel
+              symbol={symbol}
+              last={lastBar ? lastBar.c.close : null}
+              alerts={alerts.alerts}
+              caps={alerts.caps}
+              emailOn={alerts.emailOn}
+              status={alerts.status}
+              fresh={alerts.fresh}
+              picking={alerts.picking}
+              picked={alerts.picked}
+              onPick={(on) => {
+                if (on) drawings.cancel();
+                alerts.setPicking(on);
+              }}
+              onPicked={alerts.clearPicked}
+              onCreate={alerts.create}
+              onRemove={alerts.remove}
+              onClearHistory={alerts.clearHistory}
+              onClose={toggleAlerts}
+            />
+          ) : null}
           {drawings.textEdit ? (
             <form
               className="kc-text-edit"

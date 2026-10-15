@@ -107,7 +107,14 @@
     "TRC20_DAILY_LIMIT": "Today's top-up limit has been reached",
     "TRC20_BUSY": "This amount cannot be ordered right now — please pick another",
     "TRC20_UNKNOWN_TX": "No such on-chain transaction",
-    "TRC20_NOT_PENDING": "This transaction has already been handled"
+    "TRC20_NOT_PENDING": "This transaction has already been handled",
+    "ALERT_LIMIT": "You can keep at most 20 active price alerts. Delete some first.",
+    "ALERT_DUPLICATE": "You already have the same price alert",
+    "ALREADY_REACHED": "The price has already reached that level. Pick another price or direction.",
+    "STANDBY": "This node is temporarily unavailable, please try again later",
+    "RATE_LIMITED": "Too many requests, please slow down",
+    "BAD_DIRECTION": "Invalid trigger direction",
+    "BAD_NOTE": "Invalid note"
   },
   "common": {
     "submitting": "Submitting…",
@@ -326,7 +333,46 @@
     "auuRunSince": "since {{date}} · {{n}} bars",
     "auuRunTitle": "How long the latest long/short state has lasted (experimental, record-only, no orders)",
     "auuRegime": "Regime",
-    "auuRegimeTitle": "Shade the candles' background where the AUU signal is long / short"
+    "auuRegimeTitle": "Shade the candles' background where the AUU signal is long / short",
+    "alert": {
+      "title": "Price alerts",
+      "btn": "Alerts",
+      "btnTitle": "Price alerts ({{n}} active on this coin)",
+      "unread": "{{n}} unread alerts",
+      "close": "Close",
+      "login": "Sign in to use price alerts.",
+      "unavailable": "Price alerts are not available on this node (the primary node handles them). Try again later.",
+      "last": "Last {{p}}",
+      "cap": "{{n}}/{{max}} active",
+      "price": "Alert price",
+      "pricePlaceholder": "Alert price, e.g. 65000",
+      "pick": "Pick on chart",
+      "picking": "Click chart…",
+      "pickTitle": "Click a level on the chart to fill in its price",
+      "pickHint": "Click the chart to pick the alert price",
+      "direction": "Trigger direction",
+      "dir": {
+        "above": "Rises to",
+        "below": "Falls to",
+        "cross": "Crosses"
+      },
+      "note": "Note",
+      "notePlaceholder": "Note (optional)",
+      "add": "Add",
+      "active": "Active alerts",
+      "allCoins": "All coins",
+      "empty": "No price alerts yet. Enter a price or use “Pick on chart”.",
+      "recent": "Recently triggered",
+      "clearHistory": "Clear history",
+      "firedAt": "{{time}} · hit at {{p}}",
+      "new": "New",
+      "emailOn": "You will get an email at your registered address and a notice here when an alert triggers.",
+      "emailOff": "No email on this account: triggers are shown in the site only.",
+      "badPrice": "Enter a valid price (a number above 0)",
+      "failed": "Something went wrong, please try again",
+      "toastUp": "{{sym}} rose to {{p}}",
+      "toastDown": "{{sym}} fell to {{p}}"
+    }
   },
   "console": {
     "sub": "Trend strategy paper run, risk control and execution log",

@@ -11,7 +11,7 @@ from unittest.mock import patch
 from app import role
 
 # Per-job switches that would otherwise be "on" by default.
-_JOB_ENV = {"AUU_STRATEGY_RUNNER": "on", "AUU_SHADOW_H2": "on", "AUU_SHADOW_S3": "on", "AUU_ALERTS": "on",
+_JOB_ENV = {"AUU_STRATEGY_RUNNER": "on", "AUU_SHADOW_H2": "on", "AUU_SHADOW_S3": "on", "AUU_ALERTS": "on", "AUU_PRICE_ALERTS": "on",
             "AUU_RECON": "on", "AUU_UPTIME": "on", "AUU_EXEC_SHADOW": "on",
             "AUU_TRC20_RECEIVE_ADDRESS": "TEB618Hz3BT4YKsJYLMqbhiZvpBLsrZGtL"}
 
@@ -23,10 +23,11 @@ def _enabled() -> dict:
     from app.paper.shadow_s3 import shadow_enabled as s3_enabled
     from app.paper.strategy_runner import _exec_shadow_hook, runner_enabled
     from app.points.trc20 import poll_wanted
+    from app.price_alerts import price_alerts_enabled
     from app.status import uptime_enabled
 
     return {"strategy": runner_enabled(), "exec_shadow": _exec_shadow_hook() is not None, "shadow_s3": s3_enabled(),
-            "shadow_h2": h2_enabled(), "alerts": alerts_enabled(), "recon": recon_enabled(), "uptime": uptime_enabled(),
+            "shadow_h2": h2_enabled(), "alerts": alerts_enabled(), "price_alerts": price_alerts_enabled(), "recon": recon_enabled(), "uptime": uptime_enabled(),
             "trc20": poll_wanted()}
 
 
@@ -58,7 +59,7 @@ class StandbyJobTests(unittest.TestCase):
             self.assertEqual(role.role_status(), {"role": "standby", "standby": True, "jobsOff": list(role.STANDBY_OFF)})
 
     def test_standby_overrides_explicit_on(self):
-        with patch.dict(os.environ, {**_JOB_ENV, "AUU_ROLE": "standby", "AUU_STRATEGY_RUNNER": "1", "AUU_ALERTS": "true"}):
+        with patch.dict(os.environ, {**_JOB_ENV, "AUU_ROLE": "standby", "AUU_STRATEGY_RUNNER": "1", "AUU_ALERTS": "true", "AUU_PRICE_ALERTS": "true"}):
             self.assertFalse(any(_enabled().values()))
 
     def test_write_block_rules(self):
@@ -136,7 +137,7 @@ class StandbyAppTests(unittest.TestCase):
                 pw = "standbyPass123"
                 self.assertEqual(c.post("/api/v1/auth/register", json={"name": "sb", "password": pw,
                                                                         "password_confirm": pw}).status_code, 200)
-        for name in ("mainstream-strategy", "shadow-s3", "shadow-h2", "alerts", "recon", "uptime"):
+        for name in ("mainstream-strategy", "shadow-s3", "shadow-h2", "alerts", "price-alerts", "recon", "uptime"):
             self.assertNotIn(name, started)
 
     def test_primary_starts_jobs_and_reports_primary(self):
@@ -160,7 +161,7 @@ class StandbyAppTests(unittest.TestCase):
                 self.assertEqual(h["role"], "primary")
                 self.assertFalse(h["standby"]["standby"])
         # same spy sees the primary's jobs, so the standby assertion above is meaningful
-        for name in ("mainstream-strategy", "shadow-h2", "alerts"):
+        for name in ("mainstream-strategy", "shadow-h2", "alerts", "price-alerts"):
             self.assertIn(name, started)
 
 
