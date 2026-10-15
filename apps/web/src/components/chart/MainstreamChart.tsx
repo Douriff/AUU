@@ -19,7 +19,8 @@ import { lineSpecs } from "@/components/chart/kline/priceAlerts";
 import { MOM_COLORS, priceFormat } from "@/components/chart/kline/theme";
 import { auuScoreIndicator, releaseIndicatorData, stratMomIndicator, type MarkerData } from "@/components/chart/kline/register";
 import { regimeRuns, setMarkers, setRegimes } from "@/components/chart/kline/markers";
-import { QUICK_IDS, layoutPanes, loadPrefs, savePrefs, syncIndicators, type IndicatorId, type IndicatorPrefs } from "@/components/chart/kline/indicatorPrefs";
+import type { CrosshairBus } from "@/components/chart/crosshairBus";
+import { QUICK_IDS, compactPrefs, layoutPanes, loadPrefs, savePrefs, syncIndicators, type IndicatorId, type IndicatorPrefs } from "@/components/chart/kline/indicatorPrefs";
 
 /** KLineChart v10 (Apache-2.0) candlestick + volume + drawing tools for the mainstream page. */
 
@@ -67,7 +68,25 @@ type OvRow = StrategyOverlay["series"][number];
 type Legend = { c: MainstreamCandle; prev?: MainstreamCandle };
 type Prefetch = { key: string; candles: MainstreamCandle[]; limited: boolean };
 
-export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { symbol: string; tf: MainstreamTf; venue?: string | null; overlay?: boolean }) {
+export function MainstreamChart({
+  symbol,
+  tf,
+  venue = null,
+  overlay = true,
+  compact = false,
+  bus = null,
+  busId = "main",
+}: {
+  symbol: string;
+  tf: MainstreamTf;
+  venue?: string | null;
+  overlay?: boolean;
+  /** multi-chart cell: smaller footer, no per-cell credit line */
+  compact?: boolean;
+  /** synced crosshair: hovered bar time is shared with the other charts on this bus */
+  bus?: CrosshairBus | null;
+  busId?: string;
+}) {
   const { t, i18n: i18nInst } = useTranslation();
   const lang = i18nInst.language;
   const hostRef = useRef<HTMLDivElement>(null);
@@ -101,7 +120,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const [dataVer, setDataVer] = useState(0); // bumps when history was (pre)loaded: markers re-anchor
   const [hover, setHover] = useState<{ k: KLineData; prev?: KLineData } | null>(null);
   const [state, setState] = useState<{ loading: boolean; err: string; limited: boolean; retention?: number; count: number }>({ loading: true, err: "", limited: false, count: 0 });
-  const [prefs, setPrefs] = useState<IndicatorPrefs>(() => (typeof window !== "undefined" ? loadPrefs() : loadPrefs()));
+  const [prefs, setPrefs] = useState<IndicatorPrefs>(() => (compact ? compactPrefs() : loadPrefs()));
 
   // strategy overlay (daily only): rebalance markers + TSMOM look-back return lines
   const [sigOn, setSigOn] = useState(false);
@@ -213,11 +232,45 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
       .catch((e: unknown) => gen.current === my && setState({ loading: false, err: errText(e, "common.loadFailed"), limited: false, count: 0 }));
   }, [chart, symbol, tf, venue]);
 
-  // Crosshair legend.
+  // Crosshair legend (+ shared hover time for synced multi-chart).
+  const busRef = useRef({ bus, busId });
+  busRef.current = { bus, busId };
+  const [ghostX, setGhostX] = useState<number | null>(null);
+  useEffect(() => {
+    if (!chart || !bus) return setGhostX(null);
+    return bus.on((src, ts) => {
+      if (src === busRef.current.busId) return;
+      if (ts == null) return setGhostX(null);
+      const x = (chart.convertToPixel({ timestamp: ts }, { paneId: "candle_pane" }) as { x?: number }).x;
+      const w = chart.getSize("candle_pane", "main")?.width ?? 0;
+      setGhostX(x != null && Number.isFinite(x) && x >= 0 && x <= w ? x : null);
+    });
+  }, [chart, bus]);
+  useEffect(() => {
+    // pointer left the chart (mouse out / finger lifted): other charts drop their ghost line
+    const el = hostRef.current;
+    if (!chart || !el) return;
+    const off = () => busRef.current.bus?.emit(busRef.current.busId, null);
+    el.addEventListener("pointerleave", off);
+    el.addEventListener("pointercancel", off);
+    return () => {
+      el.removeEventListener("pointerleave", off);
+      el.removeEventListener("pointercancel", off);
+    };
+  }, [chart]);
   useEffect(() => {
     if (!chart) return;
     const onCross = (c: Crosshair) => {
       const k = c.kLineData;
+      if (busRef.current.bus) {
+        // the crosshair event carries kLineData only sometimes: fall back to the bar under x
+        let ts: number | null = k ? k.timestamp : null;
+        if (ts == null && c.x != null && c.paneId === "candle_pane") {
+          const pt = chart.convertFromPixel([{ x: c.x }], { paneId: "candle_pane" }) as Array<{ timestamp?: number }> | { timestamp?: number };
+          ts = (Array.isArray(pt) ? pt[0] : pt)?.timestamp ?? null;
+        }
+        busRef.current.bus.emit(busRef.current.busId, c.x == null ? null : ts);
+      }
       if (!k) return setHover(null);
       const list = chart.getDataList();
       const i = c.dataIndex ?? c.realDataIndex ?? list.findIndex((x) => x.timestamp === k.timestamp);
@@ -234,7 +287,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     layoutPanes(chart);
   }, [chart, prefs]);
   const changePrefs = (p: IndicatorPrefs) => {
-    savePrefs(p);
+    if (!compact) savePrefs(p); // multi-chart cells keep their own session-only indicators, the main chart's saved set is untouched
     setPrefs(p);
   };
   const toggleQuick = (id: IndicatorId) => changePrefs({ ...prefs, on: { ...prefs.on, [id]: !prefs.on[id] } });
@@ -375,8 +428,15 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     if (n && w) chart.setBarSpace(Math.max(1, (w - 60) / n));
   };
 
+  // touch users: one-tap zoom around the latest bars (pinch still works)
+  const zoomBy = (f: number) => {
+    if (!chart) return;
+    const w = chart.getSize("candle_pane", "main")?.width ?? 0;
+    chart.zoomAtCoordinate(f, { x: Math.max(0, w - 60), y: 0 }, 120);
+  };
+
   return (
-    <div className="msc" tabIndex={-1} onKeyDown={onKeyDown}>
+    <div className={`msc${compact ? " msc-compact" : ""}`} tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="msc-legend num">
         {lg ? (
           <>
@@ -480,6 +540,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
         {/* touch-action:none only while a tool is active / a drawing is selected, so page scroll still works otherwise */}
         <div className={`msc-stage${drawings.active || drawings.selected || alerts.picking ? " kc-touchlock" : ""}${alerts.picking ? " is-picking" : ""}`}>
           <div ref={hostRef} className="msc-host" />
+          {ghostX != null ? <div className="kc-ghost" style={{ left: ghostX }} data-testid="kc-ghost" aria-hidden /> : null}
           {drawings.active ? <div className="kc-hint">{t("chart.draw.hint")}</div> : null}
           {alerts.picking ? (
             <div className="kc-hint kc-hint-btn">
@@ -597,7 +658,11 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
               {t("chart.auuRegime")}
             </button>
           ) : null}
-          <button type="button" onClick={fitAll}>{t("chart.all")}</button>
+          <span className="msc-zoom" role="group" aria-label={t("chart.zoom")}>
+            <button type="button" aria-label={t("chart.zoomOut")} data-testid="zoom-out" onClick={() => zoomBy(0.8)}>−</button>
+            <button type="button" aria-label={t("chart.zoomIn")} data-testid="zoom-in" onClick={() => zoomBy(1.25)}>＋</button>
+          </span>
+          <button type="button" data-testid="chart-all" onClick={fitAll}>{t("chart.all")}</button>
           <button type="button" onClick={() => chart?.scrollToRealTime()}>{t("chart.latest")}</button>
         </span>
         <span className="kc-credit">

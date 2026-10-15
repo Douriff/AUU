@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} est monté à {{p}}",
       "toastDown": "{{sym}} est tombé à {{p}}",
       "delete": "Supprimer l'alerte"
-    }
+    },
+    "layout": {
+      "aria": "Disposition des graphiques",
+      "1": "Graphique unique",
+      "2": "Deux graphiques côte à côte",
+      "4": "Quatre graphiques (2×2)",
+      "sync": "Synchroniser le réticule",
+      "syncTitle": "Avec plusieurs graphiques, l’heure survolée s’affiche dans chacun",
+      "cellSymbol": "Symbole",
+      "cellTf": "Période",
+      "primaryTitle": "Graphique principal : suit le symbole et la période de la page",
+      "fsEnter": "Plein écran",
+      "fsExit": "Quitter le plein écran"
+    },
+    "zoom": "Zoom",
+    "zoomOut": "Dézoomer",
+    "zoomIn": "Zoomer"
   },
   "console": {
     "sub": "Exécution fictive de la stratégie de tendance, contrôle des risques et journal d’exécution",

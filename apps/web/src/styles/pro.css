@@ -1316,3 +1316,153 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
   .kc-alert-row button, .kc-alert-list button { min-height: 40px; }
   .kc-alert-toast { bottom: 40px; }
 }
+
+/* ==========================================================================
+   Step 4: layout switcher, multi-chart grid, chart fullscreen, phone landscape, safe areas, touch comfort
+   ========================================================================== */
+:root {
+  --sa-t: env(safe-area-inset-top, 0px);
+  --sa-r: env(safe-area-inset-right, 0px);
+  --sa-b: env(safe-area-inset-bottom, 0px);
+  --sa-l: env(safe-area-inset-left, 0px);
+}
+/* notch / rounded corners in landscape (needs viewport-fit=cover, see index.html) */
+.pro-shell { padding-left: var(--sa-l); padding-right: var(--sa-r); }
+.tabbar { padding-left: var(--sa-l); padding-right: var(--sa-r); }
+html.kc-fs-lock, html.kc-fs-lock body { overflow: hidden; overscroll-behavior: none; }
+
+.ms-tfs, .mk-tabs.ms-tfs { min-width: 0; flex: 0 1 auto; }
+.ms-lay { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: auto; flex: none; }
+.ms-lay button { height: 26px; min-width: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel2); color: var(--text2); display: inline-flex; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 12px; cursor: pointer; }
+.ms-lay button.is-on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.ms-lay-fs { font-size: 14px !important; }
+
+.msc-host { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.kc-ghost { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.55); pointer-events: none; z-index: 2; }
+.msc-zoom { display: none; gap: 4px; }
+@media (pointer: coarse) { .msc-zoom { display: inline-flex; } }
+
+/* multi chart grid: cell 0 = page symbol/timeframe, the rest keep their own */
+.mc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--border); min-width: 0; }
+.mc-n2 { grid-template-rows: minmax(0, 1fr) auto; }
+.mc-n4 { grid-template-rows: repeat(2, minmax(0, 1fr)) auto; }
+.mc-cell { background: var(--bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.mc-head { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 8px; border-bottom: 1px solid var(--border); flex: none; }
+.mc-head select { height: 26px; max-width: 48%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font: inherit; font-size: 12.5px; padding: 0 4px; }
+.mc-primary { margin-inline-start: auto; font-size: 12px; color: var(--accent); }
+.mc-credit { grid-column: 1 / -1; background: var(--bg); padding: 2px 10px; font-size: 10.5px; text-align: end; }
+.mc-credit a { color: inherit; text-decoration: underline; }
+.mc-cell .msc { flex: 1; min-height: 0; }
+.msc-compact .kc-credit, .msc-compact .msc-foot > span:first-child { display: none; }
+.msc-compact .msc-actions > button:not(.is-on) { padding: 0 6px; }
+.msc-compact .msc-legend { font-size: 11px; padding: 4px 8px 0; }
+@media (min-width: 901px) {
+  .ms-trade-grid.is-multi { grid-template-columns: minmax(0, 1fr) 320px; }
+  .ms-trade-grid.is-multi .ms-trade-book { display: none; }
+  .ms-trade-chart .mc-grid { flex: 1; min-height: 0; }
+}
+.mc-cell .kc-body { flex: 1; min-height: 0; }
+@media (max-width: 900px) {
+  .mc-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none !important; }
+  .mc-n4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mc-grid .msc-host { height: 300px; min-height: 0; }
+  .mc-n4 .msc-host { height: 240px; }
+  .mc-head { gap: 4px; padding: 0 6px; }
+  .mc-head select { flex: 1 1 0; min-width: 0; max-width: none; height: 32px; font-size: 16px; }
+  .mc-head .mc-tf { flex: 0 0 38%; }
+  .mc-primary { display: none; }
+  .ms-lay button { height: 34px; min-width: 38px; }
+  .ms-lay-sync span, .ms-lay-sync > span { display: none; }
+  /* phone cells are glanceable minis: no drawing rail, one-line legend (close + change), slim footer (zoom + latest) */
+  .msc-compact .kc-tools { display: none; }
+  .msc-compact .msc-legend > span:nth-child(-n+4), .msc-compact .msc-legend > span:nth-child(7) { display: none; }
+  .msc-compact .msc-inds, .msc-compact [data-testid="chart-all"] { display: none; }
+  .msc-compact .msc-actions button { min-height: 30px; }
+}
+@media (min-width: 600px) and (max-width: 900px) {
+  .mc-n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mc-grid .msc-host { height: 360px; }
+  .mc-n4 .msc-host { height: 300px; }
+}
+@media (pointer: coarse) { .ms-lay button { height: 34px; min-width: 38px; } .mc-head select { height: 36px; font-size: 16px; } }
+
+/* fullscreen chart: whole pane covers the viewport (safe areas respected) */
+.ms-trade-chart.is-fs { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg); padding: var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l); }
+.ms-trade-chart.is-fs .msc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ms-trade-chart.is-fs .kc-body { flex: 1; min-height: 0; }
+.ms-trade-chart.is-fs .msc-stage { flex: 1; min-height: 0; }
+.ms-trade-chart.is-fs .msc-host { height: 100%; min-height: 0; max-height: none; }
+.ms-trade-chart.is-fs .mc-grid { flex: 1; min-height: 0; grid-template-rows: none !important; }
+.ms-trade-chart.is-fs .mc-grid .msc-host { height: 100%; }
+/* portrait: 2 stacked / 2x2 ; landscape: 2 side by side / 2x2 */
+.ms-trade-chart.is-fs .mc-n2 { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)) auto !important; }
+.ms-trade-chart.is-fs .mc-n4 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)) auto !important; }
+@media (orientation: landscape) { .ms-trade-chart.is-fs .mc-n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr) auto !important; } }
+/* bottom sheets stay inside the safe area */
+@media (max-width: 900px) {
+  .kc-ind-panel, .kc-alert-panel { left: max(8px, var(--sa-l)); right: max(8px, var(--sa-r)); bottom: calc(8px + var(--sa-b)); }
+}
+
+/* phones held sideways (short + wide): phone shell instead of the desktop nav that overflowed, chart tools as a side rail */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  :root { --tab-h: 44px; }
+  .topnav { gap: 10px; padding: 0 12px; }
+  .topnav-links, .data-dot, .data-dot-text, .risk-pill + .data-dot { display: none; }
+  .um-name, .um-btn > span[aria-hidden] { display: none; }
+  .pro-main { padding-bottom: calc(var(--tab-h) + var(--sa-b)); }
+  .tabbar {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    height: calc(var(--tab-h) + var(--sa-b)); padding-bottom: var(--sa-b);
+    background: #0f1216; border-top: 1px solid var(--border);
+  }
+  .tabbar a { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; color: var(--dim); font-size: 12px; }
+  .tabbar a svg { width: 18px; height: 18px; }
+  .tabbar a.is-active { color: var(--accent); font-weight: 600; }
+  .ms-trade-grid, .ms-trade-grid.is-multi { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .ms-trade-grid.is-multi .ms-trade-book { display: block; }
+  .msc-host { height: max(250px, calc(100vh - var(--nav-h) - var(--tab-h) - 44px)); min-height: 0; }
+  .mc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none !important; }
+  .mc-grid .msc-host { height: max(220px, calc(100vh - var(--nav-h) - var(--tab-h) - 100px)); }
+  /* tools: vertical rail left of the chart, icons only */
+  .kc-body { flex-direction: row; }
+  .kc-tools { width: 44px; border-right: 1px solid var(--border); border-bottom: 0; }
+  .kc-tools-toggle { display: none; }
+  .kc-tools-head { flex-direction: column; align-items: center; padding-top: 2px; }
+  .kc-tools-head .kc-bell { margin: 2px 0; min-width: 0; width: 36px; height: 36px; padding: 0; border-radius: 4px; }
+  .kc-tools-list, .kc-tools.is-open .kc-tools-list { display: flex; flex-direction: column; align-items: center; flex-wrap: nowrap; overflow-y: auto; overflow-x: hidden; max-height: calc(100vh - var(--nav-h) - var(--tab-h) - 90px); padding: 2px 0; gap: 2px; }
+  .kc-tool { width: 36px; min-width: 0; height: 36px; padding: 0; flex-direction: row; }
+  .kc-tool-label, .kc-tools-head .kc-bell .kc-tool-label { display: none; }
+  .kc-sep { width: 22px; height: 1px; margin: 2px 0; }
+  .kc-sync { margin: 2px 0; }
+  .msc-legend { padding: 3px 12px 0; }
+  .msc-foot > span:first-child, .kc-credit { display: none; }
+  .ms-trade-chart.is-fs { padding-left: max(var(--sa-l), 0px); }
+  .ms-trade-chart.is-fs .msc-host { height: 100%; }
+  .ms-trade-chart.is-fs .kc-tools-list, .ms-trade-chart.is-fs .kc-tools.is-open .kc-tools-list { max-height: calc(100vh - 80px); }
+  .ms-trade-chart.is-fs .mc-grid .msc-host { height: 100%; }
+}
+/* compact cells: footer is one slim row (indicator panel, zoom, all, latest); chips + signal toggles stay on the single chart */
+.msc-compact .msc-foot { padding: 3px 8px 4px; justify-content: flex-end; }
+.msc-compact .msc-inds [data-ind-chip], .msc-compact [data-testid="strat-sig-btn"], .msc-compact [data-testid="auu-sig-btn"], .msc-compact [data-testid="auu-regime-btn"] { display: none; }
+@media (min-width: 901px) { .ms-trade-grid.is-multi { height: clamp(640px, calc(100vh - var(--nav-h) - 57px - 70px), 1000px); } }
+
+/* tablets / phones in landscape (761-1100px): the desktop nav no longer pushes the page wider than the screen */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .topnav { min-width: 0; gap: 12px; }
+  .topnav-links { min-width: 0; flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; gap: 14px; }
+  .topnav-links::-webkit-scrollbar { display: none; }
+  .topnav-right { flex: none; gap: 8px; }
+  .data-dot, .data-dot-text, .um-name { display: none; }
+  .mode-pill .mode-long { display: none; }
+  .mode-pill .mode-short { display: inline; }
+}
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .mode-pill .mode-long { display: none; }
+  .mode-pill .mode-short { display: inline; }
+  .topnav-right { min-width: 0; flex: none; }
+  /* 4 minis in a short window: the cell header is all the chrome they keep */
+  .ms-trade-chart.is-fs .msc-compact .msc-legend, .ms-trade-chart.is-fs .msc-compact .msc-foot { display: none; }
+  .ms-trade-chart.is-fs .ph { height: 34px; }
+  .mc-head { height: 32px; }
+}
+@media (pointer: coarse) { .msc-zoom button { min-width: 38px; } }

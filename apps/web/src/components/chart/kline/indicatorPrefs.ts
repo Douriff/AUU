@@ -42,6 +42,13 @@ export const defaultPrefs = (): IndicatorPrefs => ({
   params: Object.fromEntries(INDICATOR_DEFS.map((d) => [d.id, [...d.defaults]])) as Record<IndicatorId, number[]>,
 });
 
+/** multi-chart cells start light: candles + MA only (no sub panes), session-only */
+export const compactPrefs = (): IndicatorPrefs => {
+  const p = defaultPrefs();
+  p.on.vol = false;
+  return p;
+};
+
 const KEY = "auu.ms.indicators.v2";
 const OLD_KEY = "auu.ms.indicators"; // v1: boolean map of the original six
 

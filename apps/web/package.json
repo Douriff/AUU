@@ -8,7 +8,8 @@
     "build": "node scripts/i18n-check.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "i18n:check": "node scripts/i18n-check.mjs",
-    "test:sync": "node scripts/drawings-sync.test.mjs"
+    "test:sync": "node scripts/drawings-sync.test.mjs",
+    "test:layout": "node scripts/layout.test.mjs"
   },
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.28",

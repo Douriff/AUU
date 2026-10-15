@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} rose to {{p}}",
       "toastDown": "{{sym}} fell to {{p}}",
       "delete": "Delete alert"
-    }
+    },
+    "layout": {
+      "aria": "Chart layout",
+      "1": "Single chart",
+      "2": "Two charts side by side",
+      "4": "Four charts (2×2)",
+      "sync": "Sync crosshair",
+      "syncTitle": "With several charts, the hovered time is shown in every chart",
+      "cellSymbol": "Symbol",
+      "cellTf": "Timeframe",
+      "primaryTitle": "Main chart: follows the page symbol / timeframe",
+      "fsEnter": "Fullscreen",
+      "fsExit": "Exit fullscreen"
+    },
+    "zoom": "Zoom",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in"
   },
   "console": {
     "sub": "Trend strategy paper run, risk control and execution log",

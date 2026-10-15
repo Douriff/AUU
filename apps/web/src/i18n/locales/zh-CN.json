@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} 已涨到 {{p}}",
       "toastDown": "{{sym}} 已跌到 {{p}}",
       "delete": "删除提醒"
-    }
+    },
+    "layout": {
+      "aria": "图表布局",
+      "1": "单图",
+      "2": "双图并排",
+      "4": "四图 (2×2)",
+      "sync": "同步十字线",
+      "syncTitle": "多图时，鼠标/手指悬停的时间点在所有图中同步显示",
+      "cellSymbol": "品种",
+      "cellTf": "周期",
+      "primaryTitle": "主图：品种/周期与页面一致",
+      "fsEnter": "全屏",
+      "fsExit": "退出全屏"
+    },
+    "zoom": "缩放",
+    "zoomOut": "缩小",
+    "zoomIn": "放大"
   },
   "console": {
     "sub": "趋势策略纸面运行、风控与执行记录",
