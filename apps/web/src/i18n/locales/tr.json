@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} {{p}} seviyesine yükseldi",
       "toastDown": "{{sym}} {{p}} seviyesine düştü",
       "delete": "Alarmı sil"
-    }
+    },
+    "layout": {
+      "aria": "Grafik düzeni",
+      "1": "Tek grafik",
+      "2": "Yan yana iki grafik",
+      "4": "Dört grafik (2×2)",
+      "sync": "Artı imleci eşitle",
+      "syncTitle": "Birden çok grafikte, üzerine gelinen zaman tüm grafiklerde gösterilir",
+      "cellSymbol": "Sembol",
+      "cellTf": "Zaman dilimi",
+      "primaryTitle": "Ana grafik: sayfadaki sembol ve zaman dilimini izler",
+      "fsEnter": "Tam ekran",
+      "fsExit": "Tam ekrandan çık"
+    },
+    "zoom": "Yakınlaştırma",
+    "zoomOut": "Uzaklaştır",
+    "zoomIn": "Yakınlaştır"
   },
   "console": {
     "sub": "Trend stratejisinin sanal çalışması, risk kontrolü ve işlem kaydı",

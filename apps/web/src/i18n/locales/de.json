@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} ist auf {{p}} gestiegen",
       "toastDown": "{{sym}} ist auf {{p}} gefallen",
       "delete": "Alarm löschen"
-    }
+    },
+    "layout": {
+      "aria": "Chart-Layout",
+      "1": "Einzelchart",
+      "2": "Zwei Charts nebeneinander",
+      "4": "Vier Charts (2×2)",
+      "sync": "Fadenkreuz synchronisieren",
+      "syncTitle": "Bei mehreren Charts wird der überfahrene Zeitpunkt in allen Charts angezeigt",
+      "cellSymbol": "Symbol",
+      "cellTf": "Zeitrahmen",
+      "primaryTitle": "Hauptchart: folgt Symbol und Zeitrahmen der Seite",
+      "fsEnter": "Vollbild",
+      "fsExit": "Vollbild beenden"
+    },
+    "zoom": "Zoom",
+    "zoomOut": "Verkleinern",
+    "zoomIn": "Vergrößern"
   },
   "console": {
     "sub": "Paper-Lauf der Trendstrategie, Risikomanagement und Ausführungsprotokoll",

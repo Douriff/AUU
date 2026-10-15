@@ -6,6 +6,9 @@ import { Num } from "@/components/ui/Num";
 import { Empty, Sk, SkCards, SkRows } from "@/components/ui/Skeleton";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { CHART_TFS, MainstreamChart } from "@/components/chart/MainstreamChart";
+import { MultiChart } from "@/components/chart/MultiChart";
+import { createCrosshairBus } from "@/components/chart/crosshairBus";
+import { cellsFor, loadLayout, normalizeCells, saveLayout, type Cell, type LayoutN, type MultiLayout } from "@/components/chart/layout";
 import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
 import { OrderBook } from "@/components/market/OrderBook";
 import type { MainstreamCoin, MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
@@ -224,6 +227,26 @@ export function MainstreamPage() {
   const [tick, setTick] = useState(0);
   const [bottom, setBottom] = useState<"held" | "funding">("held");
   const now = useNow();
+  // multi-chart layout (1 / 2 / 4) + fullscreen chart; layout persists in localStorage
+  const [layout, setLayoutState] = useState<MultiLayout>(() => loadLayout(tf));
+  const setLayout = (fn: (l: MultiLayout) => MultiLayout) =>
+    setLayoutState((l) => {
+      const next = fn(l);
+      saveLayout(next);
+      return next;
+    });
+  const [fs, setFs] = useState(false);
+  const bus = useMemo(() => createCrosshairBus(), []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("kc-fs-lock", fs);
+    if (!fs) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !(e.target instanceof HTMLInputElement) && setFs(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.documentElement.classList.remove("kc-fs-lock");
+    };
+  }, [fs]);
 
   useEffect(() => {
     let alive = true;
@@ -306,6 +329,15 @@ export function MainstreamPage() {
     window.localStorage.setItem("auu.ms.tf", id);
   };
   const quote = mk?.quote || "USDT";
+  const knownSymbols = useMemo(() => (mk?.items ?? []).map((r) => r.symbol), [mk]);
+  const effLayout = useMemo(() => normalizeCells(layout, knownSymbols, current?.symbol ?? pick ?? ""), [layout, knownSymbols, current?.symbol, pick]);
+  const multi = effLayout.n > 1;
+  const onCell = (i: number, c: Cell) => {
+    if (i === 0) {
+      if (c.symbol !== current?.symbol) open(c.symbol);
+      if (c.tf !== tf) pickTf(c.tf);
+    } else setLayout((l) => ({ ...l, extra: l.extra.map((x, k) => (k === i - 1 ? c : x)) as MultiLayout["extra"] }));
+  };
 
   if (!current) {
     return (
@@ -387,15 +419,60 @@ export function MainstreamPage() {
             </span>
           </div>
         </div>
-        <div className="ms-trade-grid">
-          <div className="ms-trade-chart pane">
+        <div className={`ms-trade-grid${multi ? " is-multi" : ""}`}>
+          <div className={`ms-trade-chart pane${fs ? " is-fs" : ""}`}>
             <div className="ph">
-              <div className="mk-tabs ms-tfs" role="tablist" aria-label={tr("ms.tfAria")}>
-                {CHART_TFS.map((t) => (
-                  <button key={t.id} type="button" role="tab" aria-selected={tf === t.id} className={tf === t.id ? "is-on" : ""} onClick={() => pickTf(t.id)}>
-                    {tr(t.label)}
+              {multi ? null : (
+                <div className="mk-tabs ms-tfs" role="tablist" aria-label={tr("ms.tfAria")}>
+                  {CHART_TFS.map((t) => (
+                    <button key={t.id} type="button" role="tab" aria-selected={tf === t.id} className={tf === t.id ? "is-on" : ""} onClick={() => pickTf(t.id)}>
+                      {tr(t.label)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="ms-lay" role="group" aria-label={tr("chart.layout.aria")}>
+                {([1, 2, 4] as LayoutN[]).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={effLayout.n === n ? "is-on" : ""}
+                    aria-pressed={effLayout.n === n}
+                    title={tr(`chart.layout.${n}`)}
+                    aria-label={tr(`chart.layout.${n}`)}
+                    data-testid={`layout-${n}`}
+                    onClick={() => setLayout((l) => ({ ...l, n }))}
+                  >
+                    <svg viewBox="0 0 20 14" width="20" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3">
+                      <rect x="1" y="1" width="18" height="12" rx="1.5" />
+                      {n >= 2 ? <path d="M10 1v12" /> : null}
+                      {n === 4 ? <path d="M1 7h18" /> : null}
+                    </svg>
                   </button>
                 ))}
+                {multi ? (
+                  <button
+                    type="button"
+                    className={`ms-lay-sync${effLayout.sync ? " is-on" : ""}`}
+                    aria-pressed={effLayout.sync}
+                    title={tr("chart.layout.syncTitle")}
+                    data-testid="layout-sync"
+                    onClick={() => setLayout((l) => ({ ...l, sync: !l.sync }))}
+                  >
+                    ⌖ <span>{tr("chart.layout.sync")}</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`ms-lay-fs${fs ? " is-on" : ""}`}
+                  aria-pressed={fs}
+                  title={tr(fs ? "chart.layout.fsExit" : "chart.layout.fsEnter")}
+                  aria-label={tr(fs ? "chart.layout.fsExit" : "chart.layout.fsEnter")}
+                  data-testid="chart-fs"
+                  onClick={() => setFs((v) => !v)}
+                >
+                  {fs ? "✕" : "⛶"}
+                </button>
               </div>
             </div>
             {extraMode && !dataVenue ? (
@@ -403,6 +480,16 @@ export function MainstreamPage() {
                 <b>{tr("ms.viewOnly")}</b>
                 <span>{coinReason(coin, "ms.noKline")}</span>
               </div>
+            ) : multi ? (
+              <MultiChart
+                n={effLayout.n}
+                cells={cellsFor(effLayout, { symbol: current.symbol, tf })}
+                symbols={knownSymbols}
+                venue={dataVenue}
+                overlay={!extraMode || Boolean(coin?.inPool)}
+                bus={effLayout.sync ? bus : null}
+                onChange={onCell}
+              />
             ) : (
               <MainstreamChart symbol={current.symbol} tf={tf} venue={dataVenue} overlay={!extraMode || Boolean(coin?.inPool)} />
             )}

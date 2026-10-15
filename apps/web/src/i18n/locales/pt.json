@@ -373,7 +373,23 @@
       "toastUp": "{{sym}} subiu para {{p}}",
       "toastDown": "{{sym}} caiu para {{p}}",
       "delete": "Excluir alerta"
-    }
+    },
+    "layout": {
+      "aria": "Layout dos gráficos",
+      "1": "Um gráfico",
+      "2": "Dois gráficos lado a lado",
+      "4": "Quatro gráficos (2×2)",
+      "sync": "Sincronizar cruz",
+      "syncTitle": "Com vários gráficos, o horário sob o cursor aparece em todos",
+      "cellSymbol": "Símbolo",
+      "cellTf": "Período",
+      "primaryTitle": "Gráfico principal: segue o símbolo e o período da página",
+      "fsEnter": "Tela cheia",
+      "fsExit": "Sair da tela cheia"
+    },
+    "zoom": "Zoom",
+    "zoomOut": "Reduzir",
+    "zoomIn": "Ampliar"
   },
   "console": {
     "sub": "Execução simulada da estratégia de tendência, controle de risco e registro de execução",
