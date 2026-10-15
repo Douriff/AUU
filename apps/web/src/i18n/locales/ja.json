@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "公式発表 + メディア + 編集部セレクト · 同じキャンペーンは複数ソースを統合 · 各項目にソースと確認状況を表示",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "確認状況",
+    "verify": {
+      "all": "すべての確認状況",
+      "confirmed": "確認済み",
+      "unverified": "未確認"
+    },
+    "verifyTip": {
+      "confirmed": "公式ソースあり、または独立した2つ以上のソースが報道",
+      "unverified": "非公式ソースが1件のみ — プロジェクトの公式チャネルでご確認ください"
+    },
+    "sourceCount": "ソース {{n}} 件",
+    "sourcesTitle": "ソース一覧",
+    "kind": {
+      "official": "公式",
+      "media": "メディア",
+      "curated": "セレクト"
+    },
+    "riskTitle": "リスク警告",
+    "riskShort": "リスク警告：詐欺やフィッシングにご注意ください。先に送金したり、シードフレーズ／秘密鍵を教えたりしないでください。公式チャネルをご確認ください。情報提供のみで、投資助言ではありません。",
+    "riskLong": "エアドロップ、ポイント、トークン関連の企画は詐欺やフィッシングに悪用されがちです。必ずプロジェクトの公式チャネルで確認し、先に送金する・先に承認する・シードフレーズや秘密鍵の提供を求める企画には参加しないでください。当サイトは情報を集約するだけで、投資助言ではありません。",
+    "feedsOfficial": "公式ソース：",
+    "feedsMedia": "メディアソース：",
+    "verifyCounts": "確認済み {{c}} · 未確認 {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

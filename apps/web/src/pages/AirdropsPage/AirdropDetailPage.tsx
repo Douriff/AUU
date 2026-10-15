@@ -67,6 +67,7 @@ export function AirdropDetailPage() {
             <span className="ad-badge ad-cat">{t(`airdrops.cat.${item.category}`)}</span>
             <span className={`ad-badge ad-st is-${item.status}`}>{t(`airdrops.status.${item.status}`)}</span>
             {item.origin === "ingested" ? <span className="ad-badge ad-ing">{t("airdrops.origin.ingested")}</span> : null}
+            <span className={`ad-badge ad-ver is-${item.verification}`}>{t(`airdrops.verify.${item.verification}`)}</span>
           </div>
           <h1 className="ad-detail-title">{item.title}</h1>
           <p className="ad-project">{item.projectName}</p>
@@ -120,10 +121,34 @@ export function AirdropDetailPage() {
               </div>
             ) : null}
           </dl>
+          <p className="ad-verify-tip">{t(`airdrops.verifyTip.${item.verification}`)} · {t("airdrops.sourceCount", { n: item.sourceCount })}</p>
           {item.summary ? (
             <section className="ad-body">
               <h2>{t("airdrops.summary")}</h2>
               <p>{item.summary}</p>
+            </section>
+          ) : null}
+          {item.sources.length > 0 ? (
+            <section className="ad-body ad-sources">
+              <h2>{t("airdrops.sourcesTitle")}</h2>
+              <ul>
+                {item.sources.map((s) => (
+                  <li key={`${s.sourceId}|${s.url ?? ""}`}>
+                    <span className={`ad-badge ad-kind is-${s.kind}`}>{t(`airdrops.kind.${s.kind}`)}</span>{" "}
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noopener noreferrer nofollow">
+                        {s.name}
+                      </a>
+                    ) : (
+                      s.name
+                    )}
+                    <time className="muted" dateTime={new Date(s.publishedAt).toISOString()}>
+                      {" · "}
+                      {bj(s.publishedAt)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           {original ? (
@@ -133,6 +158,10 @@ export function AirdropDetailPage() {
               </a>
             </p>
           ) : null}
+          <div className="ad-risk ad-risk-box" role="note">
+            <strong>⚠ {t("airdrops.riskTitle")}</strong>
+            <p>{t("airdrops.riskLong")}</p>
+          </div>
           <p className="muted ad-disclaimer">{note || t("airdrops.disclaimer")}</p>
         </article>
       )}

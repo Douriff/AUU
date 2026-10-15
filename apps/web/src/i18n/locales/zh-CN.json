@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "空投雷达",
-    "sub": "聚合公开资讯与人工精选 · 大项目 / 社区 / 模因 · 每条标注来源",
+    "sub": "官方公告 + 媒体资讯 + 人工精选 · 同一活动多源合并 · 每条标注来源与核实状态",
     "cantConnect": "无法连接",
     "loadFailed": "空投雷达暂时无法加载：{{err}}（主站其它功能不受影响）",
     "filterCat": "分类",
@@ -1612,7 +1612,30 @@
       "ingested": "资讯",
       "curated": "精选"
     },
-    "feeds": "资讯源："
+    "feeds": "资讯源：",
+    "filterVerify": "核实状态",
+    "verify": {
+      "all": "全部核实状态",
+      "confirmed": "已确认",
+      "unverified": "未核实"
+    },
+    "verifyTip": {
+      "confirmed": "含官方来源，或至少 2 个独立来源报道",
+      "unverified": "仅 1 个非官方来源，请自行到官方渠道核实"
+    },
+    "sourceCount": "{{n}} 个来源",
+    "sourcesTitle": "来源明细",
+    "kind": {
+      "official": "官方",
+      "media": "媒体",
+      "curated": "精选"
+    },
+    "riskTitle": "风险提示",
+    "riskShort": "风险提示：谨防诈骗与钓鱼，勿先转账、勿泄露助记词/私钥，以项目官方渠道为准；仅供参考，不构成投资建议。",
+    "riskLong": "空投、积分与代币活动常被用于诈骗和钓鱼。请只通过项目官方渠道核实；任何要求「先转账 / 先授权 / 提供助记词或私钥」的活动都不要参与。本站仅作信息聚合，不构成投资建议。",
+    "feedsOfficial": "官方源：",
+    "feedsMedia": "媒体源：",
+    "verifyCounts": "已确认 {{c}} · 未核实 {{u}}"
   },
   "splash": {
     "aria": "欢迎进入 AUUTRADE",

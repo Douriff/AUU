@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "공식 공지 + 미디어 + 큐레이션 · 같은 캠페인은 여러 출처를 병합 · 모든 항목에 출처와 확인 상태 표시",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "확인 상태",
+    "verify": {
+      "all": "모든 확인 상태",
+      "confirmed": "확인됨",
+      "unverified": "미확인"
+    },
+    "verifyTip": {
+      "confirmed": "공식 출처가 있거나 독립된 출처 2곳 이상이 보도",
+      "unverified": "비공식 출처 1곳뿐 — 프로젝트 공식 채널에서 확인하세요"
+    },
+    "sourceCount": "출처 {{n}}개",
+    "sourcesTitle": "출처 목록",
+    "kind": {
+      "official": "공식",
+      "media": "미디어",
+      "curated": "큐레이션"
+    },
+    "riskTitle": "위험 고지",
+    "riskShort": "위험 고지: 사기와 피싱에 주의하세요. 먼저 송금하거나 시드 문구/개인 키를 알려주지 마세요. 프로젝트 공식 채널을 확인하세요. 정보 제공용이며 투자 조언이 아닙니다.",
+    "riskLong": "에어드롭, 포인트, 토큰 이벤트는 사기와 피싱에 자주 악용됩니다. 프로젝트 공식 채널로만 확인하고, 먼저 송금하라거나 먼저 승인하라거나 시드 문구·개인 키를 요구하는 이벤트에는 참여하지 마세요. 이 사이트는 정보를 모아 보여줄 뿐 투자 조언이 아닙니다.",
+    "feedsOfficial": "공식 출처: ",
+    "feedsMedia": "미디어 출처: ",
+    "verifyCounts": "확인됨 {{c}} · 미확인 {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

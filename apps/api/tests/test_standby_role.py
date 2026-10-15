@@ -12,11 +12,12 @@ from app import role
 
 # Per-job switches that would otherwise be "on" by default.
 _JOB_ENV = {"AUU_STRATEGY_RUNNER": "on", "AUU_SHADOW_H2": "on", "AUU_SHADOW_S3": "on", "AUU_ALERTS": "on", "AUU_PRICE_ALERTS": "on",
-            "AUU_RECON": "on", "AUU_UPTIME": "on", "AUU_EXEC_SHADOW": "on",
+            "AUU_RECON": "on", "AUU_UPTIME": "on", "AUU_EXEC_SHADOW": "on", "AUU_AIRDROPS_INGEST": "on",
             "AUU_TRC20_RECEIVE_ADDRESS": "TEB618Hz3BT4YKsJYLMqbhiZvpBLsrZGtL"}
 
 
 def _enabled() -> dict:
+    from app.airdrops.ingest import ingest_enabled as airdrops_ingest_enabled
     from app.alerts import alerts_enabled
     from app.marketdata.mainstream.recon import recon_enabled
     from app.paper.shadow_h2 import shadow_enabled as h2_enabled
@@ -28,7 +29,7 @@ def _enabled() -> dict:
 
     return {"strategy": runner_enabled(), "exec_shadow": _exec_shadow_hook() is not None, "shadow_s3": s3_enabled(),
             "shadow_h2": h2_enabled(), "alerts": alerts_enabled(), "price_alerts": price_alerts_enabled(), "recon": recon_enabled(), "uptime": uptime_enabled(),
-            "trc20": poll_wanted()}
+            "trc20": poll_wanted(), "airdrops_ingest": airdrops_ingest_enabled()}
 
 
 class RoleParseTests(unittest.TestCase):
@@ -137,7 +138,7 @@ class StandbyAppTests(unittest.TestCase):
                 pw = "standbyPass123"
                 self.assertEqual(c.post("/api/v1/auth/register", json={"name": "sb", "password": pw,
                                                                         "password_confirm": pw}).status_code, 200)
-        for name in ("mainstream-strategy", "shadow-s3", "shadow-h2", "alerts", "price-alerts", "recon", "uptime"):
+        for name in ("mainstream-strategy", "shadow-s3", "shadow-h2", "alerts", "price-alerts", "recon", "uptime", "airdrops-ingest"):
             self.assertNotIn(name, started)
 
     def test_primary_starts_jobs_and_reports_primary(self):
@@ -161,7 +162,7 @@ class StandbyAppTests(unittest.TestCase):
                 self.assertEqual(h["role"], "primary")
                 self.assertFalse(h["standby"]["standby"])
         # same spy sees the primary's jobs, so the standby assertion above is meaningful
-        for name in ("mainstream-strategy", "shadow-h2", "alerts", "price-alerts"):
+        for name in ("mainstream-strategy", "shadow-h2", "alerts", "price-alerts", "airdrops-ingest"):
             self.assertIn(name, started)
 
 

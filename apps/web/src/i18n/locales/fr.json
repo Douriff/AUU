@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Annonces officielles + médias + sélection éditoriale · même campagne fusionnée entre sources · chaque entrée indique ses sources et son statut de vérification",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Vérification",
+    "verify": {
+      "all": "Toutes vérifications",
+      "confirmed": "Confirmé",
+      "unverified": "Non vérifié"
+    },
+    "verifyTip": {
+      "confirmed": "Source officielle présente, ou relayé par au moins 2 sources indépendantes",
+      "unverified": "Une seule source non officielle — vérifiez sur les canaux officiels du projet"
+    },
+    "sourceCount": "{{n}} source(s)",
+    "sourcesTitle": "Sources",
+    "kind": {
+      "official": "Officiel",
+      "media": "Média",
+      "curated": "Sélection"
+    },
+    "riskTitle": "Avertissement",
+    "riskShort": "Avertissement : méfiez-vous des arnaques et du phishing. N'envoyez jamais de fonds en premier et ne partagez jamais votre phrase secrète / clé privée ; fiez-vous aux canaux officiels. À titre informatif, pas un conseil en investissement.",
+    "riskLong": "Les campagnes d'airdrop, de points et de jetons servent souvent aux arnaques et au phishing. Vérifiez uniquement via les canaux officiels du projet et ne participez à rien qui exige d'envoyer des fonds d'abord, d'accorder des autorisations d'abord ou de fournir une phrase secrète ou une clé privée. Ce site ne fait qu'agréger des informations et ne constitue pas un conseil en investissement.",
+    "feedsOfficial": "Sources officielles : ",
+    "feedsMedia": "Sources médias : ",
+    "verifyCounts": "Confirmé {{c}} · Non vérifié {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

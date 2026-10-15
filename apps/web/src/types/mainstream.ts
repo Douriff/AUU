@@ -595,6 +595,15 @@ export interface NewsQuery {
 export type AirdropCategory = "major" | "community" | "meme";
 export type AirdropStatus = "active" | "upcoming" | "ended";
 export type AirdropOrigin = "curated" | "ingested";
+export type AirdropVerification = "confirmed" | "unverified";
+export type AirdropSourceKind = "official" | "media" | "curated";
+export interface AirdropSource {
+  sourceId: string;
+  name: string;
+  url: string | null;
+  kind: AirdropSourceKind;
+  publishedAt: number;
+}
 export interface AirdropItem {
   id: string;
   title: string;
@@ -610,11 +619,18 @@ export interface AirdropItem {
   externalUrl: string | null;
   tags: string[];
   origin: AirdropOrigin;
+  /** confirmed = official source present or >=2 independent publishers; else unverified. */
+  verification: AirdropVerification;
+  official: boolean;
+  sourceCount: number;
+  sources: AirdropSource[];
+  risk: string;
 }
 export interface AirdropFeedStatus {
   id: string;
   name: string;
   home: string;
+  tier?: "official" | "media";
   lastOkAt: number | null;
   lastAttemptAt: number | null;
   ok: boolean;
@@ -630,6 +646,8 @@ export interface AirdropsPage {
   seededAt: number | null;
   lastIngestAt: number | null;
   feeds: AirdropFeedStatus[];
+  verificationCounts?: { confirmed: number; unverified: number };
+  riskNotice?: string;
   enabled: boolean;
   ingestEnabled: boolean;
   ingestIntervalSec: number;
@@ -639,6 +657,7 @@ export interface AirdropsPage {
 }
 export interface AirdropDetail {
   item: AirdropItem;
+  riskNotice?: string;
   enabled: boolean;
   note: string;
 }
@@ -646,6 +665,7 @@ export interface AirdropsQuery {
   category?: "all" | AirdropCategory;
   status?: AirdropStatus;
   origin?: AirdropOrigin;
+  verification?: AirdropVerification;
   page?: number;
   size?: number;
 }

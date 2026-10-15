@@ -1571,7 +1571,7 @@
   },
   "airdrops": {
     "title": "Airdrop Radar",
-    "sub": "Public feed headlines plus curated notes · major / community / meme · every item shows its source",
+    "sub": "Anuncios oficiales + medios + selección editorial · la misma campaña se fusiona entre fuentes · cada entrada muestra sus fuentes y su estado de verificación",
     "cantConnect": "Cannot connect",
     "loadFailed": "Airdrop Radar is temporarily unavailable: {{err}} (other features are unaffected)",
     "filterCat": "Category",
@@ -1612,7 +1612,30 @@
       "ingested": "Feed",
       "curated": "Curated"
     },
-    "feeds": "Feeds:"
+    "feeds": "Feeds:",
+    "filterVerify": "Verificación",
+    "verify": {
+      "all": "Toda verificación",
+      "confirmed": "Confirmado",
+      "unverified": "Sin verificar"
+    },
+    "verifyTip": {
+      "confirmed": "Tiene fuente oficial o lo informan al menos 2 fuentes independientes",
+      "unverified": "Solo una fuente no oficial: verifícalo en los canales oficiales del proyecto"
+    },
+    "sourceCount": "{{n}} fuente(s)",
+    "sourcesTitle": "Fuentes",
+    "kind": {
+      "official": "Oficial",
+      "media": "Medio",
+      "curated": "Selección"
+    },
+    "riskTitle": "Aviso de riesgo",
+    "riskShort": "Aviso de riesgo: cuidado con estafas y phishing. Nunca envíes fondos primero ni compartas tu frase semilla / clave privada; confía solo en los canales oficiales. Solo informativo, no es asesoramiento de inversión.",
+    "riskLong": "Las campañas de airdrops, puntos y tokens se usan a menudo para estafas y phishing. Verifica solo en los canales oficiales del proyecto y no participes en nada que te pida enviar fondos primero, conceder aprobaciones primero o compartir una frase semilla o clave privada. Este sitio solo agrega información y no es asesoramiento de inversión.",
+    "feedsOfficial": "Fuentes oficiales: ",
+    "feedsMedia": "Fuentes de medios: ",
+    "verifyCounts": "Confirmado {{c}} · Sin verificar {{u}}"
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

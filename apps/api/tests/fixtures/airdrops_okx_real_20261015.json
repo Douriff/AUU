@@ -1,0 +1,53 @@
+{
+ "code": "0",
+ "msg": "",
+ "data": [
+  {
+   "details": [
+    {
+     "annType": "announcements-trading-updates",
+     "title": "OKX to rename USD/USDⓈ spot trading pairs to USDC trading pairs",
+     "url": "https://www.okx.com/en-sg/help/okx-to-rename-usd-usds-spot-trading-pairs-to-usdc-trading-pairs",
+     "pTime": "1791795611384",
+     "businessPTime": "1791734400000"
+    },
+    {
+     "annType": "announcements-p2p-trading",
+     "title": "UAH P2P Voucher Campaign",
+     "url": "https://www.okx.com/en-sg/help/uah-p2p-voucher-campaign",
+     "pTime": "1791541995503",
+     "businessPTime": "1791475200000"
+    },
+    {
+     "annType": "announcements-web3",
+     "title": "Notice of Trading Fee Changes on the OKX NFT Marketplace",
+     "url": "https://www.okx.com/en-sg/help/notice-of-trading-fee-changes-on-the-okx-nft-marketplace",
+     "pTime": "1791528131177",
+     "businessPTime": "1791540000000"
+    },
+    {
+     "annType": "announcements-p2p-trading",
+     "title": "Ves voucher banner FAQ article ",
+     "url": "https://www.okx.com/en-sg/help/ves-voucher-banner",
+     "pTime": "1790949993094",
+     "businessPTime": "1790870400000"
+    },
+    {
+     "annType": "announcements-others",
+     "title": "OKX Shield Announcement",
+     "url": "https://www.okx.com/en-sg/help/okx-shield-announcement",
+     "pTime": "1790847867894",
+     "businessPTime": "1790784000000"
+    },
+    {
+     "annType": "announcements-api",
+     "title": "OKX WebSocket Port 8443 Discontinuation Announcement",
+     "url": "https://www.okx.com/en-sg/help/okx-websocket-port-8443-discontinuation-announcement",
+     "pTime": "1790758418444",
+     "businessPTime": "1790758800000"
+    }
+   ],
+   "totalPage": "118"
+  }
+ ]
+}
