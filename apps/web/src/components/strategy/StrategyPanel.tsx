@@ -153,6 +153,9 @@ export function StrategyPanel() {
         <i style={{ background: COL.strat }} />{t("strat.series.strategy")} <i style={{ background: COL.btc }} />{t("strat.k.btc")} <i style={{ background: COL.tbill }} />{t("strat.series.tbill")} <i className="bar" />{t("strat.series.daily")}
       </div>
       <div className="strat-chart" ref={host} />
+      <p className="muted" style={{ fontSize: 10.5, margin: "2px 8px 0" }}>
+        <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">Lightweight Charts™ by TradingView</a> · <a href="/THIRD_PARTY_NOTICES.txt" target="_blank" rel="noopener noreferrer">Apache-2.0</a>
+      </p>
       <div className="strat-tables">
         <div>
           <h4>{t("strat.positions", { n: data?.positions.length ?? 0 })}</h4>
