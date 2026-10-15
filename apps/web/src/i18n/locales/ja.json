@@ -298,8 +298,35 @@
       "textPlaceholder": "テキストを入力",
       "textPrompt": "テキストラベル",
       "ok": "OK",
-      "cancel": "キャンセル"
-    }
+      "cancel": "キャンセル",
+      "sync": {
+        "local": "この端末のみ",
+        "syncing": "保存中…",
+        "synced": "同期済み",
+        "error": "同期に失敗しました。再試行します",
+        "localTitle": "描画はこのブラウザにのみ保存されます（未ログインまたはスタンバイノード）",
+        "syncingTitle": "描画をアカウントに保存しています",
+        "syncedTitle": "描画はアカウントに保存され、他の端末でも表示されます",
+        "errorTitle": "現在サーバーに接続できません。描画はこの端末に保存済みで、接続回復後に同期されます"
+      }
+    },
+    "auuEnterTh": "エントリー閾値",
+    "auuSide_long": "ロング",
+    "auuSide_short": "ショート",
+    "auuSide_flat": "ノーポジ",
+    "auuAction_enter": "エントリー",
+    "auuAction_hold": "保有",
+    "auuAction_exit": "イグジット",
+    "auuAction_none": "なし",
+    "auuFacMom": "モメンタム",
+    "auuFacVol": "出来高偏り",
+    "auuFacFund": "資金調達",
+    "auuFactorsTitle": "スコアへの各因子の寄与（×100）：モメンタム／出来高の偏り／資金調達",
+    "auuRun": "現在",
+    "auuRunSince": "{{date}} から {{n}} 本",
+    "auuRunTitle": "現在のロング/ショート状態の継続期間（実験的・記録のみ・発注なし）",
+    "auuRegime": "相場色",
+    "auuRegimeTitle": "AUUシグナルがロング/ショートの区間を背景に淡く着色"
   },
   "console": {
     "sub": "トレンド戦略のペーパー運用・リスク管理・執行ログ",

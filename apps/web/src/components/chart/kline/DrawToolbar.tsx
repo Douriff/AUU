@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DRAW_TOOLS, type ToolId } from "./drawings";
+import type { SyncState } from "./drawingsSync";
 
 type Props = {
   active: ToolId | null;
   hasSelection: boolean;
   count: number;
+  sync: SyncState;
   magnet: boolean;
   onPick: (t: ToolId) => void;
   onMagnet: () => void;
@@ -14,7 +16,7 @@ type Props = {
 };
 
 /** Left toolbar on desktop; on phones a collapsible strip above the chart. */
-export function DrawToolbar({ active, hasSelection, count, magnet, onPick, onMagnet, onDelete, onClear }: Props) {
+export function DrawToolbar({ active, hasSelection, count, sync, magnet, onPick, onMagnet, onDelete, onClear }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const pick = (id: ToolId) => {
@@ -65,6 +67,9 @@ export function DrawToolbar({ active, hasSelection, count, magnet, onPick, onMag
           <span className="kc-glyph" aria-hidden>🗑</span>
           <span className="kc-tool-label">{t("chart.draw.clear")}</span>
         </button>
+        <span className={`kc-sync is-${sync}`} role="status" title={t(`chart.draw.sync.${sync}Title`)} data-sync={sync}>
+          <i aria-hidden /> <span className="kc-tool-label">{t(`chart.draw.sync.${sync}`)}</span>
+        </span>
       </div>
     </div>
   );

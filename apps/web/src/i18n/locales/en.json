@@ -298,8 +298,35 @@
       "textPlaceholder": "Enter text",
       "textPrompt": "Text label",
       "ok": "OK",
-      "cancel": "Cancel"
-    }
+      "cancel": "Cancel",
+      "sync": {
+        "local": "Local only",
+        "syncing": "Saving…",
+        "synced": "Synced",
+        "error": "Sync failed, will retry",
+        "localTitle": "Drawings are kept in this browser only (signed out or standby node)",
+        "syncingTitle": "Saving your drawings to your account",
+        "syncedTitle": "Drawings are saved to your account and follow you to other devices",
+        "errorTitle": "Server unreachable for now; drawings are safe locally and will sync when back online"
+      }
+    },
+    "auuEnterTh": "Enter threshold",
+    "auuSide_long": "Long",
+    "auuSide_short": "Short",
+    "auuSide_flat": "Flat",
+    "auuAction_enter": "Enter",
+    "auuAction_hold": "Hold",
+    "auuAction_exit": "Exit",
+    "auuAction_none": "None",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Vol imb",
+    "auuFacFund": "Fund",
+    "auuFactorsTitle": "Factor contributions to the score (×100): momentum / volume imbalance / funding",
+    "auuRun": "Now",
+    "auuRunSince": "since {{date}} · {{n}} bars",
+    "auuRunTitle": "How long the latest long/short state has lasted (experimental, record-only, no orders)",
+    "auuRegime": "Regime",
+    "auuRegimeTitle": "Shade the candles' background where the AUU signal is long / short"
   },
   "console": {
     "sub": "Trend strategy paper run, risk control and execution log",

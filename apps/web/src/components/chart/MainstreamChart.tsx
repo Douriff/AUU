@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed } from "@/i18n/format";
-import { loadAuuSignalPref, saveAuuSignalPref } from "@/components/chart/auuSignalPrefs";
+import { loadAuuRegimePref, loadAuuSignalPref, saveAuuRegimePref, saveAuuSignalPref } from "@/components/chart/auuSignalPrefs";
 import { useKChart } from "@/components/chart/kline/useKChart";
 import { useDrawings } from "@/components/chart/kline/useDrawings";
 import { useTouchScroll } from "@/components/chart/kline/useTouchScroll";
@@ -15,7 +15,7 @@ import { DrawToolbar } from "@/components/chart/kline/DrawToolbar";
 import { IndicatorPanel } from "@/components/chart/kline/IndicatorPanel";
 import { MOM_COLORS, priceFormat } from "@/components/chart/kline/theme";
 import { auuScoreIndicator, releaseIndicatorData, stratMomIndicator, type MarkerData } from "@/components/chart/kline/register";
-import { setMarkers } from "@/components/chart/kline/markers";
+import { regimeRuns, setMarkers, setRegimes } from "@/components/chart/kline/markers";
 import { QUICK_IDS, layoutPanes, loadPrefs, savePrefs, syncIndicators, type IndicatorId, type IndicatorPrefs } from "@/components/chart/kline/indicatorPrefs";
 
 /** KLineChart v10 (Apache-2.0) candlestick + volume + drawing tools for the mainstream page. */
@@ -55,6 +55,9 @@ function fmtTs(ms: number, tf: MainstreamTf) {
 }
 const toK = (c: MainstreamCandle): KLineData => ({ timestamp: c.ts, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume });
 const fromK = (k: KLineData): MainstreamCandle => ({ ts: k.timestamp, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume ?? 0 });
+const withAlpha = (hex: string, alpha: number) =>
+  /^#[0-9a-f]{6}$/i.test(hex) ? `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${alpha})` : hex;
+const fac = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, 1)}`);
 const pctTxt = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${fmtFixed(v * 100, d)}%`);
 
 type OvRow = StrategyOverlay["series"][number];
@@ -90,6 +93,16 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
   const [auu, setAuu] = useState<AuuSignalOverlay | null>(null);
   const [auuErr, setAuuErr] = useState("");
   const auuRows = useMemo(() => new Map((auu?.series ?? []).map((r) => [r.asof_ts, r])), [auu]);
+  const [auuRegime, setAuuRegime] = useState(() => (typeof window !== "undefined" ? loadAuuRegimePref() : true));
+  // how long the latest long/short regime has run (bars) and since when
+  const auuRun = useMemo(() => {
+    const runs = regimeRuns(auu?.series ?? []);
+    const last = runs[runs.length - 1];
+    const lastTs = auu?.series[auu.series.length - 1]?.asof_ts;
+    if (!last || last.to !== lastTs) return null;
+    const bars = (auu?.series ?? []).filter((r) => r.asof_ts >= last.from).length;
+    return { side: last.side, from: last.from, bars };
+  }, [auu]);
   const [colorRev, setColorRev] = useState(0);
   useEffect(() => onColorPref(() => setColorRev((n) => n + 1)), []);
 
@@ -281,7 +294,8 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     }
     const rows: Record<number, number> = {};
     for (const r of auu.series) rows[r.asof_ts] = r.score * 100;
-    chart.createIndicator(auuScoreIndicator(rows, t("chart.auuScore")), false);
+    const enterTh = typeof auu.params?.enter_th === "number" ? auu.params.enter_th * 100 : null;
+    chart.createIndicator(auuScoreIndicator(rows, t("chart.auuScore"), enterTh != null ? { value: enterTh, title: t("chart.auuEnterTh") } : null), false);
     layoutPanes(chart);
     const col = chartColors();
     const markers: MarkerData[] = auu.series
@@ -300,6 +314,17 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
     setMarkers(chart, "auu", markers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart, auu, auuOn, colorRev, lang, dataVer]);
+
+  // AUU regime bands: translucent long/short background runs behind the candles.
+  useEffect(() => {
+    if (!chart) return;
+    if (!auuOn || !auu || !auuRegime) {
+      chart.removeOverlay({ groupId: "auuRegime" });
+      return;
+    }
+    const col = chartColors();
+    setRegimes(chart, regimeRuns(auu.series), { long: withAlpha(col.up, 0.09), short: withAlpha(col.down, 0.09) });
+  }, [chart, auu, auuOn, auuRegime, colorRev, dataVer]);
 
   // keyboard: Delete removes the selected drawing, Esc cancels the tool / selection
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -390,14 +415,25 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
             <>
               <span className="bad">{t("chart.auuExpBadge")}</span>
               <span className="muted">{auu.version}</span>
+              {auuRun ? (
+                <span title={t("chart.auuRunTitle")}>
+                  {t("chart.auuRun")} <b className={auuRun.side === "long" ? "up" : "down"}>{t(`chart.auuSide_${auuRun.side}`)}</b>
+                  <span className="muted"> · {t("chart.auuRunSince", { date: fmtDate(auuRun.from, { year: "numeric", month: "2-digit", day: "2-digit" }), n: auuRun.bars })}</span>
+                </span>
+              ) : null}
               {(() => {
                 const row = auuHover ?? auu.latest ?? auu.series[auu.series.length - 1];
                 if (!row) return <span className="muted">—</span>;
                 return (
                   <>
-                    <span>{t("chart.auuSide")} <b>{row.side}</b></span>
+                    <span>{t("chart.auuSide")} <b className={row.side === "long" ? "up" : row.side === "short" ? "down" : ""}>{t(`chart.auuSide_${row.side}`)}</b></span>
                     <span>{t("chart.auuScore")} <b>{fmtFixed(row.score * 100, 1)}</b></span>
-                    <span>{t("chart.auuAction")} <b>{row.action}</b></span>
+                    <span>{t("chart.auuAction")} <b>{t(`chart.auuAction_${row.action}`)}</b></span>
+                    {row.factors ? (
+                      <span className="muted" title={t("chart.auuFactorsTitle")}>
+                        {t("chart.auuFacMom")} {fac(row.factors.momentum)} · {t("chart.auuFacVol")} {fac(row.factors.volume_imbalance)} · {t("chart.auuFacFund")} {fac(row.factors.funding)}
+                      </span>
+                    ) : null}
                     {row.reason_tags?.length ? <span className="muted">{row.reason_tags.join(" · ")}</span> : null}
                   </>
                 );
@@ -413,6 +449,7 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
           active={drawings.active}
           hasSelection={!!drawings.selected}
           count={drawings.count}
+          sync={drawings.syncState}
           magnet={drawings.magnet}
           onPick={drawings.pick}
           onMagnet={() => drawings.setMagnet((v) => !v)}
@@ -486,6 +523,23 @@ export function MainstreamChart({ symbol, tf, venue = null, overlay = true }: { 
           >
             {t("chart.auuSig")}
           </button>
+          {auuOn ? (
+            <button
+              type="button"
+              className={auuRegime ? "is-on" : ""}
+              aria-pressed={auuRegime}
+              title={t("chart.auuRegimeTitle")}
+              data-testid="auu-regime-btn"
+              onClick={() =>
+                setAuuRegime((v) => {
+                  saveAuuRegimePref(!v);
+                  return !v;
+                })
+              }
+            >
+              {t("chart.auuRegime")}
+            </button>
+          ) : null}
           <button type="button" onClick={fitAll}>{t("chart.all")}</button>
           <button type="button" onClick={() => chart?.scrollToRealTime()}>{t("chart.latest")}</button>
         </span>

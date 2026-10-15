@@ -298,8 +298,35 @@
       "textPlaceholder": "Metin girin",
       "textPrompt": "Metin etiketi",
       "ok": "Tamam",
-      "cancel": "İptal"
-    }
+      "cancel": "İptal",
+      "sync": {
+        "local": "Yalnızca yerel",
+        "syncing": "Kaydediliyor…",
+        "synced": "Senkronize",
+        "error": "Senkronizasyon başarısız, tekrar denenecek",
+        "localTitle": "Çizimler yalnızca bu tarayıcıda tutulur (oturum yok veya yedek düğüm)",
+        "syncingTitle": "Çizimleriniz hesabınıza kaydediliyor",
+        "syncedTitle": "Çizimler hesabınıza kaydedildi ve diğer cihazlarda da görünür",
+        "errorTitle": "Sunucuya şu an ulaşılamıyor; çizimler yerelde güvende, bağlantı gelince senkronize edilir"
+      }
+    },
+    "auuEnterTh": "Giriş eşiği",
+    "auuSide_long": "Uzun",
+    "auuSide_short": "Kısa",
+    "auuSide_flat": "Nötr",
+    "auuAction_enter": "Giriş",
+    "auuAction_hold": "Tut",
+    "auuAction_exit": "Çıkış",
+    "auuAction_none": "Yok",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Hacim den.",
+    "auuFacFund": "Fonlama",
+    "auuFactorsTitle": "Faktörlerin skora katkısı (×100): momentum / hacim dengesizliği / fonlama",
+    "auuRun": "Şimdi",
+    "auuRunSince": "{{date}} tarihinden beri · {{n}} mum",
+    "auuRunTitle": "Mevcut uzun/kısa durumunun süresi (deneysel, yalnızca kayıt, emir yok)",
+    "auuRegime": "Rejim",
+    "auuRegimeTitle": "AUU sinyalinin uzun / kısa olduğu bölgelerde mum arka planını renklendir"
   },
   "console": {
     "sub": "Trend stratejisinin sanal çalışması, risk kontrolü ve işlem kaydı",

@@ -298,8 +298,35 @@
       "textPlaceholder": "Text eingeben",
       "textPrompt": "Textbeschriftung",
       "ok": "OK",
-      "cancel": "Abbrechen"
-    }
+      "cancel": "Abbrechen",
+      "sync": {
+        "local": "Nur lokal",
+        "syncing": "Speichern…",
+        "synced": "Synchronisiert",
+        "error": "Sync fehlgeschlagen, neuer Versuch folgt",
+        "localTitle": "Zeichnungen bleiben nur in diesem Browser (abgemeldet oder Standby-Knoten)",
+        "syncingTitle": "Zeichnungen werden in Ihrem Konto gespeichert",
+        "syncedTitle": "Zeichnungen sind in Ihrem Konto gespeichert und folgen Ihnen auf andere Geräte",
+        "errorTitle": "Server derzeit nicht erreichbar; Zeichnungen sind lokal gesichert und werden später synchronisiert"
+      }
+    },
+    "auuEnterTh": "Einstiegsschwelle",
+    "auuSide_long": "Long",
+    "auuSide_short": "Short",
+    "auuSide_flat": "Neutral",
+    "auuAction_enter": "Einstieg",
+    "auuAction_hold": "Halten",
+    "auuAction_exit": "Ausstieg",
+    "auuAction_none": "Keine",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Vol-Imb",
+    "auuFacFund": "Fund.",
+    "auuFactorsTitle": "Faktorbeiträge zum Score (×100): Momentum / Volumen-Ungleichgewicht / Funding",
+    "auuRun": "Aktuell",
+    "auuRunSince": "seit {{date}} · {{n}} Kerzen",
+    "auuRunTitle": "Wie lange der aktuelle Long/Short-Zustand anhält (experimentell, nur Aufzeichnung, keine Orders)",
+    "auuRegime": "Regime",
+    "auuRegimeTitle": "Hintergrund der Kerzen einfärben, wo das AUU-Signal long / short ist"
   },
   "console": {
     "sub": "Paper-Lauf der Trendstrategie, Risikomanagement und Ausführungsprotokoll",

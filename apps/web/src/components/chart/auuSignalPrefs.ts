@@ -25,3 +25,22 @@ export function saveAuuSignalPref(on: boolean): void {
     /* private mode */
   }
 }
+
+const REGIME_KEY = "auu.ms.auuRegime";
+
+/** Regime shading (long/short bands behind the candles) — default on once the AUU signal is on. */
+export function loadAuuRegimePref(): boolean {
+  try {
+    return window.localStorage.getItem(REGIME_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function saveAuuRegimePref(on: boolean): void {
+  try {
+    window.localStorage.setItem(REGIME_KEY, on ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+}

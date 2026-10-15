@@ -1252,3 +1252,13 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
   .msc-actions button { min-height: 32px; }
   .kc-credit { flex-basis: 100%; }
 }
+
+/* Drawing sync status (step 2): a dot on desktop, dot + label in the phone strip */
+.kc-sync { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 4px; font-size: 10px; color: var(--muted, #7f8794); cursor: default; }
+.kc-sync i { width: 7px; height: 7px; border-radius: 50%; background: #7f8794; display: inline-block; }
+.kc-sync.is-synced i { background: #2ebd85; }
+.kc-sync.is-syncing i { background: #f0b90b; animation: kc-sync-pulse 1s ease-in-out infinite; }
+.kc-sync.is-error i { background: #f6465d; }
+@keyframes kc-sync-pulse { 50% { opacity: 0.35; } }
+@media (max-width: 900px) { .kc-sync { margin-top: 0; padding: 0 6px; white-space: nowrap; font-size: 10px; } }
+@media (prefers-reduced-motion: reduce) { .kc-sync.is-syncing i { animation: none; } }

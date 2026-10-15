@@ -298,8 +298,35 @@
       "textPlaceholder": "텍스트 입력",
       "textPrompt": "텍스트 라벨",
       "ok": "확인",
-      "cancel": "취소"
-    }
+      "cancel": "취소",
+      "sync": {
+        "local": "이 기기만",
+        "syncing": "저장 중…",
+        "synced": "동기화됨",
+        "error": "동기화 실패, 다시 시도합니다",
+        "localTitle": "그림은 이 브라우저에만 저장됩니다 (로그아웃 또는 대기 노드)",
+        "syncingTitle": "그림을 계정에 저장하는 중입니다",
+        "syncedTitle": "그림이 계정에 저장되어 다른 기기에서도 보입니다",
+        "errorTitle": "지금은 서버에 연결할 수 없습니다. 그림은 이 기기에 저장되어 있으며 연결되면 동기화됩니다"
+      }
+    },
+    "auuEnterTh": "진입 임계값",
+    "auuSide_long": "롱",
+    "auuSide_short": "숏",
+    "auuSide_flat": "중립",
+    "auuAction_enter": "진입",
+    "auuAction_hold": "보유",
+    "auuAction_exit": "청산",
+    "auuAction_none": "없음",
+    "auuFacMom": "모멘텀",
+    "auuFacVol": "거래량 불균형",
+    "auuFacFund": "펀딩",
+    "auuFactorsTitle": "점수에 대한 요인별 기여 (×100): 모멘텀 / 거래량 불균형 / 펀딩",
+    "auuRun": "현재",
+    "auuRunSince": "{{date}}부터 · {{n}}봉",
+    "auuRunTitle": "현재 롱/숏 상태가 이어진 기간 (실험적, 기록 전용, 주문 없음)",
+    "auuRegime": "구간 색",
+    "auuRegimeTitle": "AUU 신호가 롱/숏인 구간을 캔들 배경에 옅게 표시"
   },
   "console": {
     "sub": "추세 전략 모의 운용, 리스크 관리 및 실행 로그",

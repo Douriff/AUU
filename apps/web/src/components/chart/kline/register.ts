@@ -2,6 +2,7 @@
  * Custom KLineChart overlays + indicators (registered once):
  *  - auuRect / auuText: drawing tools KLineChart does not ship (v10 has no "rect"/"text" overlay)
  *  - auuMarker: ▲▼● signal markers (strategy fills, AUU enter/exit)
+ *  - auuRegime: translucent full-height band for an AUU long/short regime run
  *  - AUU_SCORE / STRAT_MOM: sub-pane indicators fed by our own API data (real data, not demo)
  */
 import { registerIndicator, registerOverlay, type IndicatorCreate, type KLineData } from "klinecharts";
@@ -9,6 +10,7 @@ import { chartColors } from "@/theme/colorPref";
 import { MOM_COLORS } from "@/components/chart/kline/theme";
 
 export type MarkerShape = "arrow" | "dot";
+export type RegimeData = { color: string };
 export type MarkerData = { ts: number; shape: MarkerShape; color: string; text: string; side: "low" | "high" };
 
 let done = false;
@@ -86,8 +88,30 @@ export function registerAuuKline(): void {
     },
   });
 
+  registerOverlay<RegimeData>({
+    name: "auuRegime",
+    totalStep: 3,
+    lock: true,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: ({ coordinates, overlay, bounding }) => {
+      if (coordinates.length < 2 || !overlay.extendData) return [];
+      const x0 = Math.min(coordinates[0].x, coordinates[1].x);
+      const x1 = Math.max(coordinates[0].x, coordinates[1].x);
+      return [
+        {
+          type: "rect",
+          attrs: { x: x0, y: 0, width: Math.max(1, x1 - x0), height: bounding.height },
+          styles: { style: "fill", color: overlay.extendData.color, borderSize: 0 },
+          ignoreEvent: true,
+        },
+      ];
+    },
+  });
+
   // ── indicators fed from our API (rows are looked up by bar timestamp) ──
-  registerIndicator<{ score?: number }, number, string>({
+  registerIndicator<{ score?: number; thUp?: number; thDn?: number }, number, string>({
     name: "AUU_SCORE",
     shortName: "AUU",
     series: "normal",
@@ -95,8 +119,10 @@ export function registerAuuKline(): void {
     calcParams: [],
     figures: [],
     calc: (dataList: KLineData[], indicator) => {
-      const rows = SCORE_STORE.get(indicator.extendData) ?? {};
-      return dataList.map((k) => ({ score: rows[k.timestamp] }));
+      const d = SCORE_STORE.get(indicator.extendData);
+      const rows = d?.rows ?? {};
+      const th = d?.enter ?? null;
+      return dataList.map((k) => ({ score: rows[k.timestamp], ...(th != null ? { thUp: th, thDn: -th } : {}) }));
     },
   });
 
@@ -119,14 +145,15 @@ export function registerAuuKline(): void {
   });
 }
 
-const SCORE_STORE = new Map<string, Record<number, number>>();
+type ScoreData = { rows: Record<number, number>; enter: number | null };
+const SCORE_STORE = new Map<string, ScoreData>();
 const MOM_STORE = new Map<string, Record<number, (number | null)[]>>();
 let seq = 0;
 
 /** Indicator-create value for the AUU score pane (bars, signed colour follows 红涨绿跌 pref). */
-export function auuScoreIndicator(rows: Record<number, number>, title: string): IndicatorCreate {
+export function auuScoreIndicator(rows: Record<number, number>, title: string, enter: { value: number; title: string } | null = null): IndicatorCreate {
   const key = `auu${++seq}`;
-  SCORE_STORE.set(key, rows);
+  SCORE_STORE.set(key, { rows, enter: enter ? enter.value : null });
   return {
     name: "AUU_SCORE",
     shortName: title,
@@ -143,7 +170,14 @@ export function auuScoreIndicator(rows: Record<number, number>, title: string): 
           return { color: v >= 0 ? c.up : c.down, borderColor: v >= 0 ? c.up : c.down };
         },
       },
+      ...(enter
+        ? [
+            { key: "thUp", title: `${enter.title}+: `, type: "line" },
+            { key: "thDn", title: `${enter.title}−: `, type: "line" },
+          ]
+        : []),
     ],
+    ...(enter ? { styles: { lines: [1, 2].map(() => ({ color: "rgba(212,175,55,0.55)", style: "dashed", size: 1, smooth: false, dashedValue: [4, 4] })) } } : {}),
   } as unknown as IndicatorCreate;
 }
 

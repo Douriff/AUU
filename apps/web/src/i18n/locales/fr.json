@@ -298,8 +298,35 @@
       "textPlaceholder": "Saisir le texte",
       "textPrompt": "Étiquette de texte",
       "ok": "OK",
-      "cancel": "Annuler"
-    }
+      "cancel": "Annuler",
+      "sync": {
+        "local": "Local seulement",
+        "syncing": "Enregistrement…",
+        "synced": "Synchronisé",
+        "error": "Échec de synchro, nouvelle tentative",
+        "localTitle": "Les dessins restent dans ce navigateur (déconnecté ou nœud de secours)",
+        "syncingTitle": "Enregistrement de vos dessins dans votre compte",
+        "syncedTitle": "Dessins enregistrés dans votre compte et disponibles sur vos autres appareils",
+        "errorTitle": "Serveur injoignable ; dessins conservés localement, synchro automatique au retour"
+      }
+    },
+    "auuEnterTh": "Seuil d'entrée",
+    "auuSide_long": "Long",
+    "auuSide_short": "Short",
+    "auuSide_flat": "Neutre",
+    "auuAction_enter": "Entrée",
+    "auuAction_hold": "Conserver",
+    "auuAction_exit": "Sortie",
+    "auuAction_none": "Aucune",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Déséq. vol",
+    "auuFacFund": "Fin.",
+    "auuFactorsTitle": "Contribution des facteurs au score (×100) : momentum / déséquilibre de volume / financement",
+    "auuRun": "Actuel",
+    "auuRunSince": "depuis le {{date}} · {{n}} bougies",
+    "auuRunTitle": "Durée de l'état long/short actuel (expérimental, enregistrement seul, aucun ordre)",
+    "auuRegime": "Régime",
+    "auuRegimeTitle": "Colorer l'arrière-plan des bougies là où le signal AUU est long / short"
   },
   "console": {
     "sub": "Exécution fictive de la stratégie de tendance, contrôle des risques et journal d’exécution",
