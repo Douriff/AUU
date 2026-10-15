@@ -37,7 +37,6 @@ import { AdminFlagsPanel } from "@/pages/AdminPage/AdminFlagsPanel";
 import { AdminExchangePanel } from "@/pages/AdminPage/AdminExchangePanel";
 import { ExchangePage } from "@/pages/ExchangePage/ExchangePage";
 import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
-import { ChartPocPage } from "@/pages/ChartPocPage/ChartPocPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 
 export const router = createBrowserRouter([
@@ -101,7 +100,6 @@ export const router = createBrowserRouter([
       { path: "airdrops/:id", element: <AirdropDetailPage /> },
       { path: "positions", element: <LegacyOnly><PositionsPage /></LegacyOnly> },
       { path: "leaderboard", element: <LeaderboardPage /> },
-      { path: "chart-poc", element: <ChartPocPage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
