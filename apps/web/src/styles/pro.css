@@ -1262,3 +1262,57 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 @keyframes kc-sync-pulse { 50% { opacity: 0.35; } }
 @media (max-width: 900px) { .kc-sync { margin-top: 0; padding: 0 6px; white-space: nowrap; font-size: 10px; } }
 @media (prefers-reduced-motion: reduce) { .kc-sync.is-syncing i { animation: none; } }
+
+/* ── price alerts (chart bell, panel, toast) ── */
+.kc-tools-head { display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
+.kc-bell { position: relative; }
+.kc-badge { position: absolute; top: -3px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #f6465d; color: #fff; font: 700 9.5px/15px system-ui, sans-serif; font-style: normal; text-align: center; box-sizing: border-box; pointer-events: none; }
+.kc-alert-panel { position: absolute; left: 8px; top: 8px; width: min(330px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; z-index: 30; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); color: var(--text); font-size: 12.5px; }
+.kc-alert-panel .kc-ind-head { top: -8px; }
+.kc-alert-panel button { cursor: pointer; }
+.kc-alert-form { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.kc-alert-meta { display: flex; gap: 10px; align-items: baseline; font-size: 12px; }
+.kc-alert-meta span:first-child { font-weight: 700; }
+.kc-alert-meta span:last-child { margin-left: auto; }
+.kc-alert-row { display: flex; gap: 6px; }
+.kc-alert-row input, .kc-alert-row select { min-width: 0; flex: 1; height: 30px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 0 6px; font-size: 12.5px; }
+.kc-alert-row select { flex: 0 0 auto; max-width: 46%; }
+.kc-alert-row button { height: 30px; padding: 0 10px; border-radius: 4px; background: var(--panel3); border: 1px solid var(--border); color: var(--text); font: inherit; font-size: 12px; white-space: nowrap; }
+.kc-alert-row button.is-on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.kc-alert-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+.kc-alert-add { background: var(--accent-bg) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
+.kc-alert-err { margin: 0; color: #f6465d; font-size: 12px; }
+.kc-alert-sec { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 12px; }
+.kc-alert-sec button { background: none; border: 0; color: var(--text2); text-decoration: underline; font: inherit; font-size: 11.5px; padding: 0; }
+.kc-alert-all { display: inline-flex; gap: 4px; align-items: center; color: var(--text2); font-size: 11.5px; }
+.kc-alert-list { list-style: none; margin: 0; padding: 0; }
+.kc-alert-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); }
+.kc-alert-list li.is-new { background: rgba(240, 185, 11, 0.1); }
+.kc-alert-list em { font-style: normal; color: var(--text2); }
+.kc-alert-dir { width: 14px; text-align: center; color: #f0b90b; }
+.kc-alert-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.kc-alert-list button { background: none; border: 0; color: var(--text2); padding: 4px 6px; }
+.kc-alert-list button:hover { color: #f6465d; }
+.kc-alert-newtag { font-size: 10px; color: #f0b90b; }
+.kc-alert-note { margin: 6px 0 0; font-size: 11.5px; line-height: 1.5; }
+.kc-alert-toast { position: absolute; left: 50%; bottom: 36px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-radius: 8px; background: rgba(240, 185, 11, 0.18); border: 1px solid #f0b90b; color: var(--text); font-size: 12.5px; z-index: 6; max-width: 92%; }
+.kc-alert-toast button { background: none; border: 0; color: var(--text2); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.msc-stage.is-picking .msc-host { cursor: crosshair; }
+.kc-hint-btn { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; }
+.kc-hint-btn button { height: 22px; padding: 0 8px; border-radius: 4px; background: var(--panel3); border: 1px solid var(--border); color: var(--text); cursor: pointer; font: inherit; font-size: 11px; }
+@media (max-width: 900px) {
+  .kc-alert-panel.is-picking { display: none; } /* the sheet would cover the chart you are tapping */
+  .kc-tools-head { flex-direction: row; justify-content: flex-start; align-items: center; padding-top: 0; }
+  .kc-tools-head .kc-bell { margin: 4px 8px 4px 0; min-width: 44px; height: 32px; flex-direction: row; gap: 4px; border-radius: 16px; border-color: var(--border); background: var(--panel3); padding: 0 10px; }
+  .kc-tools-head .kc-bell .kc-tool-label { display: block; font-size: 12px; }
+  .kc-tools-head .kc-bell.is-on { border-color: var(--accent); }
+  .kc-badge { top: -4px; right: -2px; }
+  .kc-alert-panel { position: fixed; left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 72vh; }
+  .kc-alert-row { flex-wrap: wrap; }
+  .kc-alert-row input, .kc-alert-row select { height: 40px; font-size: 16px; }
+  .kc-alert-row select { flex: 0 0 44%; max-width: none; }
+  .kc-alert-row input { flex: 1 1 40%; }
+  .kc-alert-row .kc-alert-add { flex: 1 1 100%; }
+  .kc-alert-row button, .kc-alert-list button { min-height: 40px; }
+  .kc-alert-toast { bottom: 40px; }
+}

@@ -6,7 +6,7 @@ mail while the primary is alive, otherwise two hosts would rebalance, the
 ledgers would fork and every digest would arrive twice. On a standby:
 
 * the daily strategy runner (and with it the exec-price shadow and the risk
-  caps), the S3 and H2 shadow records, the alert/digest mailer, the cross-source
+  caps), the S3 and H2 shadow records, the alert/digest mailer, the user price-alert checker (and its mail), the cross-source
   recon and the uptime recorder do not start, and their ``*_enabled()`` checks
   report off, whatever their own ``AUU_*`` switch says;
 * writes under the ledger-owning API prefixes answer ``503 STANDBY``.
@@ -23,7 +23,7 @@ PRIMARY = "primary"
 STANDBY = "standby"
 
 # Background jobs a standby never runs (reported in health).
-STANDBY_OFF = ("strategy", "exec_shadow", "shadow_s3", "shadow_h2", "alerts", "recon", "uptime", "trc20")
+STANDBY_OFF = ("strategy", "exec_shadow", "shadow_s3", "shadow_h2", "alerts", "price_alerts", "recon", "uptime", "trc20")
 
 # API prefixes whose writes change a ledger; refused on a standby.
 STANDBY_WRITE_BLOCK_PREFIXES = (
