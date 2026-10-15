@@ -315,6 +315,19 @@
         "syncingTitle": "Salvando seus desenhos na sua conta",
         "syncedTitle": "Desenhos salvos na sua conta e disponíveis em outros dispositivos",
         "errorTitle": "Servidor indisponível; desenhos seguros localmente e sincronizam quando voltar"
+      },
+      "auuFibExt": "Extensão Fib",
+      "auuPitchfork": "Garfo",
+      "auuFibChannel": "Canal Fib",
+      "auuMeasure": "Medir",
+      "auuPriceRange": "Faixa de preço",
+      "auuDateRange": "Faixa de datas",
+      "hintN": "Clique / toque em {{n}} pontos no gráfico (Esc cancela)",
+      "measure": {
+        "bars": "{{n}} velas",
+        "unitD": "d",
+        "unitH": "h",
+        "unitM": "min"
       }
     },
     "auuEnterTh": "Limite de entrada",

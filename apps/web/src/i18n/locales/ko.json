@@ -315,6 +315,19 @@
         "syncingTitle": "그림을 계정에 저장하는 중입니다",
         "syncedTitle": "그림이 계정에 저장되어 다른 기기에서도 보입니다",
         "errorTitle": "지금은 서버에 연결할 수 없습니다. 그림은 이 기기에 저장되어 있으며 연결되면 동기화됩니다"
+      },
+      "auuFibExt": "피보 확장",
+      "auuPitchfork": "피치포크",
+      "auuFibChannel": "피보 채널",
+      "auuMeasure": "측정",
+      "auuPriceRange": "가격 범위",
+      "auuDateRange": "기간 범위",
+      "hintN": "차트에서 {{n}}개 지점을 클릭/탭하세요 (Esc로 취소)",
+      "measure": {
+        "bars": "{{n}}봉",
+        "unitD": "일",
+        "unitH": "시",
+        "unitM": "분"
       }
     },
     "auuEnterTh": "진입 임계값",

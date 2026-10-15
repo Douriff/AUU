@@ -315,6 +315,19 @@
         "syncingTitle": "Zeichnungen werden in Ihrem Konto gespeichert",
         "syncedTitle": "Zeichnungen sind in Ihrem Konto gespeichert und folgen Ihnen auf andere Geräte",
         "errorTitle": "Server derzeit nicht erreichbar; Zeichnungen sind lokal gesichert und werden später synchronisiert"
+      },
+      "auuFibExt": "Fib-Extension",
+      "auuPitchfork": "Pitchfork",
+      "auuFibChannel": "Fib-Kanal",
+      "auuMeasure": "Messen",
+      "auuPriceRange": "Preisspanne",
+      "auuDateRange": "Zeitspanne",
+      "hintN": "{{n}} Punkte im Chart anklicken/antippen (Esc bricht ab)",
+      "measure": {
+        "bars": "{{n}} Kerzen",
+        "unitD": "T",
+        "unitH": "Std",
+        "unitM": "Min"
       }
     },
     "auuEnterTh": "Einstiegsschwelle",

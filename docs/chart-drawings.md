@@ -14,7 +14,7 @@ the account across devices.
 `tf` is empty for drawings shared by all timeframes (what the web app uses); the API also accepts 1m..1d.
 
 ## Limits and validation (`app/chart_drawings.py`)
-- tools whitelisted: `segment rayLine horizontalStraightLine verticalStraightLine fibonacciLine auuRect parallelStraightLine auuText`
+- tools whitelisted: `segment rayLine horizontalStraightLine verticalStraightLine fibonacciLine auuRect parallelStraightLine auuText` + step 5: `auuFibExt auuPitchfork auuFibChannel auuMeasure auuPriceRange auuDateRange`
 - ≤ 200 drawings per chart, 1..5 points each, finite numbers, timestamps 2000..2100, text ≤ 200 chars,
   `styles` ≤ 2 KB plain JSON, document ≤ 60 KB (nginx `client_max_body_size` is 64k), ≤ 300 charts per account
 - rate limit per account: 30 PUT/min, 240 GET/min (429 `RATE_LIMITED`); the global shield limits still apply

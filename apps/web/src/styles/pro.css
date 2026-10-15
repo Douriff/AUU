@@ -1216,7 +1216,7 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .kc-tool.is-on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .kc-tool:disabled { opacity: 0.35; cursor: not-allowed; }
 .kc-glyph { font-size: 14px; line-height: 1; font-family: ui-monospace, Menlo, monospace; }
-.kc-tool[data-tool="fibonacciLine"] .kc-glyph { font-size: 10.5px; font-weight: 700; }
+.kc-tool[data-tool="fibonacciLine"] .kc-glyph, .kc-tool[data-tool="auuFibExt"] .kc-glyph, .kc-tool[data-tool="auuFibChannel"] .kc-glyph, .kc-tool[data-tool="auuPitchfork"] .kc-glyph { font-size: 10.5px; font-weight: 700; }
 .kc-tool-label { display: none; }
 .kc-sep { width: 20px; height: 1px; background: var(--border); margin: 3px 0; }
 .kc-hint { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); padding: 3px 10px; border-radius: 10px; background: rgba(76, 154, 255, 0.18); border: 1px solid #4c9aff; color: var(--text); font-size: 11.5px; pointer-events: none; z-index: 3; white-space: nowrap; }
