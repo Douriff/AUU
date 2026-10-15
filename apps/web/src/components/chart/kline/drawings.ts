@@ -1,4 +1,4 @@
-/** Drawing tools: catalogue + localStorage persistence (step 1; server persistence comes in step 2). */
+/** Drawing tools: catalogue + localStorage persistence (the local copy is the offline cache; drawingsSync.ts mirrors it to the server). */
 import type { Chart, OverlayCreate, Overlay } from "klinecharts";
 
 export type ToolId = "segment" | "rayLine" | "horizontalStraightLine" | "verticalStraightLine" | "fibonacciLine" | "auuRect" | "parallelStraightLine" | "auuText";
@@ -16,9 +16,10 @@ export const DRAW_TOOLS: { id: ToolId; glyph: string }[] = [
 ];
 
 export const USER_GROUP = "user";
-const key = (symbol: string) => `auu.kc.drawings.v1.${symbol.toUpperCase()}`;
+export const drawingsKey = (symbol: string) => `auu.kc.drawings.v1.${symbol.toUpperCase()}`;
+const key = drawingsKey;
 
-type Saved = { name: string; points: { timestamp: number; value: number }[]; extendData?: unknown; styles?: unknown };
+export type Saved = { name: string; points: { timestamp: number; value: number }[]; extendData?: unknown; styles?: unknown };
 
 export function loadDrawings(symbol: string): Saved[] {
   try {

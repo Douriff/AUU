@@ -298,8 +298,35 @@
       "textPlaceholder": "Introduce texto",
       "textPrompt": "Etiqueta de texto",
       "ok": "Aceptar",
-      "cancel": "Cancelar"
-    }
+      "cancel": "Cancelar",
+      "sync": {
+        "local": "Solo local",
+        "syncing": "Guardando…",
+        "synced": "Sincronizado",
+        "error": "Error de sincronización, se reintentará",
+        "localTitle": "Los dibujos solo se guardan en este navegador (sin sesión o nodo en espera)",
+        "syncingTitle": "Guardando tus dibujos en tu cuenta",
+        "syncedTitle": "Los dibujos están guardados en tu cuenta y te siguen a otros dispositivos",
+        "errorTitle": "Servidor no disponible; los dibujos están a salvo en local y se sincronizarán al volver"
+      }
+    },
+    "auuEnterTh": "Umbral de entrada",
+    "auuSide_long": "Largo",
+    "auuSide_short": "Corto",
+    "auuSide_flat": "Neutral",
+    "auuAction_enter": "Entrar",
+    "auuAction_hold": "Mantener",
+    "auuAction_exit": "Salir",
+    "auuAction_none": "Ninguna",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Desb. vol",
+    "auuFacFund": "Fin.",
+    "auuFactorsTitle": "Aportes de cada factor al score (×100): momentum / desbalance de volumen / financiación",
+    "auuRun": "Ahora",
+    "auuRunSince": "desde {{date}} · {{n}} velas",
+    "auuRunTitle": "Cuánto lleva el estado largo/corto actual (experimental, solo registro, sin órdenes)",
+    "auuRegime": "Régimen",
+    "auuRegimeTitle": "Sombrear el fondo donde la señal AUU está larga / corta"
   },
   "console": {
     "sub": "Ejecución simulada de la estrategia de tendencia, control de riesgos y registro de ejecución",

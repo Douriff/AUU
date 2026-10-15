@@ -126,6 +126,8 @@ export class ApiError extends Error {
   params?: Record<string, unknown>;
   retryAfter?: number;
   status: number;
+  /** The raw error object (carries extra fields such as `current` on a 409 CONFLICT). */
+  details?: Record<string, unknown>;
   constructor(err: { code?: string; message?: string; key?: string; params?: Record<string, unknown>; retry_after?: number } | undefined, status: number) {
     super(err?.message ?? "request failed");
     this.code = err?.code ?? "REQUEST_FAILED";
@@ -133,6 +135,7 @@ export class ApiError extends Error {
     this.params = err?.params;
     this.retryAfter = typeof err?.retry_after === "number" ? err.retry_after : undefined;
     this.status = status;
+    this.details = err as Record<string, unknown> | undefined;
   }
 }
 
@@ -149,6 +152,8 @@ export type AdminExchange = {
   enabled: boolean; allowlistOnly: boolean; allowlist: string[]; killSwitch: boolean; maxOrderUsdt: number; userCaps: Record<string, number>;
   allowlistUsers: { id: string; name: string; capUsdt?: number | null; futuresCapUsdt?: number | null; futuresAck?: boolean }[]; maxLeverage: number; maxFuturesUsdt: number; boundCounts: Record<string, number>; serverIps: { primary: string; standby: string }; cryptoReady: boolean;
 };
+
+export type ChartDrawingsDoc = { symbol: string; tf: string; drawings: { name: string; points: { timestamp: number; value: number }[]; extendData?: string; styles?: unknown }[]; updatedAt: number };
 
 export const AUTH_REQUIRED_EVENT = "auu:auth-required";
 
@@ -392,6 +397,15 @@ export class HttpWsProvider {
   getAuuSignal(symbol: string, tf = "1d", limit = 400): Promise<AuuSignalOverlay> {
     const q = new URLSearchParams({ symbol, tf, limit: String(limit) });
     return getJson(`/api/v1/mainstream/signal?${q}`);
+  }
+
+  getChartDrawings(symbol: string, tf = ""): Promise<ChartDrawingsDoc> {
+    const q = new URLSearchParams({ symbol, ...(tf ? { tf } : {}) });
+    return getJson(`/api/v1/chart/drawings?${q}`);
+  }
+
+  putChartDrawings(symbol: string, drawings: unknown[], baseUpdatedAt: number, tf = ""): Promise<ChartDrawingsDoc> {
+    return putJson("/api/v1/chart/drawings", { symbol, ...(tf ? { tf } : {}), drawings, baseUpdatedAt });
   }
 
   getAuuSignalLatest(symbol: string, tf = "1d"): Promise<Pick<AuuSignalOverlay, "version" | "experimental" | "symbol" | "tf" | "latest" | "label">> {

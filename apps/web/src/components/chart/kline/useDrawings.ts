@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Chart, OverlayCreate } from "klinecharts";
-import { DRAW_TOOLS, USER_GROUP, loadDrawings, saveDrawings, type ToolId } from "./drawings";
+import { DRAW_TOOLS, USER_GROUP, loadDrawings, saveDrawings, type Saved, type ToolId } from "./drawings";
+import { DrawingsSync, type SyncState } from "./drawingsSync";
+import { drawingsRemote } from "./drawingsRemote";
 
 export type TextEdit = { id: string; text: string } | null;
 
@@ -11,6 +13,9 @@ export function useDrawings(chart: Chart | null, symbol: string) {
   const [count, setCount] = useState(0);
   const [magnet, setMagnet] = useState(true);
   const [textEdit, setTextEdit] = useState<TextEdit>(null);
+  const [syncState, setSyncState] = useState<SyncState>("local");
+  const syncRef = useRef<DrawingsSync | null>(null);
+  const renderRef = useRef<(list: Saved[]) => void>(() => undefined);
   const drawingId = useRef<string | null>(null);
   const suppress = useRef(false);
   const symRef = useRef(symbol);
@@ -21,6 +26,7 @@ export function useDrawings(chart: Chart | null, symbol: string) {
   const persist = useCallback(() => {
     if (!chart || suppress.current) return;
     setCount(saveDrawings(chart, symRef.current));
+    syncRef.current?.markDirty(symRef.current.toUpperCase()); // mirror to the server (debounced, offline-safe)
   }, [chart]);
 
   const handlers = useCallback(
@@ -57,21 +63,49 @@ export function useDrawings(chart: Chart | null, symbol: string) {
     [persist],
   );
 
-  // (Re)load stored drawings when the chart or symbol changes.
+  // Draw a saved list (replaces the user's overlays; never persists by itself).
+  const renderList = useCallback(
+    (saved: Saved[]) => {
+      if (!chart) return;
+      suppress.current = true;
+      chart.removeOverlay({ groupId: USER_GROUP });
+      drawingId.current = null;
+      setActive(null);
+      setSelected(null);
+      for (const o of saved) {
+        chart.createOverlay({ name: o.name, groupId: USER_GROUP, points: o.points, extendData: o.extendData, styles: o.styles as never, ...handlers() } as OverlayCreate);
+      }
+      suppress.current = false;
+      setCount(saved.length);
+    },
+    [chart, handlers],
+  );
+  renderRef.current = renderList;
+
+  // One sync engine per chart instance: pulls on load, pushes after edits, retries when offline.
+  useEffect(() => {
+    const sync = new DrawingsSync(drawingsRemote, window.localStorage, {
+      state: (sym, st) => {
+        if (sym === symRef.current.toUpperCase()) setSyncState(st);
+      },
+      remote: (sym, list) => {
+        if (sym === symRef.current.toUpperCase()) renderRef.current(list);
+      },
+    });
+    syncRef.current = sync;
+    return () => {
+      sync.dispose();
+      syncRef.current = null;
+    };
+  }, []);
+
+  // (Re)load stored drawings when the chart or symbol changes, then reconcile with the server.
   useEffect(() => {
     if (!chart) return;
-    suppress.current = true;
-    chart.removeOverlay({ groupId: USER_GROUP });
-    drawingId.current = null;
-    setActive(null);
-    setSelected(null);
-    const saved = loadDrawings(symbol);
-    for (const o of saved) {
-      chart.createOverlay({ name: o.name, groupId: USER_GROUP, points: o.points, extendData: o.extendData, styles: o.styles as never, ...handlers() } as OverlayCreate);
-    }
-    suppress.current = false;
-    setCount(saved.length);
-  }, [chart, symbol, handlers]);
+    renderList(loadDrawings(symbol));
+    setSyncState("local");
+    void syncRef.current?.pull(symbol.toUpperCase());
+  }, [chart, symbol, renderList]);
 
   const cancel = useCallback(() => {
     if (chart && drawingId.current) {
@@ -124,5 +158,5 @@ export function useDrawings(chart: Chart | null, symbol: string) {
     [chart, textEdit, persist],
   );
 
-  return { active, selected, count, magnet, setMagnet, textEdit, setTextEdit, pick, cancel, removeSelected, clearAll, commitText };
+  return { active, selected, count, syncState, magnet, setMagnet, textEdit, setTextEdit, pick, cancel, removeSelected, clearAll, commitText };
 }

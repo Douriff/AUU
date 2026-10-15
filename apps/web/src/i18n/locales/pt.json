@@ -298,8 +298,35 @@
       "textPlaceholder": "Digite o texto",
       "textPrompt": "Rótulo de texto",
       "ok": "OK",
-      "cancel": "Cancelar"
-    }
+      "cancel": "Cancelar",
+      "sync": {
+        "local": "Somente local",
+        "syncing": "Salvando…",
+        "synced": "Sincronizado",
+        "error": "Falha na sincronização, tentará de novo",
+        "localTitle": "Os desenhos ficam só neste navegador (sem login ou nó em espera)",
+        "syncingTitle": "Salvando seus desenhos na sua conta",
+        "syncedTitle": "Desenhos salvos na sua conta e disponíveis em outros dispositivos",
+        "errorTitle": "Servidor indisponível; desenhos seguros localmente e sincronizam quando voltar"
+      }
+    },
+    "auuEnterTh": "Limite de entrada",
+    "auuSide_long": "Comprado",
+    "auuSide_short": "Vendido",
+    "auuSide_flat": "Neutro",
+    "auuAction_enter": "Entrar",
+    "auuAction_hold": "Manter",
+    "auuAction_exit": "Sair",
+    "auuAction_none": "Nenhuma",
+    "auuFacMom": "Mom",
+    "auuFacVol": "Desb. vol",
+    "auuFacFund": "Fin.",
+    "auuFactorsTitle": "Contribuição de cada fator ao score (×100): momentum / desbalanço de volume / funding",
+    "auuRun": "Agora",
+    "auuRunSince": "desde {{date}} · {{n}} velas",
+    "auuRunTitle": "Há quanto tempo o estado comprado/vendido atual dura (experimental, só registro, sem ordens)",
+    "auuRegime": "Regime",
+    "auuRegimeTitle": "Sombrear o fundo onde o sinal AUU está comprado / vendido"
   },
   "console": {
     "sub": "Execução simulada da estratégia de tendência, controle de risco e registro de execução",

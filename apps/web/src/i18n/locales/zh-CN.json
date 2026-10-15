@@ -298,8 +298,35 @@
       "textPlaceholder": "输入文字",
       "textPrompt": "文字标注",
       "ok": "确定",
-      "cancel": "取消"
-    }
+      "cancel": "取消",
+      "sync": {
+        "local": "仅本机",
+        "syncing": "同步中…",
+        "synced": "已同步",
+        "error": "同步失败，稍后重试",
+        "localTitle": "画线只保存在本浏览器（未登录或备用节点）",
+        "syncingTitle": "正在把画线保存到你的账号",
+        "syncedTitle": "画线已保存到你的账号，换设备登录也能看到",
+        "errorTitle": "暂时无法连接服务器，画线已存在本机，联网后自动重试"
+      }
+    },
+    "auuEnterTh": "入场阈值",
+    "auuSide_long": "多",
+    "auuSide_short": "空",
+    "auuSide_flat": "空仓",
+    "auuAction_enter": "入场",
+    "auuAction_hold": "持有",
+    "auuAction_exit": "离场",
+    "auuAction_none": "无",
+    "auuFacMom": "动量",
+    "auuFacVol": "量差",
+    "auuFacFund": "资金费",
+    "auuFactorsTitle": "各因子对分数的贡献（×100）：动量 / 成交量失衡 / 资金费",
+    "auuRun": "当前",
+    "auuRunSince": "自 {{date}} 起，已持续 {{n}} 根",
+    "auuRunTitle": "最新的多/空状态已连续持续多久（实验信号，仅记录，不下单）",
+    "auuRegime": "多空底色",
+    "auuRegimeTitle": "在 K 线背后用淡色标出 AUU 信号的多头/空头区间"
   },
   "console": {
     "sub": "趋势策略纸面运行、风控与执行记录",

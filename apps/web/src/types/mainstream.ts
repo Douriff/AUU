@@ -672,5 +672,7 @@ export type AuuSignalOverlay = {
   latest: AuuSignalPoint | null;
   shadowWritten?: number;
   shadowCount?: number;
+  /** Frozen formula parameters (enter_th / exit_th are in score units, [-1, 1]). */
+  params?: { enter_th?: number; exit_th?: number };
 };
 

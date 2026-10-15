@@ -38,6 +38,7 @@ STANDBY_WRITE_BLOCK_PREFIXES = (
     "/api/v1/points/",
     "/api/v1/admin/",
     "/api/v1/exchange/",
+    "/api/v1/chart/",  # drawings DB is not synced to the standby; a write there would fork it
 )
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
