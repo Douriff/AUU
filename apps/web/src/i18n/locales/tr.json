@@ -371,7 +371,8 @@
       "badPrice": "Geçerli bir fiyat girin (0'dan büyük sayı)",
       "failed": "Bir sorun oluştu, lütfen tekrar deneyin",
       "toastUp": "{{sym}} {{p}} seviyesine yükseldi",
-      "toastDown": "{{sym}} {{p}} seviyesine düştü"
+      "toastDown": "{{sym}} {{p}} seviyesine düştü",
+      "delete": "Alarmı sil"
     }
   },
   "console": {

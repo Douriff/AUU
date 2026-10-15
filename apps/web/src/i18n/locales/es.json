@@ -371,7 +371,8 @@
       "badPrice": "Introduce un precio válido (número mayor que 0)",
       "failed": "Algo salió mal, inténtalo de nuevo",
       "toastUp": "{{sym}} subió a {{p}}",
-      "toastDown": "{{sym}} bajó a {{p}}"
+      "toastDown": "{{sym}} bajó a {{p}}",
+      "delete": "Eliminar alerta"
     }
   },
   "console": {
