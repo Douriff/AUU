@@ -74,7 +74,7 @@
 
 响应要点：`version=auu_signal_v0`，`experimental=true`，`series[]` 为五字段，`latest`，`shadowWritten`。
 
-影子库：`data/auu_signal_shadow.sqlite`（与 `mainstream_strategy.sqlite` / H2 / S3 / 用户纸面账本**隔离**）。后台可选 loop（`AUU_SIGNAL_SHADOW=on`，默认 on）按日给策略池币种补记。
+影子库：`data/auu_signal_shadow.sqlite`（与 `mainstream_strategy.sqlite` / H2 / S3 / 用户纸面账本**隔离**）。后台可选 loop（`AUU_SIGNAL_SHADOW=on`，默认 on）按日给策略池币种补记。loop 在工作线程里跑、只在输入变化时重算、只写变化的行，详见 `docs/auu-signal-shadow-tick.md`（`AUU_SIGNAL_SHADOW_INTERVAL_SEC` / `_PROBE_SEC` / `_FORCE_SEC`）。
 
 ---
 
