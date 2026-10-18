@@ -12,7 +12,8 @@ from typing import Any, Optional
 
 from app.exchange import store
 from app.exchange.connector import map_error, norm_order, norm_position
-from app.exchange.service import ServiceError, _call, _client, _ex, futures_cap
+from app.exchange.service import (DUP_WINDOW_MS, ServiceError, _call, _client, _ex, futures_cap, require_confirmed, require_market,
+                                  require_trade)
 
 _SYM = re.compile(r"^[A-Z0-9]{2,15}/USDT:USDT$")
 _COID = re.compile(r"^[A-Za-z0-9]{8,28}$")
@@ -76,16 +77,7 @@ def funding(user_id: str, exchange: str, symbol: str) -> dict[str, Any]:
             "markPrice": f.get("markPrice"), "indexPrice": f.get("indexPrice"), "interval": f.get("interval")}
 
 
-def set_leverage(user_id: str, exchange: str, symbol: str, leverage: int, margin_mode: str) -> dict[str, Any]:
-    ex, _r, c = _fc(user_id, exchange)
-    sym = fsym(symbol)
-    mx = int(store.settings()["maxLeverage"])
-    lev = int(leverage)
-    if not (1 <= lev <= mx):
-        raise ServiceError("LEVERAGE_TOO_HIGH", f"杠杆只能设置 1–{mx} 倍")
-    mode = (margin_mode or "").lower()
-    if mode not in MARGIN_MODES:
-        raise ServiceError("BAD_MARGIN_MODE", "保证金模式只能是全仓或逐仓")
+def _apply_leverage(c, ex: str, sym: str, lev: int, mode: str) -> None:
     try:
         if ex == "okx":
             c.set_margin_mode(mode, sym, {"lever": lev})
@@ -100,6 +92,27 @@ def set_leverage(user_id: str, exchange: str, symbol: str, leverage: int, margin
     except Exception as exc:  # noqa: BLE001
         ce = map_error(exc)
         raise ServiceError(ce.code, ce.message, 502) from None
+
+
+def check_leverage(lev: Any, mode: Any) -> tuple[int, str]:
+    mx = int(store.settings()["maxLeverage"])
+    try:
+        n = int(lev)
+    except (TypeError, ValueError):
+        raise ServiceError("LEVERAGE_TOO_HIGH", f"杠杆只能设置 1–{mx} 倍") from None
+    if not (1 <= n <= mx):
+        raise ServiceError("LEVERAGE_TOO_HIGH", f"杠杆只能设置 1–{mx} 倍")
+    m = str(mode or "").lower()
+    if m not in MARGIN_MODES:
+        raise ServiceError("BAD_MARGIN_MODE", "保证金模式只能是全仓或逐仓")
+    return n, m
+
+
+def set_leverage(user_id: str, exchange: str, symbol: str, leverage: int, margin_mode: str) -> dict[str, Any]:
+    ex, _r, c = _fc(user_id, exchange)
+    sym = fsym(symbol)
+    lev, mode = check_leverage(leverage, margin_mode)
+    _apply_leverage(c, ex, sym, lev, mode)
     store.audit(user_id, user_id, "futures_leverage", {"exchange": ex, "symbol": sym, "leverage": lev, "marginMode": mode})
     return {"symbol": sym, "leverage": lev, "marginMode": mode}
 
@@ -115,10 +128,8 @@ def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
     ex = _ex(exchange)
     key = f"{ex}:swap"
     reduce_only = bool(body.get("reduceOnly"))
-    s = store.settings()
-    if s["killSwitch"] and not reduce_only:
-        store.audit(user_id, user_id, "futures_blocked_kill", {"exchange": ex})
-        raise ServiceError("KILL_SWITCH", "管理员已开启紧急停止：不能开新仓，只能平仓/撤单", 403)
+    require_confirmed(body)
+    require_trade(user_id, ex, "swap", reduce_only=reduce_only)
     raw = str(body.get("clientOrderId") or "")
     if not _COID.match(raw):
         raise ServiceError("BAD_CLIENT_ORDER_ID", "clientOrderId 需为 8-28 位字母数字")
@@ -143,6 +154,18 @@ def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
         return _resolve_prior_swap(user_id, ex, key, coid, prior)
 
     _e, _r, c = _fc(user_id, ex)
+    require_market(c, sym, "swap")
+    lev_mode = None
+    if body.get("leverage") is not None or body.get("marginMode") is not None:
+        lev_mode = check_leverage(body.get("leverage"), body.get("marginMode"))
+    if reduce_only:  # a reduce-only order must really reduce: needs an opposite position at least as large as the order
+        held = [p for p in _call(c.fetch_positions, [sym]) if p.get("symbol") == sym and float(p.get("contracts") or 0) != 0]
+        want = "short" if side == "buy" else "long"
+        size = sum(abs(float(p.get("contracts") or 0)) for p in held if (p.get("side") or "long") == want)
+        if size <= 0:
+            raise ServiceError("NO_POSITION", "没有可以减仓的持仓（reduce-only 订单必须对应一个反方向的现有仓位）", 409)
+        if amount > size * (1 + 1e-9):
+            raise ServiceError("REDUCE_EXCEEDS_POSITION", f"减仓数量 {amount:g} 超过持仓 {size:g}", 422)
     ref = price
     if otype == "market" or not ref:
         t = _call(c.fetch_ticker, sym)
@@ -161,9 +184,17 @@ def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
 
     request = {"symbol": sym, "side": side, "type": otype, "amount": amount, "price": price or None, "reduceOnly": reduce_only,
                "takeProfit": tp or None, "stopLoss": sl or None, "notionalEst": round(notional, 6)}
+    if store.recent_same(user_id, key, request, DUP_WINDOW_MS):
+        raise ServiceError("DUPLICATE_ORDER", "相同的订单刚刚提交过，请确认后再下", 409)
     if not store.claim_order(user_id, key, coid, sym, request):
         return _resolve_prior_swap(user_id, ex, key, coid, store.get_order(user_id, key, coid) or {})
-    store.audit(user_id, user_id, "futures_submit", {"exchange": ex, "coid": coid, **request})
+    store.audit(user_id, user_id, "futures_submit", {"exchange": ex, "coid": coid, **request, **({"leverage": lev_mode[0], "marginMode": lev_mode[1]} if lev_mode else {})})
+    if lev_mode and not reduce_only:
+        try:
+            _apply_leverage(c, ex, sym, lev_mode[0], lev_mode[1])
+        except ServiceError as e:
+            store.finish_order(user_id, key, coid, "rejected", {"code": e.code, "message": e.message})
+            raise
     params: dict[str, Any] = {"clientOrderId": coid}
     if reduce_only:
         params["reduceOnly"] = True
@@ -228,28 +259,88 @@ def cancel(user_id: str, exchange: str, order_id: str, symbol: str) -> dict[str,
     return norm_order(o or {"id": oid, "symbol": sym, "status": "canceled"})
 
 
-def _close_one(c, p: dict[str, Any]) -> dict[str, Any]:
+def _close_one(c, p: dict[str, Any], coid: Optional[str] = None) -> dict[str, Any]:
     sym = p["symbol"]
     qty = abs(float(p.get("contracts") or 0))
     side = "sell" if (p.get("side") or "long") == "long" else "buy"
     import secrets
 
-    params: dict[str, Any] = {"reduceOnly": True, "clientOrderId": "auuX" + secrets.token_hex(10)}
+    params: dict[str, Any] = {"reduceOnly": True, "clientOrderId": coid or ("auuX" + secrets.token_hex(10))}
     if p.get("marginMode"):
         params["marginMode"] = p["marginMode"]
     o = c.create_order(sym, "market", side, qty, None, params)
     return norm_order(o)
 
 
-def close_position(user_id: str, exchange: str, symbol: str, actor: str = "") -> dict[str, Any]:
-    ex, _r, c = _fc(user_id, exchange)
+def close_position(user_id: str, exchange: str, symbol: str, client_order_id: Any = None, confirmed: Any = None,
+                   actor: str = "") -> dict[str, Any]:
+    """Market-close the user's own position, always reduce-only, side and size taken from the exchange (never the client).
+
+    Idempotent per ``client_order_id`` (same store table as orders): a repeat returns the first result, an unknown
+    outcome is looked up on the exchange by clientOrderId and never re-sent."""
+    ex = _ex(exchange)
+    key = f"{ex}:swap"
+    if confirmed is not True:
+        raise ServiceError("CONFIRM_REQUIRED", "平仓需要二次确认（confirmed=true）", 400)
+    require_trade(user_id, ex, "swap", reduce_only=True)
+    raw = str(client_order_id or "")
+    if not _COID.match(raw):
+        raise ServiceError("BAD_CLIENT_ORDER_ID", "clientOrderId 需为 8-28 位字母数字")
+    coid = "auu" + raw
     sym = fsym(symbol)
+    prior = store.get_order(user_id, key, coid)
+    if prior is not None:
+        return _resolve_prior_close(user_id, ex, key, coid, prior)
+    _e, _r, c = _fc(user_id, ex)
     rows = [p for p in _call(c.fetch_positions, [sym]) if float(p.get("contracts") or 0) != 0 and p.get("symbol") == sym]
     if not rows:
-        raise ServiceError("NO_POSITION", "没有这个合约的持仓", 404)
-    out = [_call(_close_one, c, p) for p in rows]
-    store.audit(user_id, actor or user_id, "futures_close", {"exchange": ex, "symbol": sym, "n": len(out)})
-    return {"closed": out}
+        raise ServiceError("NO_POSITION", "没有这个合约的持仓（可能已经平仓）", 404)
+    request = {"symbol": sym, "close": True, "reduceOnly": True, "type": "market",
+               "legs": [{"side": p.get("side"), "contracts": abs(float(p.get("contracts") or 0))} for p in rows]}
+    if not store.claim_order(user_id, key, coid, sym, request):
+        return _resolve_prior_close(user_id, ex, key, coid, store.get_order(user_id, key, coid) or {})
+    store.audit(user_id, actor or user_id, "futures_close_submit", {"exchange": ex, "coid": coid, **request})
+    outs: list[dict[str, Any]] = []
+    try:
+        for i, p in enumerate(rows):  # hedge mode can hold a long and a short in one symbol
+            outs.append(_close_one(c, p, coid if i == 0 else f"{coid}{i}"))
+    except Exception as exc:  # noqa: BLE001
+        ce = map_error(exc)
+        if outs:  # some legs went through: record them, report the rest
+            store.finish_order(user_id, key, coid, "accepted", outs)
+            store.audit(user_id, actor or user_id, "futures_close", {"exchange": ex, "symbol": sym, "n": len(outs), "partial": True})
+            return {"closed": outs, "duplicate": False, "partialError": ce.message}
+        if ce.code in {"EXCHANGE_NETWORK", "EXCHANGE_ERROR"}:
+            store.finish_order(user_id, key, coid, "unknown", {"code": ce.code})
+            store.audit(user_id, actor or user_id, "futures_close_unknown", {"exchange": ex, "coid": coid, "code": ce.code})
+            raise ServiceError("ORDER_UNKNOWN", "平仓结果未知（网络问题）。请稍后用同一笔请求重试查询，不会重复平仓。", 502) from None
+        store.finish_order(user_id, key, coid, "rejected", {"code": ce.code, "message": ce.message})
+        store.audit(user_id, actor or user_id, "futures_close_rejected", {"exchange": ex, "coid": coid, "code": ce.code})
+        raise ServiceError(ce.code, ce.message, 400) from None
+    store.finish_order(user_id, key, coid, "accepted", outs)
+    store.audit(user_id, actor or user_id, "futures_close", {"exchange": ex, "symbol": sym, "n": len(outs)})
+    return {"closed": outs, "duplicate": False}
+
+
+def _resolve_prior_close(user_id: str, ex: str, key: str, coid: str, prior: dict[str, Any]) -> dict[str, Any]:
+    status = prior.get("status")
+    if status == "accepted":
+        res = prior.get("result")
+        return {"closed": res if isinstance(res, list) else [res], "duplicate": True}
+    if status == "rejected":
+        r = prior.get("result") or {}
+        raise ServiceError(r.get("code") or "EXCHANGE_BAD_ORDER", r.get("message") or "这笔平仓之前已被拒绝", 409)
+    _e, _r, c = _fc(user_id, ex)
+    try:
+        o = c.fetch_order(None, prior.get("symbol"), {"clientOrderId": coid})
+    except Exception as exc:  # noqa: BLE001
+        if map_error(exc).code == "EXCHANGE_ORDER_NOT_FOUND":
+            store.finish_order(user_id, key, coid, "rejected", {"code": "NOT_PLACED", "message": "交易所没有这笔平仓订单，请重新操作"})
+            raise ServiceError("NOT_PLACED", "交易所没有这笔平仓订单，请重新操作", 409) from None
+        raise ServiceError("ORDER_UNKNOWN", "订单状态仍未知，请稍后再查", 502) from None
+    out = norm_order(o)
+    store.finish_order(user_id, key, coid, "accepted", [out])
+    return {"closed": [out], "duplicate": True}
 
 
 def close_all(user_id: str, actor: str) -> dict[str, Any]:

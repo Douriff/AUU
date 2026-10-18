@@ -185,3 +185,20 @@ def finish_order(user_id: str, exchange: str, coid: str, status: str, result: An
             "UPDATE orders SET status=?, result=? WHERE user_id=? AND exchange=? AND coid=?",
             (status, json.dumps(result, default=str), user_id, exchange, coid),
         )
+
+
+def recent_same(user_id: str, exchange: str, request: dict, window_ms: int) -> bool:
+    """True if this user sent an identical order (same symbol/side/type/amount/price/reduceOnly) within the window."""
+    keys = ("symbol", "side", "type", "amount", "price", "reduceOnly")
+    rows = conn().execute(
+        "SELECT request FROM orders WHERE user_id=? AND exchange=? AND ts>? AND status!='rejected'",
+        (user_id, exchange, now_ms() - int(window_ms)),
+    ).fetchall()
+    for (raw,) in rows:
+        try:
+            old = json.loads(raw)
+        except ValueError:
+            continue
+        if all(old.get(k) == request.get(k) for k in keys):
+            return True
+    return False

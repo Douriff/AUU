@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PnlCurve, PnlSummary } from "@/types/contracts";
@@ -8,6 +8,7 @@ import { fmtDate, fmtFixed, fmtNum, fmtSignedPct } from "@/i18n/format";
 import { Empty, Sk } from "@/components/ui/Skeleton";
 import { tone, usePnlSummary } from "@/pages/PnlPage/usePnl";
 import { money, signed } from "@/pages/PnlPage/fmt";
+import { LiveView } from "@/pages/PnlPage/live/LiveView";
 import { CloseAllModal, PaperLedger, usePaperAccount, usePaperClose } from "@/pages/PnlPage/PaperClose";
 
 type Range = "7d" | "30d" | "all";
@@ -130,6 +131,10 @@ export function PnlPage() {
   const { t } = useTranslation();
   const { data: s, error, needLogin, reload } = usePnlSummary(10_000);
   const { acct, reload: reloadAcct } = usePaperAccount();
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "live" ? "live" : "paper";
+  const setView = (v: "paper" | "live") =>
+    setParams((p) => { const n = new URLSearchParams(p); if (v === "live") n.set("view", "live"); else n.delete("view"); return n; }, { replace: true });
   const [range, setRange] = useState<Range>("7d");
   const [curve, setCurve] = useState<PnlCurve | null>(null);
   const [curveErr, setCurveErr] = useState("");
@@ -177,100 +182,108 @@ export function PnlPage() {
         <Link className="td-link pnl-perf-link" to="/performance">{t("pnl.strategyLink")} ›</Link>
       </header>
       {error && !s ? <div className="pro-alert">{errText(error, "common.loadFailed")}</div> : null}
-      {s?.stale ? (
+      {s?.stale && view === "paper" ? (
         <div className="pro-alert is-warn pnl-stale">
           {s.priceMissing ? t("pnl.priceMissingNote") : t("pnl.staleNote", { min: Math.round(s.staleAfterMs / 60000) })}
         </div>
       ) : null}
-      <section className="pnl-section">{s ? <PnlCards s={s} /> : <Sk w={320} h={60} />}</section>
+      <div className="mk-tabs live-view-tabs" role="tablist" aria-label={t("live.tab.aria")} data-testid="view-switch">
+        <button type="button" role="tab" aria-selected={view === "paper"} className={view === "paper" ? "is-on" : ""} data-testid="view-paper" onClick={() => setView("paper")}>{t("live.tab.paper")}</button>
+        <button type="button" role="tab" aria-selected={view === "live"} className={view === "live" ? "is-on is-live" : ""} data-testid="view-live" onClick={() => setView("live")}>{t("live.tab.live")}</button>
+      </div>
+      {view === "live" ? <LiveView /> : (
+        <>
+        <section className="pnl-section">{s ? <PnlCards s={s} /> : <Sk w={320} h={60} />}</section>
 
-      <section className="pnl-section pane">
-        <div className="pnl-sec-head">
-          <h2>{t("pnl.curve")}</h2>
-          <div className="mk-tabs" role="tablist" aria-label={t("pnl.curve")}>
-            {RANGES.map((r) => (
-              <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? "is-on" : ""} onClick={() => setRange(r)}>
-                {t(`pnl.range.${r}`)}
-              </button>
-            ))}
+        <section className="pnl-section pane">
+          <div className="pnl-sec-head">
+            <h2>{t("pnl.curve")}</h2>
+            <div className="mk-tabs" role="tablist" aria-label={t("pnl.curve")}>
+              {RANGES.map((r) => (
+                <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? "is-on" : ""} onClick={() => setRange(r)}>
+                  {t(`pnl.range.${r}`)}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        {curveErr ? <div className="pro-alert">{curveErr}</div> : curve ? <EquityChart c={curve} /> : <Sk w={320} h={180} />}
-        {curve?.approx ? <p className="td-note">{t("pnl.approxNote")}</p> : null}
-      </section>
+          {curveErr ? <div className="pro-alert">{curveErr}</div> : curve ? <EquityChart c={curve} /> : <Sk w={320} h={180} />}
+          {curve?.approx ? <p className="td-note">{t("pnl.approxNote")}</p> : null}
+        </section>
 
-      <section className="pnl-section pane">
-        <div className="pnl-sec-head">
-          <h2>{t("pnl.positions", { n: s?.positions.length ?? 0 })}</h2>
-          <div className="pnl-sec-actions">
-            {s ? <span className="muted num">{t("pnl.updated", { time: fmtDate(s.asOf, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })}</span> : null}
-            {s && s.positions.length > 0 ? (
-              <button type="button" className="pnl-close-all" disabled={closer.busy !== null} onClick={() => setConfirmAll(true)}>
-                {t("pnl.close.all")}
-              </button>
-            ) : null}
+        <section className="pnl-section pane">
+          <div className="pnl-sec-head">
+            <h2>{t("pnl.positions", { n: s?.positions.length ?? 0 })}</h2>
+            <div className="pnl-sec-actions">
+              {s ? <span className="muted num">{t("pnl.updated", { time: fmtDate(s.asOf, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })}</span> : null}
+              {s && s.positions.length > 0 ? (
+                <button type="button" className="pnl-close-all" disabled={closer.busy !== null} onClick={() => setConfirmAll(true)}>
+                  {t("pnl.close.all")}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-        {closer.note ? (
-          <div className={`pro-alert pnl-close-note ${closer.note.kind === "ok" ? "is-ok" : ""}`} role="status" aria-live="polite">{closer.note.text}</div>
-        ) : null}
-        {!s ? (
-          <Sk w={320} h={40} />
-        ) : s.positions.length === 0 ? (
-          <Empty title={t("pnl.noPositions")} action={<Link className="td-link" to="/?symbol=BTC">{t("pnl.goTrade")} ›</Link>} />
-        ) : (
-          <div className="pro-table-wrap">
-            <table className="pro-table pnl-table">
-              <thead>
-                <tr>
-                  <th>{t("pnl.col.symbol")}</th>
-                  <th>{t("pnl.col.qty")}</th>
-                  <th>{t("pnl.col.avg")}</th>
-                  <th>{t("pnl.col.last")}</th>
-                  <th>{t("pnl.col.value")}</th>
-                  <th>{t("pnl.col.pnl")}</th>
-                  <th>{t("pnl.col.pct")}</th>
-                  <th>{t("pnl.close.col")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.positions.map((p) => (
-                  <tr key={p.symbol}>
-                    <td>
-                      <Link className="pnl-sym" to={`/?symbol=${p.symbol}`}>{p.symbol}</Link>
-                      <span className="muted"> /USDT</span>
-                    </td>
-                    <td className="num">{qty(p.qty)}</td>
-                    <td className="num">{px(p.avgPrice)}</td>
-                    <td className="num">
-                      {px(p.last)}
-                      {p.stale ? <span className="pnl-stale-tag" title={age(p.priceAgeMs, t)}>{p.priceMissing ? t("pnl.costTag") : t("pnl.staleTag")}</span> : null}
-                    </td>
-                    <td className="num">{money(p.value)}</td>
-                    <td className={`num ${tone(p.unrealized)}`}>{signed(p.unrealized)}</td>
-                    <td className={`num ${tone(p.unrealized)}`}>{fmtSignedPct(p.unrealizedPct)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="pnl-close-btn"
-                        data-testid={`close-${p.symbol}`}
-                        disabled={closer.busy !== null || p.stale}
-                        title={p.stale ? t("pnl.close.unavailable") : undefined}
-                        onClick={() => closer.closeOne(p.symbol)}
-                      >
-                        {closer.busy === `c:${p.symbol}` ? t("pnl.close.busy") : t("pnl.close.btn")}
-                      </button>
-                    </td>
+          {closer.note ? (
+            <div className={`pro-alert pnl-close-note ${closer.note.kind === "ok" ? "is-ok" : ""}`} role="status" aria-live="polite">{closer.note.text}</div>
+          ) : null}
+          {!s ? (
+            <Sk w={320} h={40} />
+          ) : s.positions.length === 0 ? (
+            <Empty title={t("pnl.noPositions")} action={<Link className="td-link" to="/?symbol=BTC">{t("pnl.goTrade")} ›</Link>} />
+          ) : (
+            <div className="pro-table-wrap">
+              <table className="pro-table pnl-table">
+                <thead>
+                  <tr>
+                    <th>{t("pnl.col.symbol")}</th>
+                    <th>{t("pnl.col.qty")}</th>
+                    <th>{t("pnl.col.avg")}</th>
+                    <th>{t("pnl.col.last")}</th>
+                    <th>{t("pnl.col.value")}</th>
+                    <th>{t("pnl.col.pnl")}</th>
+                    <th>{t("pnl.col.pct")}</th>
+                    <th>{t("pnl.close.col")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="td-note">{t("pnl.footnote")}</p>
-      </section>
+                </thead>
+                <tbody>
+                  {s.positions.map((p) => (
+                    <tr key={p.symbol}>
+                      <td>
+                        <Link className="pnl-sym" to={`/?symbol=${p.symbol}`}>{p.symbol}</Link>
+                        <span className="muted"> /USDT</span>
+                      </td>
+                      <td className="num">{qty(p.qty)}</td>
+                      <td className="num">{px(p.avgPrice)}</td>
+                      <td className="num">
+                        {px(p.last)}
+                        {p.stale ? <span className="pnl-stale-tag" title={age(p.priceAgeMs, t)}>{p.priceMissing ? t("pnl.costTag") : t("pnl.staleTag")}</span> : null}
+                      </td>
+                      <td className="num">{money(p.value)}</td>
+                      <td className={`num ${tone(p.unrealized)}`}>{signed(p.unrealized)}</td>
+                      <td className={`num ${tone(p.unrealized)}`}>{fmtSignedPct(p.unrealizedPct)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="pnl-close-btn"
+                          data-testid={`close-${p.symbol}`}
+                          disabled={closer.busy !== null || p.stale}
+                          title={p.stale ? t("pnl.close.unavailable") : undefined}
+                          onClick={() => closer.closeOne(p.symbol)}
+                        >
+                          {closer.busy === `c:${p.symbol}` ? t("pnl.close.busy") : t("pnl.close.btn")}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="td-note">{t("pnl.footnote")}</p>
+        </section>
 
-      <PaperLedger acct={acct} />
+        <PaperLedger acct={acct} />
+        </>
+      )}
 
       {confirmAll && s ? (
         <CloseAllModal

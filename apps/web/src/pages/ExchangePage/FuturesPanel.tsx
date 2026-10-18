@@ -76,7 +76,7 @@ export function FuturesPanel({ ex, exName, cfg, bound, onCfg, setErr, setMsg }: 
       .exchangeFuturesPlace(ex, {
         clientOrderId: coid, symbol: normSym(sym), side: o.side, type: o.type, amount: amountN,
         price: o.type === "limit" ? Number(o.price) : null, reduceOnly: o.reduceOnly,
-        takeProfit: o.tp ? Number(o.tp) : null, stopLoss: o.sl ? Number(o.sl) : null,
+        takeProfit: o.tp ? Number(o.tp) : null, stopLoss: o.sl ? Number(o.sl) : null, confirmed: true,
       })
       .then((r) => {
         const extra = r.tpsl.map((t) => `${t.kind === "takeProfit" ? "止盈" : "止损"}${t.ok ? "已设置" : "失败：" + (t.message ?? "")}`).join("，");
@@ -94,7 +94,7 @@ export function FuturesPanel({ ex, exName, cfg, bound, onCfg, setErr, setMsg }: 
 
   const closePos = (p: ExchangePosition) => {
     if (!window.confirm(`以市价平掉 ${p.symbol} ${p.side === "long" ? "多" : "空"}仓 ${p.contracts} 张？`)) return;
-    marketProvider.exchangeFuturesClose(ex, p.symbol).then(() => { setMsg(`已提交平仓 ${p.symbol}`); refresh(); }).catch((e: unknown) => setErr(errText(e)));
+    marketProvider.exchangeFuturesClose(ex, p.symbol, newCoid()).then(() => { setMsg(`已提交平仓 ${p.symbol}`); refresh(); }).catch((e: unknown) => setErr(errText(e)));
   };
   const cancel = (x: ExchangeOrder) => {
     if (!window.confirm(`撤销合约订单 ${x.id}？`)) return;

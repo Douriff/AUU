@@ -62,6 +62,8 @@
 
 **平仓（资产 / 盈亏页 `/pnl`）**：每个纸面持仓行有「平仓」按钮，按页头同源的当前行情价市价卖出全部数量，手续费 / 滑点沿用上面同一套纸面撮合（`CostModel`）；同币种尚未成交的卖出限价单、止盈止损会先撤销（它们占用了可卖数量），买入挂单不动。「一键全部平仓」需二次确认弹窗，服务端也要求 `confirm: true`。平仓不受单笔上限 / 最小金额 / 每分钟下单数限制（任何仓位都必须能走得掉），但价格过期（>3 分钟）或缺失时拒绝（503）。幂等：每次点击带 `client_order_id`，订单行以 `<id>-x-<币种>` 做 `(user_id, client_id)` 唯一键，重复请求返回第一次的成交（`duplicate: true`）；已平仓后用新 id 再点返回 409 `NO_POSITION`，不会二次卖出。整批在账本锁 + `BEGIN IMMEDIATE` 事务里完成，并发安全。只能平当前登录用户自己的仓位（无 user 参数），只写 `mainstream_paper.sqlite`，不碰策略账户 / 影子盘。API：`POST /api/v1/mainstream/paper/positions/{symbol}/close`、`POST /api/v1/mainstream/paper/positions/close-all`。账本区块「最近成交」在平仓后立即刷新。
 
+**实盘视图（`/pnl?view=live`，「纸面｜实盘」切换）**：展示用户**自己绑定**的币安 / OKX 现货余额与 U 本位永续持仓，可买入 / 卖出 / 「卖出全部」 / 合约开仓 / 合约平仓，复用「交易所接入」下单端点（用户自己的无提现权限 Key，加密保存）。总开关默认关闭；总开关关 / 不在白名单 / 未绑定 / Key 无交易权限 / 未确认合约风险 / 紧急停止 / 品种不受支持时按钮灰掉并写明原因（`GET /api/v1/exchange/availability`），**服务端用同一套规则再次拒绝**。每笔订单都有二次确认弹窗（交易所、品种、方向、数量、预估成交价、杠杆 / 保证金模式），服务端要求 `confirmed: true`；合约平仓只读交易所持仓、强制 `reduceOnly`；`clientOrderId` 幂等 + 3 秒相同订单去重防双击。策略永不使用用户 Key 自动下单。风险与小额自测计划见 [docs/live-trading-risk-and-selftest.md](docs/live-trading-risk-and-selftest.md)。
+
 ### 旧版 pump 纸面账本归档
 
 主流模式从空账本开始。旧 pump.fun 纸面数据（`paper_journal*.json`、`shadow_compare*.json`、`trader_watchlist.json`、`evidence/`）用下面的命令打包归档（先停 API；默认 dry-run）：

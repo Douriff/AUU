@@ -112,6 +112,7 @@ export function ExchangePage() {
         type: order.type,
         amount: Number(order.amount),
         price: order.type === "limit" ? Number(order.price) : null,
+        confirmed: true, // sent only after the inline confirmation above; the server requires it
       })
       .then((r) => {
         setMsg(`${r.duplicate ? "（同一笔订单，未重复提交）" : "下单成功"}：${r.order.symbol} ${r.order.side} 状态 ${r.order.status} 订单号 ${r.order.id}`);
