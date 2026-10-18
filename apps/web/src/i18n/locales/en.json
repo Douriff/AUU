@@ -1635,7 +1635,14 @@
     "riskLong": "Airdrop, points and token campaigns are often used for scams and phishing. Verify only through the project's official channels, and never join anything that asks you to send funds first, grant approvals first, or share a seed phrase or private key. This site only aggregates information and is not investment advice.",
     "feedsOfficial": "Official sources: ",
     "feedsMedia": "Media sources: ",
-    "verifyCounts": "Confirmed {{c}} · Unverified {{u}}"
+    "verifyCounts": "Confirmed {{c}} · Unverified {{u}}",
+    "justNow": "just now",
+    "updatedAt": "Updated {{when}}",
+    "ingestAt": "sources last fetched {{when}}",
+    "updTitle": "Refreshes automatically every {{s}} s (paused while the tab is hidden, refreshes right away when you come back)",
+    "refreshFailed": "Auto-refresh failed for now; showing the list from {{when}}. It will retry automatically.",
+    "sourcesDown": "Some sources can't be updated right now ({{names}}); showing previously saved items. The system retries automatically.",
+    "stale": "Sources haven't updated successfully for {{min}} minutes, so this list may not be the latest. Please rely on official channels."
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

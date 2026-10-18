@@ -83,8 +83,8 @@ class IngestStoreTests(unittest.TestCase):
         out = fetcher.tick()
         self.assertTrue(out["coindesk"]["ok"])
         self.assertEqual(out["coindesk"]["matched"], 2)  # airdrop + pump holder rewards
-        # second tick: dedup
-        out2 = fetcher.tick()
+        # second tick (forced: media now have a 240 s politeness floor): dedup
+        out2 = fetcher.tick(force=True)
         self.assertEqual(out2["coindesk"]["added"], 0)
         ingested = self.store.list(origin="ingested", size=50)
         self.assertEqual(ingested["total"], 2)

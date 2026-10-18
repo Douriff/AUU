@@ -1,6 +1,7 @@
 """空投雷达 API: curated + RSS-ingested list/detail (login required; local store only)."""
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
@@ -50,6 +51,7 @@ def airdrops_list(
         "enabled": airdrops_enabled(),
         "ingestEnabled": ingest_enabled(),
         "ingestIntervalSec": interval_sec(),
+        "serverNow": int(time.time() * 1000),  # lets the page show "updated x min ago" without trusting the client clock
         "categories": list(CATEGORIES),
         "statuses": list(STATUSES),
         "note": NOTE,

@@ -83,6 +83,9 @@ CREATE TABLE IF NOT EXISTS fetch_log (
   source TEXT PRIMARY KEY, last_attempt INTEGER, last_ok INTEGER, last_error TEXT, last_added INTEGER,
   last_items INTEGER, fails INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS fetch_validators (
+  source TEXT PRIMARY KEY, etag TEXT, last_modified TEXT
+);
 """
 
 
@@ -698,10 +701,17 @@ class AirdropStore:
             self._db.execute("DELETE FROM sightings WHERE item_id NOT IN (SELECT id FROM items)")
             return self._db.total_changes - before
 
-    def log_fetch(self, source: str, *, now_ms: int, ok: bool, error: str = "", added: int = 0, items: int = 0) -> None:
+    def log_fetch(self, source: str, *, now_ms: int, ok: bool, error: str = "", added: int = 0, items: Optional[int] = 0) -> None:
+        """``items=None`` (HTTP 304: nothing parsed) keeps the previous ``last_items``."""
         with self._lock:
             self._db.execute("INSERT OR IGNORE INTO fetch_log(source, fails) VALUES (?, 0)", (source,))
-            if ok:
+            if ok and items is None:
+                self._db.execute(
+                    "UPDATE fetch_log SET last_attempt=?, last_ok=?, last_error=NULL, last_added=?, fails=0 WHERE source=?",
+                    (now_ms, now_ms, added, source),
+                )
+                self._meta_set("last_ingest_ok", str(now_ms))
+            elif ok:
                 self._db.execute(
                     "UPDATE fetch_log SET last_attempt=?, last_ok=?, last_error=NULL, last_added=?, last_items=?, fails=0 WHERE source=?",
                     (now_ms, now_ms, added, items, source),
@@ -712,6 +722,23 @@ class AirdropStore:
                     "UPDATE fetch_log SET last_attempt=?, last_error=?, fails=fails+1 WHERE source=?",
                     (now_ms, error[:200], source),
                 )
+
+    def get_validators(self, source: str) -> dict[str, Optional[str]]:
+        """HTTP validators (ETag / Last-Modified) of the last good response of this source."""
+        with self._lock:
+            r = self._db.execute("SELECT etag, last_modified FROM fetch_validators WHERE source=?", (source,)).fetchone()
+        return {"etag": r["etag"], "last_modified": r["last_modified"]} if r else {}
+
+    def set_validators(self, source: str, etag: Optional[str], last_modified: Optional[str]) -> None:
+        with self._lock:
+            if etag or last_modified:
+                self._db.execute(
+                    "INSERT INTO fetch_validators(source, etag, last_modified) VALUES (?,?,?) "
+                    "ON CONFLICT(source) DO UPDATE SET etag=excluded.etag, last_modified=excluded.last_modified",
+                    (source, (etag or "")[:300] or None, (last_modified or "")[:100] or None),
+                )
+            else:
+                self._db.execute("DELETE FROM fetch_validators WHERE source=?", (source,))
 
     def fetch_state(self, source: str) -> Optional[dict[str, Any]]:
         with self._lock:
@@ -731,7 +758,7 @@ class AirdropStore:
 
 def _feed_status(logs: dict[str, dict]) -> list[dict[str, Any]]:
     try:
-        from app.airdrops.ingest import FEED_SOURCES, enabled_feeds
+        from app.airdrops.ingest import FEED_SOURCES, enabled_feeds, min_interval_for
     except Exception:
         return []
     out = []
@@ -742,6 +769,7 @@ def _feed_status(logs: dict[str, dict]) -> list[dict[str, Any]]:
             "name": s["name"],
             "home": s["home"],
             "tier": s.get("tier", "media"),
+            "minIntervalSec": min_interval_for(s),
             "lastOkAt": lg.get("last_ok"),
             "lastAttemptAt": lg.get("last_attempt"),
             "ok": bool(lg.get("last_ok")) and not lg.get("last_error"),

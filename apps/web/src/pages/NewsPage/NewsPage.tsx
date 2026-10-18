@@ -10,7 +10,7 @@ import { fmtDate, fmtRelative } from "@/i18n/format";
 /** 行业动态 (news): headlines/summaries stay in the original language (not translated); UI chrome is i18n. */
 /** 行业动态: crypto headlines from public RSS (title + summary + original link, source named). Login required. */
 
-const POLL_MS = 120_000;
+const POLL_MS = 60_000;
 const PAGE_SIZE = 20;
 const TOP = ["BTC", "ETH", "SOL"];
 type Mode = "all" | "focus" | "important";
@@ -97,7 +97,7 @@ export function NewsPage() {
     void load();
   }, [load]);
 
-  // auto refresh (only while the tab is visible); the server fetches its feeds every ~12 min
+  // auto refresh (only while the tab is visible); the server fetches its feeds every ~5 min
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!document.hidden) void load(true);
