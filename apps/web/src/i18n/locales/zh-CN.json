@@ -114,7 +114,9 @@
     "STANDBY": "当前节点暂不可用，请稍后再试",
     "RATE_LIMITED": "操作太频繁，请稍后再试",
     "BAD_DIRECTION": "触发方向不正确",
-    "BAD_NOTE": "备注不正确"
+    "BAD_NOTE": "备注不正确",
+    "NO_POSITION": "没有这个币种的持仓（可能已经平仓）",
+    "CONFIRM_REQUIRED": "此操作需要二次确认"
   },
   "common": {
     "submitting": "提交中…",
@@ -1484,7 +1486,37 @@
     "ageMin": "{{n}} 分钟前的价格",
     "footnote": "已实现盈亏已扣除手续费；今日盈亏 = 当前总资产 − 北京时间 0 点的总资产。这里只统计你的手动纸面交易，不含策略纸面盘和 H2。",
     "stripAria": "查看我的资产与盈亏",
-    "details": "详情"
+    "details": "详情",
+    "close": {
+      "btn": "平仓",
+      "all": "一键全部平仓",
+      "col": "操作",
+      "busy": "平仓中…",
+      "unavailable": "行情价格已过期或缺失，暂时不能平仓",
+      "done": "已平仓 {{symbol}}：{{qty}} @ {{price}}，已实现 {{pnl}} USDT（已扣手续费）",
+      "dup": "这笔平仓已经处理过，没有重复执行（{{symbol}}）",
+      "doneAll": "已平仓 {{n}} 个持仓，已实现 {{pnl}} USDT（已扣手续费）",
+      "doneAllPartial": "已平仓 {{n}} 个，另有 {{m}} 个未成功（{{symbols}}），可稍后重试",
+      "dupAll": "这次全部平仓已经处理过，没有重复执行",
+      "confirmTitle": "确认全部平仓",
+      "confirmBody": "将按当前行情价对你的 {{n}} 个纸面持仓全部市价平仓，并扣除手续费和滑点。只影响你自己的手动纸面账户，不会影响策略纸面盘和影子盘。",
+      "confirmEst": "预估回收约 {{value}} USDT（含滑点），手续费约 {{fee}} USDT；实际以成交时的行情价为准。",
+      "confirmGo": "确认全部平仓",
+      "cancel": "取消"
+    },
+    "ledger": {
+      "title": "账本 · 最近成交",
+      "sub": "来自你的纸面账本，平仓后立即刷新。",
+      "empty": "还没有成交记录",
+      "time": "时间",
+      "side": "方向",
+      "price": "成交价",
+      "fee": "手续费",
+      "realized": "已实现",
+      "buy": "买入",
+      "sell": "卖出",
+      "closeTag": "平仓"
+    }
   },
   "withdraw": {
     "title": "提现",

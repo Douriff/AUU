@@ -34,6 +34,16 @@ class OrderBody(BaseModel):
     mode: str = "paper"
 
 
+class CloseBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_order_id: str
+    mode: str = "paper"
+
+
+class CloseAllBody(CloseBody):
+    confirm: bool = False  # the web UI sends true only after its confirmation dialog; the server insists too
+
+
 def _uid(request: Request) -> Optional[str]:
     if not auth_enabled():
         return "local"
@@ -74,5 +84,35 @@ def cancel(request: Request, order_id: str):
         return _need_login()
     try:
         return ok(get_accounts().cancel(uid, order_id))
+    except OrderError as e:
+        return err(e.code, e.message, e.status, extra=e.extra())
+
+
+@router.post("/positions/close-all")
+def close_all(request: Request, body: CloseAllBody):
+    """Market-close every open paper position of the session user (one idempotent batch)."""
+    uid = _uid(request)
+    if uid is None:
+        return _need_login()
+    if body.mode != "paper":
+        return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
+    if body.confirm is not True:
+        return err("CONFIRM_REQUIRED", "全部平仓需要二次确认", 400, extra={"key": "confirmRequired"})
+    try:
+        return ok(get_accounts().close_all(uid, body.client_order_id))
+    except OrderError as e:
+        return err(e.code, e.message, e.status, extra=e.extra())
+
+
+@router.post("/positions/{symbol}/close")
+def close_position(request: Request, symbol: str, body: CloseBody):
+    """Market-close the session user's own position in ``symbol`` (idempotent per client_order_id)."""
+    uid = _uid(request)
+    if uid is None:
+        return _need_login()
+    if body.mode != "paper":
+        return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
+    try:
+        return ok(get_accounts().close_position(uid, symbol, body.client_order_id))
     except OrderError as e:
         return err(e.code, e.message, e.status, extra=e.extra())

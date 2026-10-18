@@ -114,7 +114,9 @@
     "STANDBY": "Dieser Knoten ist vorübergehend nicht verfügbar, bitte später erneut versuchen",
     "RATE_LIMITED": "Zu viele Anfragen, bitte langsamer",
     "BAD_DIRECTION": "Ungültige Auslöserichtung",
-    "BAD_NOTE": "Ungültige Notiz"
+    "BAD_NOTE": "Ungültige Notiz",
+    "NO_POSITION": "Keine Position in dieser Münze (möglicherweise bereits geschlossen)",
+    "CONFIRM_REQUIRED": "Diese Aktion erfordert eine zweite Bestätigung"
   },
   "common": {
     "submitting": "Wird gesendet…",
@@ -1484,7 +1486,37 @@
     "ageMin": "Preis von vor {{n}} Min.",
     "footnote": "Realisierte GuV ist nach Gebühren; heutige GuV = Gesamtvermögen jetzt − Gesamtvermögen um 0:00 Uhr Pekinger Zeit. Gezählt werden nur deine manuellen Papiertrades, nicht das Strategie-Papierdepot oder H2.",
     "stripAria": "Mein Vermögen und meine GuV ansehen",
-    "details": "Details"
+    "details": "Details",
+    "close": {
+      "btn": "Schließen",
+      "all": "Alle schließen",
+      "col": "Aktion",
+      "busy": "Wird geschlossen …",
+      "unavailable": "Der Kurs ist veraltet oder fehlt, Schließen ist derzeit nicht möglich",
+      "done": "{{symbol}} geschlossen: {{qty}} @ {{price}}, realisiert {{pnl}} USDT (nach Gebühren)",
+      "dup": "Dieses Schließen wurde bereits verarbeitet und nicht erneut ausgeführt ({{symbol}})",
+      "doneAll": "{{n}} Positionen geschlossen, realisiert {{pnl}} USDT (nach Gebühren)",
+      "doneAllPartial": "{{n}} geschlossen; {{m}} fehlgeschlagen ({{symbols}}), später erneut versuchen",
+      "dupAll": "Dieses „Alle schließen“ wurde bereits verarbeitet und nicht erneut ausgeführt",
+      "confirmTitle": "Alle Positionen schließen bestätigen",
+      "confirmBody": "Alle {{n}} Ihrer Paper-Positionen werden zum aktuellen Kurs am Markt geschlossen, abzüglich Gebühren und Slippage. Das betrifft nur Ihr eigenes manuelles Paper-Konto, nicht das Strategie-Paper-Buch oder die Schattenbücher.",
+      "confirmEst": "Geschätzter Erlös ca. {{value}} USDT (nach Slippage), Gebühren ca. {{fee}} USDT; maßgeblich ist der Kurs bei Ausführung.",
+      "confirmGo": "Alle schließen bestätigen",
+      "cancel": "Abbrechen"
+    },
+    "ledger": {
+      "title": "Kontobuch · letzte Ausführungen",
+      "sub": "Aus Ihrem Paper-Kontobuch; wird direkt nach dem Schließen aktualisiert.",
+      "empty": "Noch keine Ausführungen",
+      "time": "Zeit",
+      "side": "Seite",
+      "price": "Ausführungskurs",
+      "fee": "Gebühr",
+      "realized": "Realisiert",
+      "buy": "Kauf",
+      "sell": "Verkauf",
+      "closeTag": "Schließen"
+    }
   },
   "withdraw": {
     "title": "Withdraw",

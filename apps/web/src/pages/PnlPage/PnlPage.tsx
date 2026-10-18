@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { marketProvider } from "@/providers/HttpWsProvider";
@@ -7,12 +7,13 @@ import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed, fmtNum, fmtSignedPct } from "@/i18n/format";
 import { Empty, Sk } from "@/components/ui/Skeleton";
 import { tone, usePnlSummary } from "@/pages/PnlPage/usePnl";
+import { money, signed } from "@/pages/PnlPage/fmt";
+import { CloseAllModal, PaperLedger, usePaperAccount, usePaperClose } from "@/pages/PnlPage/PaperClose";
 
 type Range = "7d" | "30d" | "all";
 const RANGES: Range[] = ["7d", "30d", "all"];
 
-export const money = (v: number) => fmtNum(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-export const signed = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${money(Math.abs(v))}`;
+export { money, signed };
 
 function px(v: number) {
   const a = Math.abs(v);
@@ -127,14 +128,22 @@ export function PnlCards({ s }: { s: PnlSummary }) {
 
 export function PnlPage() {
   const { t } = useTranslation();
-  const { data: s, error, needLogin } = usePnlSummary(10_000);
+  const { data: s, error, needLogin, reload } = usePnlSummary(10_000);
+  const { acct, reload: reloadAcct } = usePaperAccount();
   const [range, setRange] = useState<Range>("7d");
   const [curve, setCurve] = useState<PnlCurve | null>(null);
   const [curveErr, setCurveErr] = useState("");
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [curveTick, setCurveTick] = useState(0);
+  const afterClose = useCallback(() => {
+    reload();
+    reloadAcct();
+    setCurveTick((n) => n + 1);
+  }, [reload, reloadAcct]);
+  const closer = usePaperClose(afterClose);
 
   useEffect(() => {
     let alive = true;
-    setCurve(null);
     const load = () =>
       marketProvider
         .getPnlCurve(range)
@@ -146,7 +155,8 @@ export function PnlPage() {
       alive = false;
       window.clearInterval(id);
     };
-  }, [range]);
+  }, [range, curveTick]);
+  useEffect(() => setCurve(null), [range]);
 
   if (needLogin) {
     return (
@@ -192,8 +202,18 @@ export function PnlPage() {
       <section className="pnl-section pane">
         <div className="pnl-sec-head">
           <h2>{t("pnl.positions", { n: s?.positions.length ?? 0 })}</h2>
-          {s ? <span className="muted num">{t("pnl.updated", { time: fmtDate(s.asOf, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })}</span> : null}
+          <div className="pnl-sec-actions">
+            {s ? <span className="muted num">{t("pnl.updated", { time: fmtDate(s.asOf, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })}</span> : null}
+            {s && s.positions.length > 0 ? (
+              <button type="button" className="pnl-close-all" disabled={closer.busy !== null} onClick={() => setConfirmAll(true)}>
+                {t("pnl.close.all")}
+              </button>
+            ) : null}
+          </div>
         </div>
+        {closer.note ? (
+          <div className={`pro-alert pnl-close-note ${closer.note.kind === "ok" ? "is-ok" : ""}`} role="status" aria-live="polite">{closer.note.text}</div>
+        ) : null}
         {!s ? (
           <Sk w={320} h={40} />
         ) : s.positions.length === 0 ? (
@@ -210,6 +230,7 @@ export function PnlPage() {
                   <th>{t("pnl.col.value")}</th>
                   <th>{t("pnl.col.pnl")}</th>
                   <th>{t("pnl.col.pct")}</th>
+                  <th>{t("pnl.close.col")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,6 +249,18 @@ export function PnlPage() {
                     <td className="num">{money(p.value)}</td>
                     <td className={`num ${tone(p.unrealized)}`}>{signed(p.unrealized)}</td>
                     <td className={`num ${tone(p.unrealized)}`}>{fmtSignedPct(p.unrealizedPct)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="pnl-close-btn"
+                        data-testid={`close-${p.symbol}`}
+                        disabled={closer.busy !== null || p.stale}
+                        title={p.stale ? t("pnl.close.unavailable") : undefined}
+                        onClick={() => closer.closeOne(p.symbol)}
+                      >
+                        {closer.busy === `c:${p.symbol}` ? t("pnl.close.busy") : t("pnl.close.btn")}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -236,6 +269,18 @@ export function PnlPage() {
         )}
         <p className="td-note">{t("pnl.footnote")}</p>
       </section>
+
+      <PaperLedger acct={acct} />
+
+      {confirmAll && s ? (
+        <CloseAllModal
+          s={s}
+          acct={acct}
+          busy={closer.busy === "all"}
+          onCancel={() => setConfirmAll(false)}
+          onConfirm={() => closer.closeAll().then(() => setConfirmAll(false))}
+        />
+      ) : null}
     </div>
   );
 }

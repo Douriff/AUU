@@ -1043,6 +1043,25 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .pnl-strip-item small { font-size: 11px; color: var(--dim); }
 .pnl-strip-item b { font-size: 14px; font-weight: 600; }
 .pnl-strip-more { margin-inline-start: auto; color: var(--accent); font-size: 12.5px; white-space: nowrap; }
+.pnl-sec-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pnl-close-btn, .pnl-close-all { height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--border2, rgba(255,255,255,0.18)); background: transparent; color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pnl-close-btn:hover:not(:disabled), .pnl-close-all:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pnl-close-btn:disabled, .pnl-close-all:disabled { opacity: 0.45; cursor: not-allowed; }
+.pnl-close-all { border-color: rgba(255, 154, 158, 0.55); color: #ff9a9e; }
+.pnl-close-note { margin-bottom: 10px; }
+.pnl-close-tag { margin-inline-start: 6px; font-size: 10.5px; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--accent); color: var(--accent); white-space: nowrap; }
+.pnl-ledger tr.is-close td { background: rgba(240, 165, 49, 0.05); }
+.close-modal { max-width: 520px; }
+.close-modal-table td, .close-modal-table th { text-align: end; }
+.close-modal-table td:first-child, .close-modal-table th:first-child { text-align: start; }
+.close-modal-actions { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 12px; }
+.close-modal-actions .td-submit { height: 38px; padding: 0 16px; }
+.close-modal-actions .close-go { background: #e5484d; color: #fff; }
+@media (max-width: 640px) {
+  .pnl-table th:last-child, .pnl-table td:last-child { position: sticky; inset-inline-end: 0; background: var(--panel); }
+  .close-modal-actions { flex-direction: column-reverse; align-items: stretch; }
+  .close-modal-actions .td-submit { height: 46px; }
+}
 @media (max-width: 900px) {
   .pnl-cards { grid-template-columns: 1fr 1fr; }
   .pnl-card.is-big { grid-column: 1 / -1; }

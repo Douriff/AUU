@@ -60,6 +60,8 @@
 
 每个币的图表页（`/mainstream?symbol=ETH`）右侧（手机在图下方）有纸面下单面板：买/卖、市价/限价、按金额或数量、预估手续费和滑点（与回测共用 `CostModel`）、持仓与盈亏、挂单和订单记录。只写纸面账本 `data/mainstream_paper.sqlite`，每个登录用户一个独立账户（初始 10,000 USDT，只做现货多头）；未登录下单返回 401。风控：单笔 ≤2,000、单币持仓 ≤5,000 USDT，最多 20 张挂单，每分钟 20 单，`client_order_id` 幂等，同样的单 3 秒内重复提交返回 409，价格超过 3 分钟没更新时拒单。可用 `AUU_PAPER_START_USDT`、`AUU_PAPER_MAX_ORDER_USDT`、`AUU_PAPER_MAX_POSITION_USDT`、`AUU_PAPER_MAX_OPEN_ORDERS`、`AUU_PAPER_ORDERS_PER_MIN` 调整。实盘仍被 `LIVE_API_LOCKED` 锁住：面板只显示“实盘未开启”，`mode` 不是 `paper` 一律 403，接口也不接收交易所/密钥字段。API：`GET /api/v1/mainstream/paper/account`、`POST /api/v1/mainstream/paper/orders`、`POST /api/v1/mainstream/paper/orders/{id}/cancel`。
 
+**平仓（资产 / 盈亏页 `/pnl`）**：每个纸面持仓行有「平仓」按钮，按页头同源的当前行情价市价卖出全部数量，手续费 / 滑点沿用上面同一套纸面撮合（`CostModel`）；同币种尚未成交的卖出限价单、止盈止损会先撤销（它们占用了可卖数量），买入挂单不动。「一键全部平仓」需二次确认弹窗，服务端也要求 `confirm: true`。平仓不受单笔上限 / 最小金额 / 每分钟下单数限制（任何仓位都必须能走得掉），但价格过期（>3 分钟）或缺失时拒绝（503）。幂等：每次点击带 `client_order_id`，订单行以 `<id>-x-<币种>` 做 `(user_id, client_id)` 唯一键，重复请求返回第一次的成交（`duplicate: true`）；已平仓后用新 id 再点返回 409 `NO_POSITION`，不会二次卖出。整批在账本锁 + `BEGIN IMMEDIATE` 事务里完成，并发安全。只能平当前登录用户自己的仓位（无 user 参数），只写 `mainstream_paper.sqlite`，不碰策略账户 / 影子盘。API：`POST /api/v1/mainstream/paper/positions/{symbol}/close`、`POST /api/v1/mainstream/paper/positions/close-all`。账本区块「最近成交」在平仓后立即刷新。
+
 ### 旧版 pump 纸面账本归档
 
 主流模式从空账本开始。旧 pump.fun 纸面数据（`paper_journal*.json`、`shadow_compare*.json`、`trader_watchlist.json`、`evidence/`）用下面的命令打包归档（先停 API；默认 dry-run）：

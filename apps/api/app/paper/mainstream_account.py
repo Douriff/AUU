@@ -520,6 +520,119 @@ class PaperAccounts:
         pub = [self._public(o) for o in rows]
         return {**pub[0], "orders": pub, "ocoGroup": group, "duplicate": False}
 
+    # ---- close position (market, at the same price the P&L header uses) -------------------------
+    @staticmethod
+    def _norm_sym(symbol: Any) -> str:
+        return "".join(ch for ch in str(symbol or "").split("/")[0].upper() if ch.isalnum())
+
+    @staticmethod
+    def _close_cid(raw: Any) -> str:
+        cid = str(raw or "").strip()
+        if not (8 <= len(cid) <= 64) or not all(ch.isalnum() or ch in "-_" for ch in cid):
+            raise OrderError("BAD_CLIENT_ID", "缺少有效的 client_order_id（防重复提交）", key="badClientId")
+        return cid
+
+    def _close_locked(self, uid: str, sym: str, cid_full: str, px: float, now: int) -> dict:
+        """Sell the whole position of ``sym`` at ``px`` (minus slippage, taker fee) and return the order row.
+
+        Caller holds ``self._lock`` and an open write transaction. Resting sell-side orders of the coin
+        (limit sells, TP/SL, OCO) are cancelled first because they reserve the quantity being sold."""
+        pos = self._position(uid, sym)
+        qty = float(pos["qty"])
+        self._db.execute(
+            "UPDATE orders SET status='cancelled', reserved=0, reason='CLOSE_CANCEL' "
+            "WHERE user_id=? AND symbol=? AND side='sell' AND status='open'", (uid, sym))
+        slip = self.slippage(sym)
+        fill_px = px * (1 - slip)
+        order = {"id": uuid.uuid4().hex[:16], "user_id": uid, "client_id": cid_full, "ts": now, "symbol": sym,
+                 "side": "sell", "type": "market", "qty": qty, "limit_px": None, "status": "open", "ref_px": px, "reserved": 0.0}
+        self._db.execute(
+            "INSERT INTO orders (id,user_id,client_id,ts,symbol,side,type,qty,limit_px,status,reserved,ref_px) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            tuple(order[k] for k in ("id", "user_id", "client_id", "ts", "symbol", "side", "type", "qty", "limit_px", "status", "reserved", "ref_px")))
+        self._apply_fill(uid, order, fill_px, self.cost.taker * self.cost.mult, slip, now)
+        self._db.execute("UPDATE orders SET reason='CLOSE' WHERE id=?", (order["id"],))
+        return dict(self._db.execute("SELECT * FROM orders WHERE id=?", (order["id"],)).fetchone())
+
+    def _close_many(self, uid: str, client_order_id: Any, symbols: Optional[list[str]]) -> dict:
+        """Market-close ``symbols`` (None = every open position) of ``uid`` only.
+
+        Idempotent per ``(user, client_order_id, symbol)``: the order row uses the unique
+        ``(user_id, client_id)`` key ``<cid>-x-<SYMBOL>``, so a repeat request returns the earlier fill
+        (``duplicate: true``) and never sells twice. The whole batch runs in one ``BEGIN IMMEDIATE``
+        transaction under the account lock, so concurrent requests (threads or processes) serialise and
+        the loser finds the position already flat. Strategy accounts / shadow books are other files."""
+        cid = self._close_cid(client_order_id)
+        with self._lock:
+            try:
+                self.match_open(uid)  # settle resting limit / TP / SL fills first so the quantity is current
+            except Exception:
+                pass
+            self._db.commit()
+            held = [r["symbol"] for r in self._db.execute(
+                "SELECT symbol FROM positions WHERE user_id=? AND qty>1e-12 ORDER BY symbol", (uid,))]
+            if symbols is None:  # replay of an earlier close-all also lists the coins it already closed
+                pre = f"{cid}-x-"
+                done = [r["client_id"][len(pre):] for r in self._db.execute(
+                    "SELECT client_id FROM orders WHERE user_id=? AND substr(client_id,1,?)=?", (uid, len(pre), pre))]
+                wanted = sorted(set(held) | set(done))
+            else:
+                wanted = symbols
+            prices: dict[str, tuple[float, int]] = {}
+            failed: list[dict] = []
+            for sym in wanted:
+                if self._db.execute("SELECT 1 FROM orders WHERE user_id=? AND client_id=?", (uid, f"{cid}-x-{sym}")).fetchone():
+                    continue  # replay: nothing to price
+                if sym not in held:
+                    continue
+                try:
+                    prices[sym] = self._price(sym)
+                except OrderError as e:
+                    failed.append({"symbol": sym, "code": e.code, "message": e.message, "key": e.key})
+            now = self.now_ms()
+            closed: list[dict] = []
+            dup = False
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                for sym in wanted:
+                    prev = self._db.execute("SELECT * FROM orders WHERE user_id=? AND client_id=?", (uid, f"{cid}-x-{sym}")).fetchone()
+                    if prev is not None:
+                        closed.append({**self._public(dict(prev)), "duplicate": True})
+                        dup = True
+                        continue
+                    if sym not in prices:
+                        continue
+                    pos = self._position(uid, sym)
+                    if pos["qty"] < 1e-12:
+                        continue  # flat already (another request won the race)
+                    row = self._close_locked(uid, sym, f"{cid}-x-{sym}", prices[sym][0], now)
+                    closed.append({**self._public(row), "duplicate": False})
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                raise
+        return {"closed": closed, "failed": failed, "duplicate": bool(closed) and all(c["duplicate"] for c in closed),
+                "partialDuplicate": dup, "requested": list(wanted),
+                "realized": sum(c["realized"] for c in closed if not c["duplicate"]),
+                "fees": sum(c["fee"] for c in closed if not c["duplicate"])}
+
+    def close_position(self, uid: str, symbol: Any, client_order_id: Any) -> dict:
+        sym = self._norm_sym(symbol)
+        if not sym:
+            raise OrderError("UNKNOWN_SYMBOL", f"不支持的币种：{symbol}", 404, key="unknownSymbol", params={"s": str(symbol)[:20]})
+        res = self._close_many(uid, client_order_id, [sym])
+        if res["closed"]:
+            return {**res, "order": res["closed"][0]}
+        if res["failed"]:
+            f = res["failed"][0]
+            raise OrderError(f["code"], f["message"], 503, key=f.get("key"))
+        raise OrderError("NO_POSITION", "没有这个币种的持仓（可能已经平仓）", 409, key="noPositionToClose")
+
+    def close_all(self, uid: str, client_order_id: Any) -> dict:
+        res = self._close_many(uid, client_order_id, None)
+        if not res["closed"] and not res["failed"]:
+            raise OrderError("NO_POSITION", "当前没有可平的持仓", 409, key="noPositionToClose")
+        return res
+
     # ---- read model ----------------------------------------------------------
     @staticmethod
     def _public(o: dict) -> dict:

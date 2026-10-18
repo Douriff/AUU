@@ -114,7 +114,9 @@
     "STANDBY": "This node is temporarily unavailable, please try again later",
     "RATE_LIMITED": "Too many requests, please slow down",
     "BAD_DIRECTION": "Invalid trigger direction",
-    "BAD_NOTE": "Invalid note"
+    "BAD_NOTE": "Invalid note",
+    "NO_POSITION": "No position in this coin (it may already be closed)",
+    "CONFIRM_REQUIRED": "This action requires a second confirmation"
   },
   "common": {
     "submitting": "Submitting…",
@@ -1484,7 +1486,37 @@
     "ageMin": "price from {{n}} min ago",
     "footnote": "Realized P&L is net of fees; today's P&L = total assets now − total assets at 00:00 Beijing time. Only your manual paper trades are counted, not the strategy paper book or H2.",
     "stripAria": "View my assets and P&L",
-    "details": "Details"
+    "details": "Details",
+    "close": {
+      "btn": "Close",
+      "all": "Close all",
+      "col": "Action",
+      "busy": "Closing…",
+      "unavailable": "The price is stale or missing, so closing is unavailable for now",
+      "done": "Closed {{symbol}}: {{qty}} @ {{price}}, realized {{pnl}} USDT (after fees)",
+      "dup": "This close was already processed and was not executed again ({{symbol}})",
+      "doneAll": "Closed {{n}} positions, realized {{pnl}} USDT (after fees)",
+      "doneAllPartial": "Closed {{n}}; {{m}} failed ({{symbols}}), you can retry shortly",
+      "dupAll": "This close-all was already processed and was not executed again",
+      "confirmTitle": "Confirm close all",
+      "confirmBody": "All {{n}} of your paper positions will be closed at market using the current price, minus fees and slippage. This only affects your own manual paper account, not the strategy paper book or the shadow books.",
+      "confirmEst": "Estimated proceeds about {{value}} USDT (after slippage), fees about {{fee}} USDT; the actual fill uses the price at execution.",
+      "confirmGo": "Confirm close all",
+      "cancel": "Cancel"
+    },
+    "ledger": {
+      "title": "Ledger · recent fills",
+      "sub": "From your paper ledger; refreshed right after a close.",
+      "empty": "No fills yet",
+      "time": "Time",
+      "side": "Side",
+      "price": "Fill price",
+      "fee": "Fee",
+      "realized": "Realized",
+      "buy": "Buy",
+      "sell": "Sell",
+      "closeTag": "Close"
+    }
   },
   "withdraw": {
     "title": "Withdraw",

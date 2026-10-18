@@ -114,7 +114,9 @@
     "STANDBY": "Bu düğüm geçici olarak kullanılamıyor, lütfen sonra tekrar deneyin",
     "RATE_LIMITED": "Çok fazla istek, lütfen yavaşlayın",
     "BAD_DIRECTION": "Geçersiz tetikleme yönü",
-    "BAD_NOTE": "Geçersiz not"
+    "BAD_NOTE": "Geçersiz not",
+    "NO_POSITION": "Bu coinde pozisyon yok (zaten kapanmış olabilir)",
+    "CONFIRM_REQUIRED": "Bu işlem ikinci bir onay gerektirir"
   },
   "common": {
     "submitting": "Gönderiliyor…",
@@ -1484,7 +1486,37 @@
     "ageMin": "{{n}} dk önceki fiyat",
     "footnote": "Gerçekleşen K&Z ücretler düşülmüş hâldedir; bugünkü K&Z = şu anki toplam varlık − Pekin saatiyle 00:00'daki toplam varlık. Yalnızca manuel kâğıt işlemleriniz sayılır; strateji kâğıt portföyü ve H2 dahil değildir.",
     "stripAria": "Varlıklarımı ve K&Z'mi gör",
-    "details": "Ayrıntılar"
+    "details": "Ayrıntılar",
+    "close": {
+      "btn": "Kapat",
+      "all": "Tümünü kapat",
+      "col": "İşlem",
+      "busy": "Kapatılıyor…",
+      "unavailable": "Fiyat eski veya yok, şu anda kapatılamıyor",
+      "done": "{{symbol}} kapatıldı: {{qty}} @ {{price}}, gerçekleşen {{pnl}} USDT (komisyon sonrası)",
+      "dup": "Bu kapatma zaten işlendi ve tekrar uygulanmadı ({{symbol}})",
+      "doneAll": "{{n}} pozisyon kapatıldı, gerçekleşen {{pnl}} USDT (komisyon sonrası)",
+      "doneAllPartial": "{{n}} kapatıldı; {{m}} başarısız ({{symbols}}), biraz sonra tekrar deneyin",
+      "dupAll": "Bu «tümünü kapat» zaten işlendi ve tekrar uygulanmadı",
+      "confirmTitle": "Tümünü kapatmayı onayla",
+      "confirmBody": "{{n}} kâğıt pozisyonunuzun tamamı güncel fiyattan piyasa emriyle, komisyon ve kayma düşülerek kapatılacak. Yalnızca kendi manuel kâğıt hesabınızı etkiler; strateji kâğıt defterini ve gölge defterleri etkilemez.",
+      "confirmEst": "Tahmini gelir yaklaşık {{value}} USDT (kayma sonrası), komisyon yaklaşık {{fee}} USDT; gerçek işlem anındaki fiyatla yapılır.",
+      "confirmGo": "Tümünü kapatmayı onayla",
+      "cancel": "İptal"
+    },
+    "ledger": {
+      "title": "Defter · son işlemler",
+      "sub": "Kâğıt defterinizden; kapatmadan hemen sonra yenilenir.",
+      "empty": "Henüz işlem yok",
+      "time": "Zaman",
+      "side": "Yön",
+      "price": "Gerçekleşme fiyatı",
+      "fee": "Komisyon",
+      "realized": "Gerçekleşen",
+      "buy": "Alış",
+      "sell": "Satış",
+      "closeTag": "Kapatma"
+    }
   },
   "withdraw": {
     "title": "Withdraw",

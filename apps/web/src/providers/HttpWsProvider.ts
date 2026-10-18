@@ -7,6 +7,7 @@ import type {
   MainstreamOverview,
   MainstreamTf,
   PaperAccount,
+  PaperCloseResult,
   StrategySummary,
   ShadowH2Summary, ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
   NewsPage, NewsQuery,
@@ -393,6 +394,15 @@ export class HttpWsProvider {
 
   placePaperOrder(body: PaperOrderRequest): Promise<PaperOrder> {
     return postJson("/api/v1/mainstream/paper/orders", body);
+  }
+
+  /** Market-close the caller's own paper position (idempotent per clientOrderId). */
+  closePaperPosition(symbol: string, clientOrderId: string): Promise<PaperCloseResult> {
+    return postJson(`/api/v1/mainstream/paper/positions/${encodeURIComponent(symbol)}/close`, { client_order_id: clientOrderId });
+  }
+
+  closeAllPaperPositions(clientOrderId: string): Promise<PaperCloseResult> {
+    return postJson("/api/v1/mainstream/paper/positions/close-all", { client_order_id: clientOrderId, confirm: true });
   }
 
   cancelPaperOrder(id: string): Promise<PaperOrder> {

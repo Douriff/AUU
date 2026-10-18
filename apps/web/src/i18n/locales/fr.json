@@ -114,7 +114,9 @@
     "STANDBY": "Ce nœud est temporairement indisponible, réessayez plus tard",
     "RATE_LIMITED": "Trop de requêtes, ralentissez",
     "BAD_DIRECTION": "Sens de déclenchement invalide",
-    "BAD_NOTE": "Note invalide"
+    "BAD_NOTE": "Note invalide",
+    "NO_POSITION": "Aucune position sur cette crypto (peut-être déjà clôturée)",
+    "CONFIRM_REQUIRED": "Cette action nécessite une seconde confirmation"
   },
   "common": {
     "submitting": "Envoi…",
@@ -1484,7 +1486,37 @@
     "ageMin": "prix d'il y a {{n}} min",
     "footnote": "Le P&L réalisé est net de frais ; P&L du jour = actifs totaux actuels − actifs totaux à 0 h (heure de Pékin). Seuls vos trades papier manuels sont comptés, pas le portefeuille de la stratégie ni H2.",
     "stripAria": "Voir mes actifs et mon P&L",
-    "details": "Détails"
+    "details": "Détails",
+    "close": {
+      "btn": "Clôturer",
+      "all": "Tout clôturer",
+      "col": "Action",
+      "busy": "Clôture…",
+      "unavailable": "Le prix est périmé ou manquant, la clôture est indisponible pour le moment",
+      "done": "{{symbol}} clôturé : {{qty}} @ {{price}}, réalisé {{pnl}} USDT (frais déduits)",
+      "dup": "Cette clôture a déjà été traitée et n'a pas été exécutée à nouveau ({{symbol}})",
+      "doneAll": "{{n}} positions clôturées, réalisé {{pnl}} USDT (frais déduits)",
+      "doneAllPartial": "{{n}} clôturées ; {{m}} en échec ({{symbols}}), réessayez dans un instant",
+      "dupAll": "Ce « tout clôturer » a déjà été traité et n'a pas été exécuté à nouveau",
+      "confirmTitle": "Confirmer la clôture de tout",
+      "confirmBody": "Vos {{n}} positions papier seront toutes clôturées au marché au prix actuel, frais et glissement déduits. Cela n'affecte que votre compte papier manuel, pas le livre papier de stratégie ni les livres fantômes.",
+      "confirmEst": "Produit estimé d'environ {{value}} USDT (après glissement), frais d'environ {{fee}} USDT ; l'exécution réelle utilise le prix au moment de l'ordre.",
+      "confirmGo": "Confirmer tout clôturer",
+      "cancel": "Annuler"
+    },
+    "ledger": {
+      "title": "Registre · exécutions récentes",
+      "sub": "Issu de votre registre papier ; actualisé juste après une clôture.",
+      "empty": "Aucune exécution pour l'instant",
+      "time": "Heure",
+      "side": "Sens",
+      "price": "Prix d'exécution",
+      "fee": "Frais",
+      "realized": "Réalisé",
+      "buy": "Achat",
+      "sell": "Vente",
+      "closeTag": "Clôture"
+    }
   },
   "withdraw": {
     "title": "Withdraw",

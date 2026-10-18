@@ -114,7 +114,9 @@
     "STANDBY": "Este nó está temporariamente indisponível, tente novamente mais tarde",
     "RATE_LIMITED": "Muitas solicitações, vá mais devagar",
     "BAD_DIRECTION": "Direção de disparo inválida",
-    "BAD_NOTE": "Nota inválida"
+    "BAD_NOTE": "Nota inválida",
+    "NO_POSITION": "Não há posição nesta moeda (talvez já esteja fechada)",
+    "CONFIRM_REQUIRED": "Esta ação exige uma segunda confirmação"
   },
   "common": {
     "submitting": "Enviando…",
@@ -1484,7 +1486,37 @@
     "ageMin": "preço de {{n}} min atrás",
     "footnote": "O L&P realizado é líquido de taxas; L&P de hoje = ativos totais agora − ativos totais às 0:00 no horário de Pequim. Só contam suas operações de papel manuais, não a carteira da estratégia nem o H2.",
     "stripAria": "Ver meus ativos e L&P",
-    "details": "Detalhes"
+    "details": "Detalhes",
+    "close": {
+      "btn": "Fechar",
+      "all": "Fechar tudo",
+      "col": "Ação",
+      "busy": "Fechando…",
+      "unavailable": "O preço está desatualizado ou ausente; fechar está indisponível por agora",
+      "done": "{{symbol}} fechado: {{qty}} @ {{price}}, realizado {{pnl}} USDT (após taxas)",
+      "dup": "Este fechamento já foi processado e não foi executado novamente ({{symbol}})",
+      "doneAll": "{{n}} posições fechadas, realizado {{pnl}} USDT (após taxas)",
+      "doneAllPartial": "{{n}} fechadas; {{m}} falharam ({{symbols}}), tente de novo em instantes",
+      "dupAll": "Este «fechar tudo» já foi processado e não foi executado novamente",
+      "confirmTitle": "Confirmar fechar tudo",
+      "confirmBody": "Todas as suas {{n}} posições de papel serão fechadas a mercado ao preço atual, menos taxas e derrapagem. Afeta apenas a sua conta manual de papel, não o livro de papel da estratégia nem os livros sombra.",
+      "confirmEst": "Retorno estimado de cerca de {{value}} USDT (após derrapagem), taxas de cerca de {{fee}} USDT; a execução real usa o preço no momento.",
+      "confirmGo": "Confirmar fechar tudo",
+      "cancel": "Cancelar"
+    },
+    "ledger": {
+      "title": "Livro · execuções recentes",
+      "sub": "Do seu livro de papel; atualizado logo após fechar.",
+      "empty": "Ainda não há execuções",
+      "time": "Hora",
+      "side": "Lado",
+      "price": "Preço de execução",
+      "fee": "Taxa",
+      "realized": "Realizado",
+      "buy": "Compra",
+      "sell": "Venda",
+      "closeTag": "Fechamento"
+    }
   },
   "withdraw": {
     "title": "Withdraw",

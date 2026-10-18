@@ -114,7 +114,9 @@
     "STANDBY": "Este nodo no está disponible por ahora, inténtalo más tarde",
     "RATE_LIMITED": "Demasiadas solicitudes, ve más despacio",
     "BAD_DIRECTION": "Dirección de activación no válida",
-    "BAD_NOTE": "Nota no válida"
+    "BAD_NOTE": "Nota no válida",
+    "NO_POSITION": "No hay posición en esta moneda (quizá ya está cerrada)",
+    "CONFIRM_REQUIRED": "Esta acción requiere una segunda confirmación"
   },
   "common": {
     "submitting": "Enviando…",
@@ -1484,7 +1486,37 @@
     "ageMin": "precio de hace {{n}} min",
     "footnote": "La PyG realizada es neta de comisiones; PyG de hoy = activos totales ahora − activos totales a las 0:00 hora de Pekín. Solo se cuentan tus operaciones de papel manuales, no la cartera de la estrategia ni H2.",
     "stripAria": "Ver mis activos y mi PyG",
-    "details": "Detalles"
+    "details": "Detalles",
+    "close": {
+      "btn": "Cerrar",
+      "all": "Cerrar todo",
+      "col": "Acción",
+      "busy": "Cerrando…",
+      "unavailable": "El precio está desactualizado o falta; no se puede cerrar por ahora",
+      "done": "{{symbol}} cerrado: {{qty}} @ {{price}}, realizado {{pnl}} USDT (tras comisiones)",
+      "dup": "Este cierre ya se procesó y no se ejecutó de nuevo ({{symbol}})",
+      "doneAll": "{{n}} posiciones cerradas, realizado {{pnl}} USDT (tras comisiones)",
+      "doneAllPartial": "{{n}} cerradas; {{m}} fallaron ({{symbols}}), puedes reintentar en un momento",
+      "dupAll": "Este «cerrar todo» ya se procesó y no se ejecutó de nuevo",
+      "confirmTitle": "Confirmar cerrar todo",
+      "confirmBody": "Las {{n}} posiciones de papel se cerrarán a mercado al precio actual, menos comisiones y deslizamiento. Solo afecta a tu cuenta manual de papel, no al libro de papel de la estrategia ni a los libros sombra.",
+      "confirmEst": "Ingreso estimado de unos {{value}} USDT (tras deslizamiento), comisiones de unos {{fee}} USDT; la ejecución real usa el precio en ese momento.",
+      "confirmGo": "Confirmar cerrar todo",
+      "cancel": "Cancelar"
+    },
+    "ledger": {
+      "title": "Libro · últimas ejecuciones",
+      "sub": "De tu libro de papel; se actualiza justo después de cerrar.",
+      "empty": "Aún no hay ejecuciones",
+      "time": "Hora",
+      "side": "Lado",
+      "price": "Precio de ejecución",
+      "fee": "Comisión",
+      "realized": "Realizado",
+      "buy": "Compra",
+      "sell": "Venta",
+      "closeTag": "Cierre"
+    }
   },
   "withdraw": {
     "title": "Withdraw",
