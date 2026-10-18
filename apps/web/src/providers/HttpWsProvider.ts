@@ -7,6 +7,7 @@ import type {
   MainstreamOverview,
   MainstreamTf,
   PaperAccount,
+  PaperCloseResult,
   StrategySummary,
   ShadowH2Summary, ShadowS3Summary, StrategyReport, MarketsResponse, ReconSummary, StrategyOverlay,
   NewsPage, NewsQuery,
@@ -146,6 +147,12 @@ export type ExchangeConfig = {
   maxFuturesUsdt: number; maxLeverage: number; futuresAck: boolean; markets?: string[];
 };
 export type ExchangePosition = { symbol: string; side: string; contracts: number; contractSize?: number | null; notional?: number | null; entryPrice?: number | null; markPrice?: number | null; liquidationPrice?: number | null; unrealizedPnl?: number | null; leverage?: number | null; marginMode?: string | null; percentage?: number | null };
+export type TradeGate = { available: boolean; reason: string | null; message: string | null };
+export type ExchangeAvailability = {
+  enabled: boolean; killSwitch: boolean;
+  exchanges: Record<string, { bound: boolean; spot: { open: TradeGate; close: TradeGate }; swap: { open: TradeGate; close: TradeGate } }>;
+};
+export type ExchangeQuote = { exchange: string; market: string; symbol: string; bid?: number | null; ask?: number | null; last?: number | null; contractSize?: number | null; ts?: number | null };
 export type ExchangeAccount = { exchange: string; masked: string; perms: { read: boolean; trade: boolean; futures?: boolean; withdraw: boolean; ipRestricted: boolean }; createdTs?: number };
 export type ExchangeOrder = { id: string; clientOrderId?: string; symbol: string; side: string; type: string; price?: number | null; average?: number | null; amount?: number | null; filled?: number | null; cost?: number | null; status: string; timestamp?: number | null };
 export type AdminExchange = {
@@ -393,6 +400,15 @@ export class HttpWsProvider {
 
   placePaperOrder(body: PaperOrderRequest): Promise<PaperOrder> {
     return postJson("/api/v1/mainstream/paper/orders", body);
+  }
+
+  /** Market-close the caller's own paper position (idempotent per clientOrderId). */
+  closePaperPosition(symbol: string, clientOrderId: string): Promise<PaperCloseResult> {
+    return postJson(`/api/v1/mainstream/paper/positions/${encodeURIComponent(symbol)}/close`, { client_order_id: clientOrderId });
+  }
+
+  closeAllPaperPositions(clientOrderId: string): Promise<PaperCloseResult> {
+    return postJson("/api/v1/mainstream/paper/positions/close-all", { client_order_id: clientOrderId, confirm: true });
   }
 
   cancelPaperOrder(id: string): Promise<PaperOrder> {
@@ -692,7 +708,16 @@ export class HttpWsProvider {
   exchangeHistory(ex: string, symbol?: string): Promise<{ items: ExchangeOrder[] }> {
     return getJson(`/api/v1/exchange/${ex}/orders/history${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`);
   }
-  exchangePlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null }): Promise<{ order: ExchangeOrder; duplicate: boolean }> {
+  exchangeAvailability(): Promise<ExchangeAvailability> {
+    return getJson("/api/v1/exchange/availability");
+  }
+  exchangeQuote(ex: string, symbol: string, market: "spot" | "swap"): Promise<ExchangeQuote> {
+    return getJson(`/api/v1/exchange/${ex}/quote?symbol=${encodeURIComponent(symbol)}&market=${market}`);
+  }
+  exchangeSupported(ex: string, symbols: string[], market: "spot" | "swap"): Promise<{ market: string; supported: Record<string, boolean> }> {
+    return getJson(`/api/v1/exchange/${ex}/supported?market=${market}&symbols=${encodeURIComponent(symbols.join(","))}`);
+  }
+  exchangePlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null; confirmed: boolean }): Promise<{ order: ExchangeOrder; duplicate: boolean }> {
     return postJson(`/api/v1/exchange/${ex}/orders`, body);
   }
   exchangeCancel(ex: string, orderId: string, symbol: string): Promise<ExchangeOrder> {
@@ -713,14 +738,14 @@ export class HttpWsProvider {
   exchangeFuturesLeverage(ex: string, body: { symbol: string; leverage: number; marginMode: string }): Promise<{ symbol: string; leverage: number; marginMode: string }> {
     return postJson(`/api/v1/exchange/${ex}/futures/leverage`, body);
   }
-  exchangeFuturesPlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null; reduceOnly?: boolean; takeProfit?: number | null; stopLoss?: number | null }): Promise<{ order: ExchangeOrder; duplicate: boolean; tpsl: { kind: string; ok: boolean; message?: string }[] }> {
+  exchangeFuturesPlace(ex: string, body: { clientOrderId: string; symbol: string; side: string; type: string; amount: number; price?: number | null; reduceOnly?: boolean; takeProfit?: number | null; stopLoss?: number | null; confirmed: boolean; leverage?: number; marginMode?: string }): Promise<{ order: ExchangeOrder; duplicate: boolean; tpsl: { kind: string; ok: boolean; message?: string }[] }> {
     return postJson(`/api/v1/exchange/${ex}/futures/orders`, body);
   }
   exchangeFuturesCancel(ex: string, orderId: string, symbol: string): Promise<ExchangeOrder> {
     return postJson(`/api/v1/exchange/${ex}/futures/orders/cancel`, { orderId, symbol });
   }
-  exchangeFuturesClose(ex: string, symbol: string): Promise<{ closed: ExchangeOrder[] }> {
-    return postJson(`/api/v1/exchange/${ex}/futures/close`, { symbol });
+  exchangeFuturesClose(ex: string, symbol: string, clientOrderId: string): Promise<{ closed: ExchangeOrder[]; duplicate: boolean; partialError?: string }> {
+    return postJson(`/api/v1/exchange/${ex}/futures/close`, { symbol, clientOrderId, confirmed: true });
   }
   adminExchangeCloseAll(user: string): Promise<{ report: { exchange: string; symbol?: string; ok: boolean; message?: string }[] }> {
     return postJson("/api/v1/admin/exchange/close-all", { user });

@@ -14,6 +14,7 @@ SERVER_IPS = {"primary": "156.227.238.242", "standby": "156.239.51.157"}
 ALLOWED_QUOTES = ("USDT",)
 _SYMBOL = re.compile(r"^[A-Z0-9]{2,15}/USDT$")
 _COID = re.compile(r"^[A-Za-z0-9]{8,28}$")
+DUP_WINDOW_MS = 3_000
 
 # per-user rate limits (in-process): reads and writes per 60s
 READ_LIMIT, WRITE_LIMIT, WINDOW = 60, 20, 60.0
@@ -70,6 +71,107 @@ def futures_cap(user_id: str) -> float:
     s = store.settings()
     v = s["userFuturesCaps"].get(user_id)
     return float(v) if v is not None else float(s["maxFuturesUsdt"])
+
+
+# ---- trade gate: one rule set used by BOTH the availability endpoint (UI) and every order endpoint (server) ----
+UNAVAILABLE_TEXT = {
+    "AUTH_REQUIRED": "请先登录",
+    "STANDBY": "备用节点不接受下单",
+    "EXCHANGE_OFF": "交易所接入功能暂未开放（总开关关闭）",
+    "EXCHANGE_NOT_ALLOWED": "你的账号暂未开通交易所接入（内测中）",
+    "CRYPTO_UNAVAILABLE": "服务器加密密钥未配置",
+    "NOT_BOUND": "还没有绑定这个交易所的 API Key",
+    "KEY_NO_TRADE": "这个 API Key 没有现货交易权限，只能查看",
+    "KEY_NO_FUTURES": "这个 API Key 没有合约交易权限（请开启合约权限后解绑重绑）",
+    "KEY_HAS_WITHDRAW": "这个 API Key 带有提现权限，已禁止交易",
+    "FUTURES_ACK_REQUIRED": "首次使用合约前，请先阅读并确认合约风险提示",
+    "KILL_SWITCH": "管理员已开启紧急停止，暂时不能下新单（合约只允许平仓）",
+}
+_BLOCK_STATUS = {"AUTH_REQUIRED": 401, "STANDBY": 503, "CRYPTO_UNAVAILABLE": 503, "NOT_BOUND": 404}
+
+
+def trade_block(user_id: str, ex: str, market: str = "spot", reduce_only: bool = False,
+                user: Optional[dict[str, Any]] = None) -> Optional[tuple[str, str, int]]:
+    """Why this user can NOT trade ``market`` on ``ex`` right now, or None. Checks that need no exchange call.
+
+    ``reduce_only`` (futures close) skips only the kill switch: closing must stay possible in an emergency."""
+    from app.role import is_standby
+
+    if is_standby():
+        code = "STANDBY"
+    else:
+        code = ""
+        if user is not None:
+            okay, why = access(user)
+            code = "" if okay else why
+        s = store.settings()
+        row = store.get_cred(user_id, ex)
+        if not code and not crypto.available():
+            code = "CRYPTO_UNAVAILABLE"
+        if not code and not row:
+            code = "NOT_BOUND"
+        if not code and row:
+            perms = row.get("perms") or {}
+            if perms.get("withdraw"):
+                code = "KEY_HAS_WITHDRAW"
+            elif market == "swap":
+                if user_id not in s["futuresAcks"]:
+                    code = "FUTURES_ACK_REQUIRED"
+                elif not perms.get("futures"):
+                    code = "KEY_NO_FUTURES"
+            elif not perms.get("trade"):
+                code = "KEY_NO_TRADE"
+        if not code and s["killSwitch"] and not reduce_only:
+            code = "KILL_SWITCH"
+    if not code:
+        return None
+    return code, UNAVAILABLE_TEXT.get(code, "不可用"), _BLOCK_STATUS.get(code, 403)
+
+
+def require_trade(user_id: str, ex: str, market: str = "spot", reduce_only: bool = False) -> None:
+    b = trade_block(user_id, ex, market, reduce_only)
+    if b:
+        if b[0] == "KILL_SWITCH":
+            store.audit(user_id, user_id, "order_blocked_kill", {"exchange": ex, "market": market})
+        raise ServiceError(b[0], b[1], b[2])
+
+
+def require_confirmed(body: dict[str, Any]) -> None:
+    """Server-side second confirmation: the web UI sets ``confirmed`` only after its confirm dialog."""
+    if body.get("confirmed") is not True:
+        raise ServiceError("CONFIRM_REQUIRED", "下单需要二次确认（confirmed=true）", 400)
+
+
+def require_market(c, sym: str, kind: str) -> None:
+    """Refuse symbols the exchange does not list (or lists as inactive / wrong product type)."""
+    mk = getattr(c, "markets", None)
+    if not mk:
+        return  # markets not loaded: the exchange itself will reject an unknown symbol
+    m = mk.get(sym)
+    if kind == "swap":
+        good = bool(m) and bool(m.get("swap")) and m.get("linear") is not False and m.get("quote", "USDT") == "USDT"
+    else:
+        good = bool(m) and bool(m.get("spot")) and m.get("quote", "USDT") == "USDT"
+    if not good or m.get("active") is False:
+        raise ServiceError("SYMBOL_UNSUPPORTED", "这个交易所不支持该品种（或暂不可交易）", 400)
+
+
+def availability(user: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Per exchange x market: can the user open / close now, and if not the reason code + text (no exchange calls)."""
+    if user is None:
+        return {"enabled": False, "killSwitch": False, "exchanges": {}, "reason": "AUTH_REQUIRED"}
+    s = store.settings()
+    uid = str(user["id"])
+    out: dict[str, Any] = {}
+    for ex in EXCHANGES:
+        row: dict[str, Any] = {"bound": store.get_cred(uid, ex) is not None}
+        for market in ("spot", "swap"):
+            op = trade_block(uid, ex, market, False, user)
+            cl = trade_block(uid, ex, market, market == "swap", user)
+            pack = lambda b: {"available": b is None, "reason": b[0] if b else None, "message": b[1] if b else None}  # noqa: E731
+            row[market] = {"open": pack(op), "close": pack(cl)}
+        out[ex] = row
+    return {"enabled": bool(s["enabled"]), "killSwitch": bool(s["killSwitch"]), "exchanges": out}
 
 
 def public_config(user: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -200,10 +302,8 @@ def history(user_id: str, exchange: str, symbol: Optional[str], limit: int = 50)
 
 def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
     ex = _ex(exchange)
-    s = store.settings()
-    if s["killSwitch"]:
-        store.audit(user_id, user_id, "order_blocked_kill", {"exchange": ex})
-        raise ServiceError("KILL_SWITCH", "管理员已开启紧急停止，暂时不能下新单（可以撤单）", 403)
+    require_confirmed(body)
+    require_trade(user_id, ex, "spot")
     raw_coid = str(body.get("clientOrderId") or "")
     if not _COID.match(raw_coid):
         raise ServiceError("BAD_CLIENT_ORDER_ID", "clientOrderId 需为 8-28 位字母数字")
@@ -226,6 +326,7 @@ def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
         return _resolve_prior(user_id, ex, coid, prior)
 
     _ex2, _row, c = _client(user_id, ex)
+    require_market(c, sym, "spot")
     ref = price
     if otype == "market":
         t = _call(c.fetch_ticker, sym)
@@ -239,6 +340,8 @@ def place(user_id: str, exchange: str, body: dict[str, Any]) -> dict[str, Any]:
         raise ServiceError("ORDER_TOO_LARGE", f"单笔金额约 {notional:.2f} USDT，超过你的上限 {cap:.2f} USDT")
 
     request = {"symbol": sym, "side": side, "type": otype, "amount": amount, "price": price or None, "notionalEst": round(notional, 6)}
+    if store.recent_same(user_id, ex, request, DUP_WINDOW_MS):  # a double click with a different id still must not double-order
+        raise ServiceError("DUPLICATE_ORDER", "相同的订单刚刚提交过，请确认后再下", 409)
     if not store.claim_order(user_id, ex, coid, sym, request):
         return _resolve_prior(user_id, ex, coid, store.get_order(user_id, ex, coid) or {})
     store.audit(user_id, user_id, "order_submit", {"exchange": ex, "coid": coid, **request})
@@ -291,3 +394,34 @@ def cancel(user_id: str, exchange: str, order_id: str, symbol: str) -> dict[str,
     o = _call(c.cancel_order, oid, sym)
     store.audit(user_id, user_id, "order_cancel", {"exchange": ex, "orderId": oid, "symbol": sym})
     return norm_order(o or {"id": oid, "symbol": sym, "status": "canceled"})
+
+
+def quote(user_id: str, exchange: str, symbol: str, market: str = "spot") -> dict[str, Any]:
+    """Best bid / ask / last for the order-confirmation dialog (estimated fill price). Read-only."""
+    from app.exchange import futures as fut
+
+    mk = "swap" if market == "swap" else "spot"
+    sym = fut.fsym(symbol) if mk == "swap" else _sym(symbol, required=True)
+    ex, _row, c = _client(user_id, exchange, mk)
+    require_market(c, sym, mk)
+    t = _call(c.fetch_ticker, sym)
+    return {"exchange": ex, "market": mk, "symbol": sym, "bid": t.get("bid"), "ask": t.get("ask"), "last": t.get("last"),
+            "contractSize": fut._contract_size(c, sym) if mk == "swap" else None, "ts": t.get("timestamp")}
+
+
+def supported(user_id: str, exchange: str, symbols: list[str], market: str = "spot") -> dict[str, bool]:
+    """Which of ``symbols`` (bases like "BTC" or full pairs) this exchange lists as active USDT products. No orders, no key use
+    beyond loading the shared public market list; lets the UI show unsupported coins as unavailable up front."""
+    from app.exchange import futures as fut
+
+    mk = "swap" if market == "swap" else "spot"
+    _ex_, _row, c = _client(user_id, exchange, mk)
+    out: dict[str, bool] = {}
+    for raw in list(symbols)[:200]:
+        try:
+            sym = fut.fsym(raw) if mk == "swap" else _sym(raw, required=True)
+            require_market(c, sym, mk)
+            out[str(raw)] = True
+        except ServiceError:
+            out[str(raw)] = False
+    return out

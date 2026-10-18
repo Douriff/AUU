@@ -22,7 +22,7 @@ SECRET = "SUPERSECRETvalue123456"
 
 class FakeClient:
     instances: list["FakeClient"] = []
-    restrictions = {"enableReading": True, "enableSpotAndMarginTrading": True, "enableWithdrawals": False, "ipRestrict": True}
+    restrictions = {"enableReading": True, "enableSpotAndMarginTrading": True, "enableFutures": True, "enableWithdrawals": False, "ipRestrict": True}
     okx_perm = {"perm": "read_only,trade", "ip": "156.227.238.242"}
     create_exc: Exception | None = None
 
@@ -89,6 +89,21 @@ class FakeClient:
         return {"id": oid, "symbol": symbol, "status": "canceled"}
 
 
+def _confirming(c):
+    """The web UI sends `confirmed: true` after its confirmation dialog and the server now insists on it.
+    These older tests exercise other rules, so their client adds the flag (new tests use raw clients)."""
+    raw_post = c.post
+
+    def post(url, *a, **kw):
+        j = kw.get("json")
+        if isinstance(j, dict) and url.endswith(("/orders", "/futures/orders")) and "confirmed" not in j:
+            kw["json"] = {**j, "confirmed": True}
+        return raw_post(url, *a, **kw)
+
+    c.post = post
+    return c
+
+
 class RequestTimeout(Exception):
     pass
 
@@ -112,7 +127,7 @@ class ExchangeApiTests(unittest.TestCase):
             os.environ.pop(k, None)
         reset_accounts(); store.reset(); svc.reset_rate()
         FakeClient.instances = []; FakeClient.create_exc = None; FakeClient.positions = []
-        FakeClient.restrictions = {"enableReading": True, "enableSpotAndMarginTrading": True, "enableWithdrawals": False, "ipRestrict": True}
+        FakeClient.restrictions = {"enableReading": True, "enableSpotAndMarginTrading": True, "enableFutures": True, "enableWithdrawals": False, "ipRestrict": True}
         FakeClient.okx_perm = {"perm": "read_only,trade", "ip": "156.227.238.242"}
         self.p1 = mock.patch.object(connector, "make_client", side_effect=fake_make)
         self.p1.start()
@@ -136,7 +151,7 @@ class ExchangeApiTests(unittest.TestCase):
         c = self.TC(self.app)
         r = c.post("/api/v1/auth/register", json={"name": name, "password": PW, "password_confirm": PW})
         self.assertEqual(r.status_code, 200, r.text)
-        return c
+        return _confirming(c)
 
     def _open_for_user(self):
         self.assertEqual(self.admin.put("/api/v1/admin/exchange", json={"enabled": True}).status_code, 200)
@@ -288,6 +303,7 @@ class ExchangeApiTests(unittest.TestCase):
         self.admin.put("/api/v1/admin/exchange", json={"killSwitch": True})
         k = {**base, "clientOrderId": "fut000000004", "takeProfit": None, "stopLoss": None}
         self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=k).json()["error"]["code"], "KILL_SWITCH")
+        FakeClient.positions = [{"symbol": sym, "side": "long", "contracts": 5, "entryPrice": 100}]
         ro = {**k, "clientOrderId": "fut000000005", "side": "sell", "reduceOnly": True, "amount": 5}
         self.assertEqual(self.user.post("/api/v1/exchange/binance/futures/orders", json=ro).status_code, 200)  # close allowed, cap n/a
         f = self.user.get("/api/v1/exchange/binance/futures/funding?symbol=BTC").json()["data"]
@@ -304,7 +320,7 @@ class ExchangeApiTests(unittest.TestCase):
         items = self.user.get("/api/v1/exchange/binance/futures/positions").json()["data"]["items"]
         self.assertEqual([p["symbol"] for p in items], ["BTC/USDT:USDT", "ETH/USDT:USDT"])
         self.assertEqual(items[0]["liquidationPrice"], 60)
-        self.user.post("/api/v1/exchange/binance/futures/close", json={"symbol": "ETH/USDT:USDT"})
+        self.user.post("/api/v1/exchange/binance/futures/close", json={"symbol": "ETH/USDT:USDT", "clientOrderId": "closeeth0001", "confirmed": True})
         last = self._creates()[-1]
         self.assertEqual((last[0], last[1], last[2], last[3]), ("ETH/USDT:USDT", "market", "buy", 1.0)); self.assertTrue(last[5]["reduceOnly"])
         self.assertEqual(self.user.post("/api/v1/admin/exchange/close-all", json={"user": "exuser"}).status_code, 403)

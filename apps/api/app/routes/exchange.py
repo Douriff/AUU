@@ -66,6 +66,7 @@ class OrderBody(BaseModel):
     type: str = Field(max_length=8)
     amount: float
     price: Optional[float] = None
+    confirmed: bool = False  # set by the web UI only after its confirmation dialog; the server refuses without it
 
 
 class CancelBody(BaseModel):
@@ -80,6 +81,35 @@ def config(request: Request):
     if u is None:
         return err("AUTH_REQUIRED", "请先登录", 401)
     return ok(svc.public_config(u))
+
+
+@router.get("/api/v1/exchange/availability")
+def availability(request: Request):
+    """Per exchange x market: can the signed-in user open / close now, else the reason (no exchange call).
+    The order endpoints enforce the very same rules, so the UI state is never the only guard."""
+    u = _user(request)
+    if u is None:
+        return err("AUTH_REQUIRED", "请先登录", 401)
+    return ok(svc.availability(u))
+
+
+@router.get("/api/v1/exchange/{exchange}/quote")
+def quote(exchange: str, request: Request, symbol: str = Query(..., max_length=32), market: str = Query("spot", max_length=4)):
+    try:
+        u = _need(request)
+        return ok(svc.quote(str(u["id"]), exchange, symbol, market))
+    except ServiceError as e:
+        return _fail(e)
+
+
+@router.get("/api/v1/exchange/{exchange}/supported")
+def supported(exchange: str, request: Request, symbols: str = Query(..., max_length=2000), market: str = Query("spot", max_length=4)):
+    try:
+        u = _need(request)
+        names = [x.strip() for x in symbols.split(",") if x.strip()][:200]
+        return ok({"market": market, "supported": svc.supported(str(u["id"]), exchange, names, market)})
+    except ServiceError as e:
+        return _fail(e)
 
 
 @router.get("/api/v1/exchange/accounts")
@@ -167,6 +197,9 @@ class FutOrderBody(BaseModel):
     reduceOnly: bool = False
     takeProfit: Optional[float] = None
     stopLoss: Optional[float] = None
+    confirmed: bool = False
+    leverage: Optional[int] = None  # live view: applied before an opening order, so the dialog shows what is used
+    marginMode: Optional[str] = Field(None, max_length=10)
 
 
 class LeverageBody(BaseModel):
@@ -179,6 +212,13 @@ class LeverageBody(BaseModel):
 class SymBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     symbol: str = Field(max_length=32)
+
+
+class ClosePosBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(max_length=32)
+    clientOrderId: str = Field(max_length=40)
+    confirmed: bool = False
 
 
 @router.post("/api/v1/exchange/futures/ack")
@@ -246,10 +286,10 @@ def futures_cancel(exchange: str, request: Request, body: CancelBody):
 
 
 @router.post("/api/v1/exchange/{exchange}/futures/close")
-def futures_close(exchange: str, request: Request, body: SymBody):
+def futures_close(exchange: str, request: Request, body: ClosePosBody):
     try:
         u = _need(request, kind="write")
-        return ok(fut.close_position(str(u["id"]), exchange, body.symbol))
+        return ok(fut.close_position(str(u["id"]), exchange, body.symbol, body.clientOrderId, body.confirmed))
     except ServiceError as e:
         return _fail(e)
 

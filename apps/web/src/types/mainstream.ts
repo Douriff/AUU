@@ -101,6 +101,18 @@ export type PaperPosition = {
   available: number;
 };
 
+/** POST /paper/positions/{symbol}/close and /paper/positions/close-all */
+export type PaperCloseResult = {
+  closed: PaperOrder[];
+  failed: { symbol: string; code: string; message: string; key?: string | null }[];
+  /** every order in this response was an earlier fill returned for the same client_order_id */
+  duplicate: boolean;
+  realized: number;
+  fees: number;
+  /** single close only */
+  order?: PaperOrder;
+};
+
 export type PaperAccount = {
   mode: "paper" | "points";
   cash: number;

@@ -218,3 +218,11 @@
 - TP/SL：开仓成交请求后，另下 reduceOnly 条件单（ccxt takeProfitPrice / stopLossPrice）。
 - 绑定：接受合约权限（Binance enableFutures；OKX trade），仍拒绝提现 / 内部划转 / 万向划转。
 - store 改为每线程一个 SQLite 连接（修复并发读取报错）。
+
+## 12. 第三期：「资产/盈亏」页实盘视图（本分支 feat/portfolio-close，阶段 B）
+- 页面：`/pnl?view=live`，「纸面｜实盘」切换；实盘视图读取并展示用户自己绑定的币安/OKX 现货余额、U 本位永续持仓，提供买入/卖出/「卖出全部」、合约开仓、合约平仓。
+- 后端复用第一/二期下单端点，新增：`GET /api/v1/exchange/availability`（每个交易所×市场的 开仓/平仓 可用性及原因码，**与下单端点共用同一个 `trade_block` 规则**）、`GET /{ex}/quote`（弹窗预估价）、`GET /{ex}/supported`（品种是否受支持）。
+- 服务端强制（前端不是唯一防线）：总开关 / 白名单 / 紧急停止 / 绑定与 Key 权限 / 合约风险确认 / 品种校验（交易所已列出、active、USDT 现货或线性永续）/ 金额与杠杆上限 / `confirmed:true` 二次确认标记 / 3 秒相同订单去重 / `clientOrderId` 幂等。
+- 合约平仓 `POST /{ex}/futures/close`：不接受方向和数量，服务端从交易所读持仓、取反向、`reduceOnly`；幂等（同一 `clientOrderId` 只执行一次，结果未知时按 id 查询而不重发）；紧急停止下仍可用。合约开仓 `futures/orders` 支持可选 `leverage` / `marginMode`（实盘视图总是带上）。
+- 策略永不使用用户 Key：`app/exchange` 只被 `routes/exchange.py` 引用，有静态单测守住。
+- 测试：`tests/test_live_trade.py`（32 项，只用 mock 交易所客户端，socket 被禁用）。风险与小额自测见 `docs/live-trading-risk-and-selftest.md`。
