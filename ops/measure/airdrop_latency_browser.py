@@ -14,7 +14,7 @@ OBS = """() => {
   window.__seen = {};
   const re = /([A-Z][a-z]+\\d+): airdrop eligibility snapshot announced/g;
   const scan = () => { const txt = document.body ? document.body.innerText : ''; let m;
-    while ((m = re.exec(txt))) { if (!(m[1] in window.__seen)) window.__seen[m[1]] = performance.timeOrigin + performance.now(); } };
+    while ((m = re.exec(txt))) { if (!(m[1] in window.__seen)) window.__seen[m[1]] = performance.now(); } };
   new MutationObserver(scan).observe(document.documentElement, {childList: true, subtree: true, characterData: true});
   scan();
 }"""
@@ -29,18 +29,26 @@ with sync_playwright() as pw:
     p.evaluate("()=>{const b=[...document.querySelectorAll('button,a')].find(e=>/跳过|skip/i.test(e.textContent));b&&b.click()}")
     p.evaluate(OBS)
     api_seen = {}
-    t_end = time.time() + dur
+
+    def mono_offset():  # python CLOCK_MONOTONIC (ms) - page performance.now() (ms); constant if both clocks agree
+        m1 = time.monotonic(); pn = p.evaluate("performance.now()"); m2 = time.monotonic()
+        return (m1 + m2) / 2 * 1000 - pn
+
+    off0 = mono_offset()
+    t_end = time.monotonic() + dur
     n_polls = 0
-    while time.time() < t_end:
+    while time.monotonic() < t_end:
         r = p.evaluate("""async()=>{const r=await fetch('/api/v1/airdrops?size=50&origin=ingested',{credentials:'include',cache:'no-store'});return r.ok?(await r.json()).data.items.map(i=>i.title):[]}""")
-        now = time.time() * 1000
+        now = time.monotonic() * 1000
         n_polls += 1
         for t in r:
             m = re.match(r"([A-Z][a-z]+\d+): airdrop", t)
             if m and m.group(1) not in api_seen:
                 api_seen[m.group(1)] = now
         time.sleep(2)
-    dom = p.evaluate("() => window.__seen")
+    off1 = mono_offset()
+    print(f"monotonic offset drift over the run: {off1 - off0:.1f} ms")
+    dom = {k: v + off1 for k, v in p.evaluate("() => window.__seen").items()}
     if shot_dir:
         p.screenshot(path=f"{shot_dir}/latency-run-final.png")
     b.close()
@@ -49,7 +57,7 @@ pubs = [json.loads(l) for l in open(pub_path)]
 rows = []
 for e in pubs:
     key = e["title"].split(":")[0]
-    tp = e["t_pub"] * 1000
+    tp = e["t_pub"] * 1000  # monotonic seconds -> ms
     ta, td = api_seen.get(key), dom.get(key)
     rows.append({"n": e["n"], "source": e["source"], "t_pub": tp, "api_s": (ta - tp) / 1000 if ta else None, "page_s": (td - tp) / 1000 if td else None})
 def stats(vals):
@@ -57,7 +65,7 @@ def stats(vals):
     if not v: return None
     q = lambda p: v[min(len(v) - 1, int(round(p / 100 * (len(v) - 1))))]
     return {"n": len(v), "mean": sum(v) / len(v), "min": v[0], "p50": q(50), "p90": q(90), "max": v[-1]}
-res = {"events": rows, "api_visible_s": stats([r["api_s"] for r in rows]), "page_visible_s": stats([r["page_s"] for r in rows]), "api_polls": n_polls}
+res = {"clock": "CLOCK_MONOTONIC", "offset_drift_ms": off1 - off0, "events": rows, "api_visible_s": stats([r["api_s"] for r in rows]), "page_visible_s": stats([r["page_s"] for r in rows]), "api_polls": n_polls}
 json.dump(res, open(out, "w"), indent=1)
 print(json.dumps({k: v for k, v in res.items() if k != "events"}, indent=1))
 for r in rows: print(r)

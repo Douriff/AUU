@@ -42,12 +42,14 @@ class Origin:
 
     def publish(self, n: int, source: str) -> None:
         w = WORDS[n % len(WORDS)]
-        now = time.time()
+        now = time.time()  # wall clock: only for the feed's pubDate / pTime fields
+        mono = time.monotonic()  # latency clock: CLOCK_MONOTONIC is shared by every process on the box and is not
+        # stepped by NTP / VM pauses (the wall clock of a paused sandbox jumps; that corrupted a first, wall-clock run)
         title = f"{w}{n}: airdrop eligibility snapshot announced"
         it = {"n": n, "title": title, "path": f"{w.lower()}-{n}", "t": now}
         with self.lock:
             self.items[source].insert(0, it)
-        self.out.write(json.dumps({"n": n, "source": source, "title": title, "t_pub": now}) + "\n")
+        self.out.write(json.dumps({"n": n, "source": source, "title": title, "t_pub": mono, "t_pub_wall": now}) + "\n")
 
     def body(self, source: str) -> tuple[bytes, str]:
         with self.lock:
@@ -104,13 +106,13 @@ def serve_origin(port: int, schedule_path: str, out_path: str) -> None:
             self._send(200, hdr, body)
 
     srv = ThreadingHTTPServer(("127.0.0.1", port), H)
-    t0 = time.time()
+    t0 = time.monotonic()
 
     def publisher():
         for n, ev in enumerate(sorted(sched, key=lambda e: e["at"])):
-            time.sleep(max(0.0, t0 + ev["at"] - time.time()))
+            time.sleep(max(0.0, t0 + ev["at"] - time.monotonic()))
             org.publish(n, ev["source"])
-            print(f"[{time.time() - t0:7.1f}s] published #{n} on {ev['source']}", flush=True)
+            print(f"[{time.monotonic() - t0:7.1f}s] published #{n} on {ev['source']}", flush=True)
 
     threading.Thread(target=publisher, daemon=True).start()
     print(f"mock origin on :{port}, {len(sched)} events", flush=True)
