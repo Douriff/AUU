@@ -5,8 +5,9 @@ the server (no credentials, no cron there). Only a temp dir `/tmp/auu-bk-*` (mod
 server for the seconds of a run and is removed afterwards.
 
 - Files: `mainstream_strategy.sqlite`, `shadow_s3.sqlite`, `mainstream_paper.sqlite` (required), `alerts.sqlite`,
-  `recon.sqlite`, `auth_log.sqlite` (when present), `mainstream.sqlite` (market data, ~3 MB gz). Not copied:
-  `users.json`, `/etc/auu/auu.env`, any key.
+  `recon.sqlite`, `auth_log.sqlite`, `price_alerts.sqlite`, `chart_drawings.sqlite`, `airdrops.sqlite` (when present),
+  `mainstream.sqlite` (market data, ~3 MB gz). Not copied: `users.json`, `exchange.sqlite` (encrypted user exchange
+  credentials), `/etc/auu/auu.env`, any key.
 - Method: on the server, as `auu`, `sqlite3.Connection.backup()` (online backup API, consistent under WAL while the
   API runs) → `PRAGMA integrity_check` → SHA-256 → SFTP to the box → hash re-checked → gzip → `MANIFEST.json`
   (hashes, sizes, per-table row counts, server git rev) + `SHA256SUMS`.

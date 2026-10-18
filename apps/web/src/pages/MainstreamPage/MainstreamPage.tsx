@@ -21,7 +21,10 @@ const pct1 = (v: number) => `${fmtFixed(v * 100, 1)}%`;
 const coinReason = (c: MainstreamCoin | null | undefined, fallbackKey: string) =>
   c?.reasonCode ? i18n.t(`ms.reason.${c.reasonCode}`) : c?.reason && i18n.language === "zh-CN" ? c.reason : i18n.t(fallbackKey);
 
-const POLL_MS = 30_000;
+// Market list: the server keeps one shared ticker cache (a few seconds), so a 5 s poll costs the exchange nothing extra.
+const POLL_MS = 5_000;
+// Funding history and the extra-venue coin card change slowly: refetch them every SLOW_EVERY polls (30 s as before).
+const SLOW_EVERY = 6;
 
 function FundingBars({ rows }: { rows: { ts: number; rate: number }[] }) {
   const { t } = useTranslation();
@@ -225,6 +228,7 @@ export function MainstreamPage() {
   });
   const [funding, setFunding] = useState<{ ts: number; rate: number }[]>([]);
   const [tick, setTick] = useState(0);
+  const slowTick = Math.floor(tick / SLOW_EVERY);
   const [bottom, setBottom] = useState<"held" | "funding">("held");
   const now = useNow();
   // multi-chart layout (1 / 2 / 4) + fullscreen chart; layout persists in localStorage
@@ -279,7 +283,7 @@ export function MainstreamPage() {
     return () => {
       alive = false;
     };
-  }, [extraMode, pick, venueParam, tick]);
+  }, [extraMode, pick, venueParam, slowTick]);
 
   const current: MarketRow | undefined = useMemo(() => {
     if (!extraMode) return poolRow;
@@ -304,7 +308,7 @@ export function MainstreamPage() {
     return () => {
       alive = false;
     };
-  }, [current?.symbol, tick]);
+  }, [current?.symbol, slowTick]);
 
   const open = (symbol: string) => {
     const next = new URLSearchParams(params);
@@ -329,7 +333,9 @@ export function MainstreamPage() {
     window.localStorage.setItem("auu.ms.tf", id);
   };
   const quote = mk?.quote || "USDT";
-  const knownSymbols = useMemo(() => (mk?.items ?? []).map((r) => r.symbol), [mk]);
+  // stable across 5 s polls: only changes when the symbol list itself changes (keeps the chart layout from re-resolving)
+  const symKey = (mk?.items ?? []).map((r) => r.symbol).join(",");
+  const knownSymbols = useMemo(() => (symKey ? symKey.split(",") : []), [symKey]);
   const effLayout = useMemo(() => normalizeCells(layout, knownSymbols, current?.symbol ?? pick ?? ""), [layout, knownSymbols, current?.symbol, pick]);
   const multi = effLayout.n > 1;
   const onCell = (i: number, c: Cell) => {

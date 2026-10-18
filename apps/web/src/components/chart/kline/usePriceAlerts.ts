@@ -6,7 +6,7 @@ import { ALERT_COLOR, ALERT_GROUP, lineSpecs } from "./priceAlerts";
 export type AlertStatus = "loading" | "ready" | "login" | "unavailable" | "error";
 export type AlertToast = { id: number; symbol: string; firedDir: "up" | "down"; target: number; price: number };
 
-const POLL_MS = 30_000;
+const POLL_MS = 10_000; // the server checks every 5 s; 10 s keeps the in-site toast close behind it
 
 /** Price alerts for one chart: list + unread badge (polled), create/delete, dashed lines on the chart, "picked on chart" price. */
 export function usePriceAlerts(chart: Chart | null, symbol: string, getLast: () => { price: number; ts: number } | null) {

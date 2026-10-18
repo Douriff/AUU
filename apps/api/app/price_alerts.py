@@ -6,8 +6,8 @@ Table ``price_alerts`` (+ the in-site notification table ``price_alert_events``)
 * One alert = (user, symbol, venue, target price, direction above|below|cross, note, status).
 * A background checker runs on the **primary only** (``price_alerts_enabled()`` is False on a standby, so
   the HK node never evaluates alerts and never sends mail). It reads the market-data service's cached
-  ticker prices (no extra exchange load beyond the existing 30 s ticker refresh) and only when at least
-  one alert is active.
+  ticker prices (no extra exchange load beyond the shared ticker cache, whose TTL alone sets the request
+  rate) every ``CHECK_INTERVAL_SEC`` and only when at least one alert is active.
 * Fire-once: every alert keeps ``side`` (price below target = -1, at/above = +1) from the last fresh price.
   It fires when the side flips in the alert's direction, and the row is moved ``active -> triggered`` with a
   compare-and-set UPDATE, so a restart, a second checker or a price that wobbles around the target can
@@ -15,7 +15,9 @@ Table ``price_alerts`` (+ the in-site notification table ``price_alert_events``)
 * A trigger creates an in-site notification (badge) and, if the user has a registered email, one mail via
   the existing AUUTRADE SMTP channel (auth.email_codes), in the user's interface language, with retry for 24 h.
 
-Prices older than ``MAX_PRICE_AGE_MS`` are ignored (no firing on stale data).
+Live ticker prices older than ``MAX_PRICE_AGE_MS`` are ignored (no firing on stale data). When the ticker feed is
+unavailable the market list falls back to its store rows (``priceSource == "store"``, the last stored candle); those keep
+the previous, looser ``MAX_STORE_PRICE_AGE_MS`` rule, so a feed outage degrades to the old behaviour instead of stopping alerts.
 """
 from __future__ import annotations
 
@@ -43,8 +45,10 @@ MAX_HISTORY = 100  # triggered / cancelled rows kept per user
 MAX_EVENTS = 200  # in-site notifications kept per user
 MAX_NOTE = 80
 PRICE_MAX = 1e9
-MAX_PRICE_AGE_MS = 10 * 60_000
-CHECK_INTERVAL_SEC = 15
+MAX_PRICE_AGE_MS = 15_000  # live ticker price (was 10 min)
+MAX_STORE_PRICE_AGE_MS = 10 * 60_000  # fallback rows built from the stored candles (the previous rule)
+CHECK_INTERVAL_SEC = 5  # was 15
+MAIL_WINDOW_MS = 15_000  # at most MAIL_PER_TICK mails per this window: the pace of the old 15 s tick, kept now that the checker ticks 3x as often
 MAIL_RETRY_MAX_MS = 10 * 60_000
 MAIL_QUEUE_MS = 86_400_000
 MAIL_MAX_ATTEMPTS = 200
@@ -442,8 +446,11 @@ def fresh_prices(markets: dict[str, Any], now_ms: int) -> dict[str, float]:
     """symbol -> last price from ``MainstreamService.markets()`` rows that are fresh enough to act on."""
     out: dict[str, float] = {}
     for it in markets.get("items") or []:
-        p, ts = it.get("price"), it.get("priceTs")
-        if p and ts and now_ms - int(ts) <= MAX_PRICE_AGE_MS:
+        if it.get("priceSource") == "store":
+            p, ts, limit = it.get("price"), it.get("priceTs"), MAX_STORE_PRICE_AGE_MS
+        else:  # live ticker: judge by when the server fetched it (priceAt), else the exchange's own stat time
+            p, ts, limit = it.get("price"), it.get("priceAt") or it.get("priceTs"), MAX_PRICE_AGE_MS
+        if p and ts and now_ms - int(ts) <= limit:
             out[str(it["symbol"])] = float(p)
     return out
 
@@ -457,6 +464,8 @@ class AlertChecker:
         self.store, self.markets_fn, self.user_fn, self.send = store, markets_fn, user_fn, send
         self.configured = configured or smtp_configured
         self.now_ms = now_ms
+        self._sent_at: list[int] = []
+        self.last_attempts = 0
 
     def check(self) -> list[dict[str, Any]]:
         if not self.store.active_symbols():
@@ -465,11 +474,12 @@ class AlertChecker:
         mk = self.markets_fn()
         return self.store.evaluate(fresh_prices(mk, now), venue=str(mk.get("exchange") or ""), now_ms=now)
 
-    def deliver(self) -> int:
+    def deliver(self, limit: int = MAIL_PER_TICK) -> int:
         """Send due mails (retry with backoff for 24 h). Returns the number sent."""
         now = self.now_ms()
         sent = 0
-        for row in self.store.mail_due(now):
+        self.last_attempts = 0
+        for row in self.store.mail_due(now, limit):
             eid, uid = int(row["id"]), row["user_id"]
             user = self.user_fn(uid) or {}
             to = str(user.get("email") or "").strip()
@@ -485,6 +495,7 @@ class AlertChecker:
             ev = _event_view(row)
             subject, text, body = render_mail(str(user.get("locale") or "zh-CN"), ev)
             attempts = int(row["email_attempts"]) + 1
+            self.last_attempts += 1  # failed SMTP tries use the pacing budget too
             try:
                 self.send(to, subject, text, body)
             except Exception as exc:  # never log exc text: SMTP errors can echo addresses
@@ -501,7 +512,14 @@ class AlertChecker:
         fired = self.check()
         for f in fired:
             log.warning("price alert fired: %s %s %s at %s", f["symbol"], f["direction"], f["target"], f["price"])
-        return {"fired": len(fired), "mailed": self.deliver()}
+        now = self.now_ms()
+        self._sent_at = [t for t in self._sent_at if now - t < MAIL_WINDOW_MS]
+        room = MAIL_PER_TICK - len(self._sent_at)  # sliding window: never faster than MAIL_PER_TICK per 15 s
+        mailed = 0
+        if room > 0:
+            mailed = self.deliver(room)
+            self._sent_at += [now] * self.last_attempts
+        return {"fired": len(fired), "mailed": mailed}
 
 
 # ---- production wiring -----------------------------------------------------------------------------
@@ -526,7 +544,7 @@ def reset_store(store: Optional[PriceAlertStore] = None) -> None:
 def production_checker() -> AlertChecker:
     from app.marketdata.mainstream import get_service
 
-    return AlertChecker(get_store(), markets_fn=lambda: get_service().markets())
+    return AlertChecker(get_store(), markets_fn=lambda: get_service().markets(sync=True))
 
 
 async def run_loop(interval_sec: int = CHECK_INTERVAL_SEC) -> None:

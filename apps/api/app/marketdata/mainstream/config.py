@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 # Stored timeframes: refreshed in the background, long history kept.
@@ -69,6 +70,35 @@ def _strategy_symbols() -> list[str]:
     return out[:40]
 
 
+# Binance spot REST hosts, in preference order. The first entries are the alternative gateways that were measured
+# stable and fast from the Tokyo node (api.binance.com routes badly there); api.binance.com stays last as the final
+# fallback. Override with AUU_BINANCE_REST_HOSTS (comma list of hostnames or https:// URLs); a single
+# ``api.binance.com`` reproduces the old behaviour. All of them share one per-IP weight budget.
+DEFAULT_BINANCE_HOSTS = ("api1.binance.com", "api3.binance.com", "data-api.binance.vision", "api.binance.com")
+# The HK standby measured the other way round (api.binance.com ~73 ms, the alternatives ~225-280 ms), so with
+# AUU_ROLE=standby and no explicit setting it keeps api.binance.com first: its behaviour does not change.
+STANDBY_BINANCE_HOSTS = ("api.binance.com", "api1.binance.com", "api3.binance.com", "data-api.binance.vision")
+_HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
+
+
+def binance_hosts() -> list[str]:
+    from app.role import is_standby
+
+    raw = os.getenv("AUU_BINANCE_REST_HOSTS", "").strip()
+    default = STANDBY_BINANCE_HOSTS if is_standby() else DEFAULT_BINANCE_HOSTS
+    parts = [p for p in raw.split(",") if p.strip()] if raw else list(default)
+    out: list[str] = []
+    for part in parts:
+        h = part.strip().lower()
+        for pre in ("https://", "http://"):
+            if h.startswith(pre):
+                h = h[len(pre):]
+        h = h.split("/")[0].split(":")[0]
+        if _HOST_RE.match(h) and h not in out:
+            out.append(h)
+    return out or list(default)
+
+
 def _exchanges() -> list[str]:
     raw = os.getenv("AUU_MAINSTREAM_EXCHANGE", "auto").strip().lower()
     if raw in SUPPORTED_EXCHANGES:
@@ -97,6 +127,7 @@ class MainstreamConfig:
     retry_base_sec: float = 1.0
     timeout_ms: int = 15_000
     max_gap_repairs: int = 5
+    binance_hosts: list[str] = field(default_factory=lambda: binance_hosts())
 
     def all_symbols(self) -> list[str]:
         """Display symbols first, then strategy-only symbols."""
@@ -132,4 +163,5 @@ def load_config() -> MainstreamConfig:
         refresh=_flag("AUU_MAINSTREAM_REFRESH", True),
         refresh_sec=_int("AUU_MAINSTREAM_REFRESH_SEC", 300, 30, 86_400),
         retries=_int("AUU_MAINSTREAM_RETRIES", 3, 1, 10),
+        binance_hosts=binance_hosts(),
     )

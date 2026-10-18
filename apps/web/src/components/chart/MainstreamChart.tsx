@@ -37,7 +37,9 @@ export const CHART_TFS: { id: MainstreamTf; label: string }[] = [
 
 const INTRADAY = new Set<MainstreamTf>(["1m", "5m", "15m"]);
 const PAGE = 500;
-const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 15_000, "15m": 20_000, "1h": 60_000, "4h": 60_000, "1d": 60_000 };
+// Forming-bar refresh. The server throttles its own exchange fetch of the last bar to once per ~10 s per series (and
+// overlays the shared live ticker price), so polling at 10 s never adds exchange load.
+const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 10_000, "15m": 10_000, "1h": 10_000, "4h": 10_000, "1d": 10_000 };
 const PERIODS: Record<MainstreamTf, Period> = {
   "1m": { type: "minute", span: 1 },
   "5m": { type: "minute", span: 5 },

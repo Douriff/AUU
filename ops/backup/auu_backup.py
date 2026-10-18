@@ -46,7 +46,12 @@ FILES = [
     "recon.sqlite",
     "auth_log.sqlite",
     "mainstream.sqlite",
+    # user data without secrets: price alerts (+ in-site notifications), chart drawings, airdrop radar
+    "price_alerts.sqlite",
+    "chart_drawings.sqlite",
+    "airdrops.sqlite",
 ]
+# Deliberately NOT here: exchange.sqlite (encrypted user exchange API credentials), users.json, any key / env file.
 REQUIRED = {"mainstream_strategy.sqlite", "shadow_s3.sqlite", "mainstream_paper.sqlite"}
 
 # Executed on the server by `runuser -u auu -- python3 -` (stdin); prints one JSON line.
