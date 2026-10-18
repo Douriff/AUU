@@ -5,13 +5,19 @@ import { Empty, SkCards } from "@/components/ui/Skeleton";
 import type { AirdropItem, AirdropStatus, AirdropVerification, AirdropsPage as AirdropsData, AirdropsQuery } from "@/types/mainstream";
 import { useTranslation } from "react-i18next";
 import { errText } from "@/i18n/errors";
-import { fmtDate } from "@/i18n/format";
+import { fmtDate, fmtRelative } from "@/i18n/format";
+import { AUTO_REFRESH_MS, createAutoRefresh, degradedFeeds, minutesAgo, serverClock, staleMinutes } from "./refresh";
 
 type Cat = "all" | "major" | "community" | "meme";
 
 function bj(ms: number | null | undefined) {
   if (!ms) return "—";
   return fmtDate(ms, { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", year: "numeric" });
+}
+
+/** "刚刚" under a minute, else a localized relative time ("3 分钟前"). */
+function relWhen(t: (k: string) => string, thenMs: number, nowMs: number) {
+  return minutesAgo(thenMs, nowMs) < 1 ? t("airdrops.justNow") : fmtRelative(thenMs, nowMs);
 }
 
 function statusClass(s: AirdropStatus) {
@@ -75,33 +81,79 @@ export function AirdropsPage() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AirdropsData | null>(null);
   const [err, setErr] = useState("");
+  const [refreshErr, setRefreshErr] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [fetchedAt, setFetchedAt] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const topRef = useRef<HTMLDivElement | null>(null);
+  const reqSeq = useRef(0);
+  const inflight = useRef(false);
   const PAGE_SIZE = 20;
 
-  const load = useCallback(() => {
-    setLoading(true);
-    const q: AirdropsQuery = {
-      page,
-      size: PAGE_SIZE,
-      category,
-      status: status || undefined,
-      origin: originFilter || undefined,
-      verification: verifyFilter || undefined,
-    };
-    return marketProvider
-      .getAirdrops(q)
-      .then((d) => {
-        setData(d);
-        setErr("");
-      })
-      .catch((e: unknown) => setErr(errText(e, "airdrops.cantConnect")))
-      .finally(() => setLoading(false));
-  }, [page, category, status, originFilter, verifyFilter]);
+  // quiet = background refresh: no skeleton, keeps the current list on failure (shows a gentle note instead)
+  const load = useCallback(
+    (quiet = false) => {
+      if (quiet && inflight.current) return Promise.resolve();
+      if (!quiet) setLoading(true);
+      const seq = ++reqSeq.current; // a newer filter/page request supersedes an older response
+      inflight.current = true;
+      const q: AirdropsQuery = {
+        page,
+        size: PAGE_SIZE,
+        category,
+        status: status || undefined,
+        origin: originFilter || undefined,
+        verification: verifyFilter || undefined,
+      };
+      return marketProvider
+        .getAirdrops(q)
+        .then((d) => {
+          if (seq !== reqSeq.current) return;
+          setData(d);
+          setErr("");
+          setRefreshErr(false);
+          setFetchedAt(Date.now());
+        })
+        .catch((e: unknown) => {
+          if (seq !== reqSeq.current) return;
+          if (quiet) setRefreshErr(true);
+          else setErr(errText(e, "airdrops.cantConnect"));
+        })
+        .finally(() => {
+          if (seq === reqSeq.current) {
+            inflight.current = false;
+            setLoading(false);
+          }
+          setNow(Date.now());
+        });
+    },
+    [page, category, status, originFilter, verifyFilter],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // live refresh: every 60 s while the tab is visible; paused while hidden; refreshes at once when shown again
+  useEffect(
+    () =>
+      createAutoRefresh({
+        intervalMs: AUTO_REFRESH_MS,
+        run: () => void load(true),
+        isHidden: () => document.hidden,
+        onVisibility: (cb) => {
+          document.addEventListener("visibilitychange", cb);
+          return () => document.removeEventListener("visibilitychange", cb);
+        },
+      }),
+    [load],
+  );
+
+  // keeps "更新于 x 分钟前" ticking between refreshes (cheap: only re-renders the label's parent every 15 s)
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const pick = (fn: () => void) => {
     fn();
@@ -112,6 +164,9 @@ export function AirdropsPage() {
     topRef.current?.scrollIntoView({ block: "start" });
   };
   const items = data?.items ?? [];
+  const down = degradedFeeds(data?.feeds);
+  const srvNow = serverClock(data?.serverNow, fetchedAt, now);
+  const staleMin = data?.ingestEnabled === false ? null : staleMinutes(data?.lastIngestAt, srvNow, data?.ingestIntervalSec);
 
   return (
     <div className="pro-page airdrops-page" ref={topRef}>
@@ -120,6 +175,17 @@ export function AirdropsPage() {
           <h1>{t("airdrops.title")}</h1>
           <p>{t("airdrops.sub")}</p>
         </div>
+        <span className="ad-upd muted" role="status" aria-live="off" title={t("airdrops.updTitle", { s: AUTO_REFRESH_MS / 1000 })}>
+          {fetchedAt ? (
+            <>
+              <i className={`st-dot ${refreshErr ? "bad" : "ok"}`} aria-hidden="true" />
+              {t("airdrops.updatedAt", { when: relWhen(t, fetchedAt, now) })}
+              {data?.lastIngestAt ? <span className="ad-upd-src"> · {t("airdrops.ingestAt", { when: relWhen(t, data.lastIngestAt, srvNow) })}</span> : null}
+            </>
+          ) : (
+            t("common.loadingDots")
+          )}
+        </span>
       </header>
 
       <div className="ad-bar">
@@ -180,6 +246,9 @@ export function AirdropsPage() {
       </div>
 
       {err ? <div className="pro-alert">{t("airdrops.loadFailed", { err })}</div> : null}
+      {!err && refreshErr && data ? <div className="pro-alert is-warn">{t("airdrops.refreshFailed", { when: relWhen(t, fetchedAt, now) })}</div> : null}
+      {down.length ? <div className="pro-alert is-warn">{t("airdrops.sourcesDown", { names: down.map((f) => f.name).join(", ") })}</div> : null}
+      {staleMin !== null && !down.length ? <div className="pro-alert is-warn">{t("airdrops.stale", { min: staleMin })}</div> : null}
 
       {loading && !data ? (
         <SkCards n={6} h={110} />

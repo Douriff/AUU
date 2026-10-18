@@ -1635,7 +1635,14 @@
     "riskLong": "Airdrop, puan ve token kampanyaları sıklıkla dolandırıcılık ve oltalama için kullanılır. Yalnızca projenin resmî kanallarından doğrulayın; önce para göndermenizi, önce onay vermenizi veya kurtarma ifadesi ya da özel anahtar paylaşmanızı isteyen hiçbir şeye katılmayın. Bu site yalnızca bilgi derler ve yatırım tavsiyesi değildir.",
     "feedsOfficial": "Resmî kaynaklar: ",
     "feedsMedia": "Medya kaynakları: ",
-    "verifyCounts": "Onaylı {{c}} · Doğrulanmadı {{u}}"
+    "verifyCounts": "Onaylı {{c}} · Doğrulanmadı {{u}}",
+    "justNow": "az önce",
+    "updatedAt": "Güncellendi {{when}}",
+    "ingestAt": "kaynaklar en son {{when}} çekildi",
+    "updTitle": "Her {{s}} sn'de otomatik yenilenir (sekme gizliyken duraklar, geri dönünce hemen yenilenir)",
+    "refreshFailed": "Otomatik yenileme şimdilik başarısız oldu; {{when}} tarihli liste gösteriliyor. Otomatik olarak yeniden denenecek.",
+    "sourcesDown": "Bazı kaynaklar şu anda güncellenemiyor ({{names}}); daha önce kaydedilen öğeler gösteriliyor. Sistem otomatik olarak yeniden dener.",
+    "stale": "Kaynaklar {{min}} dakikadır başarıyla güncellenmedi; bu liste en güncel olmayabilir. Lütfen resmi kanallara güvenin."
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

@@ -631,6 +631,8 @@ export interface AirdropFeedStatus {
   name: string;
   home: string;
   tier?: "official" | "media";
+  /** Server-side politeness floor for this source (seconds between requests). */
+  minIntervalSec?: number;
   lastOkAt: number | null;
   lastAttemptAt: number | null;
   ok: boolean;
@@ -651,6 +653,8 @@ export interface AirdropsPage {
   enabled: boolean;
   ingestEnabled: boolean;
   ingestIntervalSec: number;
+  /** Server clock (ms) when the response was built; lets the page show "updated x min ago" skew-free. */
+  serverNow?: number;
   categories: AirdropCategory[];
   statuses: AirdropStatus[];
   note: string;

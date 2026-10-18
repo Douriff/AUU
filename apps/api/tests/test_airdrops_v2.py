@@ -365,17 +365,17 @@ class FetcherTests(unittest.TestCase):
         out = f.tick()
         self.assertEqual(len(calls), 3)
         self.assertEqual(out["okx"].get("skipped"), "interval")
-        self.clock[0] += 2 * 3600_000  # past 2 x 30 min
+        self.clock[0] += 2 * 3600_000  # well past the backed-off wait
         f.tick()
         self.assertEqual(len(calls), 6)
-        # after success the normal 30-min cadence returns
+        # after success the normal cadence returns (OKX API floor = 180 s, was 30 min before the realtime step)
         good = (FIX / "airdrops_okx_real_20261015.json").read_bytes()
         f2 = self.fetcher(lambda url: good)
         self.clock[0] += 4 * 3600_000
         self.assertTrue(f2.tick()["okx"]["ok"])
-        self.clock[0] += 10 * 60_000
+        self.clock[0] += 60_000
         self.assertEqual(f2.tick()["okx"].get("skipped"), "interval")
-        self.clock[0] += 25 * 60_000
+        self.clock[0] += 125_000  # 185 s since the last request
         self.assertNotEqual(f2.tick()["okx"].get("skipped"), "interval")
 
     def test_standby_never_fetches(self):

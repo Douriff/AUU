@@ -1146,6 +1146,8 @@ html[dir="rtl"] :is(.ml-name-top, .cs-btn, .cs-item, .ov-coin h6 > span:first-ch
 .ad-sources ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .ad-sources li { font-size: 13px; }
 .ad-sources a { color: var(--accent); text-decoration: none; }
+.ad-upd { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 12px var(--mono); }
+.ad-upd .st-dot { width: 7px; height: 7px; display: inline-block; }
 .ad-counts { margin: 0 0 6px; font-family: var(--mono); font-size: 12px; color: var(--text2); }
 .ad-feeds { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ad-feed-st { display: inline-flex; align-items: center; gap: 5px; }

@@ -2,8 +2,8 @@
 
 - Sources (no key, no account, no cost): CoinDesk and Cointelegraph public RSS. Each item keeps the
   source name and the original link; the full article is never fetched or stored.
-- A background loop fetches every ``AUU_NEWS_INTERVAL_SEC`` (default 720 s = 12 min, clamped to
-  300..3600) and writes ``news.sqlite`` in the data dir. Every failure is caught and recorded in
+- A background loop fetches every ``AUU_NEWS_INTERVAL_SEC`` (default 300 s = 5 min, clamped to
+  300..3600; was 720 s) and writes ``news.sqlite`` in the data dir. Every failure is caught and recorded in
   ``fetch_log``; nothing here is read by the strategy, the ledgers, health or the guard, so a dead
   feed can never affect the main site.
 - Each item is tagged with the strategy's 19 coins it mentions (BTC/ETH/SOL first), plus a rule-based
@@ -274,9 +274,9 @@ def news_enabled() -> bool:
 
 def interval_sec() -> int:
     try:
-        v = int(os.getenv("AUU_NEWS_INTERVAL_SEC", "") or 720)
+        v = int(os.getenv("AUU_NEWS_INTERVAL_SEC", "") or 300)
     except ValueError:
-        v = 720
+        v = 300
     return max(300, min(3600, v))
 
 

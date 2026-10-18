@@ -159,6 +159,11 @@ class RouteTests(unittest.TestCase):
         self.assertGreaterEqual(d["total"], 1)
         self.assertLessEqual(len(d["items"]), 5)
         self.assertTrue(all(i["category"] == "major" for i in d["items"]))
+        # realtime step: the page shows "updated x min ago" against the server clock; default tick 240 s
+        import time as _t
+        self.assertLess(abs(d["serverNow"] - int(_t.time() * 1000)), 60_000)
+        self.assertEqual(d["ingestIntervalSec"], 240)
+        self.assertTrue(all(isinstance(f["minIntervalSec"], int) and f["minIntervalSec"] >= 60 for f in d["feeds"]))
         it = d["items"][0]
         for key in (
             "id",

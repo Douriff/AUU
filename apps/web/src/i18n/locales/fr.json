@@ -1635,7 +1635,14 @@
     "riskLong": "Les campagnes d'airdrop, de points et de jetons servent souvent aux arnaques et au phishing. Vérifiez uniquement via les canaux officiels du projet et ne participez à rien qui exige d'envoyer des fonds d'abord, d'accorder des autorisations d'abord ou de fournir une phrase secrète ou une clé privée. Ce site ne fait qu'agréger des informations et ne constitue pas un conseil en investissement.",
     "feedsOfficial": "Sources officielles : ",
     "feedsMedia": "Sources médias : ",
-    "verifyCounts": "Confirmé {{c}} · Non vérifié {{u}}"
+    "verifyCounts": "Confirmé {{c}} · Non vérifié {{u}}",
+    "justNow": "à l'instant",
+    "updatedAt": "Mis à jour {{when}}",
+    "ingestAt": "sources interrogées {{when}}",
+    "updTitle": "Actualisation automatique toutes les {{s}} s (en pause si l'onglet est masqué, immédiate au retour)",
+    "refreshFailed": "L'actualisation automatique a échoué pour le moment ; la liste affichée date de {{when}}. Nouvelle tentative automatique.",
+    "sourcesDown": "Certaines sources ne peuvent pas être mises à jour pour l'instant ({{names}}) ; les éléments enregistrés précédemment sont affichés. Le système réessaie automatiquement.",
+    "stale": "Les sources n'ont pas été mises à jour avec succès depuis {{min}} minutes ; cette liste n'est peut-être pas la plus récente. Fiez-vous aux canaux officiels."
   },
   "splash": {
     "aria": "Welcome to AUUTRADE",

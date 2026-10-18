@@ -273,7 +273,7 @@ class StoreFetcherTests(unittest.TestCase):
         with patch.dict(os.environ, {"AUU_NEWS_INTERVAL_SEC": "5"}):
             self.assertEqual(news.interval_sec(), 300)
         with patch.dict(os.environ, {"AUU_NEWS_INTERVAL_SEC": ""}):
-            self.assertEqual(news.interval_sec(), 720)
+            self.assertEqual(news.interval_sec(), 300)  # realtime step: was 720
         with patch.dict(os.environ, {"AUU_NEWS_SOURCES": "cointelegraph,bogus"}):
             self.assertEqual(news.enabled_sources(), ["cointelegraph"])
 
