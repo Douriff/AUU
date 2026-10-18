@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+"""AUU ledger export for the HK standby (Tokyo side, read-only).
+
+Run ONLY as the forced command of the restricted `auusync` key
+(/var/lib/auusync/.ssh/authorized_keys). User auusync is in group auu and can
+only READ /var/lib/auu/data. Each SQLite file is copied with the online backup
+API (same as sqlite3 `.backup`) from a mode=ro connection, so the API keeps
+writing undisturbed; the result is a consistent snapshot per database.
+Output: tar.gz on stdout with the copies, users.json and manifest.json.
+Skips 07:55-08:25 Asia/Shanghai (daily rebalance + H2 write) with exit 75.
+"""
+import datetime, hashlib, io, json, os, shutil, sqlite3, sys, tarfile, tempfile, time
+
+DATA = os.environ.get("AUU_SYNC_DATA", "/var/lib/auu/data")
+STAGE_DIR = os.environ.get("AUU_SYNC_STAGE", "/var/lib/auu-sync-stage")
+DBS = ("mainstream_strategy.sqlite", "mainstream_paper.sqlite", "shadow_h2.sqlite", "shadow_s3.sqlite",
+       "exec_shadow.sqlite", "alerts.sqlite", "recon.sqlite", "uptime.sqlite", "auth_log.sqlite", "points.sqlite", "points_trading.sqlite",
+       # user price alerts + chart drawings + airdrop radar (no secrets in them)
+       "price_alerts.sqlite", "chart_drawings.sqlite", "airdrops.sqlite")
+# NEVER listed here: exchange.sqlite (users' encrypted exchange API credentials stay on the primary by design),
+# users.json is handled separately below, and no key / env file is ever exported.
+# The app keeps these 0600 (owner auu only); read the copy staged by auu-points-stage.timer instead.
+STAGED = {n: os.path.join(STAGE_DIR, n) for n in ("points.sqlite", "price_alerts.sqlite", "chart_drawings.sqlite", "airdrops.sqlite")}
+FILES = ("users.json",)
+LEDGER_DBS = ("mainstream_strategy.sqlite", "mainstream_paper.sqlite", "shadow_h2.sqlite")
+
+
+def table_hashes(path):
+    """Same algorithm as /root/auu_ledger_hash.py (rows sorted by repr, sha256[:16])."""
+    out = {}
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        for (t,) in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
+            rows = db.execute(f'SELECT * FROM "{t}"').fetchall()
+            out[t] = [len(rows), hashlib.sha256(json.dumps(sorted(map(repr, rows))).encode()).hexdigest()[:16]]
+    finally:
+        db.close()
+    return out
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 16), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def main():
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+    hm = now.hour * 100 + now.minute
+    if 755 <= hm <= 825 and os.environ.get("AUU_SYNC_FORCE") != "1":
+        print("busy window 07:55-08:25 BJ, skip", file=sys.stderr)
+        return 75
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    work = tempfile.mkdtemp(prefix="auusync-")
+    try:
+        man = {"exportedAt": now.isoformat(timespec="seconds"), "host": os.uname().nodename, "files": {}, "ledger": {}}
+        try:
+            head = open("/opt/auu/.git/HEAD").read().strip()
+            if head.startswith("ref: "):
+                head = open("/opt/auu/.git/" + head[5:]).read().strip()
+            man["gitCommit"] = head[:12]
+        except OSError:
+            man["gitCommit"] = None
+        for f in DBS:
+            src = os.path.join(DATA, f)
+            if f in STAGED and not os.access(src, os.R_OK):
+                src = STAGED[f]  # auusync on Tokyo; root (e.g. HK export at switch-back) reads the live file
+            if not os.path.exists(src):
+                continue
+            dst = os.path.join(work, f)
+            for attempt in range(5):
+                try:
+                    s = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=10)
+                    d = sqlite3.connect(dst)
+                    s.backup(d)
+                    d.execute("PRAGMA journal_mode=DELETE")
+                    d.close(); s.close()
+                    break
+                except sqlite3.OperationalError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(1 + attempt)
+            man["files"][f] = {"sha256": sha256(dst), "size": os.path.getsize(dst)}
+            if f in LEDGER_DBS:
+                man["ledger"][f] = table_hashes(dst)
+        for f in FILES:
+            src = os.path.join(DATA, f)
+            if os.path.exists(src):
+                shutil.copyfile(src, os.path.join(work, f))
+                man["files"][f] = {"sha256": sha256(os.path.join(work, f)), "size": os.path.getsize(src)}
+        with open(os.path.join(work, "manifest.json"), "w") as fh:
+            json.dump(man, fh, indent=1, sort_keys=True)
+        with tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz") as tar:
+            for name in sorted(os.listdir(work)):
+                tar.add(os.path.join(work, name), arcname=name)
+        sys.stdout.buffer.flush()
+        return 0
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

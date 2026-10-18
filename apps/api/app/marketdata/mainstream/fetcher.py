@@ -5,8 +5,10 @@ fetch_funding_rate). No API key is ever set on the exchange object.
 """
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from app.marketdata.mainstream.config import FUNDING_STEP_MS, TF_MS, MainstreamConfig
 
@@ -38,18 +40,112 @@ def classify(exc: BaseException) -> FetchError:
     return FetchError(text[:300], blocked=blocked, fatal=fatal)
 
 
+# ---- Binance REST host selection + failover --------------------------------------------------------
+# Hosts that serve the same spot ``/api/*`` endpoints (all share the per-IP weight budget). fapi (perp funding),
+# sapi (needs keys) and every other host are never rewritten.
+BINANCE_SPOT_FAMILY = frozenset(
+    {"api.binance.com", "api1.binance.com", "api2.binance.com", "api3.binance.com", "api4.binance.com", "data-api.binance.vision"}
+)
+HOST_PRIMARY_RETRY_SEC = 600  # after falling back, probe the preferred host again this often
+# ccxt classes that mean "this gateway is unreachable" (a different gateway may work). Rate limits are NOT here:
+# the weight budget is per IP, so another host cannot help and retrying elsewhere would only add load.
+_HOST_FAILOVER = {"NetworkError", "RequestTimeout", "ExchangeNotAvailable"}
+_HOST_NO_FAILOVER = {"RateLimitExceeded", "DDoSProtection", "BadSymbol", "BadRequest", "AuthenticationError", "PermissionDenied", "NotSupported"}
+
+
+class HostPool:
+    """Ordered Binance gateways with a sticky current host (shared by every client in the process).
+
+    A failure of the current host advances to the next one; a host that was left is re-probed after
+    ``retry_sec`` so the preferred (fastest) gateway comes back by itself."""
+
+    def __init__(self, hosts: list[str], *, retry_sec: float = HOST_PRIMARY_RETRY_SEC, clock: Callable[[], float] = time.monotonic):
+        self.hosts = list(hosts) or ["api.binance.com"]
+        self.retry_sec = retry_sec
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._idx = 0
+        self._since = clock()
+        self.switches = 0
+
+    def current(self) -> str:
+        with self._lock:
+            if self._idx != 0 and self._clock() - self._since >= self.retry_sec:
+                self._idx, self._since = 0, self._clock()  # probe the preferred host again
+            return self.hosts[self._idx]
+
+    def fail(self, host: str) -> None:
+        with self._lock:
+            if self.hosts[self._idx] == host and len(self.hosts) > 1:  # only the first reporter advances
+                self._idx = (self._idx + 1) % len(self.hosts)
+                self._since = self._clock()
+                self.switches += 1
+
+
+_POOLS: dict[tuple, HostPool] = {}
+_POOLS_LOCK = threading.Lock()
+
+
+def host_pool(hosts: list[str]) -> HostPool:
+    key = tuple(hosts)
+    with _POOLS_LOCK:
+        if key not in _POOLS:
+            _POOLS[key] = HostPool(list(hosts))
+        return _POOLS[key]
+
+
+def _failover_worthy(exc: BaseException) -> bool:
+    names = _names(exc)
+    if names & _HOST_NO_FAILOVER:
+        return False
+    low = f"{type(exc).__name__}: {exc}".lower()
+    return bool(names & _HOST_FAILOVER) or any(h in low for h in _BLOCK_HINTS) or isinstance(exc, (OSError, TimeoutError))
+
+
+def install_host_failover(client: Any, pool: HostPool) -> Any:
+    """Route a keyless ccxt Binance client's spot ``/api/*`` calls through ``pool`` and fall back to the next
+    gateway on a network/gateway error (also when one gateway answers 403/451 and another does not). Wraps
+    ``client.fetch`` so every caller of the client (Fetcher, order book, extra venues) gets the same behaviour."""
+    orig = client.fetch
+
+    def fetch(url, method="GET", headers=None, body=None):
+        parts = urlsplit(url)
+        if (parts.hostname or "") not in BINANCE_SPOT_FAMILY or not parts.path.startswith("/api/"):
+            return orig(url, method, headers, body)
+        last: Optional[BaseException] = None
+        for _ in range(len(pool.hosts)):
+            host = pool.current()
+            u = urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+            try:
+                return orig(u, method, headers, body)
+            except Exception as exc:
+                if not _failover_worthy(exc):
+                    raise
+                last = exc
+                pool.fail(host)
+        assert last is not None
+        raise last
+
+    client.fetch = fetch
+    client._auu_host_pool = pool
+    return client
+
+
 def make_exchange(name: str, cfg: MainstreamConfig) -> Any:
     """Keyless ccxt client (lazy import keeps ccxt out of legacy-only processes)."""
     import ccxt  # MIT
 
     klass = getattr(ccxt, name)
-    return klass(
+    client = klass(
         {
             "enableRateLimit": True,
             "timeout": cfg.timeout_ms,
             "options": {"defaultType": "spot", "fetchMarkets": {"types": _MARKET_TYPES.get(name, ["spot"])}},
         }
     )
+    if name == "binance" and getattr(cfg, "binance_hosts", None):
+        install_host_failover(client, host_pool(cfg.binance_hosts))
+    return client
 
 
 class Fetcher:
@@ -81,6 +177,13 @@ class Fetcher:
                     self.sleep(self.cfg.retry_base_sec * (2**attempt))
         assert last is not None
         raise last
+
+    def once(self, method: str, *args, **kwargs):
+        """One attempt, no retry or sleep (request paths that must not stall); errors are classified like ``call``."""
+        try:
+            return getattr(self.client, method)(*args, **kwargs)
+        except Exception as exc:
+            raise classify(exc)
 
     def ohlcv(self, symbol: str, tf: str, since: int, until: Optional[int] = None) -> list[list]:
         """Paginate forward from ``since`` until caught up (or ``until``)."""

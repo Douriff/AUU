@@ -29,23 +29,25 @@ uses the market-data service's active exchange).
 
 `app.price_alerts.run_loop` is started in the API lifespan only when `price_alerts_enabled()`:
 not `AUU_ROLE=standby` (so **HK never checks or mails**) and `AUU_PRICE_ALERTS` not off (default on).
-Every 15 s, only if at least one alert is active, it reads `MainstreamService.markets()` (cached ticker prices, the
-same 30 s ticker refresh the market list already uses) and ignores prices older than 10 minutes.
+Every 5 s, only if at least one alert is active, it reads `MainstreamService.markets(sync=True)` (cached ticker prices
+from the one shared ticker cache the market list uses; its TTL, 3 s by default, alone decides how often the exchange is
+called) and ignores live ticker prices older than 15 s (`MAX_PRICE_AGE_MS`). If the ticker feed is unavailable the market
+list falls back to its store rows, and those keep the previous 10 minute rule (`MAX_STORE_PRICE_AGE_MS`).
 
 Fire-once: each alert stores `side` (price below target = -1, at/above = +1). It fires when the side flips in the
 alert's direction (`above`: up-cross, `below`: down-cross, `cross`: either). The first price seen only records the
 side. The row moves `active -> triggered` with a compare-and-set `UPDATE ... WHERE status='active'`, so restarts,
-two checkers or a price wobbling around the target cannot fire it twice. Limit: the ticker is polled every 30 s, so a
-wick that crosses and returns between two polls is not seen.
+two checkers or a price wobbling around the target cannot fire it twice. Limit: the ticker is read every 5 s (cache TTL 3 s), so a
+wick that crosses and returns between two reads is not seen.
 
 ## Notifications
 
-* In-site: unread count badge on the chart's bell button (polled every 30 s while the tab is visible), a toast when a
+* In-site: unread count badge on the chart's bell button (polled every 10 s while the tab is visible), a toast when a
   new alert fires, a "Recently triggered" list with a "New" tag.
 * Email: to the user's registered address via the existing AUUTRADE SMTP channel (`auth.email_codes._smtp_send`),
   localized with the user's interface language (11 languages), AUUTRADE signature from `auth.email_i18n`, plain text
   + HTML. Retry with backoff (2, 4, 8 min, then every 10 min) for 24 h; at most 30 alert mails per user per hour
-  (beyond that in-site only). Users without an email (or SMTP not configured) get in-site only.
+  (beyond that in-site only) and at most 5 mail attempts per 15 s overall (unchanged pace, although the checker now ticks every 5 s). Users without an email (or SMTP not configured) get in-site only.
   The operator alert mailer (`app.alerts`, `AUU_ALERT_TO`) is not used and not changed.
 
 ## Standby

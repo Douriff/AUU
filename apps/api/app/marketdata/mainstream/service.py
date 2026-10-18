@@ -62,6 +62,10 @@ class MainstreamService:
         self._mk_lock = threading.Lock()
         self._mk_cache: Optional[dict] = None
         self._tk: dict[str, Any] = {"at": 0, "ex": None, "data": {}, "error": None, "try_at": 0, "busy": False}
+        # Forming bar of the stored timeframes (1h/4h/1d): refreshed on demand (only while a chart asks), kept in
+        # memory and merged into chart responses; the 5-minute refresh loop still owns every sqlite write.
+        self._tail_lock = threading.Lock()
+        self._tail: dict[tuple, dict[str, Any]] = {}
 
     @property
     def store(self) -> MarketStore:
@@ -268,14 +272,22 @@ class MainstreamService:
     def chart_candles(self, base: str, tf: str, *, limit: int, before: Optional[int] = None) -> dict:
         ex = self.exchange_for_read()
         meta: dict[str, Any] = {}
+        tail: Optional[dict] = None
         if ex and tf in INTRADAY:
             meta = self.ensure_intraday(ex, base, tf, limit, before)
+        elif ex and tf in TIMEFRAMES and before is None:
+            tail = self._stored_tail(ex, base, tf)
+        if ex and before is None:
+            self._tickers(ex)  # keep the shared price feed warm while a chart is open
         until = None if before is None else int(before) - 1
         if ex and tf == "4h" and base not in self.cfg.symbols:
             rows = self._agg_4h_from_1h(ex, base, limit=limit, before=before)
-            return {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows,
-                    "derived": "4h from stored 1h", "oldestAllowed": rows[0]["ts"] if rows else None,
-                    **({"limited": True} if before is not None and len(rows) < limit else {})}
+            out = {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows,
+                   "derived": "4h from stored 1h", "oldestAllowed": rows[0]["ts"] if rows else None,
+                   **({"limited": True} if before is not None and len(rows) < limit else {})}
+            if before is None:
+                out.update(self._live_overlay(ex, base, tf, rows, None))
+            return out
         rows = self.store.candles(ex, base, tf, until=until, limit=limit) if ex else []
         if tf in INTRADAY and "oldestAllowed" in meta:
             rows = [r for r in rows if r["ts"] >= meta["oldestAllowed"]]
@@ -284,15 +296,92 @@ class MainstreamService:
             meta["oldestAllowed"] = lo
             if before is not None and (not rows or (lo is not None and rows[0]["ts"] <= lo)):
                 meta["limited"] = True
+        if ex and before is None:
+            meta.update(self._live_overlay(ex, base, tf, rows, tail))
         return {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows, **meta}
+
+    # ---- forming bar: 10 s tail (stored timeframes) + live price overlay ---------------------------------
+    TAIL_MAX_AGE_MS = 60_000  # a tail older than this never overrides the store
+
+    def _tail_sec(self) -> int:
+        try:
+            return max(2, min(300, int(os.getenv("AUU_MAINSTREAM_TAIL_SEC", "10"))))
+        except ValueError:
+            return 10
+
+    def _stored_tail(self, ex: str, base: str, tf: str) -> Optional[dict]:
+        """At most every ``_tail_sec`` seconds per series: fetch only the previous + forming bar (one small
+        request) and keep them in memory. One attempt, no retry/sleep on the request path; a failure keeps the
+        previous tail and is retried at the next interval."""
+        if tf not in TIMEFRAMES or (tf == "4h" and base not in self.cfg.symbols):
+            return None  # strategy-only coins derive 4h from 1h
+        key = (ex, base, tf)
+        now = self.now_ms()
+        step = TF_MS[tf]
+        cur = now // step * step
+        with self._tail_lock:
+            t = self._tail.get(key)
+            if t is not None and now - t["tried"] < self._tail_sec() * 1000:
+                return t if t["rows"] else None
+            if t is None:
+                if len(self._tail) >= 200:  # bounded: 20 coins x 3 timeframes x venues
+                    self._tail.pop(next(iter(self._tail)))
+                t = self._tail[key] = {"at": 0, "tried": 0, "rows": [], "error": None}
+            t["tried"] = now
+        try:
+            with self._od_lock:
+                raw = self._od_fetcher(ex).once("fetch_ohlcv", self.cfg.spot(base), tf, since=cur - step, limit=2) or []
+            rows = [[int(r[0]), r[1], r[2], r[3], r[4], r[5]] for r in raw
+                    if r and r[0] is not None and r[4] is not None and cur - step <= int(r[0]) <= cur]
+            with self._tail_lock:
+                t.update(rows=rows, at=now, error=None)
+        except FetchError as exc:
+            with self._tail_lock:
+                t["error"] = str(exc)[:160]
+            log.warning("mainstream tail %s %s %s failed: %s", ex, base, tf, exc)
+        return t if t["rows"] else None
+
+    def _live_overlay(self, ex: str, base: str, tf: str, rows: list[dict], tail: Optional[dict]) -> dict:
+        """Newest bar of a chart response, in place: merge the in-memory tail (stored timeframes), then set the
+        forming bar's close/high/low from the same cached ticker the market list shows, so the page header and the
+        last candle always carry the same number. Never written to sqlite. Returns response meta."""
+        now = self.now_ms()
+        step = TF_MS[tf]
+        cur = now // step * step
+        meta: dict[str, Any] = {}
+        if tail and tail["rows"] and now - int(tail["at"]) <= self.TAIL_MAX_AGE_MS:
+            by_ts = {int(r["ts"]): i for i, r in enumerate(rows)}
+            for r in tail["rows"]:
+                bar = {"ts": int(r[0]), "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]}
+                if bar["ts"] in by_ts:
+                    rows[by_ts[bar["ts"]]] = bar
+                elif not rows or bar["ts"] > rows[-1]["ts"]:
+                    rows.append(bar)
+            meta["tailAt"] = int(tail["at"])
+        tk = self._tk
+        if rows and rows[-1]["ts"] == cur and tk["ex"] == ex and tk["data"] and now - int(tk["at"]) <= self._ticker_fresh_ms():
+            t = tk["data"].get(base)
+            if t and t.get("last"):
+                p = float(t["last"])
+                bar = dict(rows[-1])
+                bar["close"] = p
+                bar["high"] = max(float(bar["high"]), p)
+                bar["low"] = min(float(bar["low"]), p)
+                rows[-1] = bar
+                meta["priceAt"] = int(tk["at"])
+        return meta
 
     # ---- market list (all display + strategy coins) -----------------------
     MARKETS_CACHE_MS = 15_000
 
-    def markets(self, holdings: Optional[dict[str, float]] = None) -> dict:
+    def markets(self, holdings: Optional[dict[str, float]] = None, *, sync: bool = False) -> dict:
         """One batched read for the market list. Rows come from the local store (1h/1d candles and
         funding that the refresh loop already keeps for every strategy coin); when available, a
-        cached batched 24h ticker overlays last price / 24h change / 24h quote volume."""
+        cached batched 24h ticker overlays last price / 24h change / 24h quote volume.
+
+        ``sync=True`` (the price-alert checker, which runs in its own thread) refreshes a due ticker cache inline so
+        the evaluated price is at most a request old; web requests never wait for the exchange. Either way the
+        number of exchange requests depends only on the cache TTL, never on how many users or callers there are."""
         now = self.now_ms()
         ex = self.exchange_for_read()
         with self._mk_lock:
@@ -300,8 +389,9 @@ class MainstreamService:
             if c is None or c["ex"] != ex or now - c["at"] >= self.MARKETS_CACHE_MS:
                 c = {"ex": ex, "at": now, "items": [self._market_row(ex, b) for b in self.cfg.all_symbols()]}
                 self._mk_cache = c
-        tk = self._tickers(ex)
-        fresh = tk["ex"] == ex and tk["data"] and now - int(tk["at"]) <= 3 * self._ticker_ttl_ms()
+        tk = self._tickers(ex, sync=sync)
+        now = self.now_ms()
+        fresh = tk["ex"] == ex and tk["data"] and now - int(tk["at"]) <= self._ticker_fresh_ms()
         hold = holdings or {}
         items = []
         for row in c["items"]:
@@ -309,6 +399,7 @@ class MainstreamService:
             t = tk["data"].get(it["symbol"]) if fresh else None
             if t and t.get("last"):
                 it["price"], it["priceTs"], it["priceSource"] = t["last"], t.get("ts") or tk["at"], "ticker"
+                it["priceAt"] = tk["at"]  # when the server fetched it (priceTs = exchange stat time, can be older on thin coins)
                 if t.get("change24h") is not None:
                     it["change24h"] = t["change24h"]
                 if t.get("quoteVolume") is not None:
@@ -354,16 +445,27 @@ class MainstreamService:
 
     @staticmethod
     def _ticker_ttl_ms() -> int:
+        """Minimum age before the batched ticker is fetched again (the only thing that sets exchange load)."""
         try:
-            return max(15, min(600, int(os.getenv("AUU_MAINSTREAM_TICKER_SEC", "30")))) * 1000
+            return max(2, min(600, int(os.getenv("AUU_MAINSTREAM_TICKER_SEC", "3")))) * 1000
         except ValueError:
-            return 30_000
+            return 3_000
 
-    TICKER_BACKOFF_MS = 300_000
+    def _ticker_fresh_ms(self) -> int:
+        """Rows are overlaid with the ticker only while it is this young (else they fall back to the store)."""
+        return max(3 * self._ticker_ttl_ms(), 10_000)
 
-    def _tickers(self, ex: Optional[str]) -> dict:
-        """Cached batched tickers; never blocks the request. Starts at most one background
-        refresh when the cache is older than the TTL (and not inside the failure back-off)."""
+    TICKER_WAIT_S = 1.0
+    TICKER_BACKOFF_MS = 20_000  # after a failed fetch (the call already tried every Binance gateway)
+    TICKER_RATELIMIT_BACKOFF_MS = 120_000  # 418/429: stay quiet, the weight budget is per IP
+
+    def _tickers(self, ex: Optional[str], *, sync: bool = False) -> dict:
+        """Cached batched tickers. At most one refresh runs when the cache is older than the TTL (and not inside the
+        failure back-off); that is the only thing that ever calls the exchange, whatever the number of callers. The
+        request that starts it waits at most ``TICKER_WAIT_S`` for it (a request is ~20-60 ms; a slow or dead exchange
+        costs one request 1 s, then the back-off keeps everyone else on the cached/store rows without waiting), so a
+        poll gets a price at most one request old instead of one that was fetched a whole poll ago.
+        ``sync`` (alert checker thread) refreshes inline instead."""
         tk = self._tk
         if not ex or not self._tickers_enabled():
             return tk
@@ -372,8 +474,18 @@ class MainstreamService:
             due = (tk["ex"] != ex or now - int(tk["at"]) >= self._ticker_ttl_ms()) and now >= int(tk["try_at"]) and not tk["busy"]
             if due:
                 tk["busy"] = True
-        if due:
-            threading.Thread(target=self._refresh_tickers, args=(ex,), name="mainstream-tickers", daemon=True).start()
+            waiting = sync and not due and tk["busy"]
+        if due and sync:
+            self._refresh_tickers(ex)
+        elif due:
+            th = threading.Thread(target=self._refresh_tickers, args=(ex,), name="mainstream-tickers", daemon=True)
+            th.start()
+            th.join(self.TICKER_WAIT_S)
+        elif waiting:  # another thread is already fetching: wait for it (bounded) instead of reading a stale cache
+            for _ in range(150):
+                if not tk["busy"]:
+                    break
+                time.sleep(0.02)
         return tk
 
     def _refresh_tickers(self, ex: str) -> None:
@@ -397,8 +509,11 @@ class MainstreamService:
             with self._mk_lock:
                 tk.update(at=self.now_ms(), ex=ex, data=data, error=None, try_at=0, busy=False)
         except Exception as exc:  # keep serving the store rows; back off before the next try
+            low = f"{type(exc).__name__} {exc}".lower()
+            limited = any(h in low for h in ("ratelimit", "ddos", "429", "418", "too many"))
+            wait = self.TICKER_RATELIMIT_BACKOFF_MS if limited else self.TICKER_BACKOFF_MS
             with self._mk_lock:
-                tk.update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=self.now_ms() + self.TICKER_BACKOFF_MS, busy=False)
+                tk.update(error=f"{type(exc).__name__}: {str(exc)[:120]}", try_at=self.now_ms() + wait, busy=False)
             log.warning("mainstream tickers %s failed: %s", ex, exc)
 
     def _agg_4h_from_1h(self, ex: str, base: str, *, limit: int, before: Optional[int]) -> list[dict]:

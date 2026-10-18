@@ -1,0 +1,51 @@
+#!/usr/bin/python3
+"""Tokyo: stage group-readable copies of the 0600 SQLite files for the HK read-only sync (runs as user auu).
+
+points.sqlite, price_alerts.sqlite, chart_drawings.sqlite and airdrops.sqlite chmod themselves 0600 on open, so
+auusync (group auu) cannot read them directly. Each is copied with the SQLite online backup API from a mode=ro
+connection into /var/lib/auu-sync-stage/<name> (0640 auu:auu, journal_mode=DELETE), atomically, after an
+integrity_check. auu-sync-export picks the staged copies up. Read-only towards /var/lib/auu/data.
+A failure on one file never stops the others (exit code 1 if any failed). exchange.sqlite is NOT staged.
+(Installed under its old name; the systemd unit/timer ``auu-points-stage`` is unchanged.)
+"""
+import os, sqlite3, sys, tempfile
+
+DATA = os.environ.get("AUU_SYNC_DATA", "/var/lib/auu/data")
+DIR = os.environ.get("AUU_SYNC_STAGE", "/var/lib/auu-sync-stage")
+NAMES = ("points.sqlite", "price_alerts.sqlite", "chart_drawings.sqlite", "airdrops.sqlite")
+
+
+def stage_one(name):
+    src = os.path.join(DATA, name)
+    if not os.path.exists(src):
+        return True
+    fd, tmp = tempfile.mkstemp(prefix=".stage-", dir=DIR)
+    os.close(fd)
+    try:
+        s = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=10)
+        d = sqlite3.connect(tmp)
+        s.backup(d)
+        d.execute("PRAGMA journal_mode=DELETE")
+        ok = d.execute("PRAGMA integrity_check").fetchone()[0]
+        d.close()
+        s.close()
+        if ok != "ok":
+            raise RuntimeError(f"integrity_check: {ok}")
+        os.chmod(tmp, 0o640)
+        os.replace(tmp, os.path.join(DIR, name))
+        return True
+    except Exception as exc:
+        print(f"stage {name} failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return False
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def main():
+    os.makedirs(DIR, exist_ok=True)
+    return 0 if all([stage_one(n) for n in NAMES]) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

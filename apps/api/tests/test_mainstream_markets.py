@@ -75,7 +75,7 @@ class MarketsTests(_NoNetwork):
             svc.markets()
         self._wait(svc)
         self.assertEqual(len([c for c in ex.calls if c[0] == "fetch_tickers"]), 1)  # within the TTL
-        t["now"] += 31_000
+        t["now"] += 3_100  # default TTL is 3 s
         svc.markets()
         self._wait(svc)
         self.assertEqual(len([c for c in ex.calls if c[0] == "fetch_tickers"]), 2)
@@ -89,11 +89,15 @@ class MarketsTests(_NoNetwork):
         self.assertEqual(out["tickers"]["source"], "store")
         self.assertIn("RuntimeError", out["tickers"]["error"])
         n = len([c for c in ex.calls if c[0] == "fetch_tickers"])
-        t["now"] += 60_000
+        t["now"] += svc.TICKER_BACKOFF_MS - 1_000
         svc.markets()
         self._wait(svc)
         self.assertEqual(len([c for c in ex.calls if c[0] == "fetch_tickers"]), n)  # still in back-off
         self.assertIsNotNone(out["items"][0]["price"])
+        t["now"] += 2_000  # back-off over: tries again
+        svc.markets()
+        self._wait(svc)
+        self.assertGreater(len([c for c in ex.calls if c[0] == "fetch_tickers"]), n)  # a new attempt (Fetcher retries it)
 
     def test_4h_for_strategy_only_coin_is_built_from_1h(self):
         ex = TickerExchange()
