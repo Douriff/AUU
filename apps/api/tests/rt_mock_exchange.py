@@ -25,6 +25,8 @@ class MockExchange:
         self.pings = 0
         self.streams: list[str] = []
         self.subscribed: list[dict] = []
+        self.unsubscribed: list[dict] = []
+        self.subs: dict = {}  # OKX: connection -> {(channel, instId)} currently subscribed
         self.connected = asyncio.Event()
         self.server = None
         self.port = 0
@@ -67,14 +69,22 @@ class MockExchange:
                     continue
                 if self.kind == "okx":
                     m = json.loads(msg)
-                    if m.get("op") == "subscribe":
-                        self.subscribed.extend(m.get("args") or [])
+                    op = m.get("op")
+                    if op in ("subscribe", "unsubscribe"):
+                        mine = self.subs.setdefault(ws, set())
+                        (self.subscribed if op == "subscribe" else self.unsubscribed).extend(m.get("args") or [])
                         for a in m.get("args") or []:
-                            await ws.send(json.dumps({"event": "subscribe", "arg": a, "connId": "mock"}))
+                            k = (a.get("channel"), a.get("instId"))
+                            if op == "subscribe":
+                                mine.add(k)
+                            else:
+                                mine.discard(k)
+                            await ws.send(json.dumps({"event": op, "arg": a, "connId": "mock"}))
         except Exception:
             pass
         finally:
             self.conns.discard(ws)
+            self.subs.pop(ws, None)
             if not self.conns:
                 self.connected.clear()
 
@@ -87,6 +97,24 @@ class MockExchange:
             except Exception:
                 pass
         return n
+
+    async def push(self, channel: str, inst: str, frame: str) -> int:
+        """OKX: send only to connections that currently subscribe ``channel``/``inst`` (like the real thing)."""
+        n = 0
+        for ws, mine in list(self.subs.items()):
+            if (channel, inst) in mine:
+                try:
+                    await ws.send(frame)
+                    n += 1
+                except Exception:
+                    pass
+        return n
+
+    def subscribed_now(self) -> set:
+        out: set = set()
+        for mine in self.subs.values():
+            out |= mine
+        return out
 
     async def drop_all(self) -> None:
         for ws in list(self.conns):
@@ -121,3 +149,14 @@ class MockExchange:
     def okx_candle(base: str, channel: str, t: int, o: float, h: float, l: float, c: float, confirm: str = "0") -> str:
         return json.dumps({"arg": {"channel": channel, "instId": f"{base}-USDT"},
                            "data": [[str(t), f"{o}", f"{h}", f"{l}", f"{c}", "10", "10", "1000", confirm]]})
+
+    @staticmethod
+    def okx_funding(inst: str = "BTC-USDT-SWAP") -> str:
+        """Shape of a real OKX ``funding-rate`` push (~0.5 KB)."""
+        ts = str(int(time.time() * 1000))
+        return json.dumps({"arg": {"channel": "funding-rate", "instId": inst}, "data": [{
+            "formulaType": "noRate", "fundingRate": "0.0000792386885340", "fundingTime": ts, "impactValue": "",
+            "instId": inst, "instType": "SWAP", "interestRate": "", "maxFundingRate": "0.00375",
+            "method": "current_period", "minFundingRate": "-0.00375", "nextFundingRate": "", "nextFundingTime": ts,
+            "premium": "0.0000578523128634", "settFundingRate": "0.0000668309352451", "settState": "settled",
+            "ts": ts}]})

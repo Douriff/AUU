@@ -8,6 +8,13 @@ exchange, so a client never sees two venues' prices interleaved.
 REST cross-check (every ``xcheck_sec``, in a worker thread, one ``ticker/24hr`` request ~ weight 2): a stream
 whose prices differ from REST by more than ``xcheck_bps`` on ``xcheck_strikes`` consecutive checks is marked
 suspect for two check periods (readers use REST meanwhile).
+
+OKX standby (``AUU_RT_OKX_MODE=standby``, default; see ``config.RtConfig.okx_mode``): :meth:`okx_control` runs
+on every selector pass. OKX is woken (full tickers on the already open ``/public`` connection, candles connect)
+as soon as Binance is disconnected, its data is older than ``okx_wake_ms``, it is suspect or has a cross-check
+strike, or REST prefers OKX; and it is put back to standby once Binance has been healthy for the calm period.
+Every re-activation inside the flap window doubles the calm period (capped), so a flapping Binance keeps OKX hot
+instead of toggling subscriptions. A Binance disconnect wakes the selector at once (no 1 s tick wait).
 """
 from __future__ import annotations
 
@@ -17,7 +24,9 @@ from typing import Any, Callable, Optional
 
 from app.marketdata.realtime.bus import MarketBus, Subscriber, dumps, now_ms
 from app.marketdata.realtime.config import RtConfig
-from app.marketdata.realtime.feeds import BaseFeed, build_feeds
+from collections import deque
+
+from app.marketdata.realtime.feeds import BaseFeed, build_feeds, okx_standby_applies
 
 log = logging.getLogger("auu.realtime")
 
@@ -43,6 +52,19 @@ class RealtimeManager:
         self.xcheck: dict[str, dict] = {}
         self._strikes: dict[str, int] = {}
         self._tasks: list[asyncio.Task] = []
+        # OKX standby controller (event loop only)
+        self.okx_ctl = okx_standby_applies(cfg)
+        self.okx_active = not self.okx_ctl
+        self.okx_since: Optional[int] = None
+        self.okx_reason: Optional[str] = None
+        self.okx_activations = 0
+        self._okx_wakes: deque[int] = deque()  # activation times inside the flap window
+        self._calm_since: Optional[int] = None
+        self._mode_tasks: set[asyncio.Task] = set()
+        self._kick: Optional[asyncio.Event] = None
+        if self.okx_ctl:
+            for f in self.feeds:
+                f.on_down = self._feed_down
         # websocket clients (event loop only)
         self.clients = 0
         self.per_key: dict[str, int] = {}
@@ -54,6 +76,8 @@ class RealtimeManager:
         self.bus.set_ticker(ex, base, row)
         if ex == self.selected:
             self.bus.publish(("ticker", base), self.ticker_frame(ex, base, row))
+        elif self.okx_ctl and self.selected is None:
+            self.kick()  # first frames of a freshly woken backup: select it now, not on the next 1 s tick
 
     def on_bar(self, ex: str, base: str, tf: str, row: list, closed: bool, event_ts: Optional[int], recv: int) -> None:
         self.bus.set_bar(ex, base, tf, row, closed, recv)
@@ -117,13 +141,110 @@ class RealtimeManager:
                     if f:
                         self.bus.publish(key, f)
 
+    def kick(self) -> None:
+        if self._kick is not None:
+            self._kick.set()
+
+    def _feed_down(self, feed_id: str) -> None:
+        self.kick()
+
     async def _selector(self) -> None:
+        if self.okx_ctl:
+            self._kick = asyncio.Event()
         while True:
             try:
+                if self.okx_ctl:
+                    self.okx_control()
                 self.reselect()
             except Exception:
                 log.exception("realtime selector")
-            await asyncio.sleep(1.0)
+            if self._kick is None:
+                await asyncio.sleep(1.0)
+            else:
+                try:
+                    await asyncio.wait_for(self._kick.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+                self._kick.clear()
+
+    # ---- OKX standby controller -----------------------------------------------------------------
+    def _primary_state(self):
+        for st in self.bus.feed_states():
+            if st.ex == "binance" and "ticker" in st.carries:
+                return st
+        return None
+
+    def okx_need(self, now: int) -> Optional[str]:
+        """Why OKX must be fully subscribed right now (None = Binance is healthy)."""
+        if self.preferred() == "okx":
+            return "rest-prefers-okx"
+        st = self._primary_state()
+        if st is None:
+            return "no-binance-feed"
+        if not st.last_data_ms and self.started_at is not None and now - self.started_at < self.cfg.okx_boot_grace_sec * 1000:
+            return None  # start-up: Binance has not delivered yet, give it the grace period
+        if not st.connected and not st.rotating:  # a planned 24 h rotation only wakes OKX if it gets stale
+            return "binance-disconnected"
+        if not st.last_data_ms or now - st.last_data_ms > self.cfg.okx_wake_ms:
+            return "binance-stale"
+        if now < st.suspect_until_ms:
+            return "binance-suspect"
+        if self._strikes.get("binance", 0) > 0:
+            return "binance-xcheck-strike"
+        return None
+
+    def okx_calm_ms(self, now: Optional[int] = None) -> int:
+        now = self.clock() if now is None else now
+        win = int(self.cfg.okx_flap_window_sec * 1000)
+        while self._okx_wakes and now - self._okx_wakes[0] > win:
+            self._okx_wakes.popleft()
+        n = max(1, len(self._okx_wakes))
+        return int(min(self.cfg.okx_calm_max_sec, self.cfg.okx_calm_sec * (2 ** (n - 1))) * 1000)
+
+    def okx_control(self, now: Optional[int] = None) -> None:
+        if not self.okx_ctl:
+            return
+        now = self.clock() if now is None else now
+        reason = self.okx_need(now)
+        if reason is not None:
+            self._calm_since = None
+            if not self.okx_active:
+                self._okx_set(True, now, reason)
+            return
+        if not self.okx_active:
+            return
+        if self._calm_since is None:
+            self._calm_since = now
+            return
+        calm = self.okx_calm_ms(now)
+        if now - self._calm_since >= calm:
+            self._okx_set(False, now, f"binance healthy for {calm / 1000:g}s")
+
+    def _okx_set(self, on: bool, now: int, reason: str) -> None:
+        self.okx_active, self.okx_since, self.okx_reason = on, now, reason
+        self._calm_since = None
+        if on:
+            self.okx_activations += 1
+            self._okx_wakes.append(now)
+        log.warning("realtime okx %s (%s)", "standby -> active" if on else "active -> standby", reason)
+        for f in self.feeds:
+            if f.ex == "okx":
+                t = asyncio.get_running_loop().create_task(f.set_active(on), name=f"rt-mode-{f.feed_id}")
+                self._mode_tasks.add(t)
+                t.add_done_callback(self._mode_tasks.discard)
+
+    def okx_view(self, now: int) -> dict:
+        if not self.okx_ctl:
+            return {"mode": "full", "active": True}
+        tick = next((f for f in self.feeds if f.feed_id == "okx:tickers"), None)
+        st = tick.state if tick else None
+        probe_ok = bool(st and st.connected and st.probe_ms and now - st.probe_ms <= self.cfg.okx_probe_stale_sec * 1000)
+        return {"mode": "standby", "active": self.okx_active, "since": self.okx_since, "reason": self.okx_reason,
+                "activations": self.okx_activations, "calmSec": self.okx_calm_ms(now) // 1000,
+                "calmLeftSec": (max(0, self.okx_calm_ms(now) - (now - self._calm_since)) // 1000
+                                if self.okx_active and self._calm_since is not None else None),
+                "standbyHealthy": probe_ok, "probe": "%s:%s" % self.cfg.okx_probe,
+                "opsRefused": getattr(tick, "ops_refused", 0)}
 
     # ---- REST cross-check -------------------------------------------------------------------
     def compare(self, ex: str, rest: dict, now: Optional[int] = None) -> dict:
@@ -181,9 +302,9 @@ class RealtimeManager:
             self.running = False
             for f in self.feeds:
                 f.stop()
-            for t in self._tasks:
+            for t in list(self._tasks) + list(self._mode_tasks):
                 t.cancel()
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.gather(*self._tasks, *self._mode_tasks, return_exceptions=True)
             for st in self.bus.feed_states():
                 st.connected = False
 
@@ -214,6 +335,6 @@ class RealtimeManager:
             "push": self.cfg.push, "overlay": self.cfg.overlay, "staleMs": self.cfg.stale_ms,
             "feeds": [s.view(now, self.cfg.stale_ms) for s in self.bus.feed_states()],
             "backoff": {f.feed_id: [round(d, 2) for d in f.delays[-5:]] for f in self.feeds},
-            "xcheck": self.xcheck, "clients": self.clients, "rejected": self.rejected, "slowClosed": self.slow_closed,
+            "okx": self.okx_view(now), "xcheck": self.xcheck, "clients": self.clients, "rejected": self.rejected, "slowClosed": self.slow_closed,
             "subscribers": self.bus.subscriber_count(), "published": self.bus.published,
         }

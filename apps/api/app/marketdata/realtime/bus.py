@@ -58,7 +58,8 @@ class FeedState:
     """Liveness of one exchange connection (``feed_id`` e.g. ``binance`` / ``okx:tickers``)."""
 
     __slots__ = ("feed_id", "ex", "carries", "connected", "url", "connected_at", "last_msg_ms", "last_data_ms",
-                 "connects", "disconnects", "messages", "parse_errors", "last_error", "suspect_until_ms")
+                 "connects", "disconnects", "messages", "parse_errors", "last_error", "suspect_until_ms", "since_ms",
+                 "probe_ms", "mode", "rotating")
 
     def __init__(self, feed_id: str, ex: str, carries: Iterable[str]) -> None:
         self.feed_id, self.ex, self.carries = feed_id, ex, frozenset(carries)
@@ -73,6 +74,10 @@ class FeedState:
         self.parse_errors = 0
         self.last_error: Optional[str] = None
         self.suspect_until_ms = 0
+        self.since_ms = 0  # data older than this does not count (set when OKX leaves standby)
+        self.probe_ms = 0  # last OKX standby probe push (not market data: never makes the feed "fresh")
+        self.mode: Optional[str] = None  # OKX feeds: "standby" / "active"; None = always on
+        self.rotating = False  # planned close (24 h rotation) until the next connect
 
     def view(self, now: int, stale_ms: int) -> dict:
         return {
@@ -81,8 +86,12 @@ class FeedState:
             "dataAgeMs": (now - self.last_data_ms) if self.last_data_ms else None,
             "fresh": self.fresh(now, stale_ms), "connects": self.connects, "disconnects": self.disconnects,
             "messages": self.messages, "parseErrors": self.parse_errors, "lastError": self.last_error,
-            "suspectUntilMs": self.suspect_until_ms or None,
+            "suspectUntilMs": self.suspect_until_ms or None, "mode": self.mode,
+            "probeAgeMs": (now - self.probe_ms) if self.probe_ms else None,
         }
+
+    def valid_from(self) -> int:
+        return max(self.connected_at or 0, self.since_ms)
 
     def fresh(self, now: int, stale_ms: int) -> bool:
         return bool(self.connected and self.last_data_ms and now - self.last_data_ms <= stale_ms
@@ -162,7 +171,7 @@ class MarketBus:
             return None
         with self._lock:
             src = self._tickers.get(ex) or {}
-            conn_at = max((s.connected_at or 0) for s in self._feeds.values() if s.ex == ex and "ticker" in s.carries)
+            conn_at = max((s.valid_from() for s in self._feeds.values() if s.ex == ex and "ticker" in s.carries), default=0)
             data = {}
             for b in bases:
                 t = src.get(b)
@@ -178,7 +187,7 @@ class MarketBus:
             return None
         with self._lock:
             b = self._bars.get((ex, base, tf))
-            conn_at = max((s.connected_at or 0) for s in self._feeds.values() if s.ex == ex and "kline" in s.carries)
+            conn_at = max((s.valid_from() for s in self._feeds.values() if s.ex == ex and "kline" in s.carries), default=0)
             if not b or int(b["at"]) < conn_at or int(b["cur"][0]) != now // step_ms * step_ms:
                 return None
             rows = ([list(b["prev"])] if b["prev"] else []) + [list(b["cur"])]
