@@ -81,6 +81,15 @@ def _make_lifespan(legacy: bool):
         if svc.cfg.enabled and svc.cfg.refresh:
             tasks.append(asyncio.create_task(svc.run_loop(), name="mainstream-refresh"))
             stops.append(svc.stop)
+        rt_started = False
+        if not legacy and svc.cfg.enabled:
+            from app.marketdata.realtime import build_manager, rt_enabled, set_manager
+
+            if rt_enabled():  # AUU_RT_WS, default off: exchange WebSocket feed + /api/v1/ws market push
+                rt_mgr = build_manager(svc)
+                set_manager(rt_mgr)
+                rt_started = True
+                tasks.append(asyncio.create_task(rt_mgr.run(), name="realtime-ws"))
         if not legacy and svc.cfg.enabled:
             from app.paper.strategy_runner import run_loop as strategy_loop, runner_enabled
 
@@ -137,6 +146,10 @@ def _make_lifespan(legacy: bool):
             for t in tasks:
                 with suppress(asyncio.CancelledError):
                     await t
+            if rt_started:
+                from app.marketdata.realtime import set_manager
+
+                set_manager(None)
 
     return lifespan
 

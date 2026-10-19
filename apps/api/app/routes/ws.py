@@ -1,4 +1,9 @@
-"""WebSocket /api/v1/ws — hello + subscribe + paper event hub fan-out."""
+"""WebSocket /api/v1/ws — hello + subscribe + paper event hub fan-out.
+
+With ``AUU_RT_WS=on`` (mainstream mode, default off) it also streams exchange tickers / forming bars from the
+in-memory market bus (``app.marketdata.realtime.ws_session``). With the switch off ``rt`` is None and the code
+path is the one that ran before: same hello, same replies, no extra limits.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -23,6 +28,13 @@ async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     flag = getattr(websocket.app.state, "legacy_pump", None)
     legacy = legacy_pump_enabled() if flag is None else bool(flag)
+    rt = None if legacy else _rt_session(websocket)
+    if rt is not None:
+        code = rt.admit()
+        if code is not None:
+            await websocket.send_json({"type": "error", "payload": {"code": code, "message": "too many market-data connections"}})
+            await websocket.close(code=1013, reason=code)
+            return
     if legacy:
         provider = get_provider()
         active = os.getenv("DATA_PROVIDER", "mock").lower().strip()
@@ -53,7 +65,18 @@ async def ws_endpoint(websocket: WebSocket):
             "legacyPump": False,
             "eventTypes": ["signal", "risk", "fill", "reject", "trading_state"],
         }
-    await websocket.send_json(hello)
+        if rt is not None:
+            hello["eventTypes"] = hello["eventTypes"] + ["ticker", "kline", "rt_status"]
+            hello.update(rt.hello_extra())
+    if rt is None:
+        await websocket.send_json(hello)
+    else:
+        try:
+            await websocket.send_json(hello)
+            await websocket.send_text(rt.m.status_frame())
+        except BaseException:
+            rt.close()
+            raise
 
     tasks: dict[str, asyncio.Task] = {}
     stop = asyncio.Event()
@@ -95,10 +118,26 @@ async def ws_endpoint(websocket: WebSocket):
 
     hb = asyncio.create_task(heartbeat())
     hub_task = asyncio.create_task(hub_pump())
+    rt_task = asyncio.create_task(rt.sender()) if rt is not None else None
 
     try:
         while True:
-            raw = await websocket.receive_text()
+            if rt is None:
+                raw = await websocket.receive_text()
+            else:
+                try:
+                    raw = await asyncio.wait_for(websocket.receive_text(), rt.m.cfg.client_idle_sec)
+                except asyncio.TimeoutError:
+                    await websocket.close(code=1001, reason="IDLE")
+                    break
+                if rt_task.done():
+                    break  # the sender closed a slow client
+                if not rt.allow_message():
+                    if rt.violations >= 20:
+                        await websocket.close(code=1008, reason="RATE_LIMIT")
+                        break
+                    await websocket.send_json({"type": "error", "payload": {"code": "RATE_LIMIT", "message": "too many messages"}})
+                    continue
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -108,6 +147,10 @@ async def ws_endpoint(websocket: WebSocket):
                 continue
 
             mtype = msg.get("type")
+            if rt is not None and rt.handles(msg):
+                for frame in rt.apply(msg):
+                    await websocket.send_text(frame)
+                continue
             if mtype == "pong":
                 continue
             if mtype == "ping":
@@ -168,5 +211,25 @@ async def ws_endpoint(websocket: WebSocket):
         hub_task.cancel()
         for t in tasks.values():
             t.cancel()
+        extra = []
+        if rt is not None:
+            rt.close()
+            rt_task.cancel()
+            extra.append(rt_task)
         await hub.unsubscribe(hub_q)
-        await asyncio.gather(hb, hub_task, *tasks.values(), return_exceptions=True)
+        await asyncio.gather(hb, hub_task, *tasks.values(), *extra, return_exceptions=True)
+
+
+def _rt_session(websocket: WebSocket):
+    """Market-data session when the realtime feed runs with push on; None otherwise (old behaviour)."""
+    from app.marketdata.realtime import get_manager
+
+    m = get_manager()
+    if m is None or not m.running or not m.cfg.push:
+        return None
+    from app.marketdata.realtime.ws_session import RtSession
+
+    uid = websocket.scope.get("auu_user_id")
+    client = websocket.scope.get("client")
+    key = f"u:{uid}" if uid else f"ip:{client[0] if client else 'local'}"
+    return RtSession(websocket, m, key)

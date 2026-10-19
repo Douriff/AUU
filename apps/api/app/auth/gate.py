@@ -130,6 +130,8 @@ class AuthGateMiddleware:
                 user = None
         verdict = gate_decision(scope.get("path", ""), method, user)
         if verdict is None:
+            if kind == "websocket" and user:
+                scope["auu_user_id"] = str(user.get("id"))  # per-account ws connection cap (realtime feed)
             await self.app(scope, receive, send)
             return
         status, code, message = verdict
