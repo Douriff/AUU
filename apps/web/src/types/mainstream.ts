@@ -466,6 +466,8 @@ export interface MarketsResponse {
   items: MarketRow[];
   asOf: number;
   tickers: { enabled: boolean; source: "ticker" | "store"; at: number | null; error: string | null };
+  /** Only present while the backend streams market data on /api/v1/ws (AUU_RT_WS=on, push on). */
+  realtime?: import("@/realtime/types").RtCaps;
 }
 
 export interface ReconCoin {

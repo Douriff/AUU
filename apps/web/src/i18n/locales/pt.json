@@ -1833,5 +1833,11 @@
       "close": "Fechamento só reduzindo enviado: {{symbol}}",
       "closePartial": "Parte do fechamento foi enviada e o resto falhou: {{msg}}"
     }
+  },
+  "rt": {
+    "live": "Ao vivo",
+    "polling": "Consulta",
+    "liveTitle": "Preços transmitidos ao vivo da {{src}}",
+    "pollingTitle": "Transmissão ao vivo indisponível — atualizando no intervalo normal"
   }
 }

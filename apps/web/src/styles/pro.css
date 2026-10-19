@@ -1536,3 +1536,10 @@ html.kc-fs-lock, html.kc-fs-lock body { overflow: hidden; overscroll-behavior: n
   .live-ex-tabs .live-manage { margin-inline-start: 0; }
   .live-confirm-row { font-size: 13px; padding: 6px 10px; }
 }
+
+/* realtime push marker (step 3): unobtrusive, only shown while the backend can push */
+.rt-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 0 6px; line-height: 16px; font-size: 10.5px; border-radius: 8px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; vertical-align: middle; }
+.rt-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+.rt-badge.is-live { color: var(--up, #16c784); border-color: rgba(22, 199, 132, 0.35); }
+.rt-badge.is-live i { background: var(--up, #16c784); box-shadow: 0 0 0 2px rgba(22, 199, 132, 0.18); }
+.rt-badge.is-poll i { background: rgba(240, 165, 49, 0.9); }

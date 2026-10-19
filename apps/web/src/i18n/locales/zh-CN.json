@@ -1833,5 +1833,11 @@
       "close": "已提交只减仓平仓：{{symbol}}",
       "closePartial": "部分平仓已提交，其余失败：{{msg}}"
     }
+  },
+  "rt": {
+    "live": "实时",
+    "polling": "轮询",
+    "liveTitle": "行情由 {{src}} 实时推送",
+    "pollingTitle": "实时推送暂不可用，已按原频率定时刷新"
   }
 }

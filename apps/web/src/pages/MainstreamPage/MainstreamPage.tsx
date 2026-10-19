@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PnlStrip } from "@/pages/PnlPage/PnlStrip";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CoinBadge, CoinSwitcher, MarketList, Spark, fmtPct, fmtPx, fmtRate, fmtVol, pxWidths, tone } from "@/components/market/MarketList";
@@ -16,6 +16,9 @@ import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtFixed } from "@/i18n/format";
+import { rtHub } from "@/realtime/hub";
+import { useRtStatus, useRtTickers } from "@/realtime/useRealtime";
+import { RtBadge } from "@/components/market/RtBadge";
 
 const pct1 = (v: number) => `${fmtFixed(v * 100, 1)}%`;
 const coinReason = (c: MainstreamCoin | null | undefined, fallbackKey: string) =>
@@ -23,6 +26,9 @@ const coinReason = (c: MainstreamCoin | null | undefined, fallbackKey: string) =
 
 // Market list: the server keeps one shared ticker cache (a few seconds), so a 5 s poll costs the exchange nothing extra.
 const POLL_MS = 5_000;
+// While prices are pushed (/api/v1/ws, step 3) the list poll only re-calibrates the slow fields (7d/30d, funding,
+// holdings) and acts as a safety net; it drops back to POLL_MS the moment the push is not live.
+const POLL_LIVE_MS = 30_000;
 // Funding history and the extra-venue coin card change slowly: refetch them every SLOW_EVERY polls (30 s as before).
 const SLOW_EVERY = 6;
 
@@ -252,20 +258,55 @@ export function MainstreamPage() {
     };
   }, [fs]);
 
+  // realtime push (off unless the markets response advertises it: then nothing below changes behaviour)
+  const rt = useRtStatus();
+  const rtLive = rt.state === "live";
+  const rtLiveRef = useRef(rtLive);
+  rtLiveRef.current = rtLive;
   useEffect(() => {
     let alive = true;
     marketProvider
       .getMainstreamMarkets()
-      .then((d) => alive && (setMk(d), setErr("")))
+      .then((d) => {
+        if (!alive) return;
+        setMk(d);
+        setErr("");
+        rtHub().configure(d.realtime ?? null, d.exchange);
+      })
       .catch((e: unknown) => alive && setErr(errText(e, "common.loadFailed")));
-    const t = window.setTimeout(() => setTick((n) => n + 1), POLL_MS);
+    const t = window.setTimeout(() => setTick((n) => n + 1), rtLiveRef.current ? POLL_LIVE_MS : POLL_MS);
     return () => {
       alive = false;
       window.clearTimeout(t);
     };
   }, [tick]);
+  // push stopped being live -> poll at once and continue at the normal 5 s cadence
+  const wasLive = useRef(false);
+  useEffect(() => {
+    if (wasLive.current && !rtLive) setTick((n) => n + 1);
+    wasLive.current = rtLive;
+  }, [rtLive]);
+  const rtSyms = useMemo(() => {
+    const caps = mk?.realtime;
+    if (!caps) return [];
+    const ok = new Set(caps.symbols);
+    return (mk?.items ?? []).map((r) => r.symbol).filter((s) => ok.has(s));
+  }, [mk?.realtime, mk?.items]);
+  const rtTk = useRtTickers(rtSyms);
+  // pushed price overlays the polled row (same exchange only; hub drops other venues)
+  const mkView: MarketsResponse | null = useMemo(() => {
+    if (!mk || !rtLive) return mk;
+    let changed = false;
+    const items = mk.items.map((r) => {
+      const t = rtTk[r.symbol];
+      if (!t || t.recvAt < mk.asOf - 1_000) return r; // older than the polled snapshot
+      changed = true;
+      return { ...r, price: t.last, change24h: t.change24h ?? r.change24h, quoteVolume24h: t.quoteVolume ?? r.quoteVolume24h };
+    });
+    return changed ? { ...mk, items } : mk;
+  }, [mk, rtTk, rtLive]);
 
-  const poolRow = useMemo(() => mk?.items.find((i) => i.symbol === pick), [mk, pick]);
+  const poolRow = useMemo(() => mkView?.items.find((i) => i.symbol === pick), [mkView, pick]);
   // 大盘 coin (outside the pool), or a pool coin opened from another venue's tab: on-demand data path.
   const extraMode = Boolean(pick && mk && (!poolRow || (venueParam && venueParam !== mk.exchange && (venueParam === "binance" || venueParam === "okx"))));
 
@@ -369,10 +410,11 @@ export function MainstreamPage() {
         ) : null}
         {mk && !(pick && extraMode && !coinErr) ? (
           <>
-            <Overview mk={mk} onOpen={open} now={now} />
-            <MarketList rows={mk.items} onOpen={open} quote={quote} />
+            <Overview mk={mkView ?? mk} onOpen={open} now={now} />
+            <MarketList rows={(mkView ?? mk).items} onOpen={open} quote={quote} />
             <p className="ml-foot">
               {tr("ms.foot", { n: mk.items.length, src: (mk.exchange || "—").toUpperCase() })}
+              <RtBadge />
             </p>
           </>
         ) : null}
@@ -388,7 +430,7 @@ export function MainstreamPage() {
           <button type="button" className="ms-back" onClick={back} aria-label={tr("ms.backAria")}>
             ‹
           </button>
-          <CoinSwitcher rows={mk!.items} current={current.symbol} onPick={open} quote={quote} />
+          <CoinSwitcher rows={(mkView ?? mk)!.items} current={current.symbol} onPick={open} quote={quote} />
           {extraMode ? (
             <span className="tk-src" title={tr("ms.srcTitle")}>
               {venueLabel(dataVenue) || venueLabel(venueParam) || "—"}
@@ -397,8 +439,9 @@ export function MainstreamPage() {
             </span>
           ) : null}
           <div className="tk-last">
-            <b className={`num ${tone(current.change24h)}`}>{fmtPx(current.price)}</b>
+            <b className={`num ${tone(current.change24h)}`} data-testid="tk-price">{fmtPx(current.price)}</b>
             <em className={`num ${tone(current.change24h)}`}>{fmtPct(current.change24h)}</em>
+            {extraMode ? null : <RtBadge />}
           </div>
           <div className="tk-stats">
             <span className="tk-st">

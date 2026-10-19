@@ -138,8 +138,27 @@ def orderbook(symbol: str = Query(...), depth: int = Query(12, ge=1, le=20), ven
 
 @router.get("/markets")
 def markets():
-    """Market list: every display + strategy coin in one batched response (store + cached tickers)."""
-    return ok(get_service().markets(holdings=_strategy_holdings()))
+    """Market list: every display + strategy coin in one batched response (store + cached tickers).
+
+    While the realtime feed runs with push on (``AUU_RT_WS=on``), the response also carries ``realtime`` (what
+    ``/api/v1/ws`` can stream) so the page knows it may subscribe; with the switch off the response is unchanged
+    and the frontend never opens a market-data WebSocket (step 3 of docs/realtime-ws-plan.md).
+    """
+    data = get_service().markets(holdings=_strategy_holdings())
+    caps = _rt_caps()
+    if caps is not None:
+        data = {**data, "realtime": caps}
+    return ok(data)
+
+
+def _rt_caps():
+    from app.marketdata.realtime import get_manager
+
+    m = get_manager()
+    if m is None or not m.running or not m.cfg.push:
+        return None
+    return {"push": True, "intervals": list(m.cfg.tfs), "symbols": list(m.bases), "staleMs": m.cfg.stale_ms,
+            "live": m.selected is not None, "source": m.selected}
 
 
 def _strategy_holdings() -> dict[str, float]:
