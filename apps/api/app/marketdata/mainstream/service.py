@@ -315,6 +315,9 @@ class MainstreamService:
         previous tail and is retried at the next interval."""
         if tf not in TIMEFRAMES or (tf == "4h" and base not in self.cfg.symbols):
             return None  # strategy-only coins derive 4h from 1h
+        rt = _rt_tail(ex, base, tf, TF_MS[tf])
+        if rt is not None:  # exchange WebSocket kline is on and fresh: no REST call (AUU_RT_WS)
+            return rt
         key = (ex, base, tf)
         now = self.now_ms()
         step = TF_MS[tf]
@@ -467,6 +470,12 @@ class MainstreamService:
         poll gets a price at most one request old instead of one that was fetched a whole poll ago.
         ``sync`` (alert checker thread) refreshes inline instead."""
         tk = self._tk
+        if ex:
+            rt = _rt_tickers(ex, self.cfg.all_symbols())
+            if rt is not None:  # exchange WebSocket feed is on and fresh: no REST call (AUU_RT_WS)
+                with self._mk_lock:
+                    tk.update(at=rt["at"], ex=ex, data=rt["data"], error=None, try_at=0)
+                return tk
         if not ex or not self._tickers_enabled():
             return tk
         now = self.now_ms()
@@ -611,6 +620,19 @@ class MainstreamService:
                 item["fundingAnnualized"] = None if ref is None else ref * (DAY_MS / FUNDING_STEP_MS) * 365
             items.append(item)
         return {"exchange": ex, "quote": self.cfg.quote, "items": items, "freshness": self.freshness()}
+
+
+def _rt_tickers(ex: str, bases: list[str]) -> Optional[dict]:
+    """Stream prices when the realtime feed runs and is fresh; None (= unchanged REST path) otherwise."""
+    from app.marketdata.realtime import overlay_tickers
+
+    return overlay_tickers(ex, bases)
+
+
+def _rt_tail(ex: str, base: str, tf: str, step_ms: int) -> Optional[dict]:
+    from app.marketdata.realtime import overlay_tail
+
+    return overlay_tail(ex, base, tf, step_ms)
 
 
 _service: Optional[MainstreamService] = None

@@ -95,6 +95,15 @@ def status():
     return ok(get_service().freshness())
 
 
+@router.get("/realtime")
+async def realtime():
+    """Exchange WebSocket feed status (AUU_RT_WS); ``enabled: false`` while the switch is off."""
+    from app.marketdata.realtime import get_manager
+
+    m = get_manager()
+    return ok(m.status() if m is not None else {"enabled": False})
+
+
 @router.get("/overview")
 def overview():
     return ok(get_service().overview())
