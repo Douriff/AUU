@@ -32,12 +32,26 @@ class OrderBody(BaseModel):
     take_profit_price: Optional[float] = None  # type oco
     stop_loss_price: Optional[float] = None  # type oco
     mode: str = "paper"
+    market: str = "spot"  # spot | perp (USDT-M perpetual, paper)
+    leverage: Optional[int] = None  # perp only
+    margin_mode: Optional[str] = None  # perp only: cross | isolated
+    margin: Optional[float] = None  # perp only: size by margin (qty = margin * leverage / price)
+    reduce_only: bool = False  # perp only
+
+
+class LeverageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str
+    leverage: int
+    margin_mode: str = "cross"
+    mode: str = "paper"
 
 
 class CloseBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     client_order_id: str
     mode: str = "paper"
+    market: str = "spot"
 
 
 class CloseAllBody(CloseBody):
@@ -71,8 +85,15 @@ def place(request: Request, body: OrderBody):
         return _need_login()
     if body.mode != "paper":
         return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
+    if body.market not in ("spot", "perp"):
+        return err("BAD_ORDER", "market 只能是 spot 或 perp", 400)
     try:
-        return ok(get_accounts().place(uid, body.model_dump()))
+        if body.market == "perp":
+            return ok(get_accounts().perp.place(uid, body.model_dump()))
+        spot_only = ("leverage", "margin_mode", "margin")
+        if any(getattr(body, k) is not None for k in spot_only) or body.reduce_only:
+            return err("BAD_ORDER", "现货只做多，杠杆/做空请切换到 U 本位合约", 400, extra={"key": "spotNoLeverage"})
+        return ok(get_accounts().place(uid, body.model_dump(exclude={"market", "leverage", "margin_mode", "margin", "reduce_only"})))
     except OrderError as e:
         return err(e.code, e.message, e.status, extra=e.extra())
 
@@ -98,10 +119,15 @@ def close_all(request: Request, body: CloseAllBody):
         return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
     if body.confirm is not True:
         return err("CONFIRM_REQUIRED", "全部平仓需要二次确认", 400, extra={"key": "confirmRequired"})
+    acc = get_accounts()
+    perp_closed = acc.perp.close_all(uid, body.client_order_id)
     try:
-        return ok(get_accounts().close_all(uid, body.client_order_id))
+        res = acc.close_all(uid, body.client_order_id)
     except OrderError as e:
-        return err(e.code, e.message, e.status, extra=e.extra())
+        if not perp_closed:
+            return err(e.code, e.message, e.status, extra=e.extra())
+        res = {"closed": [], "failed": [], "duplicate": False, "partialDuplicate": False, "requested": [], "realized": 0.0, "fees": 0.0}
+    return ok({**res, "perpClosed": perp_closed})
 
 
 @router.post("/positions/{symbol}/close")
@@ -113,6 +139,22 @@ def close_position(request: Request, symbol: str, body: CloseBody):
     if body.mode != "paper":
         return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
     try:
+        if body.market == "perp":
+            return ok(get_accounts().perp.close_position(uid, symbol, body.client_order_id))
         return ok(get_accounts().close_position(uid, symbol, body.client_order_id))
+    except OrderError as e:
+        return err(e.code, e.message, e.status, extra=e.extra())
+
+
+@router.post("/perp/leverage")
+def perp_leverage(request: Request, body: LeverageBody):
+    """Set paper perp leverage (1..max, default max 5) and margin mode for one coin (no open position)."""
+    uid = _uid(request)
+    if uid is None:
+        return _need_login()
+    if body.mode != "paper":
+        return err("LIVE_API_LOCKED", "实盘未开启：网页端不能下实盘单", 403)
+    try:
+        return ok(get_accounts().perp.set_leverage(uid, body.symbol, body.leverage, body.margin_mode))
     except OrderError as e:
         return err(e.code, e.message, e.status, extra=e.extra())

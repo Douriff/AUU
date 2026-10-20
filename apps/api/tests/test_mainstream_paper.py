@@ -277,3 +277,25 @@ class PaperApiTests(_Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PaperPerpApiTests(PaperApiTests):
+    """USDT-M perp paper routes: open short via API, leverage cap, spot refuses leverage, close."""
+
+    def test_perp_short_open_and_close_via_api(self):
+        c = self.user("perpuser")
+        r = c.post("/api/v1/mainstream/paper/perp/leverage", json={"symbol": "BTC", "leverage": 9, "margin_mode": "isolated"})
+        self.assertEqual(r.json()["error"]["code"], "LEVERAGE_TOO_HIGH")
+        r = c.post("/api/v1/mainstream/paper/perp/leverage", json={"symbol": "BTC", "leverage": 4, "margin_mode": "isolated"})
+        self.assertEqual(r.status_code, 200, r.text)
+        r = c.post("/api/v1/mainstream/paper/orders", json={**self.BODY, "client_order_id": "api-perp-0001", "market": "perp", "side": "sell", "margin": 100})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["data"]["leverage"], 4)
+        a = c.get("/api/v1/mainstream/paper/account?symbol=BTC").json()["data"]
+        self.assertEqual(a["perp"]["positions"][0]["side"], "short")
+        r = c.post("/api/v1/mainstream/paper/orders", json={**self.BODY, "client_order_id": "api-spot-0009", "leverage": 3})
+        self.assertEqual(r.json()["error"]["code"], "BAD_ORDER")
+        r = c.post("/api/v1/mainstream/paper/positions/BTC/close", json={"client_order_id": "api-close-001", "market": "perp"})
+        self.assertEqual(r.status_code, 200, r.text)
+        a = c.get("/api/v1/mainstream/paper/account?symbol=BTC").json()["data"]
+        self.assertEqual(a["perp"]["positions"], [])

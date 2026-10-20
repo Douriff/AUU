@@ -1135,7 +1135,7 @@
     "submitBuy": "纸面买入 {{sym}}",
     "submitSell": "纸面卖出 {{sym}}",
     "tpslNote": "触发后按市价卖出（含滑点与吃单费）；同时填两个价 = OCO，一边成交另一边自动撤销；同一分钟两边都触及时按止损处理。只用于手动纸面交易，自动策略不使用。",
-    "limitsNote": "可用 {{cash}} USDT · 单笔≤{{order}} · 单币≤{{pos}} · 只做现货多头",
+    "limitsNote": "可用 {{cash}} USDT · 单笔≤{{order}} · 单币≤{{pos}} · 现货只做多（做空请切换 U 本位合约）",
     "position": "{{sym}} 持仓",
     "avgLast": "均价 / 现价",
     "value": "市值",
@@ -1180,7 +1180,7 @@
       "max": "超过单笔上限 {{v}} USDT",
       "cash": "可用资金不足",
       "posCap": "超过单币持仓上限 {{v}} USDT",
-      "noShort": "可卖数量不足（不能做空）",
+      "noShort": "现货不能做空，可卖数量不足；做空请切换到 U 本位合约",
       "points": "可用积分不足"
     },
     "msg": {
@@ -1198,7 +1198,43 @@
     "branchPoints": "积分交易",
     "pointsOff": "积分交易暂未开放（AUU_POINTS_TRADING）",
     "pts": "积分",
-    "limitsNotePoints": "可用 {{cash}} 积分（1 USDT = {{rate}} 积分）· 单笔上限 {{order}} USDT · 单币持仓上限 {{pos}} USDT"
+    "limitsNotePoints": "可用 {{cash}} 积分（1 USDT = {{rate}} 积分）· 单笔上限 {{order}} USDT · 单币持仓上限 {{pos}} USDT",
+    "perp": {
+      "market": "市场",
+      "spot": "现货",
+      "perp": "U本位永续",
+      "cross": "全仓",
+      "isolated": "逐仓",
+      "marginMode": "保证金模式",
+      "leverage": "杠杆",
+      "lockedNote": "有持仓时杠杆和保证金模式已锁定，平仓后可修改",
+      "notional": "名义价值 (USDT)",
+      "margin": "保证金",
+      "liqEst": "预估强平价 多/空",
+      "funding": "资金费率",
+      "openLong": "开多 {{lev}}x",
+      "openShort": "开空 {{lev}}x",
+      "limitsNote": "可用 {{cash}} USDT · 单笔保证金≤{{order}} · 杠杆≤{{lev}}x · 只用市价单 · 纸面模拟",
+      "position": "{{sym}} 合约持仓",
+      "side": "方向",
+      "long": "多",
+      "short": "空",
+      "entryMark": "开仓价 / 标记价",
+      "liq": "强平价",
+      "fundingPaid": "累计资金费",
+      "close": "市价平仓",
+      "chkMargin": "单笔保证金上限 {{v}} USDT",
+      "chkCash": "可用保证金不足",
+      "ack": "纸面合约风险确认：杠杆最高 {{v}} 倍，价格反向波动可能触发强平并损失全部保证金（逐仓）或更多（全仓）。这是模拟盘，不会真实下单。确认继续？",
+      "filled": "已{{side}} {{qty}} {{sym}} @ {{px}}，手续费 {{fee}}",
+      "closed": "{{sym}} 已平仓，已实现 {{pnl}} USDT",
+      "kind": {
+        "open": "开仓",
+        "close": "平仓",
+        "flip": "反手",
+        "liquidation": "强平"
+      }
+    }
   },
   "mode": {
     "paperTitle": "所有成交均为纸面模拟；实盘交易已锁定，不会动用真实资金",

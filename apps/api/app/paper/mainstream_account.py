@@ -1,4 +1,4 @@
-"""Per-user mainstream paper trading account (spot-style, long-only, USDT quoted).
+"""Per-user mainstream paper trading account (spot long-only, USDT quoted; USDT-M perps long/short in perp_account).
 
 Paper only: nothing here can reach an exchange order endpoint. Each logged-in user has
 their own account in ``data_dir()/mainstream_paper.sqlite`` (the new mainstream paper
@@ -116,6 +116,7 @@ class PaperAccounts:
         limits: Optional[Limits] = None,
         cost: Optional[CostModel] = None,
         now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
+        funding_fn: Optional[Callable[[str], float]] = None,
     ):
         self.path = Path(path) if path else data_dir() / "mainstream_paper.sqlite"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,6 +135,9 @@ class PaperAccounts:
                 if c not in cols:
                     self._db.execute(f"ALTER TABLE orders ADD COLUMN {c} {t}")
             self._db.commit()
+        from app.paper.perp_account import PerpBook  # additive tables only (perp_*); spot rows untouched
+
+        self.perp = PerpBook(self, funding_fn=funding_fn)
 
     def close(self) -> None:
         with self._lock:
@@ -397,7 +401,7 @@ class PaperAccounts:
                     raise OrderError("POSITION_CAP", f"单币持仓上限 {lim.max_position_usdt:g} USDT", 422, key="positionCap", params={"v": f"{lim.max_position_usdt:g}"})
             else:
                 if qty > pos["qty"] - res_qty.get(sym, 0.0) + 1e-12:
-                    raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足（只做现货多头，不能做空）", 422, key="noShort")
+                    raise OrderError("INSUFFICIENT_POSITION", "可卖数量不足：现货不能做空，做空请切换到 U 本位合约", 422, key="noShort")
             if otype == "limit":
                 open_n = self._db.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='open'", (uid,)).fetchone()[0]
                 if open_n >= lim.max_open_orders:
@@ -646,7 +650,9 @@ class PaperAccounts:
 
     def snapshot(self, uid: str, symbol: Optional[str] = None, *, limit: int = 50) -> dict:
         self.match_open(uid)
+        self.perp.settle(uid)
         with self._lock:
+            perp = self.perp.snapshot(uid, symbol, limit=limit)
             acct = dict(self._account(uid))
             self._db.commit()
             res_cash, res_qty = self._reserved(uid)
@@ -673,13 +679,14 @@ class PaperAccounts:
                 args.append(symbol)
             orders = [self._public(dict(r)) for r in self._db.execute(q + " ORDER BY ts DESC LIMIT ?", (*args, limit))]
             open_orders = [self._public(dict(r)) for r in self._db.execute("SELECT * FROM orders WHERE user_id=? AND status='open' ORDER BY ts DESC", (uid,))]
-        equity = acct["cash"] + value
+        equity = acct["cash"] + value + perp["value"]
         lim = self.limits
         return {
             "mode": "paper",
             "cash": acct["cash"], "availableCash": acct["cash"] - res_cash, "startCash": acct["start_cash"],
             "equity": equity, "pnl": equity - acct["start_cash"], "pnlPct": equity / acct["start_cash"] - 1,
-            "positions": positions, "openOrders": open_orders, "orders": orders,
+            "positions": positions, "openOrders": open_orders, "orders": orders, "perp": perp,
+            "markets": ["spot", "perp"],
             "limits": {"maxOrderUsdt": lim.max_order_usdt, "maxPositionUsdt": lim.max_position_usdt, "minOrderUsdt": lim.min_order_usdt,
                        "maxOpenOrders": lim.max_open_orders, "ordersPerMin": lim.orders_per_min},
             "costs": {s: self.costs(s) for s in self.symbols()},
@@ -741,6 +748,7 @@ def held_symbols() -> set[str]:
     with acc._lock:
         rows = acc._db.execute(
             "SELECT symbol FROM positions WHERE qty > 1e-12 UNION SELECT symbol FROM orders WHERE status='open'"
+            " UNION SELECT symbol FROM perp_positions"
         ).fetchall()
     return {str(r[0]) for r in rows}
 

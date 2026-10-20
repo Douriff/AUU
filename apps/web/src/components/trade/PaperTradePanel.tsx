@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed } from "@/i18n/format";
+import { PaperPerpTicket } from "./PaperPerpTicket";
 
 /** Paper-only order ticket + position + orders for one coin. Live trading stays locked server-side. */
 
@@ -45,6 +46,7 @@ const typeLabel = (t: string) => (i18n.exists(`trade.type.${t}`) ? i18n.t(`trade
 export function PaperTradePanel({ symbol, price }: { symbol: string; price: number | null | undefined }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<TradeMode>("paper");
+  const [market, setMarket] = useState<"spot" | "perp">("spot");
   const [pointsOn, setPointsOn] = useState(false);
   const [acct, setAcct] = useState<PaperAccount | null>(null);
   const [loadErr, setLoadErr] = useState("");
@@ -251,6 +253,15 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
         </button>
       </div>
 
+      {mode === "paper" ? (
+        <div className="pt-row pt-types" role="tablist" aria-label={t("trade.perp.market")}>
+          <button type="button" className={market === "spot" ? "is-on" : ""} onClick={() => { setMarket("spot"); setMsg(null); }}>{t("trade.perp.spot")}</button>
+          <button type="button" className={market === "perp" ? "is-on" : ""} onClick={() => { setMarket("perp"); setMsg(null); }}>{t("trade.perp.perp")}</button>
+        </div>
+      ) : null}
+      {mode === "paper" && market === "perp" ? (
+        <PaperPerpTicket symbol={symbol} price={last} acct={acct} refresh={refresh} />
+      ) : (<>
       <div className="pt-sides" role="tablist">
         <button type="button" className={`pt-buy${side === "buy" ? " is-on" : ""}`} onClick={() => { setSide("buy"); if (otype === "tpsl") setOtype("market"); }}>{t("trade.buy")}</button>
         <button type="button" className={`pt-sell${side === "sell" ? " is-on" : ""}`} onClick={() => setSide("sell")}>{t("trade.sell")}</button>
@@ -384,6 +395,7 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
           {(tab === "open" ? openHere : acct.orders).length === 0 ? <li className="muted">{t("common.none")}</li> : null}
         </ul>
       </div>
+      </>)}
     </aside>
   );
 }
