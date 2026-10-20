@@ -1833,5 +1833,11 @@
       "close": "Cierre solo reducción enviado: {{symbol}}",
       "closePartial": "Parte del cierre se envió y el resto falló: {{msg}}"
     }
+  },
+  "rt": {
+    "live": "En vivo",
+    "polling": "Sondeo",
+    "liveTitle": "Precios en directo desde {{src}}",
+    "pollingTitle": "Transmisión en vivo no disponible: se actualiza con la frecuencia normal"
   }
 }

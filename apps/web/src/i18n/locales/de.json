@@ -1833,5 +1833,11 @@
       "close": "Reduce-only-Schließung gesendet: {{symbol}}",
       "closePartial": "Ein Teil der Schließung wurde gesendet, der Rest ist fehlgeschlagen: {{msg}}"
     }
+  },
+  "rt": {
+    "live": "Live",
+    "polling": "Abfrage",
+    "liveTitle": "Kurse live von {{src}} gestreamt",
+    "pollingTitle": "Live-Push nicht verfügbar – Aktualisierung im normalen Intervall"
   }
 }

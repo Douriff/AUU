@@ -1833,5 +1833,11 @@
       "close": "Clôture reduce-only envoyée : {{symbol}}",
       "closePartial": "Une partie de la clôture a été envoyée, le reste a échoué : {{msg}}"
     }
+  },
+  "rt": {
+    "live": "Direct",
+    "polling": "Sondage",
+    "liveTitle": "Prix diffusés en direct depuis {{src}}",
+    "pollingTitle": "Flux en direct indisponible — actualisation au rythme habituel"
   }
 }

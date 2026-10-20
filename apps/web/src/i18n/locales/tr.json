@@ -1833,5 +1833,11 @@
       "close": "Yalnızca azaltan kapatma gönderildi: {{symbol}}",
       "closePartial": "Kapatmanın bir kısmı gönderildi, kalanı başarısız: {{msg}}"
     }
+  },
+  "rt": {
+    "live": "Canlı",
+    "polling": "Yoklama",
+    "liveTitle": "Fiyatlar {{src}} üzerinden canlı akıyor",
+    "pollingTitle": "Canlı akış kullanılamıyor — normal aralıkla yenileniyor"
   }
 }

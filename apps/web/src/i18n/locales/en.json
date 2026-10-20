@@ -1833,5 +1833,11 @@
       "close": "Reduce-only close submitted: {{symbol}}",
       "closePartial": "Part of the close was submitted, the rest failed: {{msg}}"
     }
+  },
+  "rt": {
+    "live": "Live",
+    "polling": "Polling",
+    "liveTitle": "Prices streamed live from {{src}}",
+    "pollingTitle": "Live push unavailable — refreshing on the normal schedule"
   }
 }

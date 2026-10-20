@@ -11,7 +11,8 @@
     "test:sync": "node scripts/drawings-sync.test.mjs",
     "test:layout": "node scripts/layout.test.mjs",
     "test:adv": "node scripts/advtools.test.mjs",
-    "test:airdrop": "node scripts/airdrop-refresh.test.mjs"
+    "test:airdrop": "node scripts/airdrop-refresh.test.mjs",
+    "test:rt": "node scripts/realtime.test.mjs"
   },
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.28",

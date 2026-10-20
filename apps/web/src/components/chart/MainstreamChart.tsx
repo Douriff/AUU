@@ -21,6 +21,7 @@ import { MOM_COLORS, priceFormat } from "@/components/chart/kline/theme";
 import { auuScoreIndicator, releaseIndicatorData, stratMomIndicator, type MarkerData } from "@/components/chart/kline/register";
 import { regimeRuns, setMarkers, setRegimes } from "@/components/chart/kline/markers";
 import type { CrosshairBus } from "@/components/chart/crosshairBus";
+import { rtHub } from "@/realtime/hub";
 import { QUICK_IDS, compactPrefs, layoutPanes, loadPrefs, savePrefs, syncIndicators, type IndicatorId, type IndicatorPrefs } from "@/components/chart/kline/indicatorPrefs";
 
 /** KLineChart v10 (Apache-2.0) candlestick + volume + drawing tools for the mainstream page. */
@@ -40,6 +41,10 @@ const PAGE = 500;
 // Forming-bar refresh. The server throttles its own exchange fetch of the last bar to once per ~10 s per series (and
 // overlays the shared live ticker price), so polling at 10 s never adds exchange load.
 const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 10_000, "15m": 10_000, "1h": 10_000, "4h": 10_000, "1d": 10_000 };
+// While the forming bar is pushed (/api/v1/ws kline + ticker, 1h/4h/1d only) the poll above only re-calibrates
+// every 30 s; it goes back to every 10 s as soon as the push is not live.
+const POLL_LIVE_MS = 30_000;
+const TF_MS: Partial<Record<MainstreamTf, number>> = { "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
 const PERIODS: Record<MainstreamTf, Period> = {
   "1m": { type: "minute", span: 1 },
   "5m": { type: "minute", span: 5 },
@@ -150,9 +155,12 @@ export function MainstreamChart({
 
   params.current = { symbol, tf, venue };
 
+  const rtOff = useRef<(() => void) | null>(null);
   const stopPoll = useCallback(() => {
     if (poll.current != null) window.clearInterval(poll.current);
     poll.current = null;
+    rtOff.current?.();
+    rtOff.current = null;
   }, []);
 
   // Data loader: first page comes from the prefetch below; "forward" pages older history in.
@@ -188,8 +196,36 @@ export function MainstreamChart({
         stopPoll();
         const P = params.current;
         const my = gen.current;
+        // realtime push of the forming bar (only for the pool venue and 1h/4h/1d; otherwise nothing changes)
+        const hub = rtHub();
+        let lastPoll = 0;
+        if (P.venue == null && TF_MS[P.tf]) {
+          const step = TF_MS[P.tf]!;
+          const offK = hub.subscribeKline(P.symbol, P.tf, (k) => {
+            if (gen.current !== my || !hub.isLive()) return;
+            const last = chart.getDataList().slice(-1)[0];
+            if (!last || k.ts < last.timestamp) return;
+            callback({ timestamp: k.ts, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume });
+            setTick((n) => n + 1);
+          });
+          // header and last bar from the same source (step 0): the 1 s ticker moves the forming bar's close too
+          const offT = hub.subscribeTicker([P.symbol], (t) => {
+            if (gen.current !== my || !hub.isLive()) return;
+            const last = chart.getDataList().slice(-1)[0];
+            const now = t.ts ?? t.recvAt;
+            if (!last || now < last.timestamp || now >= last.timestamp + step) return;
+            callback({ ...last, close: t.last, high: Math.max(last.high, t.last), low: Math.min(last.low, t.last) });
+            setTick((n) => n + 1);
+          });
+          rtOff.current = () => {
+            offK();
+            offT();
+          };
+        }
         poll.current = window.setInterval(() => {
           if (document.hidden) return;
+          if (hub.isLive() && rtOff.current && Date.now() - lastPoll < POLL_LIVE_MS) return;
+          lastPoll = Date.now();
           marketProvider
             .getMainstreamCandles(P.symbol, P.tf, 3, undefined, P.venue)
             .then((d) => {
