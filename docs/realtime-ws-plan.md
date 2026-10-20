@@ -155,12 +155,24 @@ API 子进程 `AUU_RT_WS=on`（只连 mock，交叉校验与所有外联后台�
 | 币安 USDⓈ-M 合约 WS | 端点已迁到 `/public`、`/market`、`/private` 路径（见之前审计结论） | 本阶段不用；以后接资金费率/标记价推送时按新路径配置，不能沿用旧 `fstream…/ws` 路径 |
 | OKX | 每 IP 建连 3 次/秒；每连接订阅/退订/登录 480 次/小时；单条订阅 ≤ 64 KB；30 秒无数据断开（需发 `ping`）；8443 端口 2026-10-31 停用；K 线频道在 `/business` | 2 个连接（tickers / candle），每次建连 1 条订阅消息；静默 20 秒发 `ping`；默认 443 |
 
-两家都同时连（OKX 热备），总共 3 个交易所连接/节点。若想再省，可把 `AUU_RT_WS_EXCHANGES=binance`，OKX 只在 REST 已切到 OKX（币安被封）时才需要。
+PR #120 时两家都全量订阅（OKX 热备），3 个交易所连接/节点。香港实测 OKX tickers 一路就约 36 KB/s，所以后续改成 OKX 省流待机（默认，见 4.1）：平时只有币安 1 个全量连接 + OKX `/public` 1 个只挂探测订阅的空闲连接；`AUU_RT_OKX_MODE=full` 回到 #120 行为。
+
+### 4.1 OKX 省流待机（`AUU_RT_OKX_MODE=standby`，默认）
+
+- 待机：OKX `/public` 连接保持（热连接，不用重新握手），只订阅 1 个探测频道 `funding-rate:BTC-USDT-SWAP`（OKX 每 30–90 秒推一条，约 0.56 KB）；静默 20 秒发文本 `ping` 收 `pong`，加上 20 秒协议 ping。这样 OKX 不会因为“无订阅/30 秒无数据”断开，也能随时知道 OKX 网关是否正常（`status.okx.standbyHealthy`）。探测帧只证明连接活着，**不算行情**，不会让 OKX 变成“新鲜”。`/business`（K 线）待机时完全不连（懒连接）。
+- 唤醒（任一条件，选源循环判断；币安断线由 feed 立即唤醒选源循环，不等 1 秒节拍）：币安断线（计划内的 23.5 小时轮换除外，那时只按“过期”判断）；币安最新数据超过 `AUU_RT_OKX_WAKE_SEC`（默认 3 秒，比 10 秒过期早）；币安被交叉校验标记可疑，或出现第一次偏差（strike）；REST 层本身已切到 OKX。唤醒 = 在已连好的 `/public` 上发 1 条 `subscribe tickers`（19 币），`/business` 开始连接并订阅 K 线。
+- 回落：币安连续健康 `AUU_RT_OKX_CALM_SEC`（默认 300 秒）后发 1 条 `unsubscribe tickers`，关 `/business`。期间币安只要再不健康一次，计时清零。选源本身仍然是币安一新鲜就立刻切回（和 #120 相同），OKX 只是多热一会儿，防止再次故障时又要等。
+- 抖动防护：`AUU_RT_OKX_FLAP_WINDOW_SEC`（默认 1800 秒）内每多唤醒一次，冷静期翻倍（300 → 600 → 1200 …），上限 `AUU_RT_OKX_CALM_MAX_SEC`（默认 3600 秒）；窗口外的唤醒不再计数。每个 OKX 连接自限 400 次订阅/退订/小时（官方 480）：唤醒时额度不够就直接重连（新连接一次订阅全部），回落时额度不够就保持订阅（宁可多花流量也不丢数据）。
+- 启动：前 `AUU_RT_OKX_BOOT_GRACE_SEC`（默认 20 秒）给币安首包时间，不唤醒 OKX；过了还没数据就唤醒。
+- 只配了 OKX（`AUU_RT_WS_EXCHANGES=okx`）时永远是 full。
+- 不阻塞事件循环：模式切换在单独 task 里做（一次小 `send` 或 `close`）；交叉校验仍在线程里用 REST。
+- 切到 OKX 多出来的延迟：币安断线时 ≈ 1 个往返（订阅 → OKX 立即推快照）。本机到 OKX 实测 warm 订阅到 19 币全部首包 p50 102 ms / max 103 ms（本机→OKX 往返约 100 ms；香港到 OKX 走 Cloudflare 应更短）；而 #120 的 full 模式要等选源 1 秒节拍（mock 实测 p50 699 ms），所以实际上不比原来慢。币安“静默不出数据”时两种模式都在 10 秒过期时切换，OKX 已在 3 秒时唤醒，不多等。K 线：`/business` 冷连接首根 K 线本机实测 p50 532 ms（握手 433 ms），这段时间图表走原来的 REST 末根补拉。
 
 ## 5. 成本
 
 - 交易所：公共行情免费，无需 API key。
-- 入站流量（每节点）：币安约 47.5 帧/秒 × 约 250 B ≈ 12 KB/s ≈ 1 GB/月；OKX tickers 推送更密（有变化最快 100 ms），估计 ≤ 50 KB/s ≈ 4 GB/月。
+- 入站流量（每节点）：**更正**：#120 原估算把 KB/s 换算成 GB/月算错了（12 KB/s ≈ 31 GB/月，不是 1 GB）。香港 standby 2026-10-19 实测（`ss` 每连接 bytes_received，30 秒）：币安约 7 KB/s ≈ 18 GB/月，OKX tickers 约 36 KB/s ≈ 93 GB/月，OKX candles 约 2 KB/s ≈ 5 GB/月，网卡合计约 50 KB/s ≈ 130 GB/月。
+- 省流待机后：OKX 待机实测（mock + 字节计数代理，`ops/measure/okx_standby_bytes.py bytes`，探测每 30–60 秒一条）WS 层 8.7–17.4 B/s，加 TLS/TCP 头估算 18–28 B/s ≈ 46–73 MB/月；每次唤醒按 300 秒冷静期约多 11 MB（36+2 KB/s × 300 s）。预计每节点入站 ≈ 币安 18 GB/月 + OKX < 0.1 GB/月 + 唤醒次数 × 11 MB。若还要再省，大头是币安 57 个 kline stream（1h/4h/1d），可考虑只给正在看的币订 K 线。
 - 出站流量：每个订阅 19 币 ticker 的页面约 19–20 帧/秒 × 约 170 B ≈ 3.4 KB/s；100 个同时在线页面 ≈ 340 KB/s ≈ 2.7 Mbps，持续在线一个月约 0.9 TB（上限估算，实际按在线时长折算）。Cloudflare 不按流量计费；VPS 出口流量额度需要核对。图表页只订阅 1 币时约 0.3 KB/s。
 - CPU / 内存：见第 3 节；100 客户端约 6% 单核、+7 MB。
 - 交易所 REST 权重下降：推流新鲜时 ticker（约 40/分钟）与 1h/4h/1d 末根补拉（最多约 490/分钟）归零，新增交叉校验约 2/分钟。
@@ -179,6 +191,12 @@ API 子进程 `AUU_RT_WS=on`（只连 mock，交叉校验与所有外联后台�
 | `AUU_RT_IDLE_SEC` | 20 | 无消息重连（OKX 先 ping） |
 | `AUU_RT_BACKOFF_BASE_SEC` / `AUU_RT_BACKOFF_MAX_SEC` | 1 / 60 | 重连退避 |
 | `AUU_RT_XCHECK_SEC` / `AUU_RT_XCHECK_BPS` | 60 / 50 | 交叉校验周期 / 阈值（0 = 关） |
+| `AUU_RT_OKX_MODE` | `standby` | `standby` = 省流待机（4.1）；`full` = #120 行为，OKX 一直全量订阅 |
+| `AUU_RT_OKX_WAKE_SEC` | 3（1–60） | 币安数据超过这么久没更新就唤醒 OKX |
+| `AUU_RT_OKX_CALM_SEC` / `AUU_RT_OKX_CALM_MAX_SEC` | 300 / 3600 | 币安连续健康多久后 OKX 回待机 / 抖动翻倍上限 |
+| `AUU_RT_OKX_FLAP_WINDOW_SEC` | 1800 | 抖动计数窗口 |
+| `AUU_RT_OKX_BOOT_GRACE_SEC` | 20 | 启动时给币安的首包时间 |
+| `AUU_RT_OKX_PROBE` | `funding-rate:BTC-USDT-SWAP` | 待机探测订阅（`频道:instId`） |
 | `AUU_RT_WS_MAX_CLIENTS` / `AUU_RT_WS_PER_CLIENT` / `AUU_RT_WS_MAX_SUBS` | 2000 / 8 / 64 | 连接与订阅上限 |
 | `AUU_RT_WS_MSG_BURST` / `AUU_RT_WS_SEND_TIMEOUT_SEC` / `AUU_RT_WS_CLIENT_IDLE_SEC` | 20 / 5 / 90 | 上行限流 / 慢客户端 / 空闲 |
 
