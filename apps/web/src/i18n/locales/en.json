@@ -1135,7 +1135,7 @@
     "submitBuy": "Paper buy {{sym}}",
     "submitSell": "Paper sell {{sym}}",
     "tpslNote": "When triggered, sells at market (incl. slippage and taker fee). Filling both prices = OCO: when one side fills the other is cancelled automatically; if both are hit in the same minute, the stop-loss applies. For manual paper trading only; the automated strategy does not use it.",
-    "limitsNote": "Available {{cash}} USDT · per order ≤{{order}} · per coin ≤{{pos}} · spot long only",
+    "limitsNote": "Available {{cash}} USDT · per order ≤{{order}} · per coin ≤{{pos}} · spot is long-only (switch to USDT-M perp to short)",
     "position": "{{sym}} position",
     "avgLast": "Avg. / last",
     "value": "Value",
@@ -1180,7 +1180,7 @@
       "max": "Exceeds the per-order limit of {{v}} USDT",
       "cash": "Insufficient available balance",
       "posCap": "Exceeds the per-coin position limit of {{v}} USDT",
-      "noShort": "Insufficient quantity to sell (no shorting)",
+      "noShort": "Not enough to sell — spot can't short; switch to USDT-M perp to short",
       "points": "Not enough available points"
     },
     "msg": {
@@ -1198,7 +1198,43 @@
     "branchPoints": "Points trading",
     "pointsOff": "Points trading is off (AUU_POINTS_TRADING)",
     "pts": "pts",
-    "limitsNotePoints": "Available {{cash}} pts (1 USDT = {{rate}} pts) · max order {{order}} USDT · max position {{pos}} USDT"
+    "limitsNotePoints": "Available {{cash}} pts (1 USDT = {{rate}} pts) · max order {{order}} USDT · max position {{pos}} USDT",
+    "perp": {
+      "market": "Market",
+      "spot": "Spot",
+      "perp": "USDT-M perp",
+      "cross": "Cross",
+      "isolated": "Isolated",
+      "marginMode": "Margin mode",
+      "leverage": "Leverage",
+      "lockedNote": "Leverage and margin mode are locked while a position is open",
+      "notional": "Notional (USDT)",
+      "margin": "Margin",
+      "liqEst": "Est. liq. price long/short",
+      "funding": "Funding rate",
+      "openLong": "Long {{lev}}x",
+      "openShort": "Short {{lev}}x",
+      "limitsNote": "Available {{cash}} USDT · margin per order ≤{{order}} · leverage ≤{{lev}}x · market orders · paper only",
+      "position": "{{sym}} perp position",
+      "side": "Side",
+      "long": "Long",
+      "short": "Short",
+      "entryMark": "Entry / mark",
+      "liq": "Liq. price",
+      "fundingPaid": "Funding (net)",
+      "close": "Market close",
+      "chkMargin": "Margin per order is capped at {{v}} USDT",
+      "chkCash": "Not enough available margin",
+      "ack": "Paper perp risk notice: up to {{v}}x leverage; an adverse move can liquidate the position and lose the whole margin (isolated) or more (cross). Paper only, no real orders. Continue?",
+      "filled": "{{side}} {{qty}} {{sym}} @ {{px}}, fee {{fee}}",
+      "closed": "{{sym}} closed, realized {{pnl}} USDT",
+      "kind": {
+        "open": "Open",
+        "close": "Close",
+        "flip": "Flip",
+        "liquidation": "Liquidation"
+      }
+    }
   },
   "mode": {
     "paperTitle": "All fills are paper simulations; live trading is locked and no real funds are used",

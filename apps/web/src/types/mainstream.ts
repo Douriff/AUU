@@ -132,6 +132,72 @@ export type PaperAccount = {
   limits: { maxOrderUsdt: number; maxPositionUsdt: number; minOrderUsdt: number; maxOpenOrders: number; ordersPerMin: number };
   costs: Record<string, { takerFee: number; makerFee: number; slippage: number }>;
   live: { enabled: false; reason: string; message: string };
+  perp?: PaperPerpBook;
+  markets?: ("spot" | "perp")[];
+};
+
+/** Paper USDT-M perpetual position (one-way: one net long or short per coin). */
+export type PaperPerpPosition = {
+  symbol: string;
+  side: "long" | "short";
+  qty: number;
+  entryPrice: number;
+  last: number;
+  notional: number;
+  leverage: number;
+  marginMode: "cross" | "isolated";
+  margin: number;
+  unrealized: number;
+  roe: number;
+  liqPrice: number;
+  realized: number;
+  fees: number;
+  funding: number;
+  nextFundingTs: number;
+};
+
+export type PaperPerpOrder = {
+  id: string;
+  clientOrderId: string;
+  ts: number;
+  symbol: string;
+  side: "buy" | "sell";
+  kind: "open" | "close" | "flip" | "liquidation";
+  qty: number;
+  fillPrice: number | null;
+  leverage: number;
+  marginMode: "cross" | "isolated";
+  fee: number;
+  notional: number;
+  realized: number;
+  status: string;
+  reason: string | null;
+  market: "perp";
+};
+
+export type PaperPerpBook = {
+  positions: PaperPerpPosition[];
+  orders: PaperPerpOrder[];
+  value: number;
+  settings: { leverage?: number; marginMode?: "cross" | "isolated" };
+  maxLeverage: number;
+  mmr: number;
+  fundingRate: number;
+  takerFee: number;
+};
+
+export type PaperPerpOrderRequest = {
+  client_order_id: string;
+  symbol: string;
+  side: "buy" | "sell";
+  type: "market";
+  market: "perp";
+  qty?: number;
+  notional?: number;
+  leverage: number;
+  margin_mode: "cross" | "isolated";
+  reduce_only?: boolean;
+  mode: "paper";
 };
 
 export type PaperOrderRequest = {

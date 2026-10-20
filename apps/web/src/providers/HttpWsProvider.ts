@@ -14,6 +14,8 @@ import type {
   AirdropsPage, AirdropsQuery, AirdropDetail,
   PaperOrder,
   PaperOrderRequest,
+  PaperPerpOrder,
+  PaperPerpOrderRequest,
   AuuSignalOverlay
 } from "@/types/mainstream";
 import type {
@@ -409,6 +411,18 @@ export class HttpWsProvider {
 
   closeAllPaperPositions(clientOrderId: string): Promise<PaperCloseResult> {
     return postJson("/api/v1/mainstream/paper/positions/close-all", { client_order_id: clientOrderId, confirm: true });
+  }
+
+  placePaperPerpOrder(body: PaperPerpOrderRequest): Promise<PaperPerpOrder> {
+    return postJson("/api/v1/mainstream/paper/orders", body);
+  }
+
+  closePaperPerpPosition(symbol: string, clientOrderId: string): Promise<{ order: PaperPerpOrder; duplicate: boolean }> {
+    return postJson(`/api/v1/mainstream/paper/positions/${encodeURIComponent(symbol)}/close`, { client_order_id: clientOrderId, market: "perp" });
+  }
+
+  setPaperPerpLeverage(symbol: string, leverage: number, marginMode: "cross" | "isolated"): Promise<{ symbol: string; leverage: number; marginMode: string }> {
+    return postJson("/api/v1/mainstream/paper/perp/leverage", { symbol, leverage, margin_mode: marginMode });
   }
 
   cancelPaperOrder(id: string): Promise<PaperOrder> {
