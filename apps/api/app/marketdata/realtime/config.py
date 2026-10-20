@@ -19,6 +19,11 @@ DEFAULT_BINANCE_WS = ("wss://stream.binance.com:443", "wss://data-stream.binance
 DEFAULT_OKX_PUBLIC_WS = "wss://ws.okx.com/ws/v5/public"
 DEFAULT_OKX_BUSINESS_WS = "wss://ws.okx.com/ws/v5/business"
 SUPPORTED = ("binance", "okx")
+OKX_MODES = ("standby", "full")
+# Standby keep-alive subscription on the OKX /public connection: one perpetual's funding rate, pushed every 30-90 s
+# (~0.5 KB). It proves the gateway still pushes data, keeps the connection subscribed (OKX drops connections
+# without a subscription) and costs almost nothing, unlike ``tickers`` (pushed every 100 ms per coin).
+DEFAULT_OKX_PROBE = ("funding-rate", "BTC-USDT-SWAP")
 RT_TFS = ("1h", "4h", "1d")
 
 
@@ -77,6 +82,22 @@ class RtConfig:
     backoff_max_sec: float = 60.0
     stable_sec: float = 60.0  # a connection that delivered data this long resets the backoff
     max_connects_5min: int = 30  # per feed; Binance allows 300 connection attempts / 5 min / IP
+    # OKX backup mode (only when Binance is configured too; an OKX-only setup is always full):
+    # "standby" (default) = /public stays connected with only the tiny probe subscription, /business (candles) is
+    #   not connected; full tickers + candles are subscribed when Binance is disconnected, its data is older than
+    #   ``okx_wake_ms``, it is suspect / has a cross-check strike, or REST itself prefers OKX; back to standby
+    #   after Binance has been healthy for ``okx_calm_sec`` (doubled per re-activation inside
+    #   ``okx_flap_window_sec``, capped at ``okx_calm_max_sec``).
+    # "full" = the PR #120 behaviour: every OKX channel subscribed all the time.
+    okx_mode: str = "standby"
+    okx_wake_ms: int = 3_000
+    okx_calm_sec: float = 300.0
+    okx_calm_max_sec: float = 3600.0
+    okx_flap_window_sec: float = 1800.0
+    okx_boot_grace_sec: float = 20.0  # at start-up give Binance this long to deliver before waking OKX
+    okx_probe: tuple[str, str] = DEFAULT_OKX_PROBE
+    okx_probe_stale_sec: float = 200.0  # standby health: a probe push within this window (pushes every 30-90 s)
+    okx_ops_per_hour: int = 400  # OKX allows 480 subscribe/unsubscribe ops per connection per hour
     # REST cross-check
     xcheck_sec: float = 60.0  # 0 = off
     xcheck_bps: float = 50.0
@@ -88,6 +109,19 @@ class RtConfig:
     msg_burst: int = 20  # inbound client messages per 10 s
     send_timeout_sec: float = 5.0
     client_idle_sec: float = 90.0  # server pings every 15 s; a browser answers with pong
+
+
+def _okx_mode() -> str:
+    raw = os.getenv("AUU_RT_OKX_MODE", "").strip().lower()
+    return raw if raw in OKX_MODES else "standby"
+
+
+def _okx_probe() -> tuple[str, str]:
+    raw = os.getenv("AUU_RT_OKX_PROBE", "").strip()
+    ch, _, inst = raw.partition(":")
+    if ch.strip() and inst.strip():
+        return ch.strip(), inst.strip().upper()
+    return DEFAULT_OKX_PROBE
 
 
 def load_rt_config() -> RtConfig:
@@ -105,6 +139,13 @@ def load_rt_config() -> RtConfig:
         idle_sec=_num("AUU_RT_IDLE_SEC", 20, 2, 120),
         backoff_base_sec=_num("AUU_RT_BACKOFF_BASE_SEC", 1.0, 0.05, 30),
         backoff_max_sec=_num("AUU_RT_BACKOFF_MAX_SEC", 60, 1, 600),
+        okx_mode=_okx_mode(),
+        okx_wake_ms=int(_num("AUU_RT_OKX_WAKE_SEC", 3, 1, 60) * 1000),
+        okx_calm_sec=_num("AUU_RT_OKX_CALM_SEC", 300, 10, 3600),
+        okx_calm_max_sec=_num("AUU_RT_OKX_CALM_MAX_SEC", 3600, 10, 86_400),
+        okx_flap_window_sec=_num("AUU_RT_OKX_FLAP_WINDOW_SEC", 1800, 60, 86_400),
+        okx_boot_grace_sec=_num("AUU_RT_OKX_BOOT_GRACE_SEC", 20, 0, 600),
+        okx_probe=_okx_probe(),
         xcheck_sec=_num("AUU_RT_XCHECK_SEC", 60, 0, 3600),
         xcheck_bps=_num("AUU_RT_XCHECK_BPS", 50, 1, 5000),
         max_clients=int(_num("AUU_RT_WS_MAX_CLIENTS", 2000, 1, 100_000)),
