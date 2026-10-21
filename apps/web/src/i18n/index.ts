@@ -3,7 +3,7 @@
  *
  * - Default / fallback: Simplified Chinese (zh-CN), bundled. Other languages are lazy chunks.
  * - Choice order: explicit choice in localStorage -> account (after login, see syncAccountLocale)
- *   -> browser languages -> zh-CN.
+ *   -> browser languages (zh-* -> zh-CN; unsupported -> en) -> zh-CN if the browser reports none.
  * - Not translated on purpose: news headlines/summaries, coin tickers, the AUUTRADE brand.
  * - Numbers/dates follow the language (Arabic keeps Latin digits for prices); up/down colours
  *   are a separate preference (theme/colorPref.ts) and never change with the language.
@@ -65,7 +65,8 @@ export function browserLang(): Lang {
     const hit = matchLang(tag);
     if (hit) return hit;
   }
-  return DEFAULT_LANG;
+  // No Chinese / supported browser language: default to English (Chinese only for zh-* browsers).
+  return list.length ? "en" : DEFAULT_LANG;
 }
 
 export function initialLang(): Lang {
