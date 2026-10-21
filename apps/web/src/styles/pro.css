@@ -1543,3 +1543,6 @@ html.kc-fs-lock, html.kc-fs-lock body { overflow: hidden; overscroll-behavior: n
 .rt-badge.is-live { color: var(--up, #16c784); border-color: rgba(22, 199, 132, 0.35); }
 .rt-badge.is-live i { background: var(--up, #16c784); box-shadow: 0 0 0 2px rgba(22, 199, 132, 0.18); }
 .rt-badge.is-poll i { background: rgba(240, 165, 49, 0.9); }
+.pt-lock.pt-live-live { color: var(--up, #2ebd85); text-decoration: none; }
+.pt-lock.pt-live-bind { color: var(--accent, #f0b90b); text-decoration: none; }
+.pt-lock.pt-live-live:hover, .pt-lock.pt-live-bind:hover { text-decoration: underline; }

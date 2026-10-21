@@ -6,6 +6,36 @@ import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed } from "@/i18n/format";
 import { PaperPerpTicket } from "./PaperPerpTicket";
+import { Link } from "react-router-dom";
+import { LIVE_BADGE_HREF, liveBadgeState, type LiveBadgeState } from "./liveBadge";
+
+const LIVE_POLL_MS = 60_000;
+
+/** Live badge from the user-scoped /api/v1/exchange/availability (no key material, no exchange call). */
+function useLiveBadge(): LiveBadgeState {
+  const [st, setSt] = useState<LiveBadgeState>("off");
+  useEffect(() => {
+    let dead = false;
+    const load = () => marketProvider.exchangeAvailability().then((a) => { if (!dead) setSt(liveBadgeState(a)); }, () => { if (!dead) setSt("off"); });
+    load();
+    const id = window.setInterval(load, LIVE_POLL_MS);
+    return () => { dead = true; window.clearInterval(id); };
+  }, []);
+  return st;
+}
+
+function LiveBadge({ state, reason }: { state: LiveBadgeState; reason?: string }) {
+  const { t } = useTranslation();
+  const href = LIVE_BADGE_HREF[state];
+  if (state === "off" || !href) {
+    return <span className="pt-lock" data-live={state} title={reason ? t("trade.liveLockTitle", { reason }) : undefined}>🔒 {t("trade.liveOff")}</span>;
+  }
+  return (
+    <Link to={href} className={`pt-lock pt-live-${state}`} data-live={state} title={t(state === "live" ? "trade.liveOnTitle" : "trade.liveBindTitle")}>
+      {state === "live" ? "● " : "🔑 "}{t(state === "live" ? "trade.liveOn" : "trade.liveBind")}
+    </Link>
+  );
+}
 
 /** Paper-only order ticket + position + orders for one coin. Live trading stays locked server-side. */
 
@@ -45,6 +75,7 @@ const typeLabel = (t: string) => (i18n.exists(`trade.type.${t}`) ? i18n.t(`trade
 
 export function PaperTradePanel({ symbol, price }: { symbol: string; price: number | null | undefined }) {
   const { t } = useTranslation();
+  const liveState = useLiveBadge();
   const [mode, setMode] = useState<TradeMode>("paper");
   const [market, setMarket] = useState<"spot" | "perp">("spot");
   const [pointsOn, setPointsOn] = useState(false);
@@ -223,7 +254,7 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
   if (!acct) {
     return (
       <aside className="pt">
-        <div className="pt-head"><b>{t("trade.title")}</b><span className="pt-lock">{t("trade.liveOff")}</span></div>
+        <div className="pt-head"><b>{t("trade.title")}</b><LiveBadge state={liveState} /></div>
         <p className="muted pt-note">{loadErr || t("trade.loadingAcct")}</p>
       </aside>
     );
@@ -236,7 +267,7 @@ export function PaperTradePanel({ symbol, price }: { symbol: string; price: numb
       <div className="pt-head">
         <b>{t("trade.title")}</b>
         <span className="pt-paper">{mode === "points" ? "POINTS" : "PAPER"}</span>
-        <span className="pt-lock" title={t("trade.liveLockTitle", { reason: acct.live.reason })}>🔒 {t("trade.liveOff")}</span>
+        <LiveBadge state={liveState} reason={acct.live.reason} />
       </div>
       <div className="pt-row pt-types" role="tablist" aria-label={t("trade.branch")}>
         <button type="button" className={mode === "paper" ? "is-on" : ""} onClick={() => { setMode("paper"); setAcct(null); setMsg(null); }}>
