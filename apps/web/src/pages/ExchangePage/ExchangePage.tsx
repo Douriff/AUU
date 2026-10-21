@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { marketProvider, type ExchangeAccount, type ExchangeConfig, type ExchangeOrder } from "@/providers/HttpWsProvider";
 import { errText } from "@/i18n/errors";
 import { ExchangeGuide } from "./ExchangeGuide";
@@ -38,6 +38,10 @@ export function ExchangePage() {
   const [tab, setTab] = useState<"spot" | "swap">("spot");
 
   const bound = accounts.find((a) => a.exchange === ex);
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === "#bind" && cfg) document.getElementById("bind")?.scrollIntoView({ block: "start" });
+  }, [hash, cfg, bound]);
 
   const loadCfg = useCallback(() => {
     marketProvider.exchangeConfig().then(setCfg).catch((e: unknown) => setErr(errText(e)));
@@ -186,7 +190,7 @@ export function ExchangePage() {
           </section>
 
           {!bound ? (
-            <section className="settings-section">
+            <section className="settings-section" id="bind">
               <h2>绑定 {NAMES[ex]}</h2>
               {!cfg.cryptoReady ? <div className="pro-alert">服务器加密密钥未配置，暂不能绑定。</div> : null}
               <form className="pts-form" onSubmit={doBind} autoComplete="off">

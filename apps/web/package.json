@@ -12,7 +12,8 @@
     "test:layout": "node scripts/layout.test.mjs",
     "test:adv": "node scripts/advtools.test.mjs",
     "test:airdrop": "node scripts/airdrop-refresh.test.mjs",
-    "test:rt": "node scripts/realtime.test.mjs"
+    "test:rt": "node scripts/realtime.test.mjs",
+    "test:livebadge": "node scripts/live-badge.test.mjs"
   },
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.28",
