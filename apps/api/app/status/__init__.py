@@ -1,4 +1,6 @@
-"""Public status page data (P1-6): coarse, login-free system health plus a 30-day availability record.
+"""Status page data (P1-6): coarse system health plus a 30-day availability record.
+
+The web page and this payload are for administrators only when accounts are on.
 
 The API records one row per minute while it runs (``uptime.sqlite`` in the data dir):
   up       the process was alive and answering (the row exists)

@@ -1,4 +1,4 @@
-"""Public status page (P1-6): minute uptime record, 30-day summary, coarse login-free payload."""
+"""Status page (P1-6): minute uptime record, 30-day summary, coarse admin-only payload."""
 from __future__ import annotations
 
 import json
@@ -131,17 +131,47 @@ class PublicPayloadTests(unittest.TestCase):
         for leak in ("binance", "451", "/opt", "SECRETPUB", "keys/", "Traceback", "trend_tsmom", "version", "nav", "BTC"):
             self.assertNotIn(leak, blob)
 
-    def test_route_is_public_with_auth_on(self):
+    def test_route_requires_admin_when_auth_on(self):
         from fastapi.testclient import TestClient
 
+        from app.auth.accounts import reset_accounts
         from app.main import create_app
 
-        with self._fake(), patch.dict(os.environ, {"AUU_AUTH": "on", "AUU_UPTIME": "off", "AUU_RECON": "off", "AUU_ALERTS": "off"}):
-            with TestClient(create_app(legacy=False)) as c:
-                r = c.get("/api/v1/status")
-                self.assertEqual(r.status_code, 200, r.text)
-                self.assertEqual(r.json()["data"]["api"], "up")
-                self.assertEqual(c.get("/api/v1/mainstream/paper/account").status_code, 401)
+        env = {
+            "AUU_AUTH": "on",
+            "AUU_ALLOW_SIGNUP": "on",
+            "AUU_ADMIN_USER": "",
+            "AUU_INVITE_CODE": "",
+            "AUU_EMAIL_VERIFY": "off",
+            "AUU_UPTIME": "off",
+            "AUU_RECON": "off",
+            "AUU_ALERTS": "off",
+            "AUU_USER_STORE": str(Path(self.tmp.name) / "users.json"),
+            "AUU_USER_JOURNAL_DIR": str(Path(self.tmp.name) / "journals"),
+            "AUU_AUTH_RATE_MAX": "1000",
+        }
+        pw = "statusPass123"
+        with self._fake(), patch.dict(os.environ, env):
+            reset_accounts()
+            try:
+                app = create_app(legacy=False)
+                with TestClient(app) as anon:
+                    self.assertEqual(anon.get("/api/v1/status").status_code, 401)
+                    self.assertEqual(anon.get("/api/v1/mainstream/paper/account").status_code, 401)
+                with TestClient(app) as admin:
+                    reg = admin.post("/api/v1/auth/register", json={"name": "owner", "password": pw, "password_confirm": pw})
+                    self.assertEqual(reg.status_code, 200, reg.text)
+                    r = admin.get("/api/v1/status")
+                    self.assertEqual(r.status_code, 200, r.text)
+                    self.assertEqual(r.json()["data"]["api"], "up")
+                with TestClient(app) as user:
+                    reg = user.post("/api/v1/auth/register", json={"name": "member", "password": pw, "password_confirm": pw})
+                    self.assertEqual(reg.status_code, 200, reg.text)
+                    denied = user.get("/api/v1/status")
+                    self.assertEqual(denied.status_code, 403, denied.text)
+                    self.assertEqual(denied.json()["error"]["code"], "ADMIN_REQUIRED")
+            finally:
+                reset_accounts()
 
 
 if __name__ == "__main__":

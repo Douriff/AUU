@@ -1,7 +1,8 @@
 # Public status page (P1-6)
 
-`/status` (web, no login needed) and `GET /api/v1/status` (public API, listed in the auth gate's
-public paths).
+`/admin/status` (web, administrators only) and `GET /api/v1/status` (admin-only when accounts
+are on; health stays public for monitors). Signed-out visitors and regular accounts do not see
+the page or a login-page link to it.
 
 Shows only coarse fields: API up, market data fresh (count of stale series), exchanges blocked
 (count, no names or error text), last rebalance time and day / overdue flag, live trading locked,

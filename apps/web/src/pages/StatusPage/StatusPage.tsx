@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import type { PublicStatus } from "@/types/contracts";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtDate, fmtFixed } from "@/i18n/format";
+import { useSubscription } from "@/components/subscribe/SubscribeGate";
 
-/** Login-free system status (coarse only: no positions, prices, versions or internal details). */
+/** Coarse system status (no positions, prices, versions or internal details). Administrators only. */
 
 const POLL_MS = 60_000;
 
@@ -32,7 +33,52 @@ function Row({ ok, label, value }: { ok: boolean | null; label: string; value: s
   );
 }
 
+function StatusDenied() {
+  const { t } = useTranslation();
+  return (
+    <div className="st-page">
+      <header className="st-head">
+        <h1>{t("status.adminOnlyTitle")}</h1>
+      </header>
+      <p className="muted">{t("status.adminOnlySub")}</p>
+      <p className="muted st-note">
+        <Link to="/">{t("admin.backToBoard")}</Link>
+      </p>
+    </div>
+  );
+}
+
+/** Public URL: admins are sent to the admin console; everyone else sees no status payload. */
+export function StatusGate() {
+  const { anon, isAdmin } = useSubscription();
+  if (anon || !isAdmin) return <StatusDenied />;
+  return <Navigate to="/admin/status" replace />;
+}
+
 export function StatusPage() {
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    marketProvider
+      .getMe()
+      .then((me) => {
+        if (!dead) setAllowed(!me.auth_enabled || Boolean(me.user?.is_admin));
+      })
+      .catch(() => {
+        if (!dead) setAllowed(false);
+      });
+    return () => {
+      dead = true;
+    };
+  }, []);
+
+  if (allowed === null) return <div className="st-page" aria-busy="true" />;
+  if (!allowed) return <StatusDenied />;
+  return <StatusBody />;
+}
+
+function StatusBody() {
   const { t } = useTranslation();
   const [s, setS] = useState<PublicStatus | null>(null);
   const [err, setErr] = useState("");
@@ -111,7 +157,7 @@ export function StatusPage() {
         </ul>
       </section>
       <p className="muted st-note">
-        {t("status.foot")} · <Link to="/login">{t("auth.login.submit")}</Link>
+        {t("status.foot")} · <Link to="/admin">{t("admin.consoleLink")}</Link>
       </p>
     </div>
   );

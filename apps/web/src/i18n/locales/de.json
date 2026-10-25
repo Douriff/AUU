@@ -207,8 +207,7 @@
       "toRegister": "Registrieren",
       "forgot": "Passwort vergessen?",
       "toReset": "Per E-Mail-Code zurücksetzen",
-      "status": "Systemstatus",
-      "noLoginNeeded": "(ohne Anmeldung)"
+      "status": "Systemstatus"
     },
     "register": {
       "title": "Registrieren",
@@ -955,7 +954,9 @@
     "recent": "Letzte Störungen",
     "degraded": "Eingeschränkt",
     "noOutage": "Keine Störungen ≥5 Minuten im erfassten Zeitraum",
-    "foot": "Zeiten in Pekinger Zeit · Aktualisierung jede Minute"
+    "foot": "Zeiten in Pekinger Zeit · Aktualisierung jede Minute",
+    "adminOnlyTitle": "Nur für Administratoren",
+    "adminOnlySub": "Der Systemstatus ist für normale Konten und Abgemeldete nicht sichtbar."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "Punktehandels-GuV",
       "withdrawals": "Auszahlungen",
       "flags": "Feature-Flags",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "Systemstatus"
     },
     "usersDesc": "Salden abfragen, mit Passwort + 2FA anpassen und das Konto des Nutzers einsehen.",
     "ledgerDesc": "Gesamtes Konto abstimmen und als CSV exportieren.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Auszahlungen prüfen: ablehnen (freigeben) oder TokenPocket-Tx-Hash eintragen.",
     "flagsDesc": "Nur-Lese-Übersicht der Feature-Flags für Punktehandel / Auszahlung / TRC20.",
     "flagsHint": "Flags werden per Server-Umgebungsvariablen gesteuert; hier nur der aktuelle Stand.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, Marktdaten, Börsen, Rebalance und die Live-Sperre. Nur Administratoren."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Abfrage",
     "liveTitle": "Kurse live von {{src}} gestreamt",
     "pollingTitle": "Live-Push nicht verfügbar – Aktualisierung im normalen Intervall"
+  },
+  "subscribe": {
+    "menu": "Abonnieren",
+    "title": "AUUTRADE abonnieren",
+    "sub": "Marktdaten und markierte Funktionen brauchen ein Abo. Diese Seite zeigt nur den Plan: keine Abbuchung und kein Checkout.",
+    "price": "$99",
+    "per": "/ Monat",
+    "includes": "Enthalten",
+    "fMarket": "Marktdaten: Kurse, Charts und das Orderbuch",
+    "fStars": "Markierte und Premium-Werkzeuge, einschließlich der Watchlist",
+    "fDesk": "Papier-Desk: Strategie, Performance und GuV (weiterhin simuliert, nicht live)",
+    "noBilling": "Nur Anzeige. Zahlung ist nicht angebunden, es entsteht keine Bestellung und keine Abbuchung.",
+    "cta": "Plan für $99/Monat ansehen",
+    "ctaPending": "Zahlung nicht angebunden",
+    "shellTitle": "Anmelden, um den Desk zu öffnen",
+    "shellSub": "Ohne Anmeldung ist nur die Hülle sichtbar. Marktdaten und markierte Funktionen brauchen ein Abo.",
+    "lockedTitle": "Diese Funktion braucht ein Abo",
+    "lockedSub": "Marktdaten und markierte Funktionen sind gesperrt. Ein Abo würde sie öffnen. Es wird nichts abgebucht.",
+    "loginCta": "Anmelden",
+    "starLabel": "Abo erforderlich",
+    "preview": "Abo-Ansicht",
+    "previewHint": "Admin-Schalter oder lokale Markierung auu.sub.preview (1 abonniert, 0 gesperrt). Gilt nur für diesen Browser und startet kein echtes Abo.",
+    "previewOn": "Abonniert",
+    "previewOff": "Gesperrt"
   }
 }

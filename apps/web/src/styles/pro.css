@@ -774,7 +774,7 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 
 /* ---- auth screens: card centred in the viewport, brand inside the card ---- */
 .auth-screen { width: 100%; padding: 24px 16px; }
-.auth-screen.is-card { justify-content: center; }
+.auth-screen.is-card { justify-content: center; overflow-x: clip; }
 .auth-screen.is-card .auth-screen-body { flex: 0 0 auto; width: 100%; max-width: 420px; margin: auto; }
 .auth-screen.is-status .auth-screen-body { width: 100%; max-width: 880px; }
 .auth-screen.is-status .auth-screen-brand { width: 100%; max-width: 880px; margin: 0 auto 8px; padding: 0 0 12px; }
@@ -816,7 +816,9 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 .auth-card .email-code-row input { min-width: 0; width: auto; }
 .auth-card .email-code-row { width: 100%; }
 .auth-head { text-align: center; }
-.auth-head-brand { justify-content: center; gap: 14px; }
+.auth-head-brand { justify-content: space-between; gap: 8px; width: 100%; min-width: 0; flex-wrap: wrap; }
+.auth-head-tools { margin-inline-start: auto; flex: none; max-width: 100%; }
+.auth-head .mode-pill { max-width: none; flex: none; }
 
 /* 行业动态 (/news) */
 .news-page { max-width: 980px; }
@@ -1546,3 +1548,30 @@ html.kc-fs-lock, html.kc-fs-lock body { overflow: hidden; overscroll-behavior: n
 .pt-lock.pt-live-live { color: var(--up, #2ebd85); text-decoration: none; }
 .pt-lock.pt-live-bind { color: var(--accent, #f0b90b); text-decoration: none; }
 .pt-lock.pt-live-live:hover, .pt-lock.pt-live-bind:hover { text-decoration: underline; }
+
+/* subscription gate: gray star-lock, display-only plan (no checkout) */
+.topnav-links a.is-locked,
+.tabbar a.is-locked { color: var(--dim); }
+.nav-star { color: var(--accent); font-size: 10px; margin-inline-start: 3px; }
+.sub-lock, .sub-plan {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
+  margin: 28px auto; max-width: 520px; padding: 28px 20px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; color: var(--text2);
+}
+.sub-lock { min-height: 360px; justify-content: center; }
+.sub-lock.is-compact { min-height: 0; margin: 8px 0 0; padding: 18px 14px; }
+.sub-lock h1, .sub-page h1 { margin: 0; color: var(--text); font-size: 20px; }
+.sub-lock p, .sub-plan p { margin: 0; line-height: 1.5; max-width: 42em; }
+.sub-star { color: var(--accent); }
+.sub-lock .sub-star { font-size: 28px; line-height: 1; }
+.sub-price { font-size: 13px; color: var(--muted); }
+.sub-price b { font-size: 32px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+.sub-cta { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; padding: 0 18px; text-decoration: none; margin-top: 4px; }
+.sub-note { font-size: 12.5px; }
+.sub-page { max-width: 720px; }
+.sub-plan { align-items: stretch; text-align: start; }
+.sub-plan .sub-price { text-align: start; }
+.sub-plan h2 { margin: 6px 0 0; font-size: 14px; color: var(--text); }
+.sub-plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.sub-plan li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.45; }
+.sub-page .settings-section { margin-top: 8px; }

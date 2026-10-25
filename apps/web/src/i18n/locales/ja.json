@@ -207,8 +207,7 @@
       "toRegister": "新規登録",
       "forgot": "パスワードをお忘れの方は",
       "toReset": "メール認証で再設定",
-      "status": "システム状態",
-      "noLoginNeeded": "（ログイン不要）"
+      "status": "システム状態"
     },
     "register": {
       "title": "新規登録",
@@ -955,7 +954,9 @@
     "recent": "最近の障害",
     "degraded": "劣化",
     "noOutage": "記録期間中に5分以上の障害はありません",
-    "foot": "時刻は北京時間 · 1分ごとに更新"
+    "foot": "時刻は北京時間 · 1分ごとに更新",
+    "adminOnlyTitle": "管理者のみ",
+    "adminOnlySub": "システムの状態は一般アカウントと未ログインの訪問者には表示しません。"
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "ポイント取引損益",
       "withdrawals": "出金",
       "flags": "機能フラグ",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "システム状態"
     },
     "usersDesc": "残高の照会、パスワード + 2FA での調整、そのユーザーの台帳表示。",
     "ledgerDesc": "全台帳の照合と CSV エクスポート。",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "出金審査：却下で凍結解除、または TokenPocket の tx ハッシュ登録。",
     "flagsDesc": "ポイント取引 / 出金 / TRC20 の機能フラグの読み取り専用サマリー。",
     "flagsHint": "フラグはサーバー環境変数で制御されます。ここには現在の状態のみ表示。",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API、相場、取引所、リバランス、実弾ロック。管理者のみ。"
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "ポーリング",
     "liveTitle": "{{src}} からリアルタイム配信中",
     "pollingTitle": "リアルタイム配信が利用できません。通常の間隔で更新しています"
+  },
+  "subscribe": {
+    "menu": "購読",
+    "title": "AUUTRADE を購読",
+    "sub": "相場とスター付き機能には購読が必要です。このページはプランの表示だけで、請求も決済もありません。",
+    "price": "$99",
+    "per": "/ 月",
+    "includes": "含まれるもの",
+    "fMarket": "相場：価格、ローソク足、板",
+    "fStars": "スター付きと上位機能（ウォッチリストを含む）",
+    "fDesk": "ペーパー机：戦略、成績、損益（模擬のまま、実弾ではありません）",
+    "noBilling": "表示のみ。決済は未接続で、注文も課金も発生しません。",
+    "cta": "$99/月のプランを見る",
+    "ctaPending": "決済は未接続",
+    "shellTitle": "ログインして画面を開く",
+    "shellSub": "未ログインでは外枠だけです。相場とスター付き機能には購読が必要です。",
+    "lockedTitle": "この機能には購読が必要です",
+    "lockedSub": "相場とスター付き機能はロック中です。購読で開きます。課金は発生しません。",
+    "loginCta": "ログイン",
+    "starLabel": "購読が必要",
+    "preview": "購読状態をプレビュー",
+    "previewHint": "管理者スイッチ、またはこのブラウザの印 auu.sub.preview（1 購読、0 ロック）。表示だけが変わり、本物の購読は始まりません。",
+    "previewOn": "購読中",
+    "previewOff": "未購読"
   }
 }

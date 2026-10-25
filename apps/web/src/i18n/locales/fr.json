@@ -207,8 +207,7 @@
       "toRegister": "S’inscrire",
       "forgot": "Mot de passe oublié ?",
       "toReset": "Réinitialiser par code e-mail",
-      "status": "État du système",
-      "noLoginNeeded": "(sans connexion)"
+      "status": "État du système"
     },
     "register": {
       "title": "Inscription",
@@ -955,7 +954,9 @@
     "recent": "Incidents récents",
     "degraded": "Dégradé",
     "noOutage": "Aucun incident de ≥5 minutes sur la période enregistrée",
-    "foot": "Heures de Pékin · actualisation chaque minute"
+    "foot": "Heures de Pékin · actualisation chaque minute",
+    "adminOnlyTitle": "Réservé aux administrateurs",
+    "adminOnlySub": "L'état du système est masqué pour les comptes ordinaires et les visiteurs déconnectés."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "P&L trading points",
       "withdrawals": "Retraits",
       "flags": "Feature flags",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "État du système"
     },
     "usersDesc": "Consulter les soldes, ajuster avec mot de passe + 2FA, et voir le grand livre de l'utilisateur.",
     "ledgerDesc": "Rapprocher le grand livre complet et exporter en CSV.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Examiner les retraits : rejeter pour dégeler, ou enregistrer un hash TokenPocket.",
     "flagsDesc": "Résumé en lecture seule des feature flags trading points / retrait / TRC20.",
     "flagsHint": "Les flags sont contrôlés par les variables d'environnement serveur ; ici l'état actuel seulement.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, données de marché, places, rééquilibrage et verrou du trading réel. Administrateurs seulement."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Sondage",
     "liveTitle": "Prix diffusés en direct depuis {{src}}",
     "pollingTitle": "Flux en direct indisponible — actualisation au rythme habituel"
+  },
+  "subscribe": {
+    "menu": "S'abonner",
+    "title": "S'abonner à AUUTRADE",
+    "sub": "Les données de marché et les fonctions étoilées exigent un abonnement. Cette page affiche seulement l'offre : aucun débit, aucun paiement.",
+    "price": "$99",
+    "per": "/ mois",
+    "includes": "Inclus",
+    "fMarket": "Données de marché : cours, graphiques et carnet d'ordres",
+    "fStars": "Outils étoilés et premium, y compris la liste de suivi",
+    "fDesk": "Bureau papier : stratégie, performance et P&L (toujours simulé, pas en réel)",
+    "noBilling": "Affichage seul. La facturation n'est pas branchée : aucun ordre et aucun débit.",
+    "cta": "Voir l'offre à 99 $/mois",
+    "ctaPending": "Paiement non branché",
+    "shellTitle": "Connectez-vous pour ouvrir le bureau",
+    "shellSub": "Sans connexion, seule l'enveloppe est visible. Les données de marché et les fonctions étoilées exigent un abonnement.",
+    "lockedTitle": "Cette fonction exige un abonnement",
+    "lockedSub": "Les données de marché et les fonctions étoilées sont verrouillées. Un abonnement les ouvrirait. Aucun débit.",
+    "loginCta": "Connexion",
+    "starLabel": "Abonnement requis",
+    "preview": "Aperçu abonné",
+    "previewHint": "Interrupteur admin, ou drapeau local auu.sub.preview (1 abonné, 0 verrouillé). Uniquement ce navigateur, pas d'abonnement réel.",
+    "previewOn": "Abonné",
+    "previewOff": "Verrouillé"
   }
 }

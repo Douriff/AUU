@@ -24,14 +24,20 @@ export function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** The one site-wide mode badge: paper trading, live trading locked. */
-export function ModeBadge({ liveOff = true }: { liveOff?: boolean }) {
+/** The one site-wide mode badge: paper trading, live trading locked. `compact` is the short label (auth cards). */
+export function ModeBadge({ liveOff = true, compact = false }: { liveOff?: boolean; compact?: boolean }) {
   const { t } = useTranslation();
   return liveOff ? (
-    <span className="mode-pill" title={t("mode.paperTitle")}>
+    <span className={`mode-pill${compact ? " is-compact" : ""}`} title={t("mode.paperTitle")}>
       <i aria-hidden="true" />
-      <span className="mode-long">{t("mode.paper")}</span>
-      <span className="mode-short">{t("mode.paperShort")}</span>
+      {compact ? (
+        <span>{t("mode.paperShort")}</span>
+      ) : (
+        <>
+          <span className="mode-long">{t("mode.paper")}</span>
+          <span className="mode-short">{t("mode.paperShort")}</span>
+        </>
+      )}
     </span>
   ) : (
     <span className="mode-pill is-warn" title={t("mode.liveCheckTitle")}>

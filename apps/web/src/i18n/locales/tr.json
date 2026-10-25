@@ -207,8 +207,7 @@
       "toRegister": "Kayıt ol",
       "forgot": "Şifrenizi mi unuttunuz?",
       "toReset": "E-posta koduyla sıfırla",
-      "status": "Sistem durumu",
-      "noLoginNeeded": "(giriş gerekmez)"
+      "status": "Sistem durumu"
     },
     "register": {
       "title": "Kayıt ol",
@@ -955,7 +954,9 @@
     "recent": "Son sorunlar",
     "degraded": "Düşük performans",
     "noOutage": "Kayıt döneminde ≥5 dakikalık sorun yok",
-    "foot": "Saatler Pekin saatidir · her dakika yenilenir"
+    "foot": "Saatler Pekin saatidir · her dakika yenilenir",
+    "adminOnlyTitle": "Yalnızca yöneticiler",
+    "adminOnlySub": "Sistem durumu normal hesaplara ve çıkış yapmış ziyaretçilere kapalıdır."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "Puan ticareti K/Z",
       "withdrawals": "Çekimler",
       "flags": "Özellik bayrakları",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "Sistem durumu"
     },
     "usersDesc": "Bakiyeleri sorgula, şifre + 2FA ile ayarla ve kullanıcının defterini gör.",
     "ledgerDesc": "Tüm defteri mutabık kıl ve CSV dışa aktar.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Çekimleri incele: reddedip çöz veya TokenPocket tx hash kaydet.",
     "flagsDesc": "Puan ticareti / çekim / TRC20 özellik bayraklarının salt okunur özeti.",
     "flagsHint": "Bayraklar sunucu ortam değişkenleriyle yönetilir; burada yalnızca canlı durum.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, piyasa verisi, borsalar, yeniden dengeleme ve canlı işlem kilidi. Yalnızca yöneticiler."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Yoklama",
     "liveTitle": "Fiyatlar {{src}} üzerinden canlı akıyor",
     "pollingTitle": "Canlı akış kullanılamıyor — normal aralıkla yenileniyor"
+  },
+  "subscribe": {
+    "menu": "Abone ol",
+    "title": "AUUTRADE aboneliği",
+    "sub": "Piyasa verisi ve yıldızlı özellikler abonelik ister. Bu sayfa yalnızca planı gösterir: tahsilat ve ödeme yok.",
+    "price": "$99",
+    "per": "/ ay",
+    "includes": "İçerik",
+    "fMarket": "Piyasa verisi: fiyatlar, grafikler ve emir defteri",
+    "fStars": "Yıldızlı ve premium araçlar, izleme listesi dahil",
+    "fDesk": "Kağıt masa: strateji, performans ve K/Z (yine simülasyon, canlı değil)",
+    "noBilling": "Yalnızca gösterim. Ödeme bağlı değil; sipariş veya tahsilat oluşmaz.",
+    "cta": "$99/ay planını gör",
+    "ctaPending": "Ödeme bağlı değil",
+    "shellTitle": "Masayı açmak için giriş yapın",
+    "shellSub": "Giriş yokken yalnızca kabuk görünür. Piyasa verisi ve yıldızlı özellikler abonelik ister.",
+    "lockedTitle": "Bu özellik abonelik ister",
+    "lockedSub": "Piyasa verisi ve yıldızlı özellikler kilitli. Abonelik onları açardı. Ücret alınmaz.",
+    "loginCta": "Giriş yap",
+    "starLabel": "Abonelik gerekli",
+    "preview": "Abone önizlemesi",
+    "previewHint": "Yönetici anahtarı veya yerel işaret auu.sub.preview (1 abone, 0 kilitli). Yalnızca bu tarayıcı; gerçek abonelik başlamaz.",
+    "previewOn": "Abone",
+    "previewOff": "Kilitli"
   }
 }

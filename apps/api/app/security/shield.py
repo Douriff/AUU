@@ -41,7 +41,8 @@ from starlette.requests import HTTPConnection
 _LOG = logging.getLogger("auu.shield")
 
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
-# Health/status stay reachable for monitors; auth endpoints have their own limits too.
+# Health stays reachable for monitors. Status skips the empty-UA block; when accounts are on
+# the auth gate still requires an admin session. Auth endpoints have their own limits too.
 UA_EXEMPT = frozenset({"/api/v1/health", "/api/v1/status"})
 DATA_PREFIXES = (
     "/api/v1/mainstream/",
