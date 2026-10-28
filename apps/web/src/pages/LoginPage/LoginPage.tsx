@@ -128,9 +128,6 @@ export function LoginPage() {
                 {t("auth.login.forgot")}<Link to="/forgot-password">{t("auth.login.toReset")}</Link>
               </p>
             )}
-            <p className="td-note">
-              <Link to="/status">{t("auth.login.status")}</Link> {t("auth.login.noLoginNeeded")}
-            </p>
           </form>
         )}
         {error && !authOn && <p className="td-block">{error}</p>}

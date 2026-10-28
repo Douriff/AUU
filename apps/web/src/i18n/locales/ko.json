@@ -207,8 +207,7 @@
       "toRegister": "회원가입",
       "forgot": "비밀번호를 잊으셨나요?",
       "toReset": "이메일 인증으로 재설정",
-      "status": "시스템 상태",
-      "noLoginNeeded": "(로그인 불필요)"
+      "status": "시스템 상태"
     },
     "register": {
       "title": "회원가입",
@@ -955,7 +954,9 @@
     "recent": "최근 장애",
     "degraded": "성능 저하",
     "noOutage": "기록 기간 중 5분 이상 장애 없음",
-    "foot": "시간은 베이징 시간 · 1분마다 갱신"
+    "foot": "시간은 베이징 시간 · 1분마다 갱신",
+    "adminOnlyTitle": "관리자만",
+    "adminOnlySub": "시스템 상태는 일반 계정과 로그아웃 방문자에게 보이지 않습니다."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "포인트 거래 손익",
       "withdrawals": "출금",
       "flags": "기능 플래그",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "시스템 상태"
     },
     "usersDesc": "잔액 조회, 비밀번호 + 2FA 조정, 해당 사용자 원장 보기.",
     "ledgerDesc": "전체 원장 대사 및 CSV 내보내기.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "출금 심사: 거부로 동결 해제, 또는 TokenPocket tx 해시 등록.",
     "flagsDesc": "포인트 거래 / 출금 / TRC20 기능 플래그 읽기 전용 요약.",
     "flagsHint": "플래그는 서버 환경 변수로 제어됩니다. 여기에는 현재 상태만 표시됩니다.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, 시세, 거래소, 리밸런스, 실거래 잠금. 관리자만."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "폴링",
     "liveTitle": "{{src}}에서 실시간 스트리밍 중",
     "pollingTitle": "실시간 푸시를 사용할 수 없어 기본 주기로 새로고침합니다"
+  },
+  "subscribe": {
+    "menu": "구독",
+    "title": "AUUTRADE 구독",
+    "sub": "시세와 별표 기능은 구독이 필요합니다. 이 페이지는 요금제만 보여 주며 결제와 청구가 없습니다.",
+    "price": "$99",
+    "per": "/ 월",
+    "includes": "포함",
+    "fMarket": "시세: 호가, 차트, 호가창",
+    "fStars": "별표와 프리미엄 도구 (관심 목록 포함)",
+    "fDesk": "모의 데스크: 전략, 성과, 손익 (계속 시뮬레이션이며 실거래가 아님)",
+    "noBilling": "표시만 합니다. 결제가 연결되지 않아 주문이나 청구가 생기지 않습니다.",
+    "cta": "$99/월 요금제 보기",
+    "ctaPending": "결제 미연결",
+    "shellTitle": "로그인하고 화면 열기",
+    "shellSub": "로그인하지 않으면 껍데기만 보입니다. 시세와 별표 기능은 구독이 필요합니다.",
+    "lockedTitle": "이 기능은 구독이 필요합니다",
+    "lockedSub": "시세와 별표 기능이 잠겨 있습니다. 구독하면 열립니다. 청구는 없습니다.",
+    "loginCta": "로그인",
+    "starLabel": "구독 필요",
+    "preview": "구독 상태 미리보기",
+    "previewHint": "관리자 스위치 또는 이 브라우저의 표시 auu.sub.preview (1 구독, 0 잠금). 화면만 바뀌며 실제 구독은 시작되지 않습니다.",
+    "previewOn": "구독 중",
+    "previewOff": "잠김"
   }
 }

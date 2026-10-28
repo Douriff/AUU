@@ -72,6 +72,9 @@ class GateDecisionTests(unittest.TestCase):
         self.assertIsNone(gate_decision("/api/v1/strategy/pump-paper-v1", "GET", {"is_admin": False}))
         self.assertIsNone(gate_decision("/api/v1/trade/orders", "POST", {"is_admin": False}))
         self.assertIsNone(gate_decision("/api/v1/auth/users", "OPTIONS", None))
+        self.assertEqual(gate_decision("/api/v1/status", "GET", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/status", "GET", {"is_admin": False})[0], 403)
+        self.assertIsNone(gate_decision("/api/v1/status", "GET", {"is_admin": True}))
 
 
 class AuthGateApiTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import { LangSwitch } from "@/components/ui/LangSwitch";
 import { useTranslation } from "react-i18next";
 import { onExplicitLang, reconcileAccountLocale, setLang } from "@/i18n";
 
-const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password", "/status"]);
+const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 type Gate = "loading" | "anon" | "ok" | "forbidden";
 
@@ -19,6 +19,7 @@ const adminNav = [
   { to: "/admin/withdrawals", label: "withdrawals" },
   { to: "/admin/flags", label: "flags" },
   { to: "/admin/exchange", label: "exchange" },
+  { to: "/admin/status", label: "status" },
 ] as const;
 
 /** Dedicated admin product surface — no market ticker, trade panel, or paper/points switch. */

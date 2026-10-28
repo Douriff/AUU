@@ -1,7 +1,8 @@
 """Login gate for the whole API when AUU_AUTH is on.
 
 With accounts enabled every /api/* request and the /api/v1/ws websocket need a
-valid session cookie, except health and the login/register flow. Writes that
+valid session cookie, except health and the login/register flow. System status
+is admin-only. Writes that
 change the shared system engine (strategy params, autopaper toggle, watch list,
 risk/pipeline/paper test orders, live switches) also need an admin. Per-user
 routes (trade/orders, wallet, password) keep their own checks. Cross-site writes
@@ -24,7 +25,6 @@ COOKIE = "auu_session"
 PUBLIC_PATHS = frozenset(
     {
         "/api/v1/health",
-        "/api/v1/status",
         "/api/v1/auth/me",
         "/api/v1/auth/login",
         "/api/v1/auth/login/totp",
@@ -34,6 +34,9 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/auth/password/reset",
     }
 )
+
+# Coarse ops status (uptime, rebalance, live lock). Not part of the public login flow.
+ADMIN_READ_PATHS = frozenset({"/api/v1/status"})
 
 ADMIN_WRITE_PREFIXES = (
     "/api/v1/strategy/",
@@ -96,6 +99,8 @@ def gate_decision(path: str, method: str, user: Optional[dict[str, Any]]) -> Opt
         return None
     if user is None:
         return (401, "AUTH_REQUIRED", "请先登录")
+    if path in ADMIN_READ_PATHS and not user.get("is_admin"):
+        return (403, "ADMIN_REQUIRED", "只有管理员可以查看系统状态")
     if method not in SAFE_METHODS and any((path + "/").startswith(p) for p in ADMIN_WRITE_PREFIXES):
         if not user.get("is_admin"):
             return (403, "ADMIN_REQUIRED", "只有管理员可以修改系统设置")

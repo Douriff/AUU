@@ -207,8 +207,7 @@
       "toRegister": "去注册",
       "forgot": "忘记密码？",
       "toReset": "用邮箱验证码重置",
-      "status": "系统状态",
-      "noLoginNeeded": "（无需登录）"
+      "status": "系统状态"
     },
     "register": {
       "title": "注册",
@@ -955,7 +954,9 @@
     "recent": "最近异常",
     "degraded": "降级",
     "noOutage": "记录期内没有 ≥5 分钟的异常",
-    "foot": "时间为北京时间 · 每分钟自动刷新"
+    "foot": "时间为北京时间 · 每分钟自动刷新",
+    "adminOnlyTitle": "仅管理员可查看",
+    "adminOnlySub": "系统状态不对普通账户和未登录访客开放。"
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "积分交易盈亏",
       "withdrawals": "提现",
       "flags": "功能开关",
-      "exchange": "交易所接入"
+      "exchange": "交易所接入",
+      "status": "系统状态"
     },
     "usersDesc": "查询用户积分、手工调整（密码 + 两步验证），查看该用户流水。",
     "ledgerDesc": "全站流水对账与 CSV 导出。",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "审核提现申请：驳回解冻，或登记 TokenPocket 交易哈希。",
     "flagsDesc": "积分交易 / 提现 / TRC20 充值等功能开关只读摘要。",
     "flagsHint": "开关由服务器环境变量控制；此处仅展示当前生效状态。",
-    "exchangeDesc": "Binance / OKX 用户 API：总开关、白名单、紧急停止、单笔上限、审计。"
+    "exchangeDesc": "Binance / OKX 用户 API：总开关、白名单、紧急停止、单笔上限、审计。",
+    "statusDesc": "API、行情、交易所、调仓与实盘锁定。仅管理员。"
   },
   "airdrops": {
     "title": "空投雷达",
@@ -1879,5 +1882,29 @@
     "polling": "轮询",
     "liveTitle": "行情由 {{src}} 实时推送",
     "pollingTitle": "实时推送暂不可用，已按原频率定时刷新"
+  },
+  "subscribe": {
+    "menu": "订阅",
+    "title": "订阅 AUUTRADE",
+    "sub": "行情与星标功能需要订阅。此页只展示方案，不会扣款，也没有结账。",
+    "price": "$99",
+    "per": "/ 月",
+    "includes": "包含",
+    "fMarket": "行情：报价、K 线、订单簿",
+    "fStars": "星标与高级功能：自选列表与带星标的工具",
+    "fDesk": "纸面绩效：策略、绩效与盈亏（仍是模拟，不连接实盘）",
+    "noBilling": "仅展示。未接入支付，点击不会创建订单或扣款。",
+    "cta": "查看 $99/月 方案",
+    "ctaPending": "支付未开通",
+    "shellTitle": "登录后查看盘面",
+    "shellSub": "未登录只能看到导航外壳。行情与星标功能需要订阅。",
+    "lockedTitle": "此功能需要订阅",
+    "lockedSub": "行情与星标功能已锁定。订阅后可查看；当前不会发生真实扣款。",
+    "loginCta": "登录",
+    "starLabel": "需要订阅",
+    "preview": "预览已订阅",
+    "previewHint": "管理员开关，或本机标记 auu.sub.preview（1 已订阅，0 锁定）。只影响这台浏览器的显示，不会开通真实订阅。",
+    "previewOn": "已订阅",
+    "previewOff": "未订阅"
   }
 }

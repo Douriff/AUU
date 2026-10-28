@@ -23,6 +23,7 @@ import { Sk } from "@/components/ui/Skeleton";
 import { useTranslation } from "react-i18next";
 import { errText } from "@/i18n/errors";
 import { LangSwitch } from "@/components/ui/LangSwitch";
+import { SubPreviewToggle, SubscribeLock, useSubscription } from "@/components/subscribe/SubscribeGate";
 
 export function SettingsPage() {
   const legacy = useLegacyMode();
@@ -33,24 +34,31 @@ export function SettingsPage() {
 /** Mainstream mode: account + read-only data/live status (pump wallet/provider/discovery are legacy). */
 function MainstreamSettingsPage() {
   const { t, i18n } = useTranslation();
+  const { isAdmin, subscribed } = useSubscription();
   const [md, setMd] = useState<MainstreamFreshness | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
+    if (!subscribed) return;
+    let dead = false;
     marketProvider
       .getHealth()
-      .then((h) => setMd(h.mainstream ?? null))
-      .catch((e: unknown) => setErr(errText(e, "common.loadFailed")));
+      .then((h) => {
+        if (!dead) setMd(h.mainstream ?? null);
+      })
+      .catch((e: unknown) => {
+        if (!dead) setErr(errText(e, "common.loadFailed"));
+      });
     marketProvider
       .getLiveStatus()
-      .then((st) => setLive(st))
+      .then((st) => {
+        if (!dead) setLive(st);
+      })
       .catch(() => undefined);
-    marketProvider
-      .getMe()
-      .then((me) => setIsAdmin(!me.auth_enabled || Boolean(me.user?.is_admin)))
-      .catch(() => undefined);
-  }, []);
+    return () => {
+      dead = true;
+    };
+  }, [subscribed]);
   const blocked = md ? Object.keys(md.blocked || {}) : [];
   return (
     <div className="shell-page settings-page pro-page">
@@ -97,13 +105,21 @@ function MainstreamSettingsPage() {
             </div>
             <Link className="td-link" to="/admin">{t("admin.open")} ›</Link>
           </div>
+          <div className="set-row">
+            <div>
+              <b>{t("subscribe.preview")}</b>
+              <p className="muted">{t("subscribe.previewHint")}</p>
+            </div>
+            <SubPreviewToggle />
+          </div>
         </section>
       ) : null}
       <AccountSection />
       <section className="settings-section">
         <h2>{t("settings.modeData")}</h2>
-        {err ? <div className="pro-alert">{err}</div> : null}
-        <dl className="set-dl">
+        {!subscribed ? <SubscribeLock variant="locked" compact /> : null}
+        {subscribed && err ? <div className="pro-alert">{err}</div> : null}
+        {subscribed ? <dl className="set-dl">
           <div>
             <dt>{t("settings.mode")}</dt>
             <dd>
@@ -135,7 +151,7 @@ function MainstreamSettingsPage() {
             <dt>{t("ms.col.coin")}</dt>
             <dd className="muted">{md ? t("settings.coins", { n: md.symbols?.length ?? 0, list: md.symbols?.join(" ") }) : <Sk w={240} h={12} />}</dd>
           </div>
-        </dl>
+        </dl> : null}
       </section>
     </div>
   );

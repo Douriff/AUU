@@ -207,8 +207,7 @@
       "toRegister": "Sign up",
       "forgot": "Forgot password?",
       "toReset": "Reset with an email code",
-      "status": "System status",
-      "noLoginNeeded": "(no sign-in needed)"
+      "status": "System status"
     },
     "register": {
       "title": "Sign up",
@@ -955,7 +954,9 @@
     "recent": "Recent incidents",
     "degraded": "Degraded",
     "noOutage": "No incidents of ≥5 minutes in the recorded period",
-    "foot": "Times are Beijing time · refreshes every minute"
+    "foot": "Times are Beijing time · refreshes every minute",
+    "adminOnlyTitle": "Administrators only",
+    "adminOnlySub": "System status is hidden from regular accounts and signed-out visitors."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "Points trading P&L",
       "withdrawals": "Withdrawals",
       "flags": "Feature flags",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "System status"
     },
     "usersDesc": "Look up balances, adjust with password + 2FA, and view that user's ledger.",
     "ledgerDesc": "Reconcile the full ledger and export CSV.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Review withdrawals: reject to unfreeze, or register a TokenPocket tx hash.",
     "flagsDesc": "Read-only summary of points trading / withdraw / TRC20 feature flags.",
     "flagsHint": "Flags are controlled by server env vars; this page only shows the live state.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, market data, exchanges, rebalance, and the live-trading lock. Administrators only."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Polling",
     "liveTitle": "Prices streamed live from {{src}}",
     "pollingTitle": "Live push unavailable — refreshing on the normal schedule"
+  },
+  "subscribe": {
+    "menu": "Subscribe",
+    "title": "Subscribe to AUUTRADE",
+    "sub": "Market data and starred features need a subscription. This page only shows the plan: no charge and no checkout.",
+    "price": "$99",
+    "per": "/ month",
+    "includes": "Includes",
+    "fMarket": "Market data: quotes, charts, and the order book",
+    "fStars": "Starred and premium tools, including the watchlist",
+    "fDesk": "Paper desk: strategy, performance, and P&L (still simulated, not live)",
+    "noBilling": "Display only. Billing is not connected, so nothing here creates an order or a charge.",
+    "cta": "View the $99/month plan",
+    "ctaPending": "Billing not connected",
+    "shellTitle": "Sign in to open the desk",
+    "shellSub": "Signed-out visitors only see the shell. Market data and starred features need a subscription.",
+    "lockedTitle": "This feature needs a subscription",
+    "lockedSub": "Market data and starred features are locked. A subscription would unlock them. Nothing is charged.",
+    "loginCta": "Sign in",
+    "starLabel": "Subscription required",
+    "preview": "Preview subscribed",
+    "previewHint": "Admin switch, or the local flag auu.sub.preview (1 subscribed, 0 locked). It only changes this browser and does not start a real subscription.",
+    "previewOn": "Subscribed",
+    "previewOff": "Locked"
   }
 }

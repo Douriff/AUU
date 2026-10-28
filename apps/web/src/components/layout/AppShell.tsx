@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useStrategyConfig } from "@/hooks/useStrategyConfig";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AUTH_REQUIRED_EVENT, marketProvider } from "@/providers/HttpWsProvider";
 import { AutoPaperToggle } from "@/components/layout/AutoPaperToggle";
 import { useLegacyMode } from "@/hooks/useLegacyMode";
@@ -12,6 +12,8 @@ import i18n from "i18next";
 import { LangSwitch } from "@/components/ui/LangSwitch";
 import { onExplicitLang, reconcileAccountLocale, setLang } from "@/i18n";
 import { fmtDate } from "@/i18n/format";
+import { isPremiumPath, readSubPreview, subscribedPreview, writeSubPreview, type SubPreview } from "@/lib/subscription";
+import { SubscribeLock, SubscriptionProvider, useSubscription, type SubscriptionState } from "@/components/subscribe/SubscribeGate";
 
 // Legacy pump nav (AUU_LEGACY_PUMP=on only). Labels are i18n keys under nav.legacy.*
 const primary = [
@@ -192,12 +194,12 @@ function Icon({ name }: { name: string }) {
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-// pages an anonymous visitor may open (/status is the login-free status page)
-const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password", "/status"]);
+// Full-screen auth cards. Every other signed-out route stays in the shell with no market data.
+const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 type Gate = "loading" | "anon" | "ok";
 
-/** Login gate: with accounts on, anonymous visitors only see login/register/forgot-password. */
+/** Signed-out visitors see the shell only. Market data stays behind the subscription gate. */
 export function AppShell() {
   const [gate, setGate] = useState<Gate>("loading");
   const [who, setWho] = useState("");
@@ -245,11 +247,22 @@ export function AppShell() {
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
   }, []);
 
+  const [flag, setFlag] = useState<SubPreview>(() => readSubPreview());
   useEffect(() => {
-    if (gate === "anon" && !AUTH_PATHS.has(location.pathname)) {
-      navigate("/login", { replace: true });
-    }
-  }, [gate, location.pathname, navigate]);
+    const sync = () => setFlag(readSubPreview());
+    window.addEventListener("auu-sub-preview", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("auu-sub-preview", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+  const setPreview = useCallback((next: "on" | "off") => writeSubPreview(next), []);
+  const subscribed = subscribedPreview(isAdmin, flag);
+  const subValue = useMemo<SubscriptionState>(
+    () => ({ anon: gate === "anon", authOn, isAdmin, subscribed, setPreview }),
+    [gate, authOn, isAdmin, subscribed, setPreview],
+  );
 
   if (gate === "loading") {
     return (
@@ -260,34 +273,31 @@ export function AppShell() {
       </div>
     );
   }
-  if (gate === "anon") {
-    return (
-      <div className={`auth-screen${location.pathname === "/status" ? " is-status" : " is-card"}`}>
-        {location.pathname === "/status" ? (
-          <div className="auth-screen-brand">
-            <Brand />
-            <ModeBadge />
-            <LangSwitch compact />
-          </div>
-        ) : null}
-        <main className="auth-screen-body">{AUTH_PATHS.has(location.pathname) ? <Outlet /> : null}</main>
-      </div>
-    );
-  }
-  return (
-    <ShellFrame
-      who={who}
-      authOn={authOn}
-      isAdmin={isAdmin}
-      onLogout={() => {
-        void marketProvider.logout().finally(() => {
-          setWho("");
-          setGate("anon");
-          navigate("/login", { replace: true });
-        });
-      }}
-    />
+  const shell = (
+    <SubscriptionProvider value={subValue}>
+      {gate === "anon" && AUTH_PATHS.has(location.pathname) ? (
+        <div className="auth-screen is-card">
+          <main className="auth-screen-body">
+            <Outlet />
+          </main>
+        </div>
+      ) : (
+        <ShellFrame
+          who={who}
+          onLogout={() => {
+            void marketProvider.logout().finally(() => {
+              setWho("");
+              setIsAdmin(false);
+              setFlag(readSubPreview());
+              setGate("anon");
+              navigate("/login", { replace: true });
+            });
+          }}
+        />
+      )}
+    </SubscriptionProvider>
   );
+  return shell;
 }
 
 function fmtClock(ms: number | null | undefined): string {
@@ -349,6 +359,7 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
       </button>
       {open ? (
         <div className="um-pop" role="menu">
+          <Link role="menuitem" to="/subscribe">{t("subscribe.menu")}</Link>
           <Link role="menuitem" to="/settings">{t("shell.settings")}</Link>
           <Link role="menuitem" to="/leaderboard">{t("nav.leaderboard")}</Link>
           {authOn && who ? <Link role="menuitem" to="/points">{t("points.title")}</Link> : null}
@@ -376,17 +387,17 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
   );
 }
 
-function ShellFrame({
-  who,
-  authOn,
-  isAdmin,
-  onLogout,
-}: {
-  who: string;
-  authOn: boolean;
-  isAdmin: boolean;
-  onLogout: () => void;
-}) {
+function GatedOutlet() {
+  const { anon, subscribed } = useSubscription();
+  const { pathname } = useLocation();
+  if (anon && pathname !== "/subscribe") return <SubscribeLock variant="shell" />;
+  if (!anon && !subscribed && isPremiumPath(pathname)) return <SubscribeLock variant="locked" />;
+  return <Outlet />;
+}
+
+function ShellFrame({ who, onLogout }: { who: string; onLogout: () => void }) {
+  const { authOn, isAdmin, anon, subscribed } = useSubscription();
+  const unlocked = !anon && subscribed;
   const legacy = useLegacyMode();
   const location = useLocation();
   const { t } = useTranslation();
@@ -397,6 +408,14 @@ function ShellFrame({
   const [fresh, setFresh] = useState<MainstreamFreshness | null>(null);
 
   useEffect(() => {
+    if (!unlocked) {
+      setFresh(null);
+      setProvider("");
+      setHealthState("");
+      setMarketData("");
+      setLiveOff(true);
+      return;
+    }
     let alive = true;
     const load = () =>
       marketProvider
@@ -412,12 +431,12 @@ function ShellFrame({
         })
         .catch(() => undefined);
     void load();
-    const t = window.setInterval(() => !document.hidden && void load(), 60_000);
+    const timer = window.setInterval(() => !document.hidden && void load(), 60_000);
     return () => {
       alive = false;
-      window.clearInterval(t);
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [unlocked]);
 
   // Remember the last opened coin so the 交易 tab returns to it.
   const sym = new URLSearchParams(location.search).get("symbol");
@@ -430,6 +449,7 @@ function ShellFrame({
     ? primary.map((i) => ({ to: i.to, label: `legacy.${i.label}`, icon: i.icon, match: (p: string) => ("end" in i && i.end ? p === i.to : p.startsWith(i.to)) }))
     : mainstreamNav.filter((i) => i.label !== "exchange" || Boolean(who));
   const href = (i: NavItem) => (i.label === "trade" && !legacy ? tradeHref() : i.to);
+  const gated = (to: string) => !unlocked && isPremiumPath((to.split("?")[0] || "/") as string);
 
   return (
     <div className={`pro-shell${legacy ? " is-legacy" : ""}`}>
@@ -438,43 +458,58 @@ function ShellFrame({
           <Brand />
         </Link>
         <nav className="topnav-links" aria-label={t("nav.mainAria")}>
-          {nav.map((i) => (
-            <Link key={i.to + i.label} to={href(i)} className={`${i.match(location.pathname, location.search) ? "is-active" : ""}${i.label === "pnl" ? " nav-hot" : ""}`} aria-current={i.match(location.pathname, location.search) ? "page" : undefined}>
-              {t(`nav.${i.label}`)}
-            </Link>
-          ))}
+          {nav.map((i) => {
+            const to = href(i);
+            const locked = gated(to);
+            const on = i.match(location.pathname, location.search);
+            return (
+              <Link key={i.to + i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " nav-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? t("subscribe.starLabel") : undefined}>
+                {t(`nav.${i.label}`)}
+                {locked ? <span className="nav-star" aria-hidden="true">★</span> : null}
+              </Link>
+            );
+          })}
           {legacy
-            ? more.map((i) => (
-                <NavLink key={i.to} to={i.to} className={({ isActive }) => (isActive ? "is-active" : "")}>
-                  {t(`nav.legacy.${i.label}`)}
-                </NavLink>
-              ))
+            ? more.map((i) => {
+                const locked = gated(i.to);
+                return (
+                  <NavLink key={i.to} to={i.to} title={locked ? t("subscribe.starLabel") : undefined} className={({ isActive }) => `${isActive ? "is-active" : ""}${locked ? " is-locked" : ""}`}>
+                    {t(`nav.legacy.${i.label}`)}
+                    {locked ? <span className="nav-star" aria-hidden="true">★</span> : null}
+                  </NavLink>
+                );
+              })
             : null}
         </nav>
         <div className="topnav-right">
-          {legacy ? <LegacyControls isAdmin={isAdmin} provider={provider} marketData={marketData} /> : null}
-          {halted ? (
+          {legacy && unlocked ? <LegacyControls isAdmin={isAdmin} provider={provider} marketData={marketData} /> : null}
+          {unlocked && halted ? (
             <span className="risk-pill" title={t("shell.riskTitle")}>
               {t("shell.risk")} {healthState}
             </span>
           ) : null}
-          <DataDot f={fresh} provider={provider} />
+          {unlocked ? <DataDot f={fresh} provider={provider} /> : null}
           <ModeBadge liveOff={liveOff} />
           <LangSwitch compact />
           <UserMenu who={who} authOn={authOn} isAdmin={isAdmin} onLogout={onLogout} />
         </div>
       </header>
       <main className="main pro-main">
-        <Outlet />
+        <GatedOutlet />
       </main>
       {legacy ? null : (
         <nav className="tabbar" aria-label={t("nav.tabAria")}>
           {mobileTabs.map((i) => {
+            const to = href(i);
+            const locked = gated(to);
             const on = i.match(location.pathname, location.search);
             return (
-              <Link key={i.label} to={href(i)} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}`} aria-current={on ? "page" : undefined}>
+              <Link key={i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? t("subscribe.starLabel") : undefined}>
                 <Icon name={i.icon} />
-                <span>{t(`nav.${i.label}`)}</span>
+                <span>
+                  {t(`nav.${i.label}`)}
+                  {locked ? <span className="nav-star" aria-hidden="true">★</span> : null}
+                </span>
               </Link>
             );
           })}

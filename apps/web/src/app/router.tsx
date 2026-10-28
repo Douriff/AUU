@@ -22,7 +22,8 @@ import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { MainstreamPage } from "@/pages/MainstreamPage/MainstreamPage";
 import { PerformancePage } from "@/pages/PerformancePage/PerformancePage";
 import { PnlPage } from "@/pages/PnlPage/PnlPage";
-import { StatusPage } from "@/pages/StatusPage/StatusPage";
+import { StatusGate, StatusPage } from "@/pages/StatusPage/StatusPage";
+import { SubscribePage } from "@/pages/SubscribePage/SubscribePage";
 import { NewsPage } from "@/pages/NewsPage/NewsPage";
 import { AirdropsPage } from "@/pages/AirdropsPage/AirdropsPage";
 import { AirdropDetailPage } from "@/pages/AirdropsPage/AirdropDetailPage";
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
       },
       { path: "flags", element: <AdminFlagsPanel /> },
       { path: "exchange", element: <AdminExchangePanel /> },
+      { path: "status", element: <StatusPage /> },
       // Back-compat: old /admin/points lived inside the trading shell
       { path: "points", element: <Navigate to="/admin/users" replace /> },
     ],
@@ -109,7 +111,8 @@ export const router = createBrowserRouter([
       { path: "observe", element: <LegacyOnly><ObservePage /></LegacyOnly> },
       { path: "alerts", element: <LegacyOnly><AlertsPage /></LegacyOnly> },
       { path: "settings", element: <SettingsPage /> },
-      { path: "status", element: <StatusPage /> },
+      { path: "status", element: <StatusGate /> },
+      { path: "subscribe", element: <SubscribePage /> },
       { path: "points", element: <PointsPage /> },
     ],
   },

@@ -1,4 +1,4 @@
-"""GET /api/v1/status — login-free, coarse system status (P1-6). See app.status."""
+"""GET /api/v1/status — coarse system status (P1-6). Admin-only when accounts are on. See app.status."""
 from __future__ import annotations
 
 from fastapi import APIRouter

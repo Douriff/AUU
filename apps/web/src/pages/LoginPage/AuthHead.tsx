@@ -14,7 +14,7 @@ export function AuthHead({ title, sub }: { title: string; sub?: string }) {
         </Link>
         <span className="auth-head-tools">
           <LangSwitch compact />
-          <ModeBadge />
+          <ModeBadge compact />
         </span>
       </div>
       <h1>{title}</h1>

@@ -207,8 +207,7 @@
       "toRegister": "Cadastre-se",
       "forgot": "Esqueceu a senha?",
       "toReset": "Redefinir com código por e-mail",
-      "status": "Status do sistema",
-      "noLoginNeeded": "(sem login)"
+      "status": "Status do sistema"
     },
     "register": {
       "title": "Cadastro",
@@ -955,7 +954,9 @@
     "recent": "Incidentes recentes",
     "degraded": "Degradado",
     "noOutage": "Nenhum incidente de ≥5 minutos no período registrado",
-    "foot": "Horários de Pequim · atualiza a cada minuto"
+    "foot": "Horários de Pequim · atualiza a cada minuto",
+    "adminOnlyTitle": "Somente administradores",
+    "adminOnlySub": "O estado do sistema fica oculto para contas comuns e visitantes sem sessão."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "P&L trading de pontos",
       "withdrawals": "Saques",
       "flags": "Feature flags",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "Estado do sistema"
     },
     "usersDesc": "Consultar saldos, ajustar com senha + 2FA e ver o livro desse usuário.",
     "ledgerDesc": "Conciliar o livro completo e exportar CSV.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Revisar saques: rejeitar para descongelar, ou registrar um hash TokenPocket.",
     "flagsDesc": "Resumo somente leitura dos feature flags de trading de pontos / saque / TRC20.",
     "flagsHint": "Os flags são controlados por variáveis de ambiente do servidor; aqui só o estado atual.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, dados de mercado, exchanges, rebalanceamento e o bloqueio do trading real. Somente administradores."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Consulta",
     "liveTitle": "Preços transmitidos ao vivo da {{src}}",
     "pollingTitle": "Transmissão ao vivo indisponível — atualizando no intervalo normal"
+  },
+  "subscribe": {
+    "menu": "Assinar",
+    "title": "Assinar o AUUTRADE",
+    "sub": "Dados de mercado e funções com estrela exigem assinatura. Esta página só mostra o plano: sem cobrança e sem checkout.",
+    "price": "$99",
+    "per": "/ mês",
+    "includes": "Inclui",
+    "fMarket": "Dados de mercado: cotações, gráficos e livro de ofertas",
+    "fStars": "Ferramentas com estrela e premium, incluindo a lista de observação",
+    "fDesk": "Mesa de papel: estratégia, desempenho e P&L (continua simulada, não ao vivo)",
+    "noBilling": "Apenas exibição. A cobrança não está ligada: nada aqui cria pedido ou débito.",
+    "cta": "Ver o plano de $99/mês",
+    "ctaPending": "Pagamento não ligado",
+    "shellTitle": "Entre para abrir a mesa",
+    "shellSub": "Sem sessão, só a estrutura aparece. Dados de mercado e funções com estrela exigem assinatura.",
+    "lockedTitle": "Esta função exige assinatura",
+    "lockedSub": "Dados de mercado e funções com estrela estão bloqueados. A assinatura os abriria. Nada é cobrado.",
+    "loginCta": "Entrar",
+    "starLabel": "Assinatura necessária",
+    "preview": "Pré-visualizar assinatura",
+    "previewHint": "Interruptor de admin, ou a marca local auu.sub.preview (1 assinante, 0 bloqueado). Só neste navegador; não inicia uma assinatura real.",
+    "previewOn": "Assinante",
+    "previewOff": "Bloqueado"
   }
 }

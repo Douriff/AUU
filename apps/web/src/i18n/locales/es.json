@@ -207,8 +207,7 @@
       "toRegister": "Regístrate",
       "forgot": "¿Olvidaste la contraseña?",
       "toReset": "Restablecer con código por correo",
-      "status": "Estado del sistema",
-      "noLoginNeeded": "(sin iniciar sesión)"
+      "status": "Estado del sistema"
     },
     "register": {
       "title": "Registro",
@@ -955,7 +954,9 @@
     "recent": "Incidencias recientes",
     "degraded": "Degradado",
     "noOutage": "Sin incidencias de ≥5 minutos en el período registrado",
-    "foot": "Horas de Pekín · actualización cada minuto"
+    "foot": "Horas de Pekín · actualización cada minuto",
+    "adminOnlyTitle": "Solo administradores",
+    "adminOnlySub": "El estado del sistema no se muestra a las cuentas normales ni a quien no ha iniciado sesión."
   },
   "strat": {
     "series": {
@@ -1655,7 +1656,8 @@
       "trading": "P&L trading de puntos",
       "withdrawals": "Retiros",
       "flags": "Feature flags",
-      "exchange": "Exchange connect"
+      "exchange": "Exchange connect",
+      "status": "Estado del sistema"
     },
     "usersDesc": "Consultar saldos, ajustar con contraseña + 2FA y ver el libro de ese usuario.",
     "ledgerDesc": "Conciliar el libro completo y exportar CSV.",
@@ -1665,7 +1667,8 @@
     "withdrawalsDesc": "Revisar retiros: rechazar para descongelar, o registrar un hash de TokenPocket.",
     "flagsDesc": "Resumen de solo lectura de los feature flags de trading de puntos / retiro / TRC20.",
     "flagsHint": "Los flags se controlan con variables de entorno del servidor; aquí solo el estado actual.",
-    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit."
+    "exchangeDesc": "Binance / OKX user API keys: toggle, allowlist, kill switch, caps, audit.",
+    "statusDesc": "API, datos de mercado, exchanges, rebalance y el bloqueo del trading real. Solo administradores."
   },
   "airdrops": {
     "title": "Airdrop Radar",
@@ -1879,5 +1882,29 @@
     "polling": "Sondeo",
     "liveTitle": "Precios en directo desde {{src}}",
     "pollingTitle": "Transmisión en vivo no disponible: se actualiza con la frecuencia normal"
+  },
+  "subscribe": {
+    "menu": "Suscribirse",
+    "title": "Suscribirse a AUUTRADE",
+    "sub": "Los datos de mercado y las funciones destacadas requieren suscripción. Esta página solo muestra el plan: sin cobro ni pago.",
+    "price": "$99",
+    "per": "/ mes",
+    "includes": "Incluye",
+    "fMarket": "Datos de mercado: cotizaciones, gráficos y libro de órdenes",
+    "fStars": "Herramientas destacadas y premium, incluida la lista de seguimiento",
+    "fDesk": "Mesa de papel: estrategia, rendimiento y PyG (sigue siendo simulada, no real)",
+    "noBilling": "Solo visualización. La facturación no está conectada: no hay pedido ni cargo.",
+    "cta": "Ver el plan de $99/mes",
+    "ctaPending": "Pago no conectado",
+    "shellTitle": "Inicia sesión para abrir la mesa",
+    "shellSub": "Sin sesión solo se ve la estructura. Los datos de mercado y las funciones destacadas requieren suscripción.",
+    "lockedTitle": "Esta función requiere suscripción",
+    "lockedSub": "Los datos de mercado y las funciones destacadas están bloqueados. La suscripción los abriría. No se cobra nada.",
+    "loginCta": "Iniciar sesión",
+    "starLabel": "Suscripción requerida",
+    "preview": "Vista de suscrito",
+    "previewHint": "Interruptor de admin, o la marca local auu.sub.preview (1 suscrito, 0 bloqueado). Solo este navegador; no inicia una suscripción real.",
+    "previewOn": "Suscrito",
+    "previewOff": "Bloqueado"
   }
 }

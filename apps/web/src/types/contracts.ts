@@ -1343,7 +1343,7 @@ export interface PipelineResult extends PaperOrderResult {
   };
 }
 
-/** GET /api/v1/status — login-free, coarse status (P1-6). */
+/** GET /api/v1/status — coarse status (P1-6). Admin-only when accounts are on. */
 export interface PublicStatus {
   api: "up";
   checkedAt: number;

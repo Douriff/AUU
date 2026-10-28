@@ -1541,7 +1541,7 @@ code.hl { color: var(--accent); }
   .wallet-signal dl, .wallet-signal.is-compact dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Login gate: anonymous visitors only see the auth pages. */
+/* Auth cards (login / register / reset). Signed-out app routes use the shell instead. */
 .auth-screen {
   min-height: 100vh;
   min-height: 100dvh;
