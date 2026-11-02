@@ -3,10 +3,15 @@
 Two tiers (``FEED_SOURCES[...]["tier"]``):
 
 * ``official`` – exchange announcement APIs (OKX ``/api/v5/support/announcements``, Bybit
-  ``/v5/announcements/index``: documented, public, key-less endpoints) and project / exchange
-  blog RSS feeds that the sites themselves advertise. Shown as 已确认. Binance is NOT fetched
-  (its only key-less endpoint is disallowed by robots.txt, the official one needs an API key).
+  ``/v5/announcements/index``, KuCoin ``/api/v3/announcements?annType=activities``: documented,
+  public, key-less endpoints) and project / exchange blog RSS feeds that the sites themselves
+  advertise. Shown as 已确认. Binance is NOT fetched (its only key-less endpoint is disallowed
+  by robots.txt, the official one needs an API key).
 * ``media`` – CoinDesk / Cointelegraph public RSS (reuses ``app.news`` parse/fetch).
+
+Matching is tiered. Exchange APIs (``keywords: "exchange"``) also keep earn / prize-pool /
+giveaway campaigns. Media and project blogs stay on the stricter airdrop vocabulary so the
+list does not turn into ordinary crypto news.
 
 Only title, a short summary (<= 220 chars) and the article link are kept; article bodies are never
 fetched or stored. Failures are per-source (logged, backed off, old rows kept) and never reach the
@@ -77,6 +82,14 @@ FEED_SOURCES: dict[str, dict[str, Any]] = {
         "kind": "bybit", "tier": "official", "hosts": ("bybit.com",),
         "keywords": "exchange",
     },
+    # KuCoin public market-data announcements. ``annType=activities`` is the listing-campaign /
+    # giveaway slice (not the full firehose of delistings and fee changes). One page, no API key.
+    "kucoin": {
+        "name": "KuCoin 活动", "project": "KuCoin", "home": "https://www.kucoin.com/announcement",
+        "url": "https://api.kucoin.com/api/v3/announcements?currentPage=1&pageSize=20&lang=en_US&annType=activities",
+        "kind": "kucoin", "tier": "official", "hosts": ("kucoin.com",),
+        "keywords": "exchange",
+    },
     # --- official: project / exchange blogs (RSS the sites advertise) ---
     "ethereum": {
         "name": "Ethereum Foundation Blog", "project": "Ethereum", "home": "https://blog.ethereum.org/",
@@ -129,6 +142,8 @@ FEED_SOURCES: dict[str, dict[str, Any]] = {
 }
 
 # Title/summary must match at least one (case-insensitive) to be kept.
+# Media and project blogs use this stricter set. Bare "earn", "launch" or "share" do not qualify:
+# those words show up in ordinary market news.
 AIRDROP_KEYWORDS = re.compile(
     r"\bairdrops?\b|空投|\bstakedrops?\b|\bretrodrops?\b|\btoken\s+claim\b|\bclaim\s+portal\b|"
     r"\bpoints?\s+program\b|\bholder\s+rewards?\b|\btoken\s+generation\b|\bTGE\b|"
@@ -136,11 +151,31 @@ AIRDROP_KEYWORDS = re.compile(
     re.I,
 )
 
-# Exchange announcement streams are mostly listings/maintenance; keep launch-style campaigns too.
-EXCHANGE_KEYWORDS = re.compile(
-    AIRDROP_KEYWORDS.pattern + r"|\bjumpstart\b|\blaunchpool\b|\blaunchpad\b|\btoken\s+splash\b|\bmegadrops?\b|\bhodler\b",
-    re.I,
+# Exchange announcement APIs. Still not "any listing": a spot listing, delisting, fee change or
+# maintenance notice must miss. Campaign phrasing the exchanges actually use is in.
+_HY = r"[\s\-‐‑–—]*"  # space or hyphen, including the dashes exchanges paste into titles
+_EXCHANGE_EXTRA = (
+    r"|\bjumpstart\b|\blaunch" + _HY + r"pools?\b|\blaunch" + _HY + r"pads?\b"
+    r"|\btoken" + _HY + r"splash\b|\bmega" + _HY + r"drops?\b|\bhodler\b"
+    r"|\bcandy" + _HY + r"(?:drops?|bombs?)\b"
+    r"|\bflash" + _HY + r"earn\b"
+    r"|\bhold" + _HY + r"to" + _HY + r"earn\b"
+    r"|\btrade" + _HY + r"to" + _HY + r"earn\b"
+    r"|\blearn" + _HY + r"(?:and|&|to)" + _HY + r"earn\b"
+    r"|\bpoints?" + _HY + r"(?:campaign|event|season|system)s?\b"
+    r"|\b(?:futures|trading)" + _HY + r"points\b"
+    r"|\bearn\b[^.]{0,48}?\bpoints\b"
+    r"|\bprize" + _HY + r"pools?\b"
+    r"|\bgiveaways?\b"
+    # "share 50,000 USDT" / "grab a share of the … prize pool" — not bare "share".
+    r"|\bshare\b[^.]{0,48}?\b(?:usdt|usdc|prize" + _HY + r"pools?|rewards?)\b"
+    r"|\b(?:usdt|usdc)\b[^.]{0,32}?\b(?:prize" + _HY + r"pools?|rewards?|giveaways?)\b"
+    r"|\b(?:subscribe|stake|deposit|hold|trade)\b[^.]{0,40}?\bearn\b"
+    r"|\bearn\b[^.]{0,40}?\b(?:campaigns?|events?|rewards?|airdrops?|pools?)\b"
+    r"|\b(?:trading" + _HY + r")?competitions?\b[^.]{0,60}?\b(?:usdt|usdc|prize|rewards?|airdrops?|points?)\b"
+    r"|赚币|持仓赚|交易赚|闪赚|瓜分|奖池|积分(?:活动|赛|计划|奖励)|糖果空投|空投糖果|交易(?:大赛|赛)"
 )
+EXCHANGE_KEYWORDS = re.compile(AIRDROP_KEYWORDS.pattern + _EXCHANGE_EXTRA, re.I)
 SUMMARY_SHORT = 220
 MAX_AGE_DAYS = 90
 
@@ -193,7 +228,7 @@ def interval_sec() -> int:
 
 
 def source_class(meta: dict[str, Any]) -> str:
-    if meta.get("kind") in {"okx", "bybit"}:
+    if meta.get("kind") in {"okx", "bybit", "kucoin"}:
         return "api"
     return "media" if meta.get("tier") == "media" else "rss"
 
@@ -214,6 +249,11 @@ def enabled_feeds() -> list[str]:
 
 
 def matches_airdrop(title: str, summary: str = "", *, exchange: bool = False) -> bool:
+    """``exchange=True`` for OKX / Bybit / KuCoin announcement APIs only.
+
+    Project blogs and media stay on ``AIRDROP_KEYWORDS`` so an "earn" or "share USDT" headline
+    from CoinDesk is still dropped unless it also says airdrop / points program / TGE / etc.
+    """
     text = f"{title or ''} {summary or ''}"
     return bool((EXCHANGE_KEYWORDS if exchange else AIRDROP_KEYWORDS).search(text))
 
@@ -373,6 +413,35 @@ def parse_okx(raw: bytes, now_ms: int) -> list[dict[str, Any]]:
                 continue
             out.append({"title": title, "url": url, "guid": url, "summary": "", "published_at": min(pub, now_ms + 300_000),
                         "ann_type": str(a.get("annType") or "")})
+    return out
+
+
+def parse_kucoin(raw: bytes, now_ms: int) -> list[dict[str, Any]]:
+    """KuCoin ``GET /api/v3/announcements`` (public, no API key) → item dicts."""
+    d = json.loads(raw.decode("utf-8", "replace"))
+    if str(d.get("code")) != "200000":
+        raise ValueError(f"kucoin code {d.get('code')}")
+    data = d.get("data") or {}
+    items = data.get("items") if isinstance(data, dict) else None
+    if items is None:
+        raise ValueError("kucoin missing items")
+    out = []
+    for a in items:
+        title = str(a.get("annTitle") or "").strip()
+        url = str(a.get("annUrl") or "").strip()
+        try:
+            pub = int(a.get("cTime") or 0)
+        except (TypeError, ValueError):
+            pub = 0
+        if not title or not url or pub <= 0:
+            continue
+        desc = str(a.get("annDesc") or "").strip()
+        if desc == title:
+            desc = ""
+        out.append({
+            "title": title, "url": url, "guid": str(a.get("annId") or url), "summary": desc,
+            "published_at": min(pub, now_ms + 300_000),
+        })
     return out
 
 
@@ -550,7 +619,7 @@ class AirdropFetcher:
         elif self._injected is not None:
             r = self._injected(meta["url"])
         else:
-            accept = "application/json" if meta.get("kind") in {"okx", "bybit"} else "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8"
+            accept = "application/json" if meta.get("kind") in {"okx", "bybit", "kucoin"} else "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8"
             return http_fetch_cond(meta["url"], accept=accept, etag=v.get("etag"), last_modified=v.get("last_modified"))
         return r if isinstance(r, FetchResult) else FetchResult(200, r, final_url=meta["url"])
 
@@ -560,6 +629,8 @@ class AirdropFetcher:
             return parse_okx(raw, now)
         if kind == "bybit":
             return parse_bybit(raw, now)
+        if kind == "kucoin":
+            return parse_kucoin(raw, now)
         from app.news import parse_feed
 
         return parse_feed(raw, sid, now)

@@ -1739,6 +1739,8 @@
     "verifyCounts": "Confirmado {{c}} · Sin verificar {{u}}",
     "justNow": "ahora mismo",
     "updatedAt": "Actualizado {{when}}",
+    "contentAt": "contenido más reciente publicado {{when}}",
+    "contentAtTip": "Fecha de publicación del elemento más reciente en esta vista. Una consulta correcta sin un anuncio coincidente no mueve esta fecha.",
     "ingestAt": "fuentes consultadas por última vez {{when}}",
     "updTitle": "Se actualiza automáticamente cada {{s}} s (en pausa con la pestaña oculta; al volver se actualiza al instante)",
     "refreshFailed": "La actualización automática ha fallado por ahora; se muestra la lista de {{when}}. Se reintentará automáticamente.",

@@ -1739,6 +1739,8 @@
     "verifyCounts": "已确认 {{c}} · 未核实 {{u}}",
     "justNow": "刚刚",
     "updatedAt": "更新于 {{when}}",
+    "contentAt": "内容最新发布 {{when}}",
+    "contentAtTip": "当前筛选下最新一条的发布日期。来源抓取成功但没有新的相关公告时，这个日期不会变。",
     "ingestAt": "来源最近抓取 {{when}}",
     "updTitle": "页面每 {{s}} 秒自动刷新（标签页不可见时暂停，切回立即刷新）",
     "refreshFailed": "自动刷新暂时失败，显示的是 {{when}}的内容，稍后会自动重试。",

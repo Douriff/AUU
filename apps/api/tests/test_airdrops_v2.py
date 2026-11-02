@@ -162,8 +162,11 @@ class ParserTests(unittest.TestCase):
         items = ing.parse_bybit((FIX / "airdrops_bybit_real_20261015.json").read_bytes(), NOW)
         rows = [ing.feed_item_to_row(i, source_id="bybit", source_name=meta["name"], now_ms=NOW, meta=meta) for i in items]
         rows = [r for r in rows if r]
-        self.assertTrue(rows)
-        self.assertTrue(all("Token Splash" in r["title"] or "irdrop" in r["title"] or "irdrop" in r["summary"] for r in rows), [r["title"] for r in rows])
+        titles = [r["title"] for r in rows]
+        self.assertTrue(any("Token Splash" in t for t in titles), titles)
+        # prize-pool campaigns ("Share 150,000 USDC") are kept; listings/news without a reward are not
+        self.assertTrue(any("Share 150,000 USDC" in t for t in titles), titles)
+        self.assertFalse(any("Bybit AI" in t or "Midterm" in t or "Stocks & ETFs" in t for t in titles), titles)
         for r in rows:
             self.assertEqual(r["kind"], "official")
             self.assertLessEqual(len(r["summary"]), ing.SUMMARY_SHORT)

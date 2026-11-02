@@ -180,6 +180,12 @@ export function AirdropsPage() {
             <>
               <i className={`st-dot ${refreshErr ? "bad" : "ok"}`} aria-hidden="true" />
               {t("airdrops.updatedAt", { when: relWhen(t, fetchedAt, now) })}
+              {data?.latestPublishedAt ? (
+                <span className="ad-upd-src" title={t("airdrops.contentAtTip")}>
+                  {" · "}
+                  {t("airdrops.contentAt", { when: bj(data.latestPublishedAt) })}
+                </span>
+              ) : null}
               {data?.lastIngestAt ? <span className="ad-upd-src"> · {t("airdrops.ingestAt", { when: relWhen(t, data.lastIngestAt, srvNow) })}</span> : null}
             </>
           ) : (

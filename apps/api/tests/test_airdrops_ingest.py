@@ -57,6 +57,89 @@ class HeuristicTests(unittest.TestCase):
         self.assertEqual(ing.guess_project("Acme Labs: token airdrop details"), "Acme Labs")
         self.assertEqual(ing.guess_project("Something vague without markers"), "行业资讯")
 
+    def test_exchange_campaigns_match_and_media_stays_strict(self):
+        """Titles seen on OKX / Bybit / KuCoin activity feeds must ingest; the same wording on media must not."""
+        exchange_keep = [
+            "OKX Flash Earn Lite (CT) is Now Live: Subscribe BTC, ETH, OKB or CT to Share 1,000,000 CT",
+            "Flash Earn: Hold to Earn and Trade-to-Earn — share 50,000 USDT",
+            "Hold to Earn: stake BTC to earn rewards",
+            "Trade-to-Earn campaign",
+            "Learn-to-Earn week",
+            "[Exclusive Launch] Full Stocks Ahead: Share 150,000 USDC",
+            "KII Alpha Token Splash— Grab a share of the 2,000,000 KII prize pool .",
+            "New Launchpool: Stake to earn TOKEN",
+            "Launch pool opens for ABC",
+            "Jumpstart sale",
+            "Bitget CandyBomb is live",
+            "Points season 2",
+            "Ritual (RITUAL) Listing Campaign — 2,300,000 RITUAL Giveaway",
+            "KuMining Halloween · Keep the Mine Lit — 50,000+ USDT in Rewards",
+            "欧易闪赚：持仓赚币，瓜分 50,000 USDT",
+            "Bybit Trading Competition: Share 100,000 USDT",
+            "Introducing KuCoin Futures Arena: Earn Ongoing Futures Points & Boost Your Multiplier Up to 1.10x",
+            "New Listing: Arbitrum (ARB) — Deposit, Trade and Stake ARB to Share a 400,000 USDT Prize Pool!",
+            "积分活动开启",
+        ]
+        exchange_drop = [
+            "OKX will launch GRVT/USD for spot trading",
+            "OKX to delist DORA, ICX, STORJ spot trading pairs",
+            "OKX WebSocket Port 8443 Discontinuation Announcement",
+            "Notice: Fee Update for USDT-USD",
+            "Bybit AI Now Supports Main Account Operations",
+            "Bybit Expands Beyond Crypto With Direct Access to U.S. Stocks & ETFs",
+            "New: Bybit Odds Launches U.S. Midterm Election Contracts (Nov 6, 2026)",
+            "Bitcoin ETF sees record inflow",
+            "UAH P2P Voucher Campaign",
+            "Bitget announcement on suspending withdrawals",
+            "OKX to list CARDS/USDT (Collector Crypt) for spot trading",
+            "Simple Earn flexible rate adjustment",
+            "Weather in New York",
+        ]
+        for title in exchange_keep:
+            self.assertTrue(ing.matches_airdrop(title, "", exchange=True), title)
+        for title in exchange_drop:
+            self.assertFalse(ing.matches_airdrop(title, "", exchange=True), title)
+        # media / project blogs do not inherit the exchange campaign vocabulary
+        for title in (
+            "OKX Flash Earn Lite is Now Live: Hold to Earn and share 50,000 USDT",
+            "How traders earn yield on stablecoins",
+            "Share 150,000 USDC exclusive launch",
+            "Ritual Listing Campaign Giveaway",
+            "KuMining 50,000 USDT in Rewards",
+            "Introducing KuCoin Futures Arena: Earn Ongoing Futures Points",
+            "Bitcoin ETF inflow",
+        ):
+            self.assertFalse(ing.matches_airdrop(title, "", exchange=False), title)
+        for title in ("Protocol X announces community airdrop", "New points program", "空投快讯", "TGE date set", "token claim portal opens"):
+            self.assertTrue(ing.matches_airdrop(title, "", exchange=False), title)
+
+    def test_exchange_titles_become_rows_media_copies_do_not(self):
+        okx = ing.FEED_SOURCES["okx"]
+        media = ing.FEED_SOURCES["coindesk"]
+        item = {
+            "title": "Flash Earn: Hold to Earn and Trade-to-Earn — share 50,000 USDT",
+            "url": "https://www.okx.com/help/flash-earn-hold-to-earn",
+            "guid": "g-earn",
+            "summary": "Subscribe and share the prize pool.",
+            "published_at": NOW,
+        }
+        row = ing.feed_item_to_row(item, source_id="okx", source_name=okx["name"], now_ms=NOW, meta=okx)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["kind"], "official")
+        self.assertEqual(row["project_name"], "OKX")
+        self.assertIn("official", row["tags"].split(","))
+        # same headline on a media feed is ordinary promo copy, not an airdrop story
+        media_item = dict(item, url="https://www.coindesk.com/markets/flash-earn")
+        self.assertIsNone(ing.feed_item_to_row(media_item, source_id="coindesk", source_name=media["name"], now_ms=NOW, meta=media))
+        listing = {
+            "title": "OKX will launch GRVT/USD for spot trading",
+            "url": "https://www.okx.com/help/grvt-usd",
+            "guid": "g-list",
+            "summary": "Spot trading only.",
+            "published_at": NOW,
+        }
+        self.assertIsNone(ing.feed_item_to_row(listing, source_id="okx", source_name=okx["name"], now_ms=NOW, meta=okx))
+
 
 class IngestStoreTests(unittest.TestCase):
     def setUp(self):
@@ -143,6 +226,46 @@ class IngestStoreTests(unittest.TestCase):
         self.assertTrue(out["coindesk"]["ok"])
         self.assertEqual(out["coindesk"]["matched"], 0)
         self.assertEqual(self.store.list(origin="ingested", size=10)["total"], 0)
+
+    def test_kucoin_activities_keep_giveaway_drop_fee_notice_and_seed(self):
+        curated = self.store.list(origin="curated", size=100)["total"]
+        payload = """{"code":"200000","data":{"items":[
+            {"annId":1,"annTitle":"Ritual (RITUAL) Listing Campaign — 2,300,000 RITUAL Giveaway",
+             "annDesc":"Listing campaign giveaway.","annUrl":"https://www.kucoin.com/announcement/ritual-giveaway","cTime":%d},
+            {"annId":2,"annTitle":"KuCoin Will Adjust the Spot Trading Fee Rate for Gnoland (GNOT)",
+             "annDesc":"Fee update only.","annUrl":"https://www.kucoin.com/announcement/fee-gnot","cTime":%d}
+        ]}}""" % (NOW - 3_600_000, NOW - 1_800_000)
+        with patch.dict(os.environ, {"AUU_AIRDROPS_FEEDS": "kucoin", "AUU_ROLE": "primary"}):
+            out = ing.AirdropFetcher(self.store, fetch=lambda u: payload.encode(), now_ms=lambda: NOW).tick()
+        self.assertTrue(out["kucoin"]["ok"], out)
+        self.assertEqual(out["kucoin"]["matched"], 1)
+        self.assertEqual(out["kucoin"]["added"], 1)
+        items = self.store.list(origin="ingested", size=10)["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["projectName"], "KuCoin")
+        self.assertEqual(items[0]["verification"], "confirmed")
+        self.assertIn("Giveaway", items[0]["title"])
+        self.assertEqual(self.store.list(origin="curated", size=100)["total"], curated)
+        # a successful scrape with nothing new still records lastIngestAt, while the content date stays put
+        listed = self.store.list(size=5)
+        self.assertEqual(listed["lastIngestAt"], NOW)
+        self.assertGreaterEqual(listed["latestPublishedAt"], items[0]["publishedAt"])
+
+    def test_kucoin_rejects_bad_payload_and_foreign_host(self):
+        with self.assertRaises(ValueError):
+            ing.parse_kucoin(b'{"code":"400100","msg":"bad","data":{}}', NOW)
+        meta = ing.FEED_SOURCES["kucoin"]
+        evil = {
+            "title": "Some token giveaway",
+            "url": "https://phish.example/giveaway",
+            "guid": "g",
+            "summary": "",
+            "published_at": NOW,
+        }
+        self.assertIsNone(ing.feed_item_to_row(evil, source_id="kucoin", source_name=meta["name"], now_ms=NOW, meta=meta))
+        self.assertNotIn("binance", ing.FEED_SOURCES)
+        self.assertNotIn("apikey", ing.FEED_SOURCES["kucoin"]["url"].lower())
+        self.assertIn("annType=activities", ing.FEED_SOURCES["kucoin"]["url"])
 
 
 class IngestRouteTests(unittest.TestCase):

@@ -1739,6 +1739,8 @@
     "verifyCounts": "Confirmado {{c}} · Não verificado {{u}}",
     "justNow": "agora mesmo",
     "updatedAt": "Atualizado {{when}}",
+    "contentAt": "conteúdo mais recente publicado {{when}}",
+    "contentAtTip": "Data de publicação do item mais recente nesta vista. Uma busca bem-sucedida sem anúncio correspondente não altera esta data.",
     "ingestAt": "fontes consultadas pela última vez {{when}}",
     "updTitle": "Atualiza automaticamente a cada {{s}} s (em pausa com a aba oculta; ao voltar atualiza de imediato)",
     "refreshFailed": "A atualização automática falhou por agora; mostrando a lista de {{when}}. Será repetida automaticamente.",

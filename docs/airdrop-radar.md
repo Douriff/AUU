@@ -32,7 +32,9 @@
 - 默认源（与行业动态相同的公开 RSS，官方出口）：
   - CoinDesk `https://www.coindesk.com/arc/outboundfeeds/rss`
   - Cointelegraph `https://cointelegraph.com/rss`
-- 关键词过滤（标题/摘要）：`airdrop` / `空投` / `stakedrop` / `retrodrop` / `points program` / `holder rewards` / `TGE` / `claim portal` 等。
+- 关键词过滤（标题/摘要），分两层：
+  - **媒体与项目博客**（较严）：`airdrop` / `空投` / `stakedrop` / `retrodrop` / `points program` / `holder rewards` / `TGE` / `claim portal` 等。不含单独的 earn / share / launch，避免整页变成普通加密新闻。
+  - **交易所公告**（OKX / Bybit / KuCoin，`keywords: exchange`）：在上一层之外，再覆盖 Flash Earn、Hold to Earn、Trade-to-Earn、Learn-to-Earn、Launchpool / Launchpad、Token Splash、prize pool、giveaway、`share … USDT/USDC`、交易赛/瓜分/奖池/赚币/积分活动。仍不收纯上新、下架、费率、维护、API 变更。
 - 分类启发式：模因关键词 → `meme`；主流协议/ETF 等 → `major`；否则 `community`。
 - 入库字段：`origin=ingested`，`tags` 含 `ingested`，`source_url`=文章 URL；按 id + `source_url` 去重；**不覆盖**精选行。
 - 后台：`AUU_AIRDROPS_INGEST`（默认跟随 `AUU_AIRDROPS`，测试下默认关），间隔 `AUU_AIRDROPS_INTERVAL_SEC`（默认 **240**，夹在 60–3600；实时性改造前为 900/300–3600，详见文末「实时性」）。
@@ -67,6 +69,7 @@ cd apps/api && .venv/bin/python -m unittest tests.test_airdrops tests.test_airdr
 |----|------|----------|------|-----------------------------------|
 | `okx` | OKX 公告 | 官方文档化公开接口 `GET https://www.okx.com/api/v5/support/announcements`（免密钥，按 IP 限频 5 次/2 秒；我们约每 3–4 分钟 1 次，见「实时性」） | official → 已确认 | robots.txt 的 `*` 组未禁止 `/api/`；API Agreement §9.4 限制的是 *Market Data* 的转售/高频抓取（公告不在其定义内），我们低频、仅标题+链接+来源标注；**条款灰区，见 PR 说明** |
 | `bybit` | Bybit 公告 | 官方文档化公开接口 `GET https://api.bybit.com/v5/announcements/index`（免密钥；约每 3–4 分钟 1 次，见「实时性」） | official → 已确认 | `api.bybit.com/robots.txt` 404（无限制）；`www.bybit.com` robots 不涉及该接口；API Terms 未区分免密钥调用方（既未授权也未禁止），禁止转售/商业化 Service Data——我们不转售、仅链接回原文；**条款灰区，见 PR 说明** |
+| `kucoin` | KuCoin 活动 | 公开行情接口 `GET https://api.kucoin.com/api/v3/announcements?annType=activities`（免密钥，只要活动/赠金页，不要全量公告；约每 3–4 分钟 1 次） | official → 已确认 | 文档放在 Market Data（与 ticker 同类，调用无需 API Key）。`api.kucoin.com/robots.txt` 为 404；`www.kucoin.com/robots.txt` 未禁止 `/announcement`。只存标题、≤220 字摘要和原文链接。KuCoin API 条款对行情数据再分发偏严，公告不在其典型定义内，但仍属灰区：不转售、可随时用 `AUU_AIRDROPS_FEEDS` 去掉。2026-11-02 实测 `annType=activities` 返回近期 Listing Campaign / Giveaway |
 | `ethereum` `solana` `arbitrum` `optimism` `eigen` `lido` `sui` `layerzero` `kraken` | 项目/交易所官方博客 RSS | 站点自身公布的 RSS/Atom（`<link rel="alternate">` 或 Mirror/Medium 标准 feed），约每 4 分钟 1 次（Medium 16 分钟），见「实时性」 | official → 已确认 | 各站 robots.txt 均允许 feed 路径；仅取 RSS 中标题/摘要/链接；链接域名必须在白名单内（防 feed 注入外链） |
 | `coindesk` `cointelegraph` | 媒体 RSS | 既有（`app.news`） | media | 沿用既有接入；单源 → 未核实 |
 | **Binance** | **未接入** | 官方公告接口是需要 API Key + 签名的 WebSocket（`com_announcement_en`）；免密钥的 `bapi/.../cms/article/list/query` 被 `robots.txt`（`Disallow: */bapi/`）禁止，站点页面受 JS 挑战保护 | — | 按「不能抓取就不抓」处理；拿到官方 API Key 且用户批准后再接 |
@@ -102,7 +105,7 @@ cd apps/api && AUU_TEST=1 python -m unittest tests.test_airdrops tests.test_aird
 | 项 | 改前 | 改后 | 环境变量 |
 |---|---|---|---|
 | 后台轮询周期 | 900 s | **240 s**（夹在 60–3600） | `AUU_AIRDROPS_INTERVAL_SEC` |
-| OKX / Bybit 公告 API 每源最短间隔 | 1800 s | **180 s** | `AUU_AIRDROPS_MIN_API_SEC` |
+| OKX / Bybit / KuCoin 公告 API 每源最短间隔 | 1800 s | **180 s** | `AUU_AIRDROPS_MIN_API_SEC` |
 | 官方博客 RSS（含 Paragraph/Optimism） | 1800 s | **240 s** | `AUU_AIRDROPS_MIN_RSS_SEC` |
 | 媒体 RSS（CoinDesk / Cointelegraph） | 0（每轮） | **240 s** | `AUU_AIRDROPS_MIN_MEDIA_SEC` |
 | LayerZero（Medium，`Cache-Control: private, max-age=900`） | 1800 s | **960 s**（4×RSS，`slow: 4`） | 随 RSS 变量 |
@@ -110,8 +113,8 @@ cd apps/api && AUU_TEST=1 python -m unittest tests.test_airdrops tests.test_aird
 | 失败退避 | ×2…×16，上限 4 h | **不变**（首次失败至少等 300 s） | — |
 | `Retry-After`（429/503） | 无 | 遵守（上限 4 h，与退避取较大者） | — |
 
-- 实际节奏 = 轮询周期的整数倍：OKX/Bybit/博客/媒体每 ~4 分钟 1 次（每轮 1 个请求），Medium 约每 16 分钟 1 次。每个源约 15 个请求/小时（改前约 2/小时；媒体改前 4/小时），13 个源合计约 180 个请求/小时（改前约 30），其中带校验头的源大多返回 304（几百字节）。
-- OKX 官方限频 5 次/2 秒、Bybit 600 次/5 秒（按 IP），我们是 1 次/4 分钟，低 3 个数量级。**注意：OKX / Bybit 条款灰区（见上文 v2 表）在频率上比 v2 高了约 7 倍，复核条款后可用 `AUU_AIRDROPS_FEEDS` 去掉任一交易所，或用 `AUU_AIRDROPS_MIN_API_SEC` 调慢。**
+- 实际节奏 = 轮询周期的整数倍：OKX/Bybit/KuCoin/博客/媒体每 ~4 分钟 1 次（每轮 1 个请求），Medium 约每 16 分钟 1 次。每个源约 15 个请求/小时（改前约 2/小时；媒体改前 4/小时），14 个源合计约 195 个请求/小时（改前约 30；KuCoin 活动源约 +15/小时），其中带校验头的源大多返回 304（几百字节）。
+- OKX 官方限频 5 次/2 秒、Bybit 600 次/5 秒（按 IP），KuCoin 公开行情接口同样远高于 1 次/4 分钟。**注意：OKX / Bybit / KuCoin 条款灰区（见上文 v2 表）在频率上比最初的 v2 高了约 7 倍，复核条款后可用 `AUU_AIRDROPS_FEEDS` 去掉任一交易所，或用 `AUU_AIRDROPS_MIN_API_SEC` 调慢。**
 - **条件请求**：每次请求带 `User-Agent: AUUTRADE-airdrops/2.0 (+https://auutrade.com; headlines + links only, low frequency)`、`Accept-Encoding: gzip`；该源上次成功响应有 `ETag` / `Last-Modified` 时发 `If-None-Match` / `If-Modified-Since`（存在 `airdrops.sqlite` 的 `fetch_validators` 表，重启后仍有效；新表，旧代码忽略，回滚安全）。收到 304 不解析、不入库，只刷新该源的「最近成功时间」（`lastIngestAt`）。解析失败时不保存校验头。2026-10-18 实测各源响应头：Ethereum / Arbitrum / Eigen / Lido / Kraken / Paragraph / Cointelegraph 有 ETag 或 Last-Modified，所有被测源都支持 gzip；OKX / Bybit 公告 API 无校验头（照常整包返回：OKX ≈5 KB、gzip ≈1.4 KB；Bybit ≈25 KB、gzip ≈6 KB）。
 - 响应体上限 3 MB（压缩前与解压后都限制），不带 cookie、不带凭证。
 - 备用机：`AUU_ROLE=standby` 时 `ingest_enabled()` 恒为 False，`tick()` 直接返回，不发任何请求（有测试）。
@@ -129,7 +132,7 @@ cd apps/api && AUU_TEST=1 python -m unittest tests.test_airdrops tests.test_aird
 ### 前端（`/airdrops`）
 
 - 每 **60 秒**自动刷新（`AUTO_REFRESH_MS`）；页面不可见（`document.hidden`）时暂停，重新可见时**立即刷新**并重新计时；刷新是后台静默的（不闪骨架屏、不丢当前列表/筛选/页码），切换筛选时较旧的响应会被丢弃（不会覆盖新结果）。
-- 页头显示「更新于 x 分钟前 · 来源最近抓取 y 分钟前」（每 15 秒重算；「来源最近抓取」用接口返回的 `serverNow`，不受本机时钟偏差影响）。
+- 页头显示「更新于 x 分钟前 · 内容最新发布 日期 · 来源最近抓取 y 分钟前」（每 15 秒重算；「来源最近抓取」用接口返回的 `serverNow`，不受本机时钟偏差影响）。`latestPublishedAt` 是当前筛选下最新一条的**发布日**；抓取成功但没有新命中时，它不变，因此不会把「源在更新、只是没有相关公告」显示成故障。
 - 温和提示（黄色提示条，不影响页面其它部分）：某些来源最近一次抓取失败（显示来源名，说明仍展示之前保存的内容、系统自动重试）；自动刷新请求失败（说明显示的是 x 分钟前的内容）；全部来源超过 max(15 分钟, 3 个抓取周期) 没有成功更新。
 - 「行业动态」页：后台默认周期 720 s → **300 s**（`AUU_NEWS_INTERVAL_SEC`，下限仍 300），页面轮询 120 s → 60 s（原本就有可见性暂停）。
 - API：`GET /api/v1/airdrops` 新增 `serverNow`，`feeds[].minIntervalSec`；`ingestIntervalSec` 默认变为 240。

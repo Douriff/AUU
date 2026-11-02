@@ -546,6 +546,7 @@ class AirdropStore:
             seeded_at = self._meta_get("seeded_at")
             logs = {r["source"]: dict(r) for r in self._db.execute("SELECT * FROM fetch_log")}
             last_ingest = self._meta_get("last_ingest_ok")
+            latest_pub = self._db.execute(f"SELECT MAX(published_at) FROM items{w}", args).fetchone()[0]
             sx = self._sightings_for([r["id"] for r in rows])
             counts = {
                 r["verification"]: int(r["n"])
@@ -560,6 +561,9 @@ class AirdropStore:
             "pages": max(1, -(-total // size)) if total else 1,
             "seededAt": int(seeded_at) if seeded_at and seeded_at.isdigit() else None,
             "lastIngestAt": int(last_ingest) if last_ingest and last_ingest.isdigit() else None,
+            # Newest publish time in this filter (not the last successful fetch). A healthy scrape
+            # with zero new matches leaves this date where it is.
+            "latestPublishedAt": int(latest_pub) if latest_pub else None,
             "feeds": _feed_status(logs),
             "verificationCounts": {"confirmed": counts.get("confirmed", 0), "unverified": counts.get("unverified", 0)},
         }

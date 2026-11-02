@@ -165,6 +165,9 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(d["ingestIntervalSec"], 240)
         self.assertTrue(all(isinstance(f["minIntervalSec"], int) and f["minIntervalSec"] >= 60 for f in d["feeds"]))
         it = d["items"][0]
+        # content publish date is separate from "sources last fetched" (lastIngestAt may be null in tests)
+        self.assertIsInstance(d["latestPublishedAt"], int)
+        self.assertEqual(d["latestPublishedAt"], it["publishedAt"])
         for key in (
             "id",
             "title",
