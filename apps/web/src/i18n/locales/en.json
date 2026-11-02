@@ -1739,6 +1739,8 @@
     "verifyCounts": "Confirmed {{c}} · Unverified {{u}}",
     "justNow": "just now",
     "updatedAt": "Updated {{when}}",
+    "contentAt": "newest item published {{when}}",
+    "contentAtTip": "Publish date of the newest item in this view. A successful fetch with no matching announcement does not move this date.",
     "ingestAt": "sources last fetched {{when}}",
     "updTitle": "Refreshes automatically every {{s}} s (paused while the tab is hidden, refreshes right away when you come back)",
     "refreshFailed": "Auto-refresh failed for now; showing the list from {{when}}. It will retry automatically.",

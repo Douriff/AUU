@@ -1739,6 +1739,8 @@
     "verifyCounts": "Confirmé {{c}} · Non vérifié {{u}}",
     "justNow": "à l'instant",
     "updatedAt": "Mis à jour {{when}}",
+    "contentAt": "contenu le plus récent publié {{when}}",
+    "contentAtTip": "Date de publication du contenu le plus récent dans cette vue. Une collecte réussie sans annonce correspondante ne déplace pas cette date.",
     "ingestAt": "sources interrogées {{when}}",
     "updTitle": "Actualisation automatique toutes les {{s}} s (en pause si l'onglet est masqué, immédiate au retour)",
     "refreshFailed": "L'actualisation automatique a échoué pour le moment ; la liste affichée date de {{when}}. Nouvelle tentative automatique.",

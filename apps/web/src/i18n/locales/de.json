@@ -1739,6 +1739,8 @@
     "verifyCounts": "Bestätigt {{c}} · Ungeprüft {{u}}",
     "justNow": "gerade eben",
     "updatedAt": "Aktualisiert {{when}}",
+    "contentAt": "neuester Eintrag veröffentlicht {{when}}",
+    "contentAtTip": "Veröffentlichungsdatum des neuesten Eintrags in dieser Ansicht. Ein erfolgreicher Abruf ohne passenden Treffer ändert dieses Datum nicht.",
     "ingestAt": "Quellen zuletzt abgerufen {{when}}",
     "updTitle": "Aktualisiert sich alle {{s}} s automatisch (pausiert bei verstecktem Tab, sofort beim Zurückkehren)",
     "refreshFailed": "Automatische Aktualisierung vorerst fehlgeschlagen; angezeigt wird die Liste von {{when}}. Es wird automatisch erneut versucht.",

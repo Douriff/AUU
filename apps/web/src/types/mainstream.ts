@@ -727,6 +727,8 @@ export interface AirdropsPage {
   pages: number;
   seededAt: number | null;
   lastIngestAt: number | null;
+  /** Publish time of the newest item in the current filter. Independent of lastIngestAt. */
+  latestPublishedAt?: number | null;
   feeds: AirdropFeedStatus[];
   verificationCounts?: { confirmed: number; unverified: number };
   riskNotice?: string;

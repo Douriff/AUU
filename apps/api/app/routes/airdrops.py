@@ -68,6 +68,7 @@ def airdrops_list(
                 "pages": 1,
                 "seededAt": None,
                 "lastIngestAt": None,
+                "latestPublishedAt": None,
                 "verificationCounts": {"confirmed": 0, "unverified": 0},
                 "feeds": [
                     {"id": k, "name": FEED_SOURCES[k]["name"], "home": FEED_SOURCES[k]["home"], "tier": FEED_SOURCES[k].get("tier", "media"),

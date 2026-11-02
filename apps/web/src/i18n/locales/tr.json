@@ -1739,6 +1739,8 @@
     "verifyCounts": "Onaylı {{c}} · Doğrulanmadı {{u}}",
     "justNow": "az önce",
     "updatedAt": "Güncellendi {{when}}",
+    "contentAt": "en yeni içerik yayını {{when}}",
+    "contentAtTip": "Bu görünümdeki en yeni öğenin yayın tarihi. Eşleşen duyuru olmadan başarılı bir çekim bu tarihi değiştirmez.",
     "ingestAt": "kaynaklar en son {{when}} çekildi",
     "updTitle": "Her {{s}} sn'de otomatik yenilenir (sekme gizliyken duraklar, geri dönünce hemen yenilenir)",
     "refreshFailed": "Otomatik yenileme şimdilik başarısız oldu; {{when}} tarihli liste gösteriliyor. Otomatik olarak yeniden denenecek.",
