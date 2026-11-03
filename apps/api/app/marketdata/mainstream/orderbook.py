@@ -38,7 +38,7 @@ def _env_int(name: str, default: int, lo: int, hi: int) -> int:
 
 
 def book_ttl_ms() -> int:
-    return _env_int("AUU_MAINSTREAM_BOOK_SEC", 3, 2, 60) * 1000
+    return _env_int("AUU_MAINSTREAM_BOOK_SEC", 2, 2, 60) * 1000
 
 
 def book_wait_ms() -> int:

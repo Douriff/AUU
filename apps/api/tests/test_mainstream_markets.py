@@ -75,7 +75,7 @@ class MarketsTests(_NoNetwork):
             svc.markets()
         self._wait(svc)
         self.assertEqual(len([c for c in ex.calls if c[0] == "fetch_tickers"]), 1)  # within the TTL
-        t["now"] += 3_100  # default TTL is 3 s
+        t["now"] += 3_100  # past the 2 s default TTL
         svc.markets()
         self._wait(svc)
         self.assertEqual(len([c for c in ex.calls if c[0] == "fetch_tickers"]), 2)

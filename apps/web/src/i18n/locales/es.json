@@ -158,7 +158,12 @@
     "confirm": "Confirmar",
     "none": "Ninguno",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "Actualizado ahora",
+    "updatedAgo": "Actualizado hace {{n}} s",
+    "updatedMin": "Actualizado hace {{n}} min",
+    "updatedTitle": "Tiempo desde que se obtuvo esta cotización",
+    "updatedStore": "Comprobado ahora · cotizaciones del exchange no disponibles"
   },
   "auth": {
     "email": "Correo electrónico",

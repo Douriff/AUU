@@ -19,18 +19,23 @@ import { fmtFixed } from "@/i18n/format";
 import { rtHub } from "@/realtime/hub";
 import { useRtStatus, useRtTickers } from "@/realtime/useRealtime";
 import { RtBadge } from "@/components/market/RtBadge";
+import { QuoteAge } from "@/components/market/QuoteAge";
+import {
+  MARKET_POLL_HIDDEN_MS,
+  MARKET_POLL_LIVE_MS,
+  MARKET_POLL_MS,
+  SLOW_EVERY,
+  createVisiblePoll,
+  pushSample,
+  tickerSample,
+  type QuoteSample,
+} from "@/lib/quoteRefresh";
 
 const pct1 = (v: number) => `${fmtFixed(v * 100, 1)}%`;
 const coinReason = (c: MainstreamCoin | null | undefined, fallbackKey: string) =>
   c?.reasonCode ? i18n.t(`ms.reason.${c.reasonCode}`) : c?.reason && i18n.language === "zh-CN" ? c.reason : i18n.t(fallbackKey);
 
-// Market list: the server keeps one shared ticker cache (a few seconds), so a 5 s poll costs the exchange nothing extra.
-const POLL_MS = 5_000;
-// While prices are pushed (/api/v1/ws, step 3) the list poll only re-calibrates the slow fields (7d/30d, funding,
-// holdings) and acts as a safety net; it drops back to POLL_MS the moment the push is not live.
-const POLL_LIVE_MS = 30_000;
-// Funding history and the extra-venue coin card change slowly: refetch them every SLOW_EVERY polls (30 s as before).
-const SLOW_EVERY = 6;
+// Funding history changes slowly: refetch every SLOW_EVERY market polls (~30 s). The open-coin header uses every poll.
 
 function FundingBars({ rows }: { rows: { ts: number; rate: number }[] }) {
   const { t } = useTranslation();
@@ -227,6 +232,8 @@ export function MainstreamPage() {
   const [coin, setCoin] = useState<MainstreamCoin | null>(null);
   const [coinErr, setCoinErr] = useState("");
   const [mk, setMk] = useState<MarketsResponse | null>(null);
+  const [quoteFetchedAt, setQuoteFetchedAt] = useState(0);
+  const [coinFetchedAt, setCoinFetchedAt] = useState(0);
   const [err, setErr] = useState("");
   const [tf, setTf] = useState<MainstreamTf>(() => {
     const saved = (params.get("tf") ?? window.localStorage.getItem("auu.ms.tf")) as MainstreamTf | null;
@@ -270,14 +277,31 @@ export function MainstreamPage() {
       .then((d) => {
         if (!alive) return;
         setMk(d);
+        setQuoteFetchedAt(Date.now());
         setErr("");
         rtHub().configure(d.realtime ?? null, d.exchange);
       })
       .catch((e: unknown) => alive && setErr(errText(e, "common.loadFailed")));
-    const t = window.setTimeout(() => setTick((n) => n + 1), rtLiveRef.current ? POLL_LIVE_MS : POLL_MS);
+    // Visible: 2s (12s while push is live). Hidden: 20s. Shown again: this effect's next run fetches at once.
+    const stop = createVisiblePoll({
+      visibleMs: () => (rtLiveRef.current ? MARKET_POLL_LIVE_MS : MARKET_POLL_MS),
+      hiddenMs: MARKET_POLL_HIDDEN_MS,
+      run: () => {
+        if (alive) setTick((n) => n + 1);
+      },
+      isHidden: () => document.hidden,
+      onVisibility: (cb) => {
+        document.addEventListener("visibilitychange", cb);
+        return () => document.removeEventListener("visibilitychange", cb);
+      },
+      onFocus: (cb) => {
+        window.addEventListener("focus", cb);
+        return () => window.removeEventListener("focus", cb);
+      },
+    });
     return () => {
       alive = false;
-      window.clearTimeout(t);
+      stop();
     };
   }, [tick]);
   // push stopped being live -> poll at once and continue at the normal 5 s cadence
@@ -319,12 +343,17 @@ export function MainstreamPage() {
     let alive = true;
     marketProvider
       .getMainstreamCoin(pick, venueParam)
-      .then((c) => alive && (setCoin(c), setCoinErr("")))
+      .then((c) => {
+        if (!alive) return;
+        setCoin(c);
+        setCoinFetchedAt(Date.now());
+        setCoinErr("");
+      })
       .catch((e: unknown) => alive && setCoinErr(errText(e, "common.loadFailed")));
     return () => {
       alive = false;
     };
-  }, [extraMode, pick, venueParam, slowTick]);
+  }, [extraMode, pick, venueParam, tick]);
 
   const current: MarketRow | undefined = useMemo(() => {
     if (!extraMode) return poolRow;
@@ -337,6 +366,22 @@ export function MainstreamPage() {
     };
   }, [extraMode, poolRow, coin, pick]);
   const dataVenue = extraMode ? coin?.dataVenue ?? null : null;
+  const quoteSample: QuoteSample | null = useMemo(() => {
+    if (extraMode && coin && coin.symbol === pick && coinFetchedAt) {
+      return { eventAt: coin.priceAt ?? coin.serverNow ?? null, serverNow: coin.serverNow ?? null, clientFetchedAt: coinFetchedAt };
+    }
+    if (!mk || !quoteFetchedAt) return null;
+    if (rtLive) {
+      const rows = pick ? mk.items.filter((r) => r.symbol === pick) : mk.items;
+      let newest = 0;
+      for (const r of rows) {
+        const frame = rtTk[r.symbol];
+        if (frame && frame.recvAt >= mk.asOf - 1_000) newest = Math.max(newest, frame.recvAt);
+      }
+      if (newest) return pushSample(newest);
+    }
+    return tickerSample(mk.tickers?.source, mk.tickers?.at, mk.asOf, quoteFetchedAt);
+  }, [extraMode, coin, pick, coinFetchedAt, mk, quoteFetchedAt, rtLive, rtTk]);
   const venueLabel = (v: string | null | undefined) => (v ? ({ binance: "Binance", okx: "OKX", bybit: "Bybit", coinbase: "Coinbase" } as Record<string, string>)[v] ?? v : "");
 
   useEffect(() => {
@@ -414,6 +459,12 @@ export function MainstreamPage() {
             <MarketList rows={(mkView ?? mk).items} onOpen={open} quote={quote} />
             <p className="ml-foot">
               {tr("ms.foot", { n: mk.items.length, src: (mk.exchange || "—").toUpperCase() })}
+              {quoteSample ? (
+                <>
+                  {" · "}
+                  <QuoteAge sample={quoteSample} />
+                </>
+              ) : null}
               <RtBadge />
             </p>
           </>
@@ -441,6 +492,7 @@ export function MainstreamPage() {
           <div className="tk-last">
             <b className={`num ${tone(current.change24h)}`} data-testid="tk-price">{fmtPx(current.price)}</b>
             <em className={`num ${tone(current.change24h)}`}>{fmtPct(current.change24h)}</em>
+            <QuoteAge sample={quoteSample} />
             {extraMode ? null : <RtBadge />}
           </div>
           <div className="tk-stats">

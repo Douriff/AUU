@@ -158,7 +158,12 @@
     "confirm": "確認",
     "none": "なし",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "たった今更新",
+    "updatedAgo": "{{n}}秒前に更新",
+    "updatedMin": "{{n}}分前に更新",
+    "updatedTitle": "この価格を取得してからの時間",
+    "updatedStore": "たった今確認 · 取引所の価格は未取得"
   },
   "auth": {
     "email": "メールアドレス",

@@ -300,14 +300,14 @@ class MainstreamService:
             meta.update(self._live_overlay(ex, base, tf, rows, tail))
         return {"exchange": ex, "symbol": base, "pair": self.cfg.spot(base), "tf": tf, "candles": rows, **meta}
 
-    # ---- forming bar: 10 s tail (stored timeframes) + live price overlay ---------------------------------
+    # ---- forming bar: 5 s tail (stored timeframes) + live price overlay ---------------------------------
     TAIL_MAX_AGE_MS = 60_000  # a tail older than this never overrides the store
 
     def _tail_sec(self) -> int:
         try:
-            return max(2, min(300, int(os.getenv("AUU_MAINSTREAM_TAIL_SEC", "10"))))
+            return max(2, min(300, int(os.getenv("AUU_MAINSTREAM_TAIL_SEC", "5"))))
         except ValueError:
-            return 10
+            return 5
 
     def _stored_tail(self, ex: str, base: str, tf: str) -> Optional[dict]:
         """At most every ``_tail_sec`` seconds per series: fetch only the previous + forming bar (one small
@@ -375,7 +375,7 @@ class MainstreamService:
         return meta
 
     # ---- market list (all display + strategy coins) -----------------------
-    MARKETS_CACHE_MS = 15_000
+    MARKETS_CACHE_MS = 5_000
 
     def markets(self, holdings: Optional[dict[str, float]] = None, *, sync: bool = False) -> dict:
         """One batched read for the market list. Rows come from the local store (1h/1d candles and
@@ -450,9 +450,9 @@ class MainstreamService:
     def _ticker_ttl_ms() -> int:
         """Minimum age before the batched ticker is fetched again (the only thing that sets exchange load)."""
         try:
-            return max(2, min(600, int(os.getenv("AUU_MAINSTREAM_TICKER_SEC", "3")))) * 1000
+            return max(2, min(600, int(os.getenv("AUU_MAINSTREAM_TICKER_SEC", "2")))) * 1000
         except ValueError:
-            return 3_000
+            return 2_000
 
     def _ticker_fresh_ms(self) -> int:
         """Rows are overlaid with the ticker only while it is this young (else they fall back to the store)."""

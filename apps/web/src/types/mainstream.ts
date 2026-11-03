@@ -621,6 +621,10 @@ export type MainstreamCoin = {
   reasonCode?: "VENUE_NO_DATA" | "NOT_LISTED" | null;
   price: number | null;
   priceTs: number | null;
+  /** Server clock when the 1m window behind ``price`` was fetched. */
+  priceAt?: number | null;
+  /** Server clock when this response was built (pair with ``priceAt`` for a skew-free age). */
+  serverNow?: number | null;
   change24h: number | null;
   quoteVolume24h: number | null;
   bid: number | null;

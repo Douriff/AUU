@@ -14,7 +14,7 @@ from urllib.parse import quote
 from app.marketdata.cex import venue_urls
 from app.marketdata.fetch import UpstreamError, get_json
 
-TTL = 8.0
+TTL = 5.0
 _VENUES = ("binance", "okx", "bybit", "coinbase")
 _LABELS = {"binance": "Binance", "okx": "OKX", "bybit": "Bybit", "coinbase": "Coinbase"}
 _SKIP_BASE = {"USDT", "USDC", "USD", "FDUSD", "TUSD", "DAI", "BUSD", "USDE", "EUR", "USD1"}
@@ -226,20 +226,36 @@ def _load_one(venue: str) -> dict[str, Any]:
             payload = _fetch_coinbase(_coinbase_root())
             rows = _parse_coinbase(payload)
     except UpstreamError:
-        board = {"status": "unavailable", "rows": []}
+        board = _stamp({"status": "unavailable", "rows": []})
         with _LOCK:
             _CACHE[venue] = (time.monotonic(), board)
         return board
     except Exception:
-        board = {"status": "unavailable", "rows": []}
+        board = _stamp({"status": "unavailable", "rows": []})
         with _LOCK:
             _CACHE[venue] = (time.monotonic(), board)
         return board
     rows.sort(key=lambda row: float(row.get("volume_24h") or 0.0), reverse=True)
-    board = {"status": "ok", "rows": rows[:100]}
+    board = _stamp({"status": "ok", "rows": rows[:100]})
     with _LOCK:
         _CACHE[venue] = (time.monotonic(), board)
     return board
+
+
+def _stamp(board: dict[str, Any]) -> dict[str, Any]:
+    """Wall-clock ms of this fetch. Cache hits keep the original stamp so clients can show age."""
+    board["fetchedAt"] = int(time.time() * 1000)
+    return board
+
+
+def _quote_as_of(boards: dict[str, dict[str, Any]], venue_id: str) -> int:
+    """When the prices in this response were fetched. Cross-venue uses the oldest fresh board."""
+    now = int(time.time() * 1000)
+    if venue_id == "cross":
+        stamps = [int(b["fetchedAt"]) for b in boards.values() if b.get("status") == "ok" and b.get("fetchedAt")]
+        return min(stamps) if stamps else now
+    board = boards.get(venue_id) or {}
+    return int(board["fetchedAt"]) if board.get("fetchedAt") else now
 
 
 def _boards() -> dict[str, dict[str, Any]]:
@@ -380,4 +396,6 @@ def list_tickers(
         "venues": health,
         "total": len(rows),
         "items": page,
+        "asOf": _quote_as_of(boards, venue_id),
+        "serverNow": int(time.time() * 1000),
     }

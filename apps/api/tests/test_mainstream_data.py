@@ -296,6 +296,19 @@ class IntradayOnDemandTests(_NoNetwork):
         self.assertEqual(len(again["candles"]), 120)
         self.assertEqual(ex.calls, [])
 
+    def test_forming_bar_refetches_at_5s(self):
+        ex = FakeExchange()
+        svc = self._svc(ex)
+        self.assertEqual(svc.cfg.intraday_tail_sec, 5)
+        svc.chart_candles("BTC", "1m", limit=10)
+        ex.calls.clear()
+        svc.now_ms = lambda: NOW + 4_999
+        svc.chart_candles("BTC", "1m", limit=10)
+        self.assertEqual(self._ohlcv(ex, "1m"), [])
+        svc.now_ms = lambda: NOW + 5_000
+        svc.chart_candles("BTC", "1m", limit=10)
+        self.assertEqual(len(self._ohlcv(ex, "1m")), 1)
+
     def test_tail_refetch_after_ttl_only_from_last_bar(self):
         ex = FakeExchange()
         self._svc(ex).chart_candles("BTC", "5m", limit=50)

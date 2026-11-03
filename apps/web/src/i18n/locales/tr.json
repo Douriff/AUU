@@ -158,7 +158,12 @@
     "confirm": "Onayla",
     "none": "Yok",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "Az önce güncellendi",
+    "updatedAgo": "{{n}} sn önce güncellendi",
+    "updatedMin": "{{n}} dk önce güncellendi",
+    "updatedTitle": "Bu fiyatın alınmasının üzerinden geçen süre",
+    "updatedStore": "Az önce kontrol edildi · borsa fiyatları yok"
   },
   "auth": {
     "email": "E-posta",

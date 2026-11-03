@@ -158,7 +158,12 @@
     "confirm": "Confirmar",
     "none": "Nenhum",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "Atualizado agora",
+    "updatedAgo": "Atualizado há {{n}} s",
+    "updatedMin": "Atualizado há {{n}} min",
+    "updatedTitle": "Tempo desde que esta cotação foi obtida",
+    "updatedStore": "Verificado agora · cotações da exchange indisponíveis"
   },
   "auth": {
     "email": "E-mail",

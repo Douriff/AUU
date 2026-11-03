@@ -22,6 +22,7 @@ import { auuScoreIndicator, releaseIndicatorData, stratMomIndicator, type Marker
 import { regimeRuns, setMarkers, setRegimes } from "@/components/chart/kline/markers";
 import type { CrosshairBus } from "@/components/chart/crosshairBus";
 import { rtHub } from "@/realtime/hub";
+import { CHART_POLL_HIDDEN_MS, CHART_POLL_LIVE_MS, CHART_POLL_MS, createVisiblePoll } from "@/lib/quoteRefresh";
 import { QUICK_IDS, compactPrefs, layoutPanes, loadPrefs, savePrefs, syncIndicators, type IndicatorId, type IndicatorPrefs } from "@/components/chart/kline/indicatorPrefs";
 
 /** KLineChart v10 (Apache-2.0) candlestick + volume + drawing tools for the mainstream page. */
@@ -38,12 +39,9 @@ export const CHART_TFS: { id: MainstreamTf; label: string }[] = [
 
 const INTRADAY = new Set<MainstreamTf>(["1m", "5m", "15m"]);
 const PAGE = 500;
-// Forming-bar refresh. The server throttles its own exchange fetch of the last bar to once per ~10 s per series (and
-// overlays the shared live ticker price), so polling at 10 s never adds exchange load.
-const POLL_MS: Record<MainstreamTf, number> = { "1m": 10_000, "5m": 10_000, "15m": 10_000, "1h": 10_000, "4h": 10_000, "1d": 10_000 };
-// While the forming bar is pushed (/api/v1/ws kline + ticker, 1h/4h/1d only) the poll above only re-calibrates
-// every 30 s; it goes back to every 10 s as soon as the push is not live.
-const POLL_LIVE_MS = 30_000;
+// Forming-bar refresh. The server refetches the last bar about every 5 s per series and overlays the shared
+// ticker, so a 2 s poll does not add exchange calls inside that window. While that series is pushed, the poll
+// only recalibrates (CHART_POLL_LIVE_MS). A hidden tab slows down; showing the tab fetches at once.
 const TF_MS: Partial<Record<MainstreamTf, number>> = { "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
 const PERIODS: Record<MainstreamTf, Period> = {
   "1m": { type: "minute", span: 1 },
@@ -122,7 +120,7 @@ export function MainstreamChart({
   const params = useRef({ symbol, tf, venue });
   const gen = useRef(0);
   const prefetch = useRef<Prefetch | null>(null);
-  const poll = useRef<number | null>(null);
+  const pollStop = useRef<(() => void) | null>(null);
   const indIds = useRef(new Map<IndicatorId, { id: string; params: string }>());
   const [tick, setTick] = useState(0); // bumps when bars change (legend refresh)
   const [dataVer, setDataVer] = useState(0); // bumps when history was (pre)loaded: markers re-anchor
@@ -157,8 +155,8 @@ export function MainstreamChart({
 
   const rtOff = useRef<(() => void) | null>(null);
   const stopPoll = useCallback(() => {
-    if (poll.current != null) window.clearInterval(poll.current);
-    poll.current = null;
+    pollStop.current?.();
+    pollStop.current = null;
     rtOff.current?.();
     rtOff.current = null;
   }, []);
@@ -191,7 +189,7 @@ export function MainstreamChart({
           callback([], false);
         }
       },
-      // forming-bar refresh: poll our own API (same cadence as before)
+      // forming-bar refresh: poll our own API (2s visible; 12s while that series is pushed; 20s hidden)
       subscribeBar: ({ callback }) => {
         stopPoll();
         const P = params.current;
@@ -222,9 +220,12 @@ export function MainstreamChart({
             offT();
           };
         }
-        poll.current = window.setInterval(() => {
-          if (document.hidden) return;
-          if (hub.isLive() && rtOff.current && Date.now() - lastPoll < POLL_LIVE_MS) return;
+        const pull = (why: "timer" | "show") => {
+          const hidden = document.hidden;
+          if (hidden && why === "show") return;
+          const live = !hidden && hub.isLive() && rtOff.current;
+          const gap = hidden ? CHART_POLL_HIDDEN_MS : live ? CHART_POLL_LIVE_MS : CHART_POLL_MS;
+          if (why !== "show" && Date.now() - lastPoll < gap) return;
           lastPoll = Date.now();
           marketProvider
             .getMainstreamCandles(P.symbol, P.tf, 3, undefined, P.venue)
@@ -237,7 +238,23 @@ export function MainstreamChart({
               setTick((n) => n + 1);
             })
             .catch(() => undefined);
-        }, POLL_MS[P.tf]);
+        };
+        // Tick every CHART_POLL_MS so leaving "live" is noticed within 2 s, while a live series
+        // still only hits the API every CHART_POLL_LIVE_MS (pull skips until the gap elapses).
+        pollStop.current = createVisiblePoll({
+          visibleMs: CHART_POLL_MS,
+          hiddenMs: CHART_POLL_HIDDEN_MS,
+          run: pull,
+          isHidden: () => document.hidden,
+          onVisibility: (cb) => {
+            document.addEventListener("visibilitychange", cb);
+            return () => document.removeEventListener("visibilitychange", cb);
+          },
+          onFocus: (cb) => {
+            window.addEventListener("focus", cb);
+            return () => window.removeEventListener("focus", cb);
+          },
+        });
       },
       unsubscribeBar: stopPoll,
     });
