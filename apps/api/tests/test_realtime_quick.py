@@ -190,12 +190,12 @@ class TickerCadenceTests(_NoNetwork):
     def _n(self, ex):
         return len([c for c in ex.calls if c[0] == "fetch_tickers"])
 
-    def test_ttl_default_3s_floor_2s_ceiling_600s(self):
+    def test_ttl_default_2s_floor_2s_ceiling_600s(self):
         svc, _ = self._svc(TickerExchange())
         with patch.dict(os.environ, {}):
             os.environ.pop("AUU_MAINSTREAM_TICKER_SEC", None)
-            self.assertEqual(svc._ticker_ttl_ms(), 3_000)
-        for raw, want in (("1", 2_000), ("0", 2_000), ("5", 5_000), ("9999", 600_000), ("x", 3_000), ("30", 30_000)):
+            self.assertEqual(svc._ticker_ttl_ms(), 2_000)
+        for raw, want in (("1", 2_000), ("0", 2_000), ("5", 5_000), ("9999", 600_000), ("x", 2_000), ("30", 30_000)):
             with patch.dict(os.environ, {"AUU_MAINSTREAM_TICKER_SEC": raw}):
                 self.assertEqual(svc._ticker_ttl_ms(), want, raw)
 
@@ -212,7 +212,7 @@ class TickerCadenceTests(_NoNetwork):
             for _ in range(50):
                 svc.markets()
             self._wait(svc)
-        self.assertEqual(self._n(ex), 1 + 10 // 3)  # one fetch per 3 s TTL, independent of the 500 calls
+        self.assertEqual(self._n(ex), 1 + 10 // 2)  # one fetch per 2 s TTL, independent of the 500 calls
 
     def test_price_carries_fetch_time_and_overlay_expires_into_store(self):
         ex = TickerExchange()
@@ -332,10 +332,14 @@ class TailAndOverlayTests(_NoNetwork):
             self.assertEqual((kw["limit"], kw["since"]), (2, NOW // H * H - H))  # previous + forming bar only
             self.assertEqual(out["candles"][-1]["close"], 777.0)  # fresher than the store
             self.assertEqual(out["tailAt"], NOW)
-            for _ in range(20):  # a chart polling at 1 Hz inside the 10 s window
+            self.assertEqual(svc._tail_sec(), 5)
+            for _ in range(20):  # a chart polling at 1 Hz inside the 5 s window
                 svc.chart_candles("BTC", "1h", limit=5)
             self.assertEqual(len(self._ohlcv_calls(ex)) - before, 1)
-            t["now"] += 10_000
+            t["now"] += 4_999
+            svc.chart_candles("BTC", "1h", limit=5)
+            self.assertEqual(len(self._ohlcv_calls(ex)) - before, 1)
+            t["now"] += 1
             svc.chart_candles("BTC", "1h", limit=5)
             self.assertEqual(len(self._ohlcv_calls(ex)) - before, 2)
             for tf in ("4h", "1d"):

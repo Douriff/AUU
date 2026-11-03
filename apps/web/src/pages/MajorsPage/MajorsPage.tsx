@@ -1,5 +1,7 @@
 import { Empty, SkRows } from "@/components/ui/Skeleton";
 import { useEffect, useState, type KeyboardEvent } from "react";
+import { QuoteAge } from "@/components/market/QuoteAge";
+import { MAJORS_POLL_HIDDEN_MS, MAJORS_POLL_MS, createVisiblePoll, type QuoteSample } from "@/lib/quoteRefresh";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
@@ -54,6 +56,7 @@ export function MajorsPage() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [board, setBoard] = useState<MajorsTickerBoard | null>(null);
+  const [quoteFetchedAt, setQuoteFetchedAt] = useState(0);
   const [err, setErr] = useState("");
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -83,6 +86,7 @@ export function MajorsPage() {
         });
         if (!stop) {
           setBoard(data);
+          setQuoteFetchedAt(Date.now());
           setErr("");
         }
       } catch (e) {
@@ -90,10 +94,25 @@ export function MajorsPage() {
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 5000);
+    const stopPoll = createVisiblePoll({
+      visibleMs: MAJORS_POLL_MS,
+      hiddenMs: MAJORS_POLL_HIDDEN_MS,
+      run: () => {
+        if (!stop) void tick();
+      },
+      isHidden: () => document.hidden,
+      onVisibility: (cb) => {
+        document.addEventListener("visibilitychange", cb);
+        return () => document.removeEventListener("visibilitychange", cb);
+      },
+      onFocus: (cb) => {
+        window.addEventListener("focus", cb);
+        return () => window.removeEventListener("focus", cb);
+      },
+    });
     return () => {
       stop = true;
-      window.clearInterval(id);
+      stopPoll();
     };
   }, [venue, bucket, sort, dir, debounced]);
 
@@ -114,7 +133,23 @@ export function MajorsPage() {
       <header className="mj-top pro-head">
         <div>
           <h1>{t("majors.title")}</h1>
-          <p>{t("majors.sub")}</p>
+          <p>
+            {t("majors.sub")}
+            {board ? (
+              <>
+                {" · "}
+                <QuoteAge
+                  sample={
+                    {
+                      eventAt: board.asOf ?? null,
+                      serverNow: board.serverNow ?? null,
+                      clientFetchedAt: quoteFetchedAt,
+                    } satisfies QuoteSample
+                  }
+                />
+              </>
+            ) : null}
+          </p>
         </div>
         <div className="mj-health" aria-label={t("majors.health")}>
           {health.map((row) => (

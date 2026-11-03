@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.marketdata.fetch import UpstreamError
-from app.marketdata.tickers import reset_ticker_cache
+from app.marketdata.tickers import TTL, reset_ticker_cache
 
 
 def _binance():
@@ -159,3 +159,8 @@ class TickerBoardTests(unittest.TestCase):
         bases = [item["base"] for item in ranked["items"]]
         self.assertEqual(bases[0], "BTC")
         self.assertNotIn("ETHUP", bases)
+        self.assertEqual(TTL, 5.0)
+        self.assertIsInstance(ranked["asOf"], int)
+        self.assertIsInstance(ranked["serverNow"], int)
+        self.assertGreaterEqual(ranked["serverNow"], ranked["asOf"])
+        self.assertLess(ranked["serverNow"] - ranked["asOf"], 5_000)

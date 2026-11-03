@@ -120,6 +120,13 @@ class ExtraTests(unittest.TestCase):
         self.assertTrue(x.listed("okx", "WIF"))
         self.assertFalse(x.listed("okx", "PEPE"))
 
+    def test_quote_ttls_are_inside_the_old_30s_band(self):
+        self.assertEqual(X.TTL_MS, {"1m": 8_000, "5m": 12_000, "15m": 15_000, "1h": 30_000, "4h": 60_000, "1d": 120_000})
+        self.assertLessEqual(max(X.TTL_MS.values()), 120_000)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AUU_EXTRA_FETCH_PER_MIN", None)
+            self.assertEqual(X._budget(), 48)  # four 1m charts at 8 s still fit (7.5 × 4 = 30)
+
     def test_candles_cached_ttl_and_tail_polls_free(self):
         x, svc = self._x()
         out = x.candles("okx", "PEPE", "1h", limit=500)

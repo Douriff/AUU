@@ -158,7 +158,12 @@
     "confirm": "Confirmer",
     "none": "Aucun",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "Mis à jour à l'instant",
+    "updatedAgo": "Mis à jour il y a {{n}} s",
+    "updatedMin": "Mis à jour il y a {{n}} min",
+    "updatedTitle": "Temps écoulé depuis la récupération de ce cours",
+    "updatedStore": "Vérifié à l'instant · cours de l'échange indisponibles"
   },
   "auth": {
     "email": "E-mail",

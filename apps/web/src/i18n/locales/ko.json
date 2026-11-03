@@ -158,7 +158,12 @@
     "confirm": "확인",
     "none": "없음",
     "on": "on",
-    "off": "off"
+    "off": "off",
+    "updatedNow": "방금 업데이트됨",
+    "updatedAgo": "{{n}}초 전 업데이트",
+    "updatedMin": "{{n}}분 전 업데이트",
+    "updatedTitle": "이 시세를 가져온 뒤 지난 시간",
+    "updatedStore": "방금 확인 · 거래소 시세 없음"
   },
   "auth": {
     "email": "이메일",

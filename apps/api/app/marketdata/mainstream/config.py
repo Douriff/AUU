@@ -116,7 +116,7 @@ class MainstreamConfig:
     exchanges: list[str] = field(default_factory=lambda: ["binance", "okx"])
     backfill_days: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_BACKFILL_DAYS))
     intraday_days: int = 7
-    intraday_tail_sec: int = 10
+    intraday_tail_sec: int = 5
     funding_backfill_days: int = 60
     # Strategy universe: daily + 1h candles (1h = hourly risk marks) and funding (no 4h, no live funding), longer funding history.
     strategy_symbols: list[str] = field(default_factory=list)
@@ -156,7 +156,7 @@ def load_config() -> MainstreamConfig:
             "1h": _int("AUU_MAINSTREAM_BACKFILL_1H_DAYS", 90, 1, 730),
         },
         intraday_days=_int("AUU_MAINSTREAM_INTRADAY_DAYS", 7, 1, 30),
-        intraday_tail_sec=_int("AUU_MAINSTREAM_INTRADAY_TAIL_SEC", 10, 2, 300),
+        intraday_tail_sec=_int("AUU_MAINSTREAM_INTRADAY_TAIL_SEC", 5, 2, 300),
         funding_backfill_days=_int("AUU_MAINSTREAM_FUNDING_DAYS", 60, 1, 730),
         strategy_symbols=_strategy_symbols(),
         strategy_funding_days=_int("AUU_STRATEGY_FUNDING_DAYS", 730, 1, 1825),

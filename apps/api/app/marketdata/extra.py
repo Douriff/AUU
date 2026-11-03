@@ -33,12 +33,14 @@ MAX_BARS = {"binance": 500, "okx": 300}
 KEY_IDLE_MS = 24 * 3600 * 1000
 FAIL_BACKOFF_MS = 30_000
 TF_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
-TTL_MS = {"1m": 15_000, "5m": 20_000, "15m": 30_000, "1h": 60_000, "4h": 120_000, "1d": 300_000}
+# Forming bar of a coin outside the strategy pool. Short enough that an open chart is not a
+# 15–30s snapshot; the per-minute budget below still caps how many of these can run at once.
+TTL_MS = {"1m": 8_000, "5m": 12_000, "15m": 15_000, "1h": 30_000, "4h": 60_000, "1d": 120_000}
 
 
 def _budget() -> int:
     try:
-        return max(1, min(600, int(os.getenv("AUU_EXTRA_FETCH_PER_MIN", "30"))))
+        return max(1, min(600, int(os.getenv("AUU_EXTRA_FETCH_PER_MIN", "48"))))
     except ValueError:
         return 30
 

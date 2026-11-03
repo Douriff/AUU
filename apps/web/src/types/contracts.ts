@@ -1081,6 +1081,10 @@ export interface MajorsTickerBoard {
   venues: { id: string; label: string; status: string; status_label: string }[];
   total: number;
   items: MajorsTicker[];
+  /** Server clock when the cached board was fetched. */
+  asOf?: number;
+  /** Server clock when this response was built. */
+  serverNow?: number;
 }
 
 export interface MajorsCompare {

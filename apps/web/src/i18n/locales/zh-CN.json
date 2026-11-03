@@ -158,7 +158,12 @@
     "confirm": "确认",
     "none": "暂无",
     "on": "开",
-    "off": "关"
+    "off": "关",
+    "updatedNow": "刚刚更新",
+    "updatedAgo": "{{n}} 秒前更新",
+    "updatedMin": "{{n}} 分钟前更新",
+    "updatedTitle": "这条行情从交易所取回后过了多久",
+    "updatedStore": "刚刚检查过 · 交易所价格暂不可用"
   },
   "auth": {
     "email": "邮箱",

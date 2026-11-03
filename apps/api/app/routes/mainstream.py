@@ -65,11 +65,14 @@ def coin(symbol: str = Query(...), venue: Optional[str] = Query(None)):
     data_venue, why = (svc.exchange_for_read(), None) if in_pool and v not in ("binance", "okx") else ex.resolve(base, v)
     row = (ex.board_row(v, base) if v else None) or (ex.board_row(data_venue, base) if data_venue else None) or {}
     tradable = data_venue is not None and ex.allowed_for_paper(base)
-    price, price_ts = row.get("last"), None
+    price, price_ts, price_at = row.get("last"), None, None
+    server_now = svc.now_ms()
     if data_venue in ("binance", "okx"):
-        bars = ex.window(data_venue, base, "1m")["rows"]  # cached ~15s; same window the chart/paper use
+        win = ex.window(data_venue, base, "1m")  # cached (TTL_MS 1m); same window the chart and paper use
+        bars = win["rows"]
         if bars:
             price, price_ts = bars[-1]["close"], bars[-1]["ts"]
+            price_at = int(win["at"]) or None
     return ok({
         "symbol": base,
         "pair": f"{base}/USDT",
@@ -83,6 +86,8 @@ def coin(symbol: str = Query(...), venue: Optional[str] = Query(None)):
         "reasonCode": None if tradable else ("VENUE_NO_DATA" if why == "VENUE_NO_DATA" else "NOT_LISTED"),
         "price": price,
         "priceTs": price_ts,
+        "priceAt": price_at,
+        "serverNow": server_now,
         "change24h": row.get("change_24h"),
         "quoteVolume24h": row.get("volume_24h"),
         "bid": row.get("bid"),

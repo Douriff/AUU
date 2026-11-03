@@ -6,9 +6,9 @@ import { marketProvider } from "@/providers/HttpWsProvider";
 import type { MainstreamOrderbook } from "@/types/mainstream";
 import { useTranslation } from "react-i18next";
 import { fmtFixed } from "@/i18n/format";
+import { BOOK_POLL_MS } from "@/lib/quoteRefresh";
 
 export const BOOK_LEVELS = 12;
-const POLL_MS = 3000;
 
 function fmtQty(n: number): string {
   if (!Number.isFinite(n)) return "—";
@@ -51,12 +51,14 @@ export function OrderBook({ symbol, venue = null }: { symbol: string; venue?: st
   useEffect(() => {
     let alive = true;
     let timer: number | undefined;
+    let lastShow = 0;
     setBook(null);
     setErr("");
     const load = async () => {
       window.clearTimeout(timer);
+      lastShow = Date.now();
       if (document.hidden) return; // resumes on visibilitychange
-      let next = POLL_MS;
+      let next = BOOK_POLL_MS;
       try {
         const b = await marketProvider.getMainstreamOrderbook(symbol, BOOK_LEVELS, venue);
         if (!alive) return;
@@ -67,19 +69,23 @@ export function OrderBook({ symbol, venue = null }: { symbol: string; venue?: st
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : String(e));
-        next = POLL_MS * 3;
+        next = BOOK_POLL_MS * 3;
       }
       if (alive) timer = window.setTimeout(load, next);
     };
-    const onVis = () => {
-      if (!document.hidden) void load();
+    const onShow = () => {
+      if (document.hidden) return;
+      if (Date.now() - lastShow < 400) return;
+      void load();
     };
     void load();
-    document.addEventListener("visibilitychange", onVis);
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
     return () => {
       alive = false;
       window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVis);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
     };
   }, [symbol, venue]);
 
