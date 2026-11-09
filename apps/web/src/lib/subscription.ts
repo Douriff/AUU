@@ -22,6 +22,7 @@ const PREMIUM = new Set([
   "/alerts",
   "/backtest",
   "/watch",
+  "/screener",
 ]);
 
 /** Market quotes and starred/premium desk routes (not news, settings, or account pages). */

@@ -39,6 +39,7 @@ import { AdminExchangePanel } from "@/pages/AdminPage/AdminExchangePanel";
 import { ExchangePage } from "@/pages/ExchangePage/ExchangePage";
 import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
+import { ScreenerPage } from "@/pages/ScreenerPage/ScreenerPage";
 
 export const router = createBrowserRouter([
   {
@@ -114,6 +115,7 @@ export const router = createBrowserRouter([
       { path: "status", element: <StatusGate /> },
       { path: "subscribe", element: <SubscribePage /> },
       { path: "points", element: <PointsPage /> },
+      { path: "screener", element: <ScreenerPage /> },
     ],
   },
 ]);
