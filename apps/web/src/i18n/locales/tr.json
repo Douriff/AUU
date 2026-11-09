@@ -65,6 +65,7 @@
     "NOT_OPEN": "Emir zaten gerçekleşti veya iptal edildi",
     "RISK_DENIED": "Risk kontrolü tarafından reddedildi",
     "NOT_IMPLEMENTED": "Henüz desteklenmiyor",
+    "SCREENER_ADMIN": "Spot tarayici yalnizca yoneticilere acik bir onizlemedir. Sunucuda henuz piyasa aboneligi yoktur, bu hesap okuyamaz.",
     "badSideType": "Geçersiz emir yönü veya türü",
     "limitRequired": "Limit emir için geçerli bir limit fiyat gerekir",
     "limitTooFar": "Limit fiyat piyasa fiyatından çok uzak (en fazla ±%50)",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "Bu oturum ornek veridir. Canli piyasa degildir.",
     "statusOk": "Guncel",
     "statusDegraded": "Eksik veya eski",
-    "statusUnavailable": "Kullanilamiyor"
+    "statusUnavailable": "Kullanilamiyor",
+    "deniedTitle": "Yonetici onizlemesi",
+    "deniedBody": "Bu tarayici normal oturum acmis hesaplara acik degil. Sunucuda kontrol edilecek bir piyasa aboneligi yok, bu yuzden yalnizca bir yonetici onizleyebilir. Hicbir fiyat gosterilmez."
   }
 }

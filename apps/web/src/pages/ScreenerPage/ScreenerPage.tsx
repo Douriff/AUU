@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { fmtDate, fmtFixed, fmtKMB, fmtMax } from "@/i18n/format";
 import { errText } from "@/i18n/errors";
+import { ApiError } from "@/providers/HttpWsProvider";
 import { createVisiblePoll } from "@/lib/quoteRefresh";
 import {
   chartHref,
@@ -85,23 +86,40 @@ export function ScreenerPage() {
   const [err, setErr] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [tab, setTab] = useState<Tab>("pass");
   const [search, setSearch] = useState("");
   const gen = useRef(0);
+  const deniedRef = useRef(false);
   const committedRef = useRef(committed);
   committedRef.current = committed;
 
+  const refuse = (error: unknown): boolean => {
+    if (!(error instanceof ApiError)) return false;
+    if (error.status === 401 || error.code === "SCREENER_ADMIN" || error.status === 403) {
+      deniedRef.current = error.code === "SCREENER_ADMIN" || error.status === 403;
+      if (deniedRef.current) setDenied(true);
+      setData(null);
+      setMeta(null);
+      setErr("");
+      return true;
+    }
+    return false;
+  };
+
   const load = (query: Query) => {
+    if (deniedRef.current) return;
     const mine = ++gen.current;
     setLoading(true);
     void runScreen(query)
       .then((next) => {
-        if (mine !== gen.current) return;
+        if (mine !== gen.current || deniedRef.current) return;
         setData(next);
         setErr("");
       })
       .catch((error: unknown) => {
         if (mine !== gen.current) return;
+        if (refuse(error)) return;
         setErr(errText(error, "screener.loadFailed"));
       })
       .finally(() => {
@@ -113,9 +131,11 @@ export function ScreenerPage() {
     let alive = true;
     void loadMeta()
       .then((next) => {
-        if (alive) setMeta(next);
+        if (alive && !deniedRef.current) setMeta(next);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (alive) refuse(error);
+      });
     return () => {
       alive = false;
     };
@@ -142,7 +162,7 @@ export function ScreenerPage() {
         return () => window.removeEventListener("focus", cb);
       },
       run: () => {
-        if (document.hidden) return;
+        if (document.hidden || deniedRef.current) return;
         const query = committedRef.current;
         if (query) load(query);
       },
@@ -166,6 +186,21 @@ export function ScreenerPage() {
     for (const row of data?.rows ?? []) for (const key of Object.keys(row.values)) present.add(key);
     return VALUE_ORDER.filter((key) => present.has(key));
   }, [data]);
+
+  if (denied) {
+    return (
+      <div className="screener-page pro-page">
+        <header className="screener-head">
+          <p className="screener-kicker">{t("screener.kicker")}</p>
+          <h1>{t("screener.title")}</h1>
+        </header>
+        <section className="screener-denied" role="status">
+          <h2>{t("screener.deniedTitle")}</h2>
+          <p>{t("screener.deniedBody")}</p>
+        </section>
+      </div>
+    );
+  }
 
   const fixture = Boolean(meta?.fixture || data?.fixture);
   const status = data?.status;

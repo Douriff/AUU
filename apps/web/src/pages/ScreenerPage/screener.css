@@ -29,6 +29,9 @@
 .screener-ghost { height: 34px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--text2); }
 .screener-ghost:disabled { opacity: 0.45; }
 .screener-error { color: var(--bad); margin: 0; }
+.screener-denied { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-width: 68ch; }
+.screener-denied h2 { margin: 0 0 8px; font-size: 16px; }
+.screener-denied p { margin: 0; color: var(--text2); }
 .screener-tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .screener-search { min-width: min(220px, 100%); }
 .screener-page .is-pass { color: var(--ok); }

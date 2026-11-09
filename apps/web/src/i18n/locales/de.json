@@ -65,6 +65,7 @@
     "NOT_OPEN": "Die Order wurde bereits ausgeführt oder storniert",
     "RISK_DENIED": "Vom Risikomanagement abgelehnt",
     "NOT_IMPLEMENTED": "Noch nicht unterstützt",
+    "SCREENER_ADMIN": "Der Spot-Filter ist eine Vorschau fuer Administratoren. Der Server hat noch kein Markt-Abo, daher kann dieses Konto ihn nicht lesen.",
     "badSideType": "Ungültige Orderseite oder Ordertyp",
     "limitRequired": "Eine Limit-Order braucht einen gültigen Limitpreis",
     "limitTooFar": "Limitpreis weicht zu stark vom Marktpreis ab (max. ±50%)",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "Beispieldaten fuer diese Sitzung. Kein Live-Markt.",
     "statusOk": "Aktuell",
     "statusDegraded": "Unvollstaendig oder veraltet",
-    "statusUnavailable": "Nicht verfuegbar"
+    "statusUnavailable": "Nicht verfuegbar",
+    "deniedTitle": "Vorschau fuer Administratoren",
+    "deniedBody": "Dieser Filter ist fuer gewoehnliche angemeldete Konten nicht offen. Der Server hat kein Markt-Abo zum Pruefen, deshalb darf nur ein Administrator ihn ansehen. Es werden keine Kurse gezeigt."
   }
 }

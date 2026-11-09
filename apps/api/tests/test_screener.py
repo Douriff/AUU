@@ -681,30 +681,142 @@ class RouteTests(unittest.TestCase):
             reset_accounts()
             tmp.cleanup()
 
-    def test_bad_query_is_400_and_csv_is_quoted(self):
-        os.environ["AUU_AUTH"] = "off"
+    def _accounts(self):
+        import tempfile
+
+        from app.auth.accounts import reset_accounts
+
+        tmp = tempfile.TemporaryDirectory()
+        keys = ("AUU_AUTH", "AUU_ALLOW_SIGNUP", "AUU_USER_STORE", "AUU_INVITE_CODE", "AUU_LIVE_ENABLED", "AUU_EMAIL_VERIFY", "AUU_SCREENER_FIXTURE")
+        prev = {key: os.environ.get(key) for key in keys}
+        os.environ["AUU_AUTH"] = "on"
+        os.environ["AUU_ALLOW_SIGNUP"] = "on"
+        os.environ["AUU_EMAIL_VERIFY"] = "off"
+        os.environ["AUU_LIVE_ENABLED"] = "true"
+        os.environ["AUU_SCREENER_FIXTURE"] = "1"
+        os.environ.pop("AUU_INVITE_CODE", None)
+        os.environ["AUU_USER_STORE"] = str(Path(tmp.name) / "users.json")
+        reset_accounts()
+        return tmp, prev
+
+    def _restore(self, tmp, prev) -> None:
+        from app.auth.accounts import reset_accounts
+
+        for key, value in prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        reset_accounts()
+        tmp.cleanup()
+
+    def _register(self, client, name: str) -> None:
+        res = client.post(
+            "/api/v1/auth/register",
+            json={"name": name, "password": "screenPass1", "password_confirm": "screenPass1"},
+        )
+        self.assertEqual(res.status_code, 200, res.text)
+
+    def test_member_headers_and_fixture_do_not_unlock(self):
         from fastapi.testclient import TestClient
 
-        with TestClient(app) as client:
-            bad = client.post("/api/v1/screener/spot", json={"cmp": "gt", "left": {"field": "ema", "period": 50, "tf": "1d"}, "right": {"num": 1}})
-            self.assertEqual(bad.status_code, 400)
-            self.assertNotIn("0.9997", bad.text)
-            cross = client.post("/api/v1/screener/spot", json={"cmp": "crossed_above", "left": {"field": "price"}, "right": {"num": 1}})
-            self.assertEqual(cross.status_code, 400)
-            huge = client.post("/api/v1/screener/spot", data=b"{" + b" " * 9000, headers={"Content-Type": "application/json"})
-            self.assertEqual(huge.status_code, 400)
-            ok = client.post("/api/v1/screener/spot", json=DEFAULT_QUERY)
-            self.assertEqual(ok.status_code, 200, ok.text)
-            body = ok.json()["data"]
-            self.assertFalse(body["liveEnabled"])
-            self.assertEqual(body["orderMode"], "paper")
-            self.assertFalse(body["orders"])
-            csv = client.post("/api/v1/screener/spot/csv", json=DEFAULT_QUERY)
-            self.assertEqual(csv.status_code, 200, csv.text)
-            self.assertIn("text/csv", csv.headers["content-type"])
-            self.assertTrue(csv.content.startswith(b"\xef\xbb\xbf"))
-            self.assertIn(b'"BTCUSDT"', csv.content)
-            self.assertNotIn(b"<script", csv.content)
+        tmp, prev = self._accounts()
+        try:
+            with TestClient(app) as admin, TestClient(app) as member:
+                self._register(admin, "screenadmin")
+                self._register(member, "screenmember")
+                self.assertTrue(admin.get("/api/v1/auth/me").json()["data"]["user"]["is_admin"])
+                self.assertFalse(member.get("/api/v1/auth/me").json()["data"]["user"]["is_admin"])
+                headers = {"X-Subscription": "active", "X-AUU-Admin": "1", "X-Preview": "on"}
+                for method, path, body in (
+                    ("GET", "/api/v1/screener/spot", None),
+                    ("POST", "/api/v1/screener/spot", DEFAULT_QUERY),
+                    ("POST", "/api/v1/screener/spot/csv", DEFAULT_QUERY),
+                ):
+                    res = member.request(method, path, json=body, headers=headers)
+                    self.assertEqual(res.status_code, 403, res.text)
+                    self.assertEqual(res.json()["error"]["code"], "SCREENER_ADMIN")
+                    for leaked in ("0.9997", "BTCUSDT", "lastPrice", "quoteVolume"):
+                        self.assertNotIn(leaked, res.text)
+                self.assertEqual(member.get("/api/v1/live/status").status_code, 200)
+                self.assertEqual(admin.get("/api/v1/screener/spot").status_code, 200)
+                screened = admin.post("/api/v1/screener/spot", json=DEFAULT_QUERY)
+                self.assertEqual(screened.status_code, 200, screened.text)
+                self.assertGreater(screened.json()["data"]["counts"]["passes"], 0)
+        finally:
+            self._restore(tmp, prev)
+
+    def test_auth_off_fixture_is_still_refused(self):
+        from fastapi.testclient import TestClient
+
+        prev_auth = os.environ.get("AUU_AUTH")
+        prev_fix = os.environ.get("AUU_SCREENER_FIXTURE")
+        os.environ["AUU_AUTH"] = "off"
+        os.environ["AUU_SCREENER_FIXTURE"] = "1"
+        try:
+            with TestClient(app) as client:
+                for method, path in (("GET", "/api/v1/screener/spot"), ("POST", "/api/v1/screener/spot"), ("POST", "/api/v1/screener/spot/csv")):
+                    res = client.request(method, path, json=DEFAULT_QUERY)
+                    self.assertEqual(res.status_code, 403, res.text)
+                    self.assertEqual(res.json()["error"]["code"], "SCREENER_ADMIN")
+                    self.assertNotIn("BTCUSDT", res.text)
+                    self.assertNotIn("0.9997", res.text)
+        finally:
+            if prev_auth is None:
+                os.environ.pop("AUU_AUTH", None)
+            else:
+                os.environ["AUU_AUTH"] = prev_auth
+            if prev_fix is None:
+                os.environ.pop("AUU_SCREENER_FIXTURE", None)
+            else:
+                os.environ["AUU_SCREENER_FIXTURE"] = prev_fix
+
+    def test_bad_query_is_400_and_csv_is_quoted(self):
+        from fastapi.testclient import TestClient
+
+        tmp, prev = self._accounts()
+        try:
+            with TestClient(app) as client:
+                self._register(client, "screenadmin")
+                bad = client.post("/api/v1/screener/spot", json={"cmp": "gt", "left": {"field": "ema", "period": 50, "tf": "1d"}, "right": {"num": 1}})
+                self.assertEqual(bad.status_code, 400)
+                self.assertNotIn("0.9997", bad.text)
+                cross = client.post("/api/v1/screener/spot", json={"cmp": "crossed_above", "left": {"field": "price"}, "right": {"num": 1}})
+                self.assertEqual(cross.status_code, 400)
+                huge = client.post("/api/v1/screener/spot", data=b"{" + b" " * 9000, headers={"Content-Type": "application/json"})
+                self.assertEqual(huge.status_code, 400)
+                ok = client.post("/api/v1/screener/spot", json=DEFAULT_QUERY)
+                self.assertEqual(ok.status_code, 200, ok.text)
+                body = ok.json()["data"]
+                self.assertFalse(body["liveEnabled"])
+                self.assertEqual(body["orderMode"], "paper")
+                self.assertFalse(body["orders"])
+                csv = client.post("/api/v1/screener/spot/csv", json=DEFAULT_QUERY)
+                self.assertEqual(csv.status_code, 200, csv.text)
+                self.assertIn("text/csv", csv.headers["content-type"])
+                self.assertTrue(csv.content.startswith(b"\xef\xbb\xbf"))
+                self.assertIn(b'"BTCUSDT"', csv.content)
+                self.assertNotIn(b"<script", csv.content)
+        finally:
+            self._restore(tmp, prev)
+
+
+class AccessTests(unittest.TestCase):
+    def test_decide_trusts_only_admin_session(self):
+        from app.points import catalog
+        from app.screener.access import CODE, decide
+
+        self.assertEqual(decide(None, auth_on=True)[:2], (401, "AUTH_REQUIRED"))
+        self.assertEqual(decide(None, auth_on=False)[:2], (403, CODE))
+        self.assertEqual(decide({"is_admin": False, "subscribed": True, "subscription": "active"}, auth_on=True)[:2], (403, CODE))
+        self.assertIsNone(decide({"is_admin": True, "subscription": "expired"}, auth_on=True))
+        self.assertEqual(list(catalog.ITEMS), ["example_badge"])
+        self.assertTrue(catalog.ITEMS["example_badge"]["example"])
+        source = "\n".join(path.read_text(encoding="utf-8") for path in (REPO / "apps/api/app/screener").glob("*.py"))
+        route = (REPO / "apps/api/app/routes/screener.py").read_text(encoding="utf-8")
+        self.assertNotIn("has_entitlement", source + route)
+        self.assertNotIn("app.points", source + route)
+        self.assertNotIn("request.headers", route)
 
 
 class RegistrationTests(unittest.TestCase):
@@ -713,7 +825,10 @@ class RegistrationTests(unittest.TestCase):
         self.assertIn("/api/v1/health", PUBLIC_PATHS)
         self.assertEqual(gate_decision("/api/v1/screener/spot", "GET", None)[0], 401)
         self.assertEqual(gate_decision("/api/v1/screener/spot", "POST", None)[0], 401)
+        # The shared gate still only requires login. The screener router, not this gate, requires an admin.
         self.assertIsNone(gate_decision("/api/v1/screener/spot", "POST", {"is_admin": False}))
+        self.assertIsNone(gate_decision("/api/v1/majors", "GET", {"is_admin": False}))
+        self.assertIsNone(gate_decision("/api/v1/mainstream/overview", "GET", {"is_admin": False}))
         self.assertEqual(gate_decision("/api/v1/majors", "GET", None)[0], 401)
         catalog = root(False)["data"]["endpoints"]
         self.assertNotIn("screener", catalog)

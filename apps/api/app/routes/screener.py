@@ -1,8 +1,8 @@
 """Read-only spot screener.
 
 POST carries a query but writes nothing: no orders, no ledger, no live switch.
-Login is the existing auth gate. This path is not public, so an anonymous caller
-cannot read the screened book.
+The shared login gate still rejects anonymous callers with 401. This router then
+allows only an administrator session. Fixture data uses the same check.
 """
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ import threading
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
+from app.auth.accounts import auth_enabled
+from app.routes.auth import session_user
 from app.routes.envelope import err, ok
+from app.screener.access import decide
 from app.screener.logic import LIVE_ENABLED, SchemaError
 from app.screener.market import ScreenerBook, build_default_book
 
@@ -41,6 +44,15 @@ def _bad():
     return err("BAD_REQUEST", "筛币条件无效或超出限制", 400)
 
 
+def _guard(request: Request):
+    """Refuse before any book read. Headers and fixture mode are not a grant."""
+    verdict = decide(session_user(request), auth_on=auth_enabled())
+    if verdict is None:
+        return None
+    status, code, message = verdict
+    return err(code, message, status)
+
+
 async def _body(request: Request):
     raw = await request.body()
     if len(raw) > _MAX_BODY:
@@ -53,8 +65,11 @@ async def _body(request: Request):
 
 
 @router.get("/spot")
-def spot_meta():
+def spot_meta(request: Request):
     """Schema, universe definition and candle rules. No prices."""
+    refused = _guard(request)
+    if refused is not None:
+        return refused
     body = get_book().meta()
     body["liveEnabled"] = LIVE_ENABLED
     return ok(body)
@@ -62,6 +77,9 @@ def spot_meta():
 
 @router.post("/spot")
 async def spot_screen(request: Request):
+    refused = _guard(request)
+    if refused is not None:
+        return refused
     payload, problem = await _body(request)
     if problem is not None:
         return problem
@@ -75,6 +93,9 @@ async def spot_screen(request: Request):
 
 @router.post("/spot/csv")
 async def spot_csv(request: Request):
+    refused = _guard(request)
+    if refused is not None:
+        return refused
     payload, problem = await _body(request)
     if problem is not None:
         return problem

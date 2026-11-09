@@ -4,12 +4,28 @@
 
 ## 地址
 
-- 页面：`/screener`（需已有登录；行情页同一套订阅预览锁，未改旧路径的锁定规则）
+- 页面：`/screener`（不在现有导航里。浏览器里的订阅预览锁仍按原名单挡住未预览的访客，但那不是权限。）
 - `GET /api/v1/screener/spot`：字段白名单、币池说明、K 线口径。不含价格。
 - `POST /api/v1/screener/spot`：只读筛选。不写账本、不下单。
 - `POST /api/v1/screener/spot/csv`：导出。每个单元格加引号，以 `=` `+` `-` `@` 或制表符开头的内容加撇号，避免表格公式。
 
-未登录调用上述接口返回 401。路径不在公开名单里。响应里 `liveEnabled` 恒为 `false`，`orderMode` 为 `paper`。`AUU_LIVE_ENABLED` 不能把这个接口变成实盘。
+## 谁可以读
+
+服务端没有行情订阅记录。`apps/web/src/lib/subscription.ts` 写明只是本机显示预览，不代表权益。积分目录里唯一的商品是示例徽章 `example_badge`，不作为行情权限。因此这三条接口不读取 localStorage、请求头或该徽章，也不新建扣款。
+
+账号开启时：
+
+| 调用者 | GET / POST / CSV |
+| --- | --- |
+| 未登录 | 401 `AUTH_REQUIRED`（沿用原登录门，路径不在公开名单） |
+| 已登录但不是管理员 | 403 `SCREENER_ADMIN`，响应里没有行情 |
+| 管理员会话 | 允许 |
+
+账号关闭时没有管理员会话，三条接口同样 403。`AUU_SCREENER_FIXTURE=1` 不能跳过这次检查。页面收到 403 只显示“仅管理员预览”，不渲染价格。
+
+共享登录门对旧路径的判定没有改。已登录的非管理员仍然可以访问原来的行情接口；只有新筛币路由多了这一层。
+
+响应里 `liveEnabled` 恒为 `false`，`orderMode` 为 `paper`。`AUU_LIVE_ENABLED` 不能把这个接口变成实盘。
 
 ## 注册点（仅此三处碰到旧文件）
 
@@ -42,7 +58,7 @@
 
 没有数据库迁移，没有用户数据、密钥、DNS 或实盘开关的改动。缓存只在进程内存里。
 
-以后若要上线：用现有的 API / Web Dockerfile 重建镜像即可，不要设置 `AUU_SCREENER_FIXTURE`，不要为了这个功能打开 `AUU_RT_WS`，不要改 `AUU_LIVE_*`。用户登录后打开 `/screener`。
+以后若要上线：用现有的 API / Web Dockerfile 重建镜像即可，不要设置 `AUU_SCREENER_FIXTURE`，不要为了这个功能打开 `AUU_RT_WS`，不要改 `AUU_LIVE_*`。只有管理员会话能打开 `/screener` 并读到行情。普通登录账号会看到拒绝说明，接口返回 403。行情订阅若要以后接上，需要先有服务端记录，不能用浏览器标记代替。
 
 回滚：把 API 和 Web 镜像换回上一版（或 revert 这次提交后再构建）。没有要清的表，也没有要改的 DNS。进程重启后内存缓存自然消失。
 

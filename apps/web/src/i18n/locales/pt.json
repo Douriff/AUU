@@ -65,6 +65,7 @@
     "NOT_OPEN": "A ordem já foi executada ou cancelada",
     "RISK_DENIED": "Rejeitada pelo controle de risco",
     "NOT_IMPLEMENTED": "Ainda não suportado",
+    "SCREENER_ADMIN": "O filtro spot e uma previa para administradores. O servidor ainda nao tem uma assinatura de mercado, entao esta conta nao pode le-lo.",
     "badSideType": "Lado ou tipo de ordem inválido",
     "limitRequired": "Uma ordem limitada precisa de um preço limite válido",
     "limitTooFar": "Preço limite muito distante do preço de mercado (máx. ±50%)",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "Dados de exemplo desta sessao. Nao e o mercado ao vivo.",
     "statusOk": "Atual",
     "statusDegraded": "Incompleto ou vencido",
-    "statusUnavailable": "Indisponivel"
+    "statusUnavailable": "Indisponivel",
+    "deniedTitle": "Previa de administrador",
+    "deniedBody": "Este filtro nao esta aberto a contas comuns autenticadas. O servidor nao tem uma assinatura de mercado para verificar, entao so um administrador pode ve-lo. Nenhuma cotacao e mostrada."
   }
 }

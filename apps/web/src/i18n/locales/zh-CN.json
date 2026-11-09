@@ -65,6 +65,7 @@
     "NOT_OPEN": "订单已成交或已撤销",
     "RISK_DENIED": "被风控拒绝",
     "NOT_IMPLEMENTED": "暂不支持",
+    "SCREENER_ADMIN": "筛币仍是管理员预览。服务端还没有行情订阅，这个账号不能读取。",
     "badSideType": "订单方向或类型不正确",
     "limitRequired": "限价单需要有效的限价",
     "limitTooFar": "限价偏离现价太多（需在 ±50% 以内）",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "本次是样本数据，不是实盘行情。",
     "statusOk": "当前有效",
     "statusDegraded": "不完整或已过期",
-    "statusUnavailable": "不可用"
+    "statusUnavailable": "不可用",
+    "deniedTitle": "仅管理员预览",
+    "deniedBody": "筛币还没有对普通登录账号开放。服务端没有可核验的行情订阅，因此只有管理员能预览。这里不会显示行情。"
   }
 }

@@ -65,6 +65,7 @@
     "NOT_OPEN": "L’ordre a déjà été exécuté ou annulé",
     "RISK_DENIED": "Refusé par le contrôle des risques",
     "NOT_IMPLEMENTED": "Pas encore pris en charge",
+    "SCREENER_ADMIN": "Le filtre spot est un apercu reserve aux administrateurs. Le serveur n'a pas encore d'abonnement marche, ce compte ne peut pas le lire.",
     "badSideType": "Sens ou type d’ordre invalide",
     "limitRequired": "Un ordre à cours limité nécessite un prix limite valide",
     "limitTooFar": "Prix limite trop éloigné du prix du marché (±50 % max.)",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "Donnees d'exemple pour cette session. Pas un marche en direct.",
     "statusOk": "A jour",
     "statusDegraded": "Incomplet ou perime",
-    "statusUnavailable": "Indisponible"
+    "statusUnavailable": "Indisponible",
+    "deniedTitle": "Apercu administrateur",
+    "deniedBody": "Ce filtre n'est pas ouvert aux comptes connectes ordinaires. Le serveur n'a pas d'abonnement marche a verifier, donc seul un administrateur peut l'apercevoir. Aucun cours n'est affiche."
   }
 }

@@ -65,6 +65,7 @@
     "NOT_OPEN": "The order has already been filled or cancelled",
     "RISK_DENIED": "Rejected by risk control",
     "NOT_IMPLEMENTED": "Not supported yet",
+    "SCREENER_ADMIN": "The spot screener is an administrator preview. The server has no market subscription yet, so this account cannot read it.",
     "badSideType": "Invalid order side or type",
     "limitRequired": "A limit order needs a valid limit price",
     "limitTooFar": "Limit price is too far from the market price (must be within ±50%)",
@@ -1983,6 +1984,8 @@
     "fixtureBanner": "Sample data for this session. Not a live market.",
     "statusOk": "Current",
     "statusDegraded": "Incomplete or stale",
-    "statusUnavailable": "Unavailable"
+    "statusUnavailable": "Unavailable",
+    "deniedTitle": "Administrator preview",
+    "deniedBody": "This screener is not open to ordinary signed-in accounts. The server has no market subscription to check, so only an administrator can preview it. No quotes are shown."
   }
 }
