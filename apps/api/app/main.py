@@ -207,6 +207,9 @@ def create_app(legacy: bool | None = None) -> FastAPI:
 
     for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, airdrops, chart_drawings, price_alerts_routes, points, points_trading, exchange):
         app.include_router(mod.router)
+    from app.ai_review.routes import router as ai_review_router
+
+    app.include_router(ai_review_router)
     if legacy:
         for mod in _legacy_routers():
             app.include_router(mod.router)
