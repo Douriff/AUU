@@ -82,7 +82,12 @@ def _blank_book(status: str, reason: str, book: str) -> dict[str, Any]:
 def _count_signals(perf: dict[str, Any], ident: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]:
     bar_key = "v0_bars" if ident["id"] == "auu_signal_v0" else "bars"
     table_key = "bars" if ident["id"] == "auu_signal_v0" else "cand_bars"
+    trunc_key = "truncated_v0" if ident["id"] == "auu_signal_v0" else "truncated_bars"
     tables = signal.get("tables") or {}
+    if ident["id"] in set(signal.get(trunc_key) or []):
+        perf["signal_rows"] = None
+        perf.setdefault("warnings", []).append("truncated")
+        return perf
     if tables.get(table_key) == "ok":
         grouped = (signal.get(bar_key) or {}).get(ident["id"]) or {}
         perf["signal_rows"] = sum(len(rows) for rows in grouped.values())
@@ -97,13 +102,24 @@ def _signal_perf(ident: dict[str, Any], signal: dict[str, Any], now_ms: int) -> 
     tables = signal.get("tables") or {}
     if tables.get("cand_nav") != "ok":
         return _count_signals(_blank_book("not_connected", "schema_missing", "shadow"), ident, signal)
+    if ident["id"] in set(signal.get("truncated_nav") or []):
+        perf = _blank_book("incomplete", "truncated", "shadow")
+        perf["stored_rows"] = (signal.get("nav_counts") or {}).get(ident["id"])
+        perf["warnings"] = ["truncated"]
+        return _count_signals(perf, ident, signal)
     if ident["id"] in set(signal.get("bad_nav") or []):
         perf = _blank_book("non_finite", "non_finite_nav", "shadow")
         perf["warnings"] = ["non_finite"]
         return _count_signals(perf, ident, signal)
     points = list((signal.get("nav") or {}).get(ident["id"]) or [])
     perf = from_unit_nav(points, now_ms=now_ms, tf_ms=DAY_MS, book="shadow", start=1.0, basis="unit_nav")
-    if ident["id"] in set(signal.get("bad_trades") or []):
+    if ident["id"] in set(signal.get("truncated_trades") or []):
+        perf["cost"] = None
+        perf["cost_status"] = "unknown"
+        perf["closed_trades"] = None
+        perf["open_trades"] = None
+        perf.setdefault("warnings", []).append("truncated")
+    elif ident["id"] in set(signal.get("bad_trades") or []):
         perf["cost"] = None
         perf["cost_status"] = "non_finite"
         perf["closed_trades"] = None
@@ -118,6 +134,10 @@ def _paper_perf(paper: dict[str, Any], now_ms: int) -> dict[str, Any]:
         return _blank_book("not_connected", "file_missing", "paper")
     if (paper.get("tables") or {}).get("runs") != "ok":
         return _blank_book("not_connected", "schema_missing", "paper")
+    if "trend_tsmom_v1" in set(paper.get("truncated_runs") or []):
+        perf = _blank_book("incomplete", "truncated", "paper")
+        perf["warnings"] = ["truncated"]
+        return perf
     if "trend_tsmom_v1" in set(paper.get("bad_runs") or []):
         return _blank_book("non_finite", "non_finite_nav", "paper")
     points = list((paper.get("runs") or {}).get("trend_tsmom_v1") or [])
@@ -131,6 +151,10 @@ def _h2_perf(ident: dict[str, Any], h2: dict[str, Any], now_ms: int) -> dict[str
         return _blank_book("not_connected", "file_missing", "shadow")
     if h2.get("table") != "ok":
         return _blank_book("not_connected", "schema_missing", "shadow")
+    if h2.get("truncated"):
+        perf = _blank_book("incomplete", "truncated", "shadow")
+        perf["warnings"] = ["truncated"]
+        return perf
     if h2.get("non_finite"):
         return _blank_book("non_finite", "non_finite_nav", "shadow")
     points = list(h2.get("days") or [])
@@ -169,6 +193,10 @@ def _s3_view(s3: dict[str, Any]) -> tuple[dict[str, Any], Optional[dict[str, Any
         return perf, None
     if s3.get("table") != "ok":
         perf["reason"] = "schema_missing"
+        return perf, None
+    if s3.get("truncated"):
+        perf["status"] = "incomplete"
+        perf["reason"] = "truncated"
         return perf, None
     if s3.get("non_finite"):
         perf["status"] = "non_finite"
@@ -378,31 +406,6 @@ def _trade_event(strategy_id: str, symbol: str, row: dict[str, Any], kind: str) 
 
 def _book_events(strategy_id: str, ledgers: dict[str, Any]) -> list[dict[str, Any]]:
     events = []
-    if strategy_id == "trend_tsmom_v1":
-        for row in ledgers["paper"].get("fills") or []:
-            fee = row.get("fee")
-            slip = row.get("slippage")
-            cost = None if fee is None or slip is None else float(fee) + float(slip)
-            events.append(
-                {
-                    "id": f"paper:{row.get('symbol')}:{row.get('ts')}:{row.get('side')}",
-                    "ts": row.get("ts"),
-                    "book": "paper",
-                    "strategy_id": strategy_id,
-                    "kind": "fill",
-                    "symbol": row.get("symbol"),
-                    "side": row.get("side"),
-                    "price": row.get("price"),
-                    "cost": cost,
-                    "cost_unit": None if cost is None else "USDT",
-                    "gross": None,
-                    "net": None,
-                    "unrealized": None,
-                    "basis": "recorded_paper_fill",
-                    "live_order": False,
-                    "record_class": "stored_history",
-                }
-            )
     if strategy_id == "shadow_s3":
         for row in ledgers["s3"].get("trades") or []:
             events.append(
@@ -424,6 +427,57 @@ def _book_events(strategy_id: str, ledgers: dict[str, Any]) -> list[dict[str, An
                     "record_class": "stored_history",
                 }
             )
+    return events
+
+
+def _paper_fill_events(ledgers: dict[str, Any]) -> list[dict[str, Any]]:
+    paper = ledgers.get("paper") or {}
+    if paper.get("fills_truncated"):
+        return [{
+            "id": "paper:fills:truncated",
+            "ts": None,
+            "book": "paper",
+            "strategy_id": None,
+            "kind": "note",
+            "symbol": None,
+            "side": None,
+            "price": None,
+            "cost": None,
+            "gross": None,
+            "net": None,
+            "unrealized": None,
+            "basis": "truncated",
+            "attribution": "truncated",
+            "live_order": False,
+            "record_class": "stored_history",
+        }]
+    events = []
+    for row in paper.get("fills") or []:
+        fee = row.get("fee")
+        slip = row.get("slippage")
+        cost = None if fee is None or slip is None else float(fee) + float(slip)
+        strategy = row.get("strategy")
+        events.append(
+            {
+                "id": f"paper:{strategy or 'unattributed'}:{row.get('symbol')}:{row.get('ts')}:{row.get('side')}",
+                "ts": row.get("ts"),
+                "book": "paper",
+                "strategy_id": strategy,
+                "kind": "fill",
+                "symbol": row.get("symbol"),
+                "side": row.get("side"),
+                "price": row.get("price"),
+                "cost": cost,
+                "cost_unit": None if cost is None else "USDT",
+                "gross": None,
+                "net": None,
+                "unrealized": None,
+                "basis": "recorded_paper_fill",
+                "attribution": row.get("attribution") or "no_matching_run",
+                "live_order": False,
+                "record_class": "stored_history",
+            }
+        )
     return events
 
 
@@ -477,11 +531,18 @@ def _featured(cards: list[dict[str, Any]], ledgers: dict[str, Any], model_client
     preview = _signal_preview(cards, limit=40)
     if not preview:
         return None
-    chosen = preview[0]
+    chosen = None
     for item in preview:
-        if item.get("action") == "enter":
+        if item.get("action") == "enter" and item.get("strategy_id") != "auu_signal_v0":
             chosen = item
             break
+    if chosen is None:
+        for item in preview:
+            if item.get("action") == "enter":
+                chosen = item
+                break
+    if chosen is None:
+        chosen = preview[0]
     ident = find_identity(chosen["strategy_id"])
     if ident is None:
         return None
@@ -565,13 +626,14 @@ def plaza_payload(now_ms: Optional[int] = None, model_client: Any = None) -> dic
     decisions = []
     for card in cards:
         decisions.extend(_events_for_card(card, ledgers))
+    decisions.extend(_paper_fill_events(ledgers))
     decisions.sort(key=lambda item: int(item.get("ts") or 0))
     featured = _featured(cards, ledgers, model_client)
     public = []
     for card in cards:
         item = {key: value for key, value in card.items() if not key.startswith("_")}
-        item["data_origin"] = "explicit_fixture" if meta["sample"] and item["performance"]["status"] in {"ok", "empty", "inconsistent", "non_finite"} else (
-            "local_ledger" if item["performance"]["status"] in {"ok", "empty", "inconsistent", "non_finite"} else "not_connected"
+        item["data_origin"] = "explicit_fixture" if meta["sample"] and item["performance"]["status"] in {"ok", "empty", "inconsistent", "non_finite", "incomplete"} else (
+            "local_ledger" if item["performance"]["status"] in {"ok", "empty", "inconsistent", "non_finite", "incomplete"} else "not_connected"
         )
         if meta["sample"] and item["performance"]["status"] == "not_connected":
             item["data_origin"] = "not_connected"
@@ -610,8 +672,15 @@ def explain_payload(strategy_id: str, symbol: str, asof_ts: int, model_client: A
         return None
     now_box = {"now": int(now_ms if now_ms is not None else time.time() * 1000)}
     ledgers, meta = _ledgers(now_box)
-    cards = build_cards(ledgers, now_box["now"])
-    bars = next((card["_bars"] for card in cards if card["id"] == strategy_id), {})
+    if meta["sample"]:
+        cards = build_cards(ledgers, now_box["now"])
+        bars = next((card["_bars"] for card in cards if card["id"] == strategy_id), {})
+    else:
+        from app.ai_review.store_read import fetch_bar_context
+
+        ctx = fetch_bar_context(strategy_id, symbol, asof_ts)
+        rows = [row for row in (ctx.get("prev"), ctx.get("bar")) if row]
+        bars = {symbol: rows}
     body = explain_stored(ident, bars, symbol, asof_ts, model_client=model_client)
     body["sample"] = meta["sample"]
     body["notice"] = _NOTICE
@@ -633,13 +702,43 @@ def decisions_payload(strategy_id: Optional[str] = None, now_ms: Optional[int] =
 
 
 def signals_payload(strategy_id: Optional[str] = None, symbol: Optional[str] = None, limit: int = 50, now_ms: Optional[int] = None) -> dict[str, Any]:
-    payload = plaza_payload(now_ms=now_ms)
-    rows = payload["signals"]
-    if strategy_id:
-        rows = [row for row in rows if row["strategy_id"] == strategy_id]
-    if symbol:
-        rows = [row for row in rows if row["symbol"] == symbol]
-    return {"sample": payload["sample"], "notice": payload["notice"], "signals": rows[:limit]}
+    now_box = {"now": int(now_ms if now_ms is not None else time.time() * 1000)}
+    ledgers, meta = _ledgers(now_box)
+    if meta["sample"]:
+        rows = _signal_preview(build_cards(ledgers, now_box["now"]), limit=10_000)
+        if strategy_id:
+            rows = [row for row in rows if row["strategy_id"] == strategy_id]
+        if symbol:
+            rows = [row for row in rows if row["symbol"] == symbol]
+        stored = len(rows)
+        page = rows[:limit]
+        truncated = stored > len(page)
+    else:
+        from app.ai_review.store_read import page_signal_bars
+
+        fetched = page_signal_bars(strategy_id, symbol, limit)
+        page = [
+            {
+                "strategy_id": row.get("strategy_id"),
+                "symbol": row.get("symbol"),
+                "asof_ts": row.get("asof_ts"),
+                "side": row.get("side"),
+                "score": row.get("score"),
+                "action": row.get("action"),
+                "recorded_at": row.get("recorded_at"),
+            }
+            for row in fetched["rows"]
+        ]
+        stored = int(fetched["stored"])
+        truncated = bool(fetched["truncated"])
+    return {
+        "sample": meta["sample"],
+        "notice": _NOTICE,
+        "signals": page,
+        "limit": limit,
+        "stored": stored,
+        "truncated": truncated,
+    }
 
 
 def plaza_csv(now_ms: Optional[int] = None) -> str:

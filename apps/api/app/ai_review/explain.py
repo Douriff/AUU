@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from app.ai_review.schema import DAY_MS, SYMBOL
+from app.ai_review.schema import SYMBOL
 
 _SIDES = {"long", "short", "flat"}
-_GAP = int(DAY_MS * 1.5)
 
 
 def explain_bar(
@@ -121,10 +120,25 @@ def explain_bar(
     if not match or not action_ok:
         base["reconstructed"] = "partial"
         base["reason"] = "replay_mismatch"
+        _binding(base, identity)
+        return base
+    _binding(base, identity)
+    if not identity.get("params_hash"):
+        base["reconstructed"] = "partial"
+        base["reason"] = "params_hash_not_stored"
         return base
     base["reconstructed"] = "yes"
     base["reason"] = None
     return base
+
+
+def _binding(base: dict[str, Any], identity: dict[str, Any]) -> None:
+    if identity.get("params_hash"):
+        base["params_hash_verified"] = True
+        base["params_binding"] = "params_sha256_16"
+    else:
+        base["params_hash_verified"] = False
+        base["params_binding"] = "version_string_only"
 
 
 def _recorded(bar: dict) -> dict[str, Any]:
@@ -261,5 +275,5 @@ def previous_bar(rows: list[dict], asof_ts: int, tf_ms: int) -> tuple[Optional[d
     if not prior:
         return None, False
     prev = max(prior, key=lambda row: int(row["asof_ts"]))
-    gap = int(asof_ts) - int(prev["asof_ts"]) > max(_GAP, int(tf_ms * 1.5))
+    gap = int(tf_ms) <= 0 or int(asof_ts) - int(prev["asof_ts"]) > int(tf_ms * 1.5)
     return prev, gap

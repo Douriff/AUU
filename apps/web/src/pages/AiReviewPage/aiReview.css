@@ -88,7 +88,15 @@
 .ai-lane { margin-top: 0.7rem; }
 .ai-lane ol { list-style: none; padding: 0; margin: 0; }
 .ai-lane li { display: flex; gap: 0.55rem; flex-wrap: wrap; padding: 0.35rem 0; border-bottom: 1px solid var(--line); font-size: 0.82rem; }
-.ai-foot { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.4rem; font-size: 0.75rem; }
+.ai-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.55rem; margin-top: 0.6rem; }
+.ai-form label { display: flex; flex-direction: column; gap: 0.25rem; color: #a1a1aa; font-size: 0.75rem; }
+.ai-form input, .ai-form select, .ai-form button {
+  background: #0c0e13;
+  color: #f4f4f5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
 .ai-gate { max-width: 36rem; }
 .ai-gate h2 { margin-top: 0; }
 @media (max-width: 800px) {

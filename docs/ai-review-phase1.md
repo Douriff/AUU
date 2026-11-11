@@ -39,20 +39,23 @@ A zero is shown only when the stored series itself is zero. Signal-row counts ar
 
 Late entry and early exit are not scored. This repo has no pre-registered breakout detector that this page can apply, so the timing block stays `not_measured`.
 
-## Rule notes and the model adapter
+## Rule notes and the relay
 
-The explanation replays the frozen hysteresis rule from the stored score and the previous stored bar. It does not invent a stop. If the parameter hash, the previous bar, or the bar itself is missing, the note says it cannot be rebuilt. The label is always “rule note (not AI-generated)”.
+The explanation replays the frozen rule from the stored score and the previous stored bar. A gap is more than 1.5 bars of that series, including hourly bars. `auu_signal_v0` has no parameter hash in the bar table, so a matching replay is `params_hash_not_stored` and is not a verified binding. A candidate whose stored `params_hash` matches the frozen registration can be verified. There is no invented stop.
 
-`app/ai_review/model_adapter.py` is an optional server-side interface. It is off unless `AUU_AI_REVIEW_MODEL` is set, and even then this phase reports `not_started` because external calls are hard-disabled (`external_calls_enabled` is false; `network_client()` raises). No key is read and no socket is opened. Tests inject a mock client. Mock output is marked `mock` and `live: false`. Text that contains a digit, an injection phrase, an extra tool field, or a citation that does not match the supplied fact is rejected and is not shown as a successful explanation. The model cannot replace the stored score, side, or rule verdict.
+Reads are per strategy. If a strategy has more rows than the cap, its return, drawdown, and cost stay null with reason `truncated`. Paper fills have no strategy column; a fill is attributed only by joining the single `runs` row on that day. A fill with no matching run stays unassigned. `GET /signals?limit=` pages the stored bars and reports `truncated` when more rows exist. It does not reuse the 12-row board preview.
 
-`AUU_AI_REVIEW_FIXTURE=on` loads `app/ai_review/fixtures/dev_sample.json` and does not read ledgers. The page is marked as a sample. The flag defaults off. An invalid fixture does not fall back to another source. Do not enable the fixture in production.
+The relay speaks `POST https://ai.orbitlink.me/v1/chat/completions` with a bearer token. Other hosts, private addresses, and redirects are refused. The key is the server environment variable `AUU_AI_RELAY_API_KEY` and is never returned. A call also needs `AUU_AI_RELAY=on`, `AUU_AI_RELAY_MODEL`, and `AUU_AI_RELAY_BUDGET` above zero. The default sends nothing. Opening the page does not call the relay. `invoked` is false until a request is actually sent, which does not verify an operator's model list. A model number that is not in the supplied facts, or text that asks to place or arm an order, is rejected. A fact number and its percent form are allowed.
+
+The execution draft validates limits and always returns disarmed and not connected. It is not saved. See `docs/ai-review-execution-plan.md`.
+
+`AUU_AI_REVIEW_FIXTURE=on` loads `app/ai_review/fixtures/dev_sample.json` and does not read ledgers. The page is marked as a sample. The flag defaults off. An invalid fixture does not fall back to another source.
 
 ## What was registered in the existing app
 
-Only two call sites:
-
 - `apps/api/app/main.py` includes the new router.
 - `apps/web/src/app/router.tsx` lazy-loads `/lab/ai-review`.
+- The eleven locale files gained an `aiReview` object. Keys that already existed on `main` are unchanged.
 
 No navigation item, lifespan task, database migration, auth-gate rule, or existing route behavior was changed.
 

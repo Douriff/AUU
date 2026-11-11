@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import time
 from typing import Any, Optional, Protocol
 
-_DIGIT = re.compile(r"\d")
-_INJECTION = re.compile(r"ignore previous|tool call|system prompt|guaranteed profit", re.IGNORECASE)
+_NUMBER = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)(?![\w.])")
+_INJECTION = re.compile(
+    r"ignore previous|tool call|system prompt|guaranteed profit|place an order|arm live|ignore the stop",
+    re.IGNORECASE,
+)
 _MAX_INPUT = 4000
 _MAX_SUMMARY = 400
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -29,27 +31,32 @@ class ModelClient(Protocol):
 
 
 def external_calls_enabled() -> bool:
-    """Hard off. This phase does not register a paid model or open a socket."""
-    return False
+    """The relay module decides when a call is allowed. This flag is no longer a hard stop."""
+    from app.ai_review.relay import ready
 
-
-def configured_model_name() -> str:
-    return os.getenv("AUU_AI_REVIEW_MODEL", "").strip()
+    return ready()
 
 
 def model_gate() -> dict[str, Any]:
-    name = configured_model_name().lower()
-    if name in {"", "0", "off", "false", "no"}:
-        status = "unconfigured"
-        reason = None
-    else:
-        status = "not_started"
-        reason = "external_calls_disabled"
-    return {"status": status, "live": False, "external": False, "text": None, "reason": reason, "mock": False}
+    from app.ai_review.relay import public_status
+
+    relay = public_status()
+    return {
+        "status": relay["status"],
+        "live": False,
+        "external": False,
+        "invoked": relay["invoked"],
+        "text": None,
+        "reason": relay.get("reason"),
+        "mock": False,
+        "relay": relay,
+    }
 
 
-def network_client() -> ModelClient:
-    raise RuntimeError("external model calls are not enabled")
+def network_client():
+    from app.ai_review.relay import RelayClient
+
+    return RelayClient()
 
 
 def clear_cache() -> None:
@@ -82,7 +89,7 @@ def validate_model_output(raw: Any, facts: dict[str, Any]) -> Optional[dict[str,
     text = summary.strip()
     if not text or len(text) > _MAX_SUMMARY:
         return None
-    if _DIGIT.search(text) or _INJECTION.search(text):
+    if _INJECTION.search(text) or not _numbers_allowed(text, facts):
         return None
     if any(ord(ch) < 32 and ch != "\n" for ch in text):
         return None
@@ -98,6 +105,33 @@ def validate_model_output(raw: Any, facts: dict[str, Any]) -> Optional[dict[str,
             return None
         checked.append({"key": key, "value": item["value"]})
     return {"summary": text, "citations": checked}
+
+
+def _fact_numbers(facts: dict[str, Any]) -> list[float]:
+    found = []
+    for value in _flatten(facts).values():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        number = float(value)
+        if number == number and number not in {float("inf"), float("-inf")}:
+            found.append(number)
+    return found
+
+
+def _close(left: float, right: float) -> bool:
+    return abs(left - right) <= 1e-6 * max(1.0, abs(right))
+
+
+def _numbers_allowed(text: str, facts: dict[str, Any]) -> bool:
+    facts_n = _fact_numbers(facts)
+    for token in _NUMBER.findall(text):
+        try:
+            value = float(token)
+        except ValueError:
+            return False
+        if not any(_close(value, fact) or (abs(fact) <= 1 and _close(value, fact * 100)) for fact in facts_n):
+            return False
+    return True
 
 
 def _cache_get(key: str) -> Optional[dict[str, Any]]:

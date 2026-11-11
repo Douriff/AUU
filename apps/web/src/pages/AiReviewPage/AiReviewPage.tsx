@@ -5,6 +5,8 @@ import {
   downloadCsv,
   loadExplain,
   loadPlaza,
+  previewExecution,
+  previewRelay,
   ReviewHttpError,
   type ReviewAi,
   type ReviewEvent,
@@ -12,6 +14,9 @@ import {
   type ReviewRules,
   type ReviewStrategy,
 } from "./api";
+// Plain module so the node format test imports the same functions the page renders.
+// @ts-expect-error format.mjs has no declaration file
+import { reviewNumber, reviewPercent } from "./format.mjs";
 import "./aiReview.css";
 
 type Gate = "loading" | "ready" | "auth-off" | "auth" | "forbidden" | "error";
@@ -21,13 +26,11 @@ function finite(value: number | null | undefined): value is number {
 }
 
 function pct(value: number | null | undefined, lang: string): string {
-  if (!finite(value)) return "—";
-  return new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(value);
+  return reviewPercent(value, lang);
 }
 
 function plain(value: number | null | undefined, lang: string, digits = 4): string {
-  if (!finite(value)) return "—";
-  return new Intl.NumberFormat(lang, { maximumFractionDigits: digits }).format(value);
+  return reviewNumber(value, digits, lang);
 }
 
 function day(ts: number | null | undefined): string {
@@ -63,7 +66,7 @@ function statusKey(status: string, reason: string | null): string {
   if (status === "empty") return "aiReview.emptyRows";
   if (status === "non_finite") return "aiReview.nonFinite";
   if (status === "inconsistent") return "aiReview.inconsistent";
-  if (reason === "no_portfolio_nav") return "aiReview.notConnected";
+  if (status === "incomplete" || reason === "truncated") return "aiReview.truncated";
   return "aiReview.missing";
 }
 
@@ -75,7 +78,8 @@ export function AiReviewPage() {
   const [rules, setRules] = useState<ReviewRules | null>(null);
   const [panelAi, setPanelAi] = useState<ReviewAi | null>(null);
   const [staleClient, setStaleClient] = useState(false);
-  const [picked, setPicked] = useState<string>("");
+  const [picked, setPicked] = useState("");
+  const [csvError, setCsvError] = useState(false);
   const loadedAt = useRef(0);
   const hasData = useRef(false);
 
@@ -154,13 +158,14 @@ export function AiReviewPage() {
         <div className="ai-top-tools">
           <LangSwitch compact />
           {gate === "ready" ? (
-            <button type="button" className="ai-text-btn" onClick={() => downloadCsv().catch(() => setGate("error"))}>
+            <button type="button" className="ai-text-btn" onClick={() => downloadCsv().then(() => setCsvError(false)).catch(() => setCsvError(true))}>
               {t("aiReview.export")}
             </button>
           ) : null}
         </div>
       </header>
       <p className="ai-disclaimer">{t("aiReview.disclaimer")}</p>
+      {csvError && gate === "ready" ? <p className="ai-missing">{t("aiReview.csvError")}</p> : null}
       {gate === "loading" ? <p className="ai-state">{t("aiReview.loading")}</p> : null}
       {gate === "auth-off" ? <GateCard title={t("aiReview.authOff")} /> : null}
       {gate === "auth" ? <GateCard title={t("aiReview.authRequired")} action={<a href="/login">{t("aiReview.login")}</a>} /> : null}
@@ -303,6 +308,8 @@ function Main({
         <DecisionLane title={t("aiReview.bookBacktest")} rows={data.decisions.filter((row) => row.book === "backtest")} lang={lang} />
         <p className="ai-note">{t("aiReview.liveOff")}</p>
       </section>
+      <RelayPanel relay={(data.ai as { relay?: Record<string, unknown> }).relay} />
+      <ExecPanel />
       <footer className="ai-foot">
         {data.sources.map((src) => (
           <span key={src.name}>{src.name}: {src.state}</span>
@@ -372,7 +379,7 @@ function warnKey(flag: string): string {
   if (flag === "stale") return "aiReview.stale";
   if (flag === "short_nav" || flag === "short_trades") return "aiReview.shortSample";
   if (flag === "irregular_spacing") return "aiReview.irregular";
-  if (flag === "non_finite") return "aiReview.nonFinite";
+  if (flag === "truncated") return "aiReview.truncated";
   return "aiReview.missing";
 }
 
@@ -413,6 +420,7 @@ function Explain({ rules, ai, lang }: { rules: ReviewRules | null; ai: ReviewAi;
 }
 
 function reasonKey(reason: string): string {
+  if (reason === "params_hash_not_stored") return "aiReview.paramsHashMissing";
   if (reason === "params_hash_mismatch" || reason === "params_hash_missing") return "aiReview.hashMismatch";
   if (reason === "previous_side_unknown") return "aiReview.prevUnknown";
   if (reason === "gap_before_bar") return "aiReview.gap";
@@ -426,6 +434,8 @@ function aiLabel(status: string): string {
   if (status === "rejected" || status === "timeout" || status === "failed") return "aiReview.aiRejected";
   if (status === "skipped") return "aiReview.aiSkipped";
   if (status === "accepted") return "aiReview.aiChecked";
+  if (status === "configured_not_called" || status === "missing_key" || status === "missing_model" || status === "budget_blocked") return "aiReview.relayNotCalled";
+  if (status === "called") return "aiReview.relayCalled";
   return "aiReview.aiOff";
 }
 
@@ -450,5 +460,107 @@ function DecisionLane({ title, rows, lang }: { title: string; rows: ReviewEvent[
         ))}
       </ol>
     </div>
+  );
+}
+
+function RelayPanel({ relay }: { relay?: Record<string, unknown> }) {
+  const { t } = useTranslation();
+  const [model, setModel] = useState("");
+  const [timeoutSec, setTimeoutSec] = useState("");
+  const [tokens, setTokens] = useState("");
+  const [budget, setBudget] = useState("");
+  const [note, setNote] = useState("");
+  const host = String(relay?.base_host || "ai.orbitlink.me");
+  const serverModel = relay?.model ? String(relay.model) : t("aiReview.execUnset");
+  return (
+    <section className="ai-section ai-card">
+      <h2>{t("aiReview.relayTitle")}</h2>
+      <p className="ai-note">{t("aiReview.relayNotCalled")}</p>
+      <p className="ai-note">{t("aiReview.relayHost")}: {host}/v1</p>
+      <p className="ai-note">{t("aiReview.relayConfigured")}: {serverModel}</p>
+      <p className="ai-note">{t("aiReview.relayNoCatalog")}</p>
+      <p className="ai-note">{t("aiReview.relayKeyHint")}</p>
+      <div className="ai-form">
+        <label>{t("aiReview.relayModel")}<input value={model} onChange={(e) => setModel(e.target.value)} autoComplete="off" /></label>
+        <label>{t("aiReview.relayTimeout")}<input value={timeoutSec} onChange={(e) => setTimeoutSec(e.target.value)} inputMode="numeric" /></label>
+        <label>{t("aiReview.relayTokens")}<input value={tokens} onChange={(e) => setTokens(e.target.value)} inputMode="numeric" /></label>
+        <label>{t("aiReview.relayBudget")}<input value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="numeric" /></label>
+        <button type="button" onClick={() => {
+          const body: Record<string, unknown> = {};
+          if (model.trim()) body.model = model.trim();
+          if (timeoutSec.trim()) body.timeout_sec = Number(timeoutSec);
+          if (tokens.trim()) body.max_tokens = Number(tokens);
+          if (budget.trim()) body.budget = Number(budget);
+          previewRelay(body).then(() => setNote(t("aiReview.relayDraft"))).catch(() => setNote(t("aiReview.error")));
+        }}>{t("aiReview.relayCheck")}</button>
+      </div>
+      {note ? <p className="ai-missing">{note}</p> : null}
+    </section>
+  );
+}
+
+function ExecPanel() {
+  const { t } = useTranslation();
+  const [intent, setIntent] = useState("");
+  const [confirmMode, setConfirmMode] = useState("");
+  const [symbols, setSymbols] = useState("");
+  const [market, setMarket] = useState("");
+  const [capital, setCapital] = useState("");
+  const [orderLimit, setOrderLimit] = useState("");
+  const [leverage, setLeverage] = useState("");
+  const [stop, setStop] = useState("");
+  const [note, setNote] = useState("");
+  return (
+    <section className="ai-section ai-card">
+      <h2>{t("aiReview.execTitle")}</h2>
+      <p className="ai-missing">{t("aiReview.execChannel")}</p>
+      <p className="ai-missing">{t("aiReview.execLiveOff")}</p>
+      <p className="ai-note">{t("aiReview.execDraftNote")}</p>
+      <p className="ai-note">{t("aiReview.execNoKey")}</p>
+      <p className="ai-note">{t("aiReview.execPlan")}</p>
+      <div className="ai-form">
+        <label>{t("aiReview.execIntent")}
+          <select value={intent} onChange={(e) => setIntent(e.target.value)}>
+            <option value="">{t("aiReview.execUnset")}</option>
+            <option value="paper">{t("aiReview.execPaper")}</option>
+            <option value="live">{t("aiReview.execLive")}</option>
+          </select>
+        </label>
+        <label>{t("aiReview.execConfirm")}
+          <select value={confirmMode} onChange={(e) => setConfirmMode(e.target.value)}>
+            <option value="">{t("aiReview.execUnset")}</option>
+            <option value="each_order">{t("aiReview.execEach")}</option>
+            <option value="auto_within_limits">{t("aiReview.execAuto")}</option>
+          </select>
+        </label>
+        <label>{t("aiReview.execSymbols")}<input value={symbols} onChange={(e) => setSymbols(e.target.value)} autoComplete="off" /></label>
+        <label>{t("aiReview.execMarket")}
+          <select value={market} onChange={(e) => setMarket(e.target.value)}>
+            <option value="">{t("aiReview.execUnset")}</option>
+            <option value="spot">{t("aiReview.execSpot")}</option>
+            <option value="perp">{t("aiReview.execPerp")}</option>
+          </select>
+        </label>
+        <label>{t("aiReview.execCapital")}<input value={capital} onChange={(e) => setCapital(e.target.value)} inputMode="decimal" /></label>
+        <label>{t("aiReview.execOrder")}<input value={orderLimit} onChange={(e) => setOrderLimit(e.target.value)} inputMode="decimal" /></label>
+        <label>{t("aiReview.execLeverage")}<input value={leverage} onChange={(e) => setLeverage(e.target.value)} inputMode="decimal" /></label>
+        <label>{t("aiReview.execStop")}<input value={stop} onChange={(e) => setStop(e.target.value)} inputMode="decimal" /></label>
+        <button type="button" onClick={() => {
+          const body: Record<string, unknown> = {};
+          if (intent) body.intent = intent;
+          if (confirmMode) body.confirm = confirmMode;
+          if (symbols.trim()) body.symbols = symbols;
+          if (market) body.market = market;
+          if (capital.trim()) body.capital_limit = Number(capital);
+          if (orderLimit.trim()) body.order_limit = Number(orderLimit);
+          if (leverage.trim()) body.leverage = Number(leverage);
+          if (stop.trim()) body.hard_stop_fraction = Number(stop);
+          previewExecution(body).then((result) => {
+            setNote(result["armed"] ? t("aiReview.error") : t("aiReview.execDraftNote"));
+          }).catch(() => setNote(t("aiReview.error")));
+        }}>{t("aiReview.execCheck")}</button>
+      </div>
+      {note ? <p className="ai-note">{note}</p> : null}
+    </section>
   );
 }

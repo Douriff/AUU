@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.ai_review.model_adapter import clear_cache, network_client, run_model, validate_model_output
+from app.ai_review.model_adapter import clear_cache, run_model, validate_model_output
 from app.ai_review.schema import csv_cell
 from app.auth.accounts import reset_accounts
 from app.data_paths import data_dir
@@ -274,7 +274,9 @@ class ReviewDataTests(unittest.TestCase):
         payload = plaza_payload()
         self.assertTrue(payload["sample"])
         self.assertEqual(payload["fixture_id"], "dev-sample-v1")
-        self.assertEqual(payload["ai"]["status"], "not_started")
+        self.assertEqual(payload["ai"]["status"], "off")
+        self.assertFalse(payload["ai"]["invoked"])
+        self.assertNotIn("AUU_AI_RELAY_API_KEY", json.dumps(payload["ai"]))
         self.assertFalse(payload["ai"]["live"])
         blob = json.dumps(payload)
         self.assertNotIn("9.99", blob)
@@ -365,9 +367,15 @@ class ReviewModelTests(unittest.TestCase):
     def tearDown(self):
         clear_cache()
 
-    def test_network_client_is_not_constructable(self):
-        with self.assertRaises(RuntimeError):
-            network_client()
+    def test_disabled_relay_does_not_call(self):
+        from app.ai_review.relay import RelayClient, RelayDisabled, reset_budget
+
+        reset_budget()
+        calls = []
+        client = RelayClient(transport=lambda *args: calls.append(args) or (200, {}))
+        with self.assertRaises(RelayDisabled):
+            client.complete({"score": 0.28}, timeout_s=1)
+        self.assertEqual(calls, [])
 
     def test_mock_must_cite_facts_and_cannot_rewrite_them(self):
         facts = {"strategy_id": "cand_A", "symbol": "BTC", "score": 0.28, "side": "long", "conditions": [{"id": "score_ge_enter", "status": "met"}]}
@@ -404,6 +412,16 @@ class ReviewModelTests(unittest.TestCase):
             facts,
         )
         self.assertIsNone(extra)
+        quoted = validate_model_output(
+            {"summary": "Stored score is 0.28.", "citations": [{"key": "score", "value": 0.28}]},
+            facts,
+        )
+        self.assertIsNotNone(quoted)
+        percent = validate_model_output(
+            {"summary": "The recorded score is 28 percent.", "citations": [{"key": "score", "value": 0.28}]},
+            facts,
+        )
+        self.assertIsNotNone(percent)
 
     def test_timeout_and_input_limit(self):
         facts = {"strategy_id": "cand_A", "score": 0.28}

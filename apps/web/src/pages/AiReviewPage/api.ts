@@ -149,6 +149,26 @@ export function loadExplain(strategy: string, symbol: string, asof: number, sign
   });
 }
 
+export async function previewRelay(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return postJson("/api/v1/ai-review/relay/preview", body);
+}
+
+export async function previewExecution(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return postJson("/api/v1/ai-review/execution/preview", body);
+}
+
+async function postJson(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ReviewHttpError(res.status, payload?.error?.code || "ERROR");
+  return payload.data as Record<string, unknown>;
+}
+
 export async function downloadCsv(): Promise<void> {
   const res = await fetch("/api/v1/ai-review/plaza.csv", { credentials: "include" });
   if (!res.ok) {

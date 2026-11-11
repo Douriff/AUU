@@ -1,6 +1,7 @@
-"""Read-only HTTP surface. Admin session required on every method."""
+"""Read-only HTTP surface, plus two validation previews that do not persist or arm anything."""
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, Query, Request
@@ -70,7 +71,11 @@ def plaza_csv(request: Request):
         return denied
     from app.ai_review.service import plaza_csv as build_csv
 
-    body = build_csv().encode("utf-8")
+    try:
+        body = build_csv().encode("utf-8")
+    except Exception:
+        log.info("ai_review csv failed")
+        return err("CSV_FAILED", "CSV 导出失败。页面上的记录没有被改掉。", 500)
     response = Response(content=body, media_type="text/csv; charset=utf-8")
     response.headers["Content-Disposition"] = "attachment; filename=strategy-review.csv"
     return _finish(request, response)
@@ -177,7 +182,59 @@ def decisions(request: Request, strategy: str = Query("")):
     return _finish(request, ok(decisions_payload(strategy or None)))
 
 
-@router.api_route("", methods=["POST", "PUT", "PATCH", "DELETE"])
+@router.get("/relay")
+def relay_status(request: Request):
+    denied = _guard(request)
+    if denied is not None:
+        return denied
+    from app.ai_review.relay import public_status
+
+    return _finish(request, ok(public_status()))
+
+
+@router.post("/relay/preview")
+async def relay_preview(request: Request):
+    denied = require_admin(request)
+    if denied is not None:
+        return denied
+    from app.ai_review.relay import draft_problem, draft_view
+
+    body = await _json_body(request)
+    if not isinstance(body, dict) or body.get("_too_large") or body.get("_bad"):
+        return err("BAD_REQUEST", "bad_body", 400)
+    problem = draft_problem(body)
+    if problem:
+        return err("BAD_REQUEST", problem, 400)
+    return _finish(request, ok(draft_view(body)))
+
+
+@router.post("/execution/preview")
+async def execution_preview(request: Request):
+    denied = require_admin(request)
+    if denied is not None:
+        return denied
+    from app.ai_review.execution import validate_draft
+
+    body = await _json_body(request)
+    if not isinstance(body, dict) or body.get("_too_large") or body.get("_bad"):
+        return err("BAD_REQUEST", "bad_body", 400)
+    result = validate_draft(body)
+    if not result.get("ok"):
+        return err("BAD_REQUEST", str(result.get("reason") or "bad_body"), 400)
+    return _finish(request, ok(result))
+
+
+async def _json_body(request: Request):
+    raw = await request.body()
+    if len(raw) > 8000:
+        return {"_too_large": True}
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"_bad": True}
+    return parsed if isinstance(parsed, dict) else {"_bad": True}
 def writes_root(request: Request):
     return _reject_write(request)
 
