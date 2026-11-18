@@ -651,7 +651,8 @@
     },
     "pnl": "资产/盈亏",
     "airdrops": "空投",
-    "exchange": "交易所"
+    "exchange": "交易所",
+    "ai": "AI"
   },
   "shell": {
     "source": "行情来源 {{src}}",
@@ -2144,6 +2145,21 @@
     "clickSends": "只有这个按钮会发送说明，而且只有服务器开关、模型名和额度都已设置时才会发送。",
     "budgetUnlimited": "没有每日请求次数上限。今日已发送 {{used}} 次。这不是美元费用上限。",
     "budgetInvalid": "每日次数不是 0 到 1000 的整数，也不是 unlimited。没有发送请求。",
-    "noteCheckFailed": "说明没有通过核对。核对代码：{{code}}。没有保存模型原文。这不是美元费用。"
+    "noteCheckFailed": "说明没有通过核对。核对代码：{{code}}。没有保存模型原文。这不是美元费用。",
+    "boardTitle": "AI 解读",
+    "boardClose": "关闭",
+    "boardNotNow": "这里是已存储的记录。显示的时间是记录时间，不是当前行情。",
+    "boardSample": "样本数据。这不是真实模型回复。",
+    "boardLoading": "正在确认身份。",
+    "boardLogin": "请先登录，才能知道这个账号能不能查看记录。",
+    "boardAdmin": "这个账号不是管理员。已存储的记录不会显示。",
+    "boardOff": "账户系统未开启，这些记录保持关闭。",
+    "boardError": "记录列表没有载入。没有发送请求。",
+    "boardPartial": "最新信号的已存事实不完整，不能当成当前解读。没有编造分析。",
+    "boardEmpty": "这个币种没有可解读的已存记录。",
+    "boardAsk": "解读这条记录",
+    "boardFactTime": "记录时间：{{when}}。这不是当前行情。",
+    "boardDeduped": "这条记录已经发送过。没有再次发送。",
+    "boardNotSent": "没有发送请求。"
   }
 }

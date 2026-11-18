@@ -651,7 +651,8 @@
     },
     "pnl": "Активы/PnL",
     "airdrops": "Airdrops",
-    "exchange": "Exchange"
+    "exchange": "Exchange",
+    "ai": "AI"
   },
   "shell": {
     "source": "Источник данных {{src}}",
@@ -2144,6 +2145,21 @@
     "clickSends": "A note is sent only by this button, and only when the server switch, model, and budget are set.",
     "budgetUnlimited": "No daily request cap. Requests sent today: {{used}}. This is not a dollar limit.",
     "budgetInvalid": "The daily setting is not a whole number from 0 to 1000 and is not unlimited. No request was sent.",
-    "noteCheckFailed": "The note was not accepted. Check code: {{code}}. The model text was not stored. This is not a dollar charge."
+    "noteCheckFailed": "The note was not accepted. Check code: {{code}}. The model text was not stored. This is not a dollar charge.",
+    "boardTitle": "AI note",
+    "boardClose": "Close",
+    "boardNotNow": "These are stored records. The time shown is the record time, not the current quote.",
+    "boardSample": "Sample data. This is not a live model response.",
+    "boardLoading": "Checking who you are.",
+    "boardLogin": "Sign in to see whether this account can read the records.",
+    "boardAdmin": "This account is not an administrator. The stored records stay hidden.",
+    "boardOff": "Accounts are off, so these records stay closed.",
+    "boardError": "The record list did not load. Nothing was sent.",
+    "boardPartial": "The latest signal does not have enough stored facts for a current reading. No reading was invented.",
+    "boardEmpty": "This coin has no stored decision to read.",
+    "boardAsk": "Read this record",
+    "boardFactTime": "Record time: {{when}}. This is not the current quote.",
+    "boardDeduped": "This record was already sent. It was not sent again.",
+    "boardNotSent": "No request was sent."
   }
 }

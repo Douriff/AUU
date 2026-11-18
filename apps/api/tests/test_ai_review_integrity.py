@@ -20,6 +20,7 @@ LOCALES = ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]
 _NEW_TREES = frozenset({"aiReview", "screener"})
 _NEW_PATHS = frozenset({
     "apiErr.SCREENER_ADMIN",
+    "nav.ai",
     "strat.k.awaitClose",
     "strat.k.gapHistory",
     "strat.k.gapReset",

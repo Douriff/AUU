@@ -1,0 +1,40 @@
+.board-ai {
+  background: #101218;
+  color: #f4f4f5;
+  border: 1px solid rgba(228, 194, 122, 0.45);
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 70vh;
+  overflow: auto;
+  font-size: 0.82rem;
+}
+.board-ai header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.board-ai header strong { letter-spacing: 0.04em; }
+.board-ai header button, .board-ai li button {
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0.25rem 0.45rem;
+}
+.board-ai-warn { color: #e4c27a; margin: 0; }
+.board-ai-sample { color: #ffb020; margin: 0; }
+.board-ai ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.board-ai li { display: flex; flex-wrap: wrap; gap: 0.35rem 0.6rem; align-items: baseline; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.45rem; }
+.board-ai time { font-variant-numeric: tabular-nums; }
+.board-ai-result { flex-basis: 100%; color: #d4d4d8; }
+@media (min-width: 901px) {
+  .ms-trade-grid { position: relative; }
+  .board-ai {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    max-height: 100%;
+    z-index: 6;
+    box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35);
+  }
+}
