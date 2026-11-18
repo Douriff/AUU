@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { LangSwitch } from "@/components/ui/LangSwitch";
 import {
+  askNote,
   downloadCsv,
   loadExplain,
   loadPlaza,
@@ -80,6 +81,9 @@ export function AiReviewPage() {
   const [staleClient, setStaleClient] = useState(false);
   const [picked, setPicked] = useState("");
   const [csvError, setCsvError] = useState(false);
+  const [note, setNote] = useState<Record<string, unknown> | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState(false);
   const loadedAt = useRef(0);
   const hasData = useRef(false);
 
@@ -147,6 +151,18 @@ export function AiReviewPage() {
     }
   }
 
+  async function ask(body: Record<string, unknown>) {
+    setAsking(true);
+    setAskError(false);
+    try {
+      setNote(await askNote(body));
+    } catch {
+      setAskError(true);
+    } finally {
+      setAsking(false);
+    }
+  }
+
   return (
     <div className="ai-lab">
       <header className="ai-top">
@@ -180,6 +196,10 @@ export function AiReviewPage() {
           staleClient={staleClient}
           picked={picked}
           onPick={choose}
+          note={note}
+          asking={asking}
+          askError={askError}
+          onAsk={ask}
         />
       ) : null}
     </div>
@@ -203,6 +223,10 @@ function Main({
   staleClient,
   picked,
   onPick,
+  note,
+  asking,
+  askError,
+  onAsk,
 }: {
   data: ReviewPayload;
   lang: string;
@@ -211,6 +235,10 @@ function Main({
   staleClient: boolean;
   picked: string;
   onPick: (strategy: string, symbol: string, asof: number) => void;
+  note: Record<string, unknown> | null;
+  asking: boolean;
+  askError: boolean;
+  onAsk: (body: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
   const ai = panelAi || data.ai;
@@ -298,16 +326,27 @@ function Main({
             })}
           </ul>
         </div>
-        <Explain rules={rules} ai={ai} lang={lang} />
+        <Explain
+          rules={rules}
+          ai={ai}
+          lang={lang}
+          ready={relayReady(data)}
+          asking={asking}
+          onAsk={() => {
+            if (!rules?.strategy_id || !rules.symbol || !rules.asof_ts) return;
+            onAsk({ kind: "signal", strategy: rules.strategy_id, symbol: rules.symbol, asof: rules.asof_ts });
+          }}
+        />
       </section>
       <section className="ai-section">
         <h2>{t("aiReview.decisions")}</h2>
         <p className="ai-note">{t("aiReview.timingUnknown")}</p>
-        <DecisionLane title={t("aiReview.bookShadow")} rows={data.decisions.filter((row) => row.book === "shadow")} lang={lang} />
-        <DecisionLane title={t("aiReview.bookPaper")} rows={data.decisions.filter((row) => row.book === "paper")} lang={lang} />
-        <DecisionLane title={t("aiReview.bookBacktest")} rows={data.decisions.filter((row) => row.book === "backtest")} lang={lang} />
+        <DecisionLane title={t("aiReview.bookShadow")} rows={data.decisions.filter((row) => row.book === "shadow")} lang={lang} ready={relayReady(data)} asking={asking} onAsk={onAsk} />
+        <DecisionLane title={t("aiReview.bookPaper")} rows={data.decisions.filter((row) => row.book === "paper")} lang={lang} ready={relayReady(data)} asking={asking} onAsk={onAsk} />
+        <DecisionLane title={t("aiReview.bookBacktest")} rows={data.decisions.filter((row) => row.book === "backtest")} lang={lang} ready={relayReady(data)} asking={asking} onAsk={onAsk} />
         <p className="ai-note">{t("aiReview.liveOff")}</p>
       </section>
+      <NoteBox note={note} askError={askError} />
       <RelayPanel relay={(data.ai as { relay?: Record<string, unknown> }).relay} />
       <ExecPanel />
       <footer className="ai-foot">
@@ -383,7 +422,31 @@ function warnKey(flag: string): string {
   return "aiReview.missing";
 }
 
-function Explain({ rules, ai, lang }: { rules: ReviewRules | null; ai: ReviewAi; lang: string }) {
+function NoteBox({ note, askError }: { note: Record<string, unknown> | null; askError: boolean }) {
+  const { t } = useTranslation();
+  const ai = (note?.ai || null) as { status?: string; text?: string | null; reason?: string | null } | null;
+  return (
+    <section className="ai-section ai-card">
+      <h2>{t("aiReview.noteTitle")}</h2>
+      <p className="ai-missing">{t("aiReview.noteDisclaimer")}</p>
+      {askError ? <p className="ai-missing">{t("aiReview.error")}</p> : null}
+      {!note ? <p className="ai-note">{t("aiReview.noteNone")}</p> : null}
+      {note && note.sent !== true ? <p className="ai-note">{t("aiReview.noteNone")}</p> : null}
+      {note?.deduped === true ? <p className="ai-note">{t("aiReview.noteDeduped")}</p> : null}
+      {ai?.reason === "busy" ? <p className="ai-missing">{t("aiReview.noteBusy")}</p> : null}
+      {ai?.status === "failed" && ai.reason !== "busy" ? <p className="ai-missing">{t("aiReview.noteFailed")}</p> : null}
+      {ai?.status === "accepted" && ai.text ? <p className="ai-ai-text">{ai.text}</p> : null}
+      {note ? <p className="ai-note">{t("aiReview.noteNotOrder")}</p> : null}
+    </section>
+  );
+}
+
+function relayReady(data: ReviewPayload): boolean {
+  const status = String((data.ai as { relay?: { status?: string } }).relay?.status || data.ai.status || "off");
+  return status === "configured_not_called" || status === "called";
+}
+
+function Explain({ rules, ai, lang, ready, asking, onAsk }: { rules: ReviewRules | null; ai: ReviewAi; lang: string; ready: boolean; asking: boolean; onAsk: () => void }) {
   const { t } = useTranslation();
   if (!rules) return <div className="ai-explain"><h2>{t("aiReview.signals")}</h2><p>{t("aiReview.cannotRebuild")}</p></div>;
   const reason = rules.reason;
@@ -392,6 +455,8 @@ function Explain({ rules, ai, lang }: { rules: ReviewRules | null; ai: ReviewAi;
       <h2>{t("aiReview.why")}</h2>
       <p className="ai-rules">{t("aiReview.rulesLabel")}</p>
       <p className="ai-ai">{t(aiLabel(ai.status))}</p>
+      <p className="ai-note">{t("aiReview.clickSends")}</p>
+      <button type="button" className="ai-text-btn" disabled={!ready || asking || !rules.strategy_id || !rules.symbol || !rules.asof_ts} onClick={onAsk}>{t("aiReview.askSignal")}</button>
       {ai.text ? <p className="ai-ai-text">{ai.text}</p> : null}
       {reason ? <p className="ai-missing">{t(reasonKey(reason))}</p> : null}
       <dl>
@@ -442,7 +507,7 @@ function aiLabel(status: string): string {
   return "aiReview.aiOff";
 }
 
-function DecisionLane({ title, rows, lang }: { title: string; rows: ReviewEvent[]; lang: string }) {
+function DecisionLane({ title, rows, lang, ready, asking, onAsk }: { title: string; rows: ReviewEvent[]; lang: string; ready: boolean; asking: boolean; onAsk: (body: Record<string, unknown>) => void }) {
   const { t } = useTranslation();
   return (
     <div className="ai-lane">
@@ -459,6 +524,7 @@ function DecisionLane({ title, rows, lang }: { title: string; rows: ReviewEvent[
             <span>{plain(row.price, lang, 4)}</span>
             <span>{finite(row.cost) ? plain(row.cost, lang) : t("aiReview.missing")}</span>
             <span>{row.open ? t("aiReview.openPnlUnknown") : finite(row.net) ? plain(row.net, lang) : t("aiReview.missing")}</span>
+            <button type="button" className="ai-text-btn" disabled={!ready || asking} onClick={() => onAsk({ kind: "decision", id: row.id })}>{t("aiReview.askDecision")}</button>
           </li>
         ))}
       </ol>
@@ -479,10 +545,14 @@ function RelayPanel({ relay }: { relay?: Record<string, unknown> }) {
     <section className="ai-section ai-card">
       <h2>{t("aiReview.relayTitle")}</h2>
       <p className="ai-missing">{t(aiLabel(String(relay?.status || "off")))}</p>
+      <p className="ai-note">{t("aiReview.budgetUnit")}</p>
+      <p className="ai-note">{t("aiReview.candidateHint")} {relay?.verified_candidate ? String(relay.verified_candidate) : "—"}</p>
       <p className="ai-note">{t("aiReview.relayHost")}: {host}/v1</p>
       <p className="ai-note">{t("aiReview.relayConfigured")}: {serverModel}</p>
+      <p className="ai-note">{t("aiReview.budgetCount", { used: relay?.budget_used ?? 0, limit: relay?.budget_limit ?? 0 })}</p>
       <p className="ai-note">{t("aiReview.relayNoCatalog")}</p>
       <p className="ai-note">{t("aiReview.relayKeyHint")}</p>
+      <p className="ai-note">{t("aiReview.draftDoesNotSend")}</p>
       <div className="ai-form">
         <label>{t("aiReview.relayModel")}<input value={model} onChange={(e) => setModel(e.target.value)} autoComplete="off" /></label>
         <label>{t("aiReview.relayTimeout")}<input value={timeoutSec} onChange={(e) => setTimeoutSec(e.target.value)} inputMode="numeric" /></label>

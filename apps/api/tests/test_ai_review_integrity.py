@@ -47,6 +47,10 @@ def _flat_locale(obj: dict) -> dict:
 def _addition_allowed(path: str, baseline: set[str]) -> bool:
     if path in _NEW_PATHS:
         return True
+    # New strings inside the lab are allowed. A change to a lab string that
+    # is already on main is still drift.
+    if path.startswith("aiReview.") and path not in baseline:
+        return True
     for tree in _NEW_TREES:
         if path == tree or path.startswith(tree + "."):
             return not any(old == tree or old.startswith(tree + ".") for old in baseline)
@@ -314,6 +318,54 @@ class RelayAndDraftTests(unittest.TestCase):
             relay.socket.getaddrinfo = previous
         self.assertEqual(blocked.exception.reason, "host_not_allowed")
 
+    def test_transport_dials_the_checked_address_and_ignores_a_later_lookup(self):
+        import app.ai_review.relay as relay
+
+        lookups = {"n": 0}
+
+        def lookup(host, port, type):
+            lookups["n"] += 1
+            if lookups["n"] == 1:
+                return [(socket_family(), None, None, None, ("8.8.8.8", 443))]
+            return [(socket_family(), None, None, None, ("127.0.0.1", 443))]
+
+        seen = {}
+        posts = {"n": 0}
+
+        def post(address, host, payload, key, timeout):
+            posts["n"] += 1
+            seen["address"] = address
+            seen["host"] = host
+            return 200, {"ok": True}
+
+        previous_lookup = relay.socket.getaddrinfo
+        previous_post = relay._post_pinned
+        relay.socket.getaddrinfo = lookup
+        relay._post_pinned = post
+        try:
+            status, body = relay.urllib_transport(
+                "https://ai.orbitlink.me/v1/chat/completions",
+                b"{}",
+                "test-relay-key",
+                2,
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(body, {"ok": True})
+            self.assertEqual(seen["address"], "8.8.8.8")
+            self.assertEqual(seen["host"], "ai.orbitlink.me")
+            self.assertEqual(lookups["n"], 1)
+            with self.assertRaises(relay.RelayError) as blocked:
+                relay.urllib_transport("https://ai.orbitlink.me/v1/chat/completions", b"{}", "test-relay-key", 2)
+            self.assertEqual(blocked.exception.reason, "host_not_allowed")
+            self.assertEqual(posts["n"], 1)
+            with self.assertRaises(relay.RelayError) as foreign:
+                relay.urllib_transport("https://example.com/v1/chat/completions", b"{}", "test-relay-key", 2)
+            self.assertEqual(foreign.exception.reason, "host_not_allowed")
+            self.assertEqual(posts["n"], 1)
+        finally:
+            relay.socket.getaddrinfo = previous_lookup
+            relay._post_pinned = previous_post
+
     def test_enabled_client_uses_the_transport_once_and_rejects_a_rewritten_number(self):
         os.environ["AUU_AI_RELAY"] = "on"
         os.environ["AUU_AI_RELAY_API_KEY"] = "test-relay-key"
@@ -328,20 +380,26 @@ class RelayAndDraftTests(unittest.TestCase):
             content = json.dumps({"summary": "Stored score is 0.28.", "citations": [{"key": "score", "value": 0.28}]})
             return 200, {"choices": [{"message": {"content": content}}]}
 
-        from app.ai_review.relay import RelayClient, public_status
+        from app.ai_review.dispatch_quota import reserve
+        from app.ai_review.relay import RelayClient, RelayError, _utc_day, public_status
 
+        fact = "ab" * 32
+        self.assertTrue(reserve(fact, _utc_day(), 1)["ok"])
         client = RelayClient(transport=transport)
-        parsed = client.complete({"score": 0.28}, timeout_s=2)
+        parsed = client.complete({"score": 0.28}, timeout_s=2, reservation=fact)
         self.assertEqual(parsed["summary"], "Stored score is 0.28.")
         self.assertEqual(seen["url"], "https://ai.orbitlink.me/v1/chat/completions")
         self.assertNotIn(b"test-relay-key", seen["body"])
-        self.assertTrue(public_status()["invoked"])
-        self.assertFalse(public_status()["live_site_verified"])
+        self.assertEqual(public_status()["budget_used"], 1)
+        self.assertFalse(public_status()["budget_guaranteed"])
+        self.assertIsNone(public_status()["budget_currency"])
+        self.assertFalse(public_status()["price_known"])
         again = RelayClient(transport=transport)
-        from app.ai_review.relay import RelayDisabled
-
-        with self.assertRaises(RelayDisabled):
-            again.complete({"score": 0.28}, timeout_s=1)
+        with self.assertRaises(RelayError) as blocked:
+            again.complete({"score": 0.28}, timeout_s=1, reservation=fact)
+        self.assertEqual(blocked.exception.reason, "not_reserved")
+        self.assertEqual(seen["url"], "https://ai.orbitlink.me/v1/chat/completions")
+        self.assertEqual(public_status()["budget_used"], 1)
 
     def test_execution_draft_rejects_secrets_and_stays_disarmed(self):
         from app.ai_review.execution import validate_draft

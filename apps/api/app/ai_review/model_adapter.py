@@ -1,8 +1,9 @@
-"""Optional model adapter. External calls are not started in this phase.
+"""Optional model adapter.
 
-The production path never constructs a network client. Tests may inject a
-mock. Output that contradicts the supplied facts, or that cannot be checked,
-is discarded. The adapter has no tools and cannot change a rule verdict.
+GET paths do not construct a network client. ``POST /api/v1/ai-review/interpret``
+does, and only after an administrator click when the relay is ready. Output that
+contradicts the supplied facts, or that cannot be checked, is discarded. The
+adapter has no tools and cannot change a rule verdict or place an order.
 """
 from __future__ import annotations
 

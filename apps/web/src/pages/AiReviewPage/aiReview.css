@@ -75,6 +75,7 @@
   text-align: left;
 }
 .ai-signal-list button { width: 100%; display: flex; gap: 0.45rem; align-items: baseline; }
+.ai-text-btn:disabled { opacity: 0.45; }
 .ai-signal-list button.is-on { border-color: rgba(228, 194, 122, 0.7); }
 .ai-signal-list span, .ai-signal-list em { color: #a1a1aa; font-style: normal; margin-left: auto; }
 .ai-conds { list-style: none; padding: 0; }
