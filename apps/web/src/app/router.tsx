@@ -40,6 +40,7 @@ import { AdminExchangePanel } from "@/pages/AdminPage/AdminExchangePanel";
 import { ExchangePage } from "@/pages/ExchangePage/ExchangePage";
 import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
+import { ScreenerPage } from "@/pages/ScreenerPage/ScreenerPage";
 
 const AiReviewPage = lazy(() => import("@/pages/AiReviewPage/AiReviewPage").then((m) => ({ default: m.AiReviewPage })));
 
@@ -125,6 +126,7 @@ export const router = createBrowserRouter([
       { path: "status", element: <StatusGate /> },
       { path: "subscribe", element: <SubscribePage /> },
       { path: "points", element: <PointsPage /> },
+      { path: "screener", element: <ScreenerPage /> },
     ],
   },
 ]);
