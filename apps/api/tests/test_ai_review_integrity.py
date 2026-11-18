@@ -292,6 +292,67 @@ class RelayAndDraftTests(unittest.TestCase):
         self.assertEqual(public_status()["status"], "budget_blocked")
         self.assertFalse(public_status()["invoked"])
 
+    def test_unlimited_is_explicit_and_invalid_values_fail_closed(self):
+        from app.ai_review.dispatch_quota import attempts_today, quota_path, reserve
+        from app.ai_review.relay import _utc_day, parse_budget, public_status, reset_budget
+
+        self.assertEqual(parse_budget(None)["limit"], 0)
+        self.assertEqual(parse_budget("0")["limit"], 0)
+        self.assertEqual(parse_budget("1000"), {"mode": "count", "limit": 1000, "unlimited": False})
+        self.assertEqual(parse_budget("unlimited"), {"mode": "unlimited", "limit": "unlimited", "unlimited": True})
+        for bad in ("1001", "none", "inf", "Unlimited", "-1", "1.5", "00", "+1000"):
+            self.assertEqual(parse_budget(bad)["mode"], "invalid", bad)
+            self.assertEqual(parse_budget(bad)["limit"], "invalid", bad)
+        os.environ["AUU_AI_RELAY"] = "on"
+        os.environ["AUU_AI_RELAY_API_KEY"] = "test-relay-key"
+        os.environ["AUU_AI_RELAY_MODEL"] = "operator-selected"
+        os.environ["AUU_AI_RELAY_BUDGET"] = "1001"
+        invalid = public_status()
+        self.assertEqual(invalid["status"], "budget_invalid")
+        self.assertEqual(invalid["budget_limit"], "invalid")
+        self.assertIsNone(invalid["budget_currency"])
+        self.assertFalse(invalid["budget_guaranteed"])
+        self.assertFalse(invalid["price_known"])
+        os.environ["AUU_AI_RELAY_BUDGET"] = "1000"
+        reset_budget()
+        day = _utc_day()
+        self.assertTrue(reserve("a" * 64, day, 1000)["ok"])
+        import sqlite3
+        con = sqlite3.connect(quota_path())
+        con.execute("UPDATE day_attempts SET attempts=999 WHERE day=?", (day,))
+        con.commit()
+        con.close()
+        self.assertTrue(reserve("b" * 64, day, 1000)["ok"])
+        blocked = reserve("c" * 64, day, 1000)
+        self.assertFalse(blocked["ok"])
+        self.assertEqual(blocked["reason"], "budget")
+        self.assertEqual(attempts_today(day), 1000)
+        os.environ["AUU_AI_RELAY_BUDGET"] = "unlimited"
+        open_day = public_status()
+        self.assertEqual(open_day["budget_mode"], "unlimited")
+        self.assertEqual(open_day["budget_limit"], "unlimited")
+        self.assertTrue(open_day["budget_unlimited"])
+        self.assertEqual(open_day["budget_used"], 1000)
+        self.assertNotEqual(open_day["status"], "budget_blocked")
+        self.assertTrue(reserve("d" * 64, day, None)["ok"])
+        self.assertEqual(attempts_today(day), 1001)
+        self.assertEqual(public_status()["budget_used"], 1001)
+        import threading
+        raced = []
+        barrier = threading.Barrier(2)
+
+        def go(key: str) -> None:
+            barrier.wait(2)
+            raced.append(reserve(key, day, None))
+
+        workers = [threading.Thread(target=go, args=(key,)) for key in ("e" * 64, "f" * 64)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(3)
+        self.assertEqual(sum(1 for row in raced if row["ok"]), 2)
+        self.assertEqual(attempts_today(day), 1003)
+
     def test_private_address_and_redirect_are_refused_before_a_second_request(self):
         from app.ai_review.relay import RelayError, assert_public_host, interpret_status, normalize_base
 

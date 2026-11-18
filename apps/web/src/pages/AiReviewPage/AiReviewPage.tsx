@@ -502,6 +502,7 @@ function aiLabel(status: string): string {
   if (status === "missing_key") return "aiReview.relayMissingKey";
   if (status === "missing_model") return "aiReview.relayMissingModel";
   if (status === "budget_blocked") return "aiReview.relayBudgetBlocked";
+  if (status === "budget_invalid") return "aiReview.budgetInvalid";
   if (status === "configured_not_called") return "aiReview.relayNotCalled";
   if (status === "called") return "aiReview.relayCalled";
   return "aiReview.aiOff";
@@ -532,6 +533,17 @@ function DecisionLane({ title, rows, lang, ready, asking, onAsk }: { title: stri
   );
 }
 
+function budgetLine(relay: Record<string, unknown> | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const mode = String(relay?.budget_mode || "count");
+  const used = relay?.budget_used;
+  if (mode === "unlimited") return t("aiReview.budgetUnlimited", { used: typeof used === "number" ? used : "—" });
+  if (mode === "invalid") return t("aiReview.budgetInvalid");
+  return t("aiReview.budgetCount", {
+    used: typeof used === "number" ? used : 0,
+    limit: typeof relay?.budget_limit === "number" ? relay.budget_limit : 0,
+  });
+}
+
 function RelayPanel({ relay }: { relay?: Record<string, unknown> }) {
   const { t } = useTranslation();
   const [model, setModel] = useState("");
@@ -546,10 +558,10 @@ function RelayPanel({ relay }: { relay?: Record<string, unknown> }) {
       <h2>{t("aiReview.relayTitle")}</h2>
       <p className="ai-missing">{t(aiLabel(String(relay?.status || "off")))}</p>
       <p className="ai-note">{t("aiReview.budgetUnit")}</p>
+      <p className="ai-note">{budgetLine(relay, t)}</p>
       <p className="ai-note">{t("aiReview.candidateHint")} {relay?.verified_candidate ? String(relay.verified_candidate) : "—"}</p>
       <p className="ai-note">{t("aiReview.relayHost")}: {host}/v1</p>
       <p className="ai-note">{t("aiReview.relayConfigured")}: {serverModel}</p>
-      <p className="ai-note">{t("aiReview.budgetCount", { used: relay?.budget_used ?? 0, limit: relay?.budget_limit ?? 0 })}</p>
       <p className="ai-note">{t("aiReview.relayNoCatalog")}</p>
       <p className="ai-note">{t("aiReview.relayKeyHint")}</p>
       <p className="ai-note">{t("aiReview.draftDoesNotSend")}</p>
