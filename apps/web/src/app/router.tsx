@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { BoardPage } from "@/pages/BoardPage/BoardPage";
@@ -41,7 +42,17 @@ import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 import { ScreenerPage } from "@/pages/ScreenerPage/ScreenerPage";
 
+const AiReviewPage = lazy(() => import("@/pages/AiReviewPage/AiReviewPage").then((m) => ({ default: m.AiReviewPage })));
+
 export const router = createBrowserRouter([
+  {
+    path: "/lab/ai-review",
+    element: (
+      <Suspense fallback={<div aria-busy="true" />}>
+        <AiReviewPage />
+      </Suspense>
+    ),
+  },
   {
     path: "/admin",
     element: <AdminShell />,

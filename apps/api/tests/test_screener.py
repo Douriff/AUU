@@ -809,6 +809,8 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(decide(None, auth_on=True)[:2], (401, "AUTH_REQUIRED"))
         self.assertEqual(decide(None, auth_on=False)[:2], (403, CODE))
         self.assertEqual(decide({"is_admin": False, "subscribed": True, "subscription": "active"}, auth_on=True)[:2], (403, CODE))
+        self.assertEqual(decide({"is_admin": 1}, auth_on=True)[:2], (403, CODE))
+        self.assertEqual(decide({"is_admin": "true"}, auth_on=True)[:2], (403, CODE))
         self.assertIsNone(decide({"is_admin": True, "subscription": "expired"}, auth_on=True))
         self.assertEqual(list(catalog.ITEMS), ["example_badge"])
         self.assertTrue(catalog.ITEMS["example_badge"]["example"])

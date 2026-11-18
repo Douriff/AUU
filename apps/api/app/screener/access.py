@@ -27,6 +27,7 @@ def decide(user: Optional[dict[str, Any]], *, auth_on: bool) -> Optional[tuple[i
         if user is None and auth_on:
             return (401, "AUTH_REQUIRED", "请先登录")
         return (403, CODE, MESSAGE)
-    if not user.get("is_admin"):
+    # Only a real boolean from the account record. "yes", 1, or a client field do not count.
+    if user.get("is_admin") is not True:
         return (403, CODE, MESSAGE)
     return None
