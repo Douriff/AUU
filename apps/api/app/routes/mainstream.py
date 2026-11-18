@@ -145,22 +145,26 @@ def orderbook(symbol: str = Query(...), depth: int = Query(12, ge=1, le=20), ven
     return ok(get_book_cache().get(base, depth))
 
 
-@router.get("/markets")
-def markets(request: Request):
-    """Market list: every display + strategy coin in one batched response (store + cached tickers).
-
-    Anonymous readers get quotes only. Strategy weights are attached for a signed-in session.
-
-    While the realtime feed runs with push on (``AUU_RT_WS=on``), the response also carries ``realtime`` (what
-    ``/api/v1/ws`` can stream) so the page knows it may subscribe; with the switch off the response is unchanged
-    and the frontend never opens a market-data WebSocket (step 3 of docs/realtime-ws-plan.md).
-    """
-    signed_in = (not auth_enabled()) or session_user(request) is not None
+def markets_payload(request: Optional[Request] = None):
+    """Market list body. No request means the in-process caller, which still sees strategy weights."""
+    signed_in = request is None or (not auth_enabled()) or session_user(request) is not None
     data = get_service().markets(holdings=_strategy_holdings() if signed_in else None)
     caps = _rt_caps()
     if caps is not None:
         data = {**data, "realtime": caps}
     return ok(data)
+
+
+@router.get("/markets")
+def markets(request: Request):
+    """Market list: every display + strategy coin in one batched response (store + cached tickers).
+
+    While the realtime feed runs with push on (``AUU_RT_WS=on``), the response also carries ``realtime`` (what
+    ``/api/v1/ws`` can stream) so the page knows it may subscribe; with the switch off the response is unchanged
+    and the frontend never opens a market-data WebSocket (step 3 of docs/realtime-ws-plan.md).
+    Anonymous readers get quotes only. Strategy weights are attached for a signed-in session.
+    """
+    return markets_payload(request)
 
 
 def _rt_caps():

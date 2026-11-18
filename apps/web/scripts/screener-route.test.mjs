@@ -25,10 +25,11 @@ for (const path of ["/", "/pnl", "/console", "/performance", "/majors", "/news",
 }
 if (!nav.includes('to: "/?symbol=BTC"')) fail("trade link changed");
 const block = premium.split("const PREMIUM")[1].split(");")[0];
-for (const path of ["/", "/mainstream", "/majors", "/pnl", "/news"]) {
-  if (path === "/news") {
-    if (block.includes('"/news"')) fail("news became premium");
-  } else if (!block.includes(`"${path}"`)) fail(`premium path missing: ${path}`);
+for (const path of ["/", "/mainstream", "/majors", "/news"]) {
+  if (block.includes(`"${path}"`)) fail(`${path} is still behind the subscription wall`);
+}
+for (const path of ["/pnl", "/console", "/performance", "/screener"]) {
+  if (!block.includes(`"${path}"`)) fail(`premium path missing: ${path}`);
 }
 if (!block.includes('"/screener"')) fail("screener is not behind the existing subscription gate");
 for (const path of ['"/settings"', '"/login"', '"/subscribe"', '"/airdrops"']) {

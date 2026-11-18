@@ -155,8 +155,11 @@ class ShieldApiTests(unittest.TestCase):
 
     def test_data_endpoints_need_login(self):
         anon = self.client()
-        for path in ("/api/v1/mainstream/overview", "/api/v1/mainstream/candles?symbol=BTC&tf=1d", "/api/v1/news",
-                     "/api/v1/mainstream/strategy", "/api/v1/mainstream/shadow/h2", "/api/v1/points/me", "/api/v1/leaderboard"):
+        for path in ("/api/v1/mainstream/overview", "/api/v1/mainstream/candles?symbol=BTC&tf=1d"):
+            with self.subTest(path=path):
+                self.assertNotEqual(anon.get(path).status_code, 401)
+        for path in ("/api/v1/news", "/api/v1/mainstream/strategy", "/api/v1/mainstream/shadow/h2",
+                     "/api/v1/points/me", "/api/v1/leaderboard"):
             with self.subTest(path=path):
                 self.assertEqual(anon.get(path).status_code, 401)
 

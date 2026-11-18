@@ -68,9 +68,12 @@ async def ws_endpoint(websocket: WebSocket):
         if rt is not None:
             hello["eventTypes"] = hello["eventTypes"] + ["ticker", "kline", "rt_status"]
             hello.update(rt.hello_extra())
-    private = bool(websocket.scope.get("auu_user_id"))
+    from app.auth.accounts import auth_enabled
+
+    private = (not auth_enabled()) or bool(websocket.scope.get("auu_user_id"))
     if not private:
-        hello["eventTypes"] = ["ticker", "kline", "rt_status"] if rt is not None else []
+        hidden = {"fill", "reject", "signal", "risk", "trading_state"}
+        hello["eventTypes"] = [name for name in hello["eventTypes"] if name not in hidden]
     if rt is None:
         await websocket.send_json(hello)
     else:
