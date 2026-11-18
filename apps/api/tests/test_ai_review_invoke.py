@@ -336,7 +336,7 @@ class ClickTests(unittest.TestCase):
         self.calls["mode"] = "unverified"
         headers = {"Origin": "http://testserver"}
         first = admin.post("/api/v1/ai-review/interpret", json=self._signal(), headers=headers)
-        self.assertEqual(first.json()["data"]["ai"]["reason"], "unverified")
+        self.assertEqual(first.json()["data"]["ai"]["reason"], "number_not_in_facts")
         self.assertIsNone(first.json()["data"]["ai"]["text"])
         self.assertTrue(first.json()["data"]["charged_now"])
         self.assertEqual(public_status()["budget_used"], 1)

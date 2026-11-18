@@ -422,6 +422,10 @@ function warnKey(flag: string): string {
   return "aiReview.missing";
 }
 
+function safeCheck(reason: string | null | undefined): string {
+  return typeof reason === "string" && /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "";
+}
+
 function NoteBox({ note, askError }: { note: Record<string, unknown> | null; askError: boolean }) {
   const { t } = useTranslation();
   const ai = (note?.ai || null) as { status?: string; text?: string | null; reason?: string | null } | null;
@@ -434,7 +438,7 @@ function NoteBox({ note, askError }: { note: Record<string, unknown> | null; ask
       {note && note.sent !== true ? <p className="ai-note">{t("aiReview.noteNone")}</p> : null}
       {note?.deduped === true ? <p className="ai-note">{t("aiReview.noteDeduped")}</p> : null}
       {ai?.reason === "busy" ? <p className="ai-missing">{t("aiReview.noteBusy")}</p> : null}
-      {ai?.status === "failed" && ai.reason !== "busy" ? <p className="ai-missing">{t("aiReview.noteFailed")}</p> : null}
+      {ai?.status === "failed" && ai.reason !== "busy" ? <p className="ai-missing">{safeCheck(ai.reason) ? t("aiReview.noteCheckFailed", { code: safeCheck(ai.reason) }) : t("aiReview.noteFailed")}</p> : null}
       {ai?.status === "accepted" && ai.text ? <p className="ai-ai-text">{ai.text}</p> : null}
       {note ? <p className="ai-note">{t("aiReview.noteNotOrder")}</p> : null}
     </section>
