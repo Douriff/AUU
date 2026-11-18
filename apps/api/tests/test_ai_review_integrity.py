@@ -501,6 +501,71 @@ class RelayAndDraftTests(unittest.TestCase):
                 os.environ["AUU_AUTH"] = previous
 
 
+class NoteContractTests(unittest.TestCase):
+    """The prompt must ask for the object the checker accepts.
+
+    These fixtures are synthetic. They do not reserve or replay a stored fact.
+    """
+
+    FACTS = {
+        "strategy_id": "auu_signal_v0",
+        "symbol": "BTC",
+        "ts": 1753920000000,
+        "book": "shadow",
+        "kind": "signal",
+        "side": "long",
+        "price": None,
+        "cost": None,
+        "net": None,
+        "live_order": False,
+        "attribution": "stored_row",
+    }
+
+    def test_prompt_states_the_contract_and_forbids_calendar_numbers(self):
+        from app.ai_review.relay import chat_body
+
+        body = chat_body(self.FACTS, "gpt-4o-mini", 400)
+        text = body["messages"][0]["content"]
+        self.assertIn("summary", text)
+        self.assertIn("citations", text)
+        self.assertIn("calendar date", text)
+        self.assertNotIn("restate only the JSON facts", text)
+        self.assertEqual(body["max_tokens"], 400)
+
+    def test_fact_object_and_calendar_date_fail_closed(self):
+        from app.ai_review.model_adapter import classify_model_output
+
+        checked, reason = classify_model_output(self.FACTS, self.FACTS)
+        self.assertIsNone(checked)
+        self.assertEqual(reason, "wrong_keys")
+        dated = {
+            "summary": "The bar opened on 2025-07-31.",
+            "citations": [{"key": "side", "value": "long"}],
+        }
+        checked, reason = classify_model_output(dated, self.FACTS)
+        self.assertIsNone(checked)
+        self.assertEqual(reason, "number_not_in_facts")
+        typed = {
+            "summary": "Stored side is long.",
+            "citations": [{"key": "ts", "value": "1753920000000"}],
+        }
+        checked, reason = classify_model_output(typed, self.FACTS)
+        self.assertIsNone(checked)
+        self.assertEqual(reason, "citation_mismatch")
+
+    def test_exact_citation_without_a_new_number_is_accepted(self):
+        from app.ai_review.model_adapter import classify_model_output
+
+        note = {
+            "summary": "Stored side is long.",
+            "citations": [{"key": "side", "value": "long"}, {"key": "live_order", "value": False}],
+        }
+        checked, reason = classify_model_output(note, self.FACTS)
+        self.assertIsNone(reason)
+        self.assertEqual(checked["summary"], "Stored side is long.")
+        self.assertLess(len(json.dumps(note)), 400)
+
+
 def socket_family():
     import socket
 

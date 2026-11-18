@@ -11,7 +11,7 @@ import json
 from typing import Any, Callable, Optional
 
 from app.ai_review.dispatch_quota import mark, release_unsent, reserve
-from app.ai_review.model_adapter import facts_for_model, validate_model_output
+from app.ai_review.model_adapter import classify_model_output, facts_for_model
 from app.ai_review.relay import (
     ALLOWED_HOST,
     RelayDisabled,
@@ -168,9 +168,9 @@ def _send(key: str, facts: dict[str, Any], factory: ClientFactory) -> dict[str, 
         return {**_fail("connection_error", sent=True), "release": False}
     except Exception:
         return {**_fail("client_error", sent=True), "release": False}
-    checked = validate_model_output(raw, facts)
+    checked, reason = classify_model_output(raw, facts)
     if checked is None:
-        return {**_fail("unverified", sent=True), "release": False, "mark": "unverified"}
+        return {**_fail(reason or "unverified", sent=True), "release": False, "mark": reason or "unverified"}
     return {
         "status": "accepted",
         "reason": None,

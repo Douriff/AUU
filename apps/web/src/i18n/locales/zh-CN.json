@@ -2145,6 +2145,7 @@
     "draftDoesNotSend": "下面的字段只是草稿。不会保存，也不会发送请求。",
     "clickSends": "只有这个按钮会发送说明，而且只有服务器开关、模型名和额度都已设置时才会发送。",
     "budgetUnlimited": "没有每日请求次数上限。今日已发送 {{used}} 次。这不是美元费用上限。",
-    "budgetInvalid": "每日次数不是 0 到 1000 的整数，也不是 unlimited。没有发送请求。"
+    "budgetInvalid": "每日次数不是 0 到 1000 的整数，也不是 unlimited。没有发送请求。",
+    "noteCheckFailed": "说明没有通过核对。核对代码：{{code}}。没有保存模型原文。这不是美元费用。"
   }
 }

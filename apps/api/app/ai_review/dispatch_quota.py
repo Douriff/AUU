@@ -25,6 +25,17 @@ _OUTCOMES = {
     "upstream_error",
     "connection_error",
     "unverified",
+    "not_object",
+    "wrong_keys",
+    "bad_summary",
+    "summary_empty",
+    "summary_too_long",
+    "control_char",
+    "injection",
+    "number_not_in_facts",
+    "citations_missing",
+    "citation_shape",
+    "citation_mismatch",
     "accepted",
 }
 
