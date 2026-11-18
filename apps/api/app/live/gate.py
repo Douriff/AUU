@@ -13,7 +13,12 @@ Reject with LIVE_DISABLED (also RiskOut.tags) unless ALL of:
 
 The send gate lives in app.live.send and is independent of the liveEnabled
 switch. LIVE_SEND_WIRED is False, so the default runtime sends zero chain txs
-even if the four-part checklist later passes.
+even if the checklist later passes.
+
+Arming also requires an explicit account, currency, notional quota, leverage,
+stop-loss and loss cap. None of those has a default. Unset, out of range, or
+above the leverage ceiling stays disarmed. This module does not choose those
+values and does not arm itself.
 """
 from __future__ import annotations
 
@@ -34,10 +39,20 @@ DEFAULT_KEYPAIR_RELPATH = "secrets/live-keypair.json"
 ENV_MAX_NOTIONAL_SOL = "AUU_LIVE_MAX_NOTIONAL_SOL"
 ENV_MAX_DAY_LOSS_PCT = "AUU_LIVE_MAX_DAY_LOSS_PCT"
 ENV_MAX_OPEN_MINTS = "AUU_LIVE_MAX_OPEN_MINTS"
+# Explicit arm confirmation. No defaults: unset means the checklist is incomplete.
+ENV_LIVE_ACCOUNT = "AUU_LIVE_ACCOUNT"
+ENV_LIVE_CURRENCY = "AUU_LIVE_CURRENCY"
+ENV_LIVE_QUOTA = "AUU_LIVE_MAX_NOTIONAL"
+ENV_LIVE_LEVERAGE = "AUU_LIVE_LEVERAGE"
+ENV_LIVE_STOP = "AUU_LIVE_STOP_LOSS"
+ENV_LIVE_MAX_LOSS = "AUU_LIVE_MAX_LOSS"
 
 REASON_LIVE_DISABLED = "LIVE_DISABLED"
 REASON_NO_KEYPAIR = "NO_KEYPAIR"
 REASON_LIMITS_MISSING = "LIMITS_MISSING"
+REASON_ARM_INCOMPLETE = "LIVE_ARM_INCOMPLETE"
+# Ceiling only. A missing leverage is incomplete; it is never filled in with 1.
+LEVERAGE_CEILING = 5.0
 
 # User-authorized live caps. Env/settings may only tighten (never loosen or zero).
 LOCKED_MAX_NOTIONAL_SOL = 1.0
@@ -178,7 +193,7 @@ class LiveStatus:
         return self.armed
 
     def primary_reason(self) -> str:
-        for code in (REASON_LIVE_DISABLED, REASON_NO_KEYPAIR, REASON_LIMITS_MISSING):
+        for code in (REASON_LIVE_DISABLED, REASON_NO_KEYPAIR, REASON_LIMITS_MISSING, REASON_ARM_INCOMPLETE):
             if code in self.reasons:
                 return code
         return REASON_LIVE_DISABLED
@@ -208,6 +223,7 @@ class LiveStatus:
             "armedFlag": self.armed_flag,
             "venue": "live",
             "sendEnabled": False,
+            "armConfirmation": _arm_public(),
         }
 
 
@@ -253,6 +269,60 @@ def keypair_path() -> str:
 
 def inspect_keypair() -> SignerStatus:
     return _signer.inspect(keypair_path() or None)
+
+
+def _explicit_number(name: str, *, low: float, high: float, low_inclusive: bool) -> Optional[float]:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return None
+    number = _parse_positive_float(raw)
+    if number is None:
+        return None
+    if low_inclusive:
+        ok = low <= number <= high
+    else:
+        ok = low < number <= high
+    return number if ok else None
+
+
+def arm_confirmation() -> dict[str, Any]:
+    """Operator-supplied arm fields. Missing or rejected values are not replaced."""
+    missing: list[str] = []
+    account = (os.getenv(ENV_LIVE_ACCOUNT) or "").strip()
+    account_set = bool(account) and len(account) <= 64 and "\n" not in account and "\r" not in account
+    if not account_set:
+        missing.append("account")
+    currency = (os.getenv(ENV_LIVE_CURRENCY) or "").strip().upper()
+    if not (2 <= len(currency) <= 12 and currency.isalpha()):
+        missing.append("currency")
+        currency = ""
+    quota = _explicit_number(ENV_LIVE_QUOTA, low=0.0, high=1_000_000_000.0, low_inclusive=False)
+    if quota is None:
+        missing.append("max_notional")
+    leverage = _explicit_number(ENV_LIVE_LEVERAGE, low=1.0, high=LEVERAGE_CEILING, low_inclusive=True)
+    if leverage is None:
+        missing.append("leverage")
+    stop = _explicit_number(ENV_LIVE_STOP, low=0.0, high=1.0, low_inclusive=False)
+    if stop is None:
+        missing.append("stop_loss")
+    loss = _explicit_number(ENV_LIVE_MAX_LOSS, low=0.0, high=1.0, low_inclusive=False)
+    if loss is None:
+        missing.append("max_loss")
+    return {
+        "complete": not missing,
+        "missing": missing,
+        "accountSet": account_set,
+        "currency": currency or None,
+        "maxNotional": quota,
+        "leverage": leverage,
+        "stopLoss": stop,
+        "maxLoss": loss,
+    }
+
+
+def _arm_public() -> dict[str, Any]:
+    arm = arm_confirmation()
+    return {key: arm[key] for key in ("complete", "missing", "accountSet", "currency", "maxNotional", "leverage", "stopLoss", "maxLoss")}
 
 
 def effective_limits() -> LiveLimits:
@@ -304,7 +374,8 @@ def evaluate() -> LiveStatus:
     confirmed = live_confirmed()
     keypair_ok = bool(signer.ok)
     limits_ok = not missing
-    checklist = enabled and confirmed and keypair_ok and limits_ok
+    arm_ok = bool(arm_confirmation()["complete"])
+    checklist = enabled and confirmed and keypair_ok and limits_ok and arm_ok
     reasons: list[str] = []
     if not checklist:
         reasons.append(REASON_LIVE_DISABLED)
@@ -312,6 +383,8 @@ def evaluate() -> LiveStatus:
         reasons.append(REASON_NO_KEYPAIR)
     if missing:
         reasons.append(REASON_LIMITS_MISSING)
+    if not arm_ok:
+        reasons.append(REASON_ARM_INCOMPLETE)
     live_disabled = (not checklist) or (not LIVE_SEND_WIRED)
     return LiveStatus(
         live_enabled=enabled,
@@ -374,7 +447,7 @@ def try_set_armed(want_armed: bool) -> tuple[bool, LiveStatus]:
         _overlay.live_confirmed = False
         return True, evaluate()
     signer = inspect_keypair()
-    if (not live_enabled()) or (not signer.ok) or (not effective_limits().complete()):
+    if (not live_enabled()) or (not signer.ok) or (not effective_limits().complete()) or (not arm_confirmation()["complete"]):
         return False, evaluate()
     _overlay.live_confirmed = True
     return True, evaluate()
@@ -385,6 +458,8 @@ def try_set_enabled_with_confirm(want_enabled: bool, *, confirmed: bool) -> tupl
     if not want_enabled:
         return try_set_enabled(False)
     if not confirmed:
+        return False, evaluate()
+    if not arm_confirmation()["complete"]:
         return False, evaluate()
     ok_en, st = try_set_enabled(True, confirmed=False)
     if not ok_en:

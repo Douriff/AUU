@@ -204,19 +204,28 @@ class LateRebalanceTests(_Outage):
         self.assertEqual(r.tick(), [self.panel.days[e + 2]])
         self.assertIsNone(r.ledger.exec_row(self.panel.days[e + 2]))
 
-    def test_two_day_outage_holds_the_old_day_and_late_books_today(self):
+    def test_two_day_outage_is_not_booked_at_current_prices(self):
         r, clock, e = self.book()
+        n0 = len(r.ledger.runs())
         self.net = False
         for i in (e + 1, e + 2):
             self.at(clock, i, 0, 5)
             self.assertEqual(r.tick(), [])
         self.net = True
         self.at(clock, e + 2, 2)  # 10:00 Beijing two days later
-        self.assertEqual(r.tick(), [self.panel.days[e + 1], self.panel.days[e + 2]])
-        self.assertEqual(r.ledger.exec_row(self.panel.days[e + 1])["mode"], "missed")
-        self.assertEqual(r.ledger.exec_row(self.panel.days[e + 2])["mode"], "late")
-        self.assertEqual([f for f in r.ledger.fills(10_000) if f["day"] == self.panel.days[e + 1]], [])
+        calls = self.px_calls
         self.assertEqual(r.tick(), [])
+        self.assertEqual(self.px_calls, calls)
+        self.assertIn("admin resume required", r.waiting)
+        self.assertEqual(len(r.ledger.runs()), n0)
+        out = sr.resume_forward(now_ms=clock.t, by="admin-id", note="two-day", strategy_path=r.ledger.path,
+                                h2_path=Path(self.tmp.name) / "h2.sqlite")
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(len(r.ledger.runs()), n0)
+        self.assertEqual(r.tick(), [])
+        self.assertIn("gap sealed", r.waiting)
+        self.assertIsNone(r.ledger.exec_row(self.panel.days[e + 1]))
+        self.assertIsNone(r.ledger.exec_row(self.panel.days[e + 2]))
 
     def test_within_the_on_time_window_books_at_the_close_as_before(self):
         r, clock, e = self.book()
