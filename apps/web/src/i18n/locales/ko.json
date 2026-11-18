@@ -2044,6 +2044,9 @@
     "execStop": "Hard stop fraction",
     "execNoKey": "Exchange keys are not collected.",
     "execCheck": "Validate draft",
-    "execPlan": "A later connection would use the existing exchange layer, deterministic risk checks, idempotent order ids, and a separate arming step. This draft is not that authorization."
+    "execPlan": "A later connection would use the existing exchange layer, deterministic risk checks, idempotent order ids, and a separate arming step. This draft is not that authorization.",
+    "relayMissingKey": "The relay key is not set on the server. No request was sent.",
+    "relayMissingModel": "No model name is set. No request was sent.",
+    "relayBudgetBlocked": "The request budget is closed. No request was sent."
   }
 }

@@ -434,7 +434,10 @@ function aiLabel(status: string): string {
   if (status === "rejected" || status === "timeout" || status === "failed") return "aiReview.aiRejected";
   if (status === "skipped") return "aiReview.aiSkipped";
   if (status === "accepted") return "aiReview.aiChecked";
-  if (status === "configured_not_called" || status === "missing_key" || status === "missing_model" || status === "budget_blocked") return "aiReview.relayNotCalled";
+  if (status === "missing_key") return "aiReview.relayMissingKey";
+  if (status === "missing_model") return "aiReview.relayMissingModel";
+  if (status === "budget_blocked") return "aiReview.relayBudgetBlocked";
+  if (status === "configured_not_called") return "aiReview.relayNotCalled";
   if (status === "called") return "aiReview.relayCalled";
   return "aiReview.aiOff";
 }
@@ -475,7 +478,7 @@ function RelayPanel({ relay }: { relay?: Record<string, unknown> }) {
   return (
     <section className="ai-section ai-card">
       <h2>{t("aiReview.relayTitle")}</h2>
-      <p className="ai-note">{t("aiReview.relayNotCalled")}</p>
+      <p className="ai-missing">{t(aiLabel(String(relay?.status || "off")))}</p>
       <p className="ai-note">{t("aiReview.relayHost")}: {host}/v1</p>
       <p className="ai-note">{t("aiReview.relayConfigured")}: {serverModel}</p>
       <p className="ai-note">{t("aiReview.relayNoCatalog")}</p>

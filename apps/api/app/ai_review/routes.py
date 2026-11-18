@@ -235,6 +235,9 @@ async def _json_body(request: Request):
     except json.JSONDecodeError:
         return {"_bad": True}
     return parsed if isinstance(parsed, dict) else {"_bad": True}
+
+
+@router.api_route("", methods=["POST", "PUT", "PATCH", "DELETE"])
 def writes_root(request: Request):
     return _reject_write(request)
 

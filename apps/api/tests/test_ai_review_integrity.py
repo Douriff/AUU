@@ -192,16 +192,22 @@ class RelayAndDraftTests(unittest.TestCase):
                 os.environ[key] = value
         reset_budget()
 
-    def test_public_status_never_contains_the_key_and_does_not_claim_a_call(self):
-        os.environ["AUU_AI_RELAY_API_KEY"] = "test-relay-key"
+    def test_public_status_never_contains_the_key_and_names_what_is_missing(self):
         from app.ai_review.relay import public_status
 
+        os.environ["AUU_AI_RELAY"] = "on"
+        self.assertEqual(public_status()["status"], "missing_key")
+        os.environ["AUU_AI_RELAY_API_KEY"] = "test-relay-key"
         blob = json.dumps(public_status())
         self.assertNotIn("test-relay-key", blob)
         self.assertNotIn("api_key", blob)
+        self.assertEqual(public_status()["status"], "missing_model")
         self.assertFalse(public_status()["invoked"])
         self.assertFalse(public_status()["live_site_verified"])
         self.assertEqual(public_status()["base_host"], "ai.orbitlink.me")
+        os.environ["AUU_AI_RELAY_MODEL"] = "operator-selected"
+        self.assertEqual(public_status()["status"], "budget_blocked")
+        self.assertFalse(public_status()["invoked"])
 
     def test_private_address_and_redirect_are_refused_before_a_second_request(self):
         from app.ai_review.relay import RelayError, assert_public_host, interpret_status, normalize_base
@@ -271,6 +277,30 @@ class RelayAndDraftTests(unittest.TestCase):
         self.assertFalse(secret["ok"])
         self.assertEqual(secret["reason"], "secret_rejected")
         self.assertFalse(secret["armed"])
+        auto = validate_draft({"intent": "live", "confirm": "auto_within_limits", "leverage": 3})
+        self.assertTrue(auto["ok"])
+        self.assertEqual(auto["draft"]["confirm"], "auto_within_limits")
+        self.assertFalse(auto["orders_enabled"])
+        self.assertFalse(auto["ai_may_send"])
+        self.assertFalse(auto["armed"])
+        self.assertEqual(auto["channel"], "not_connected")
+
+    def test_prefix_write_stays_closed(self):
+        previous = os.environ.get("AUU_AUTH")
+        os.environ["AUU_AUTH"] = "off"
+        try:
+            from fastapi.testclient import TestClient
+            from app.main import app
+
+            res = TestClient(app).post("/api/v1/ai-review")
+            self.assertEqual(res.status_code, 401)
+            self.assertNotIn("total_return", res.text)
+            self.assertNotIn("orders_enabled", res.text)
+        finally:
+            if previous is None:
+                os.environ.pop("AUU_AUTH", None)
+            else:
+                os.environ["AUU_AUTH"] = previous
 
 
 def socket_family():
