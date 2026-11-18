@@ -1,0 +1,203 @@
+{
+  "explicit": true,
+  "id": "dev-sample-v1",
+  "notice": "explicit development fixture; not a ledger and not a performance claim",
+  "now_ms": 1792238400000,
+  "signal": {
+    "nav": {
+      "cand_A": [
+        {
+          "ts": 1791936000000,
+          "ret": 0.01,
+          "nav": 1.01,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        },
+        {
+          "ts": 1792022400000,
+          "ret": -0.02,
+          "nav": 0.9898,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        },
+        {
+          "ts": 1792108800000,
+          "ret": 0.0,
+          "nav": 0.9898,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        }
+      ],
+      "cand_B": [
+        {
+          "ts": 1791936000000,
+          "ret": 0.02,
+          "nav": 1.02,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        },
+        {
+          "ts": 1792022400000,
+          "ret": -0.02,
+          "nav": 0.9996,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        },
+        {
+          "ts": 1792108800000,
+          "ret": 0.01,
+          "nav": 1.0095960000000002,
+          "n_long": 1,
+          "n_short": 0,
+          "n_sym": 2,
+          "recorded_at": 1792195200000
+        }
+      ],
+      "cand_A_ls": [
+        {
+          "ts": 1788480000000,
+          "ret": -0.04,
+          "nav": 0.96,
+          "n_long": 0,
+          "n_short": 0,
+          "n_sym": 1,
+          "recorded_at": 1788480000000
+        }
+      ]
+    },
+    "trades": {
+      "cand_A": {
+        "BTC": [
+          {
+            "symbol": "BTC",
+            "side": "long",
+            "entry_ts": 1792022400000,
+            "entry_px": 100.0,
+            "exit_ts": 1792108800000,
+            "exit_px": 102.0,
+            "gross": 0.020000000000000018,
+            "funding": 0.0001,
+            "net": 0.01850000000000002,
+            "recorded_at": 1792195200000
+          },
+          {
+            "symbol": "BTC",
+            "side": "short",
+            "entry_ts": 1792195200000,
+            "entry_px": 50.0,
+            "exit_ts": null,
+            "exit_px": null,
+            "gross": null,
+            "funding": null,
+            "net": null,
+            "recorded_at": 1792195200000
+          }
+        ]
+      }
+    },
+    "bars": {
+      "cand_A": {
+        "BTC": [
+          {
+            "symbol": "BTC",
+            "tf": "1d",
+            "asof_ts": 1791936000000,
+            "side": "flat",
+            "score": 0.031,
+            "action": "none",
+            "factors": {
+              "momentum": 0.05,
+              "volume_imbalance": 0.02,
+              "funding": 0.0
+            },
+            "reason_tags": null,
+            "params_hash": "6f2f7dea6d308afe",
+            "recorded_at": 1792195200000
+          },
+          {
+            "symbol": "BTC",
+            "tf": "1d",
+            "asof_ts": 1792022400000,
+            "side": "long",
+            "score": 0.28,
+            "action": "enter",
+            "factors": {
+              "momentum": 0.4,
+              "volume_imbalance": 0.2,
+              "funding": 0.1
+            },
+            "reason_tags": null,
+            "params_hash": "6f2f7dea6d308afe",
+            "recorded_at": 1792195200000
+          }
+        ]
+      },
+      "cand_B": {
+        "ETH": [
+          {
+            "symbol": "ETH",
+            "tf": "1d",
+            "asof_ts": 1791936000000,
+            "side": "long",
+            "score": 0.5,
+            "action": "enter",
+            "factors": {},
+            "reason_tags": null,
+            "params_hash": "25fad2f2e60c7325",
+            "recorded_at": 1792195200000
+          }
+        ]
+      }
+    },
+    "v0_bars": {
+      "auu_signal_v0": {
+        "BTC": [
+          {
+            "symbol": "BTC",
+            "tf": "1d",
+            "asof_ts": 1791936000000,
+            "side": "flat",
+            "score": 0.0,
+            "action": "none",
+            "factors": {
+              "momentum": 0.0,
+              "volume_imbalance": 0.0,
+              "funding": 0.0
+            },
+            "reason_tags": [],
+            "params_hash": null,
+            "recorded_at": 1792195200000
+          },
+          {
+            "symbol": "BTC",
+            "tf": "1d",
+            "asof_ts": 1792022400000,
+            "side": "long",
+            "score": 0.4125,
+            "action": "enter",
+            "factors": {
+              "momentum": 0.6,
+              "volume_imbalance": 0.1,
+              "funding": null
+            },
+            "reason_tags": [
+              "momentum"
+            ],
+            "params_hash": null,
+            "recorded_at": 1792195200000
+          }
+        ]
+      }
+    }
+  }
+}
