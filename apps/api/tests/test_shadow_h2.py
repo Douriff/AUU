@@ -331,7 +331,7 @@ class IsolationTests(_Base):
         for bad in ("create_order", "place_order", "broker", "mainstream_strategy.sqlite", "mainstream_paper", "commit_day", "StrategyLedger("):
             self.assertNotIn(bad, src)
         tables = {r[0] for r in self.led.q("SELECT name FROM sqlite_master WHERE type='table'")} - {"sqlite_sequence"}
-        self.assertEqual(tables, {"meta", "days", "warmup", "perp_daily", "events", "evaluations"})
+        self.assertEqual(tables, {"meta", "days", "warmup", "perp_daily", "events", "evaluations", "ledger_gaps"})
 
     def test_digest_includes_h2_line(self):
         from app import alerts
@@ -422,6 +422,28 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(d["cumulative"])
         self.assertEqual(d["progress"], 0)
         self.assertEqual(d["refused"], "")
+
+
+class GapTests(_Base):
+    def test_refuse_keeps_the_gap_out_of_the_forward_count(self):
+        self.sh = self.make(self.led, catchup="refuse")
+        self.assertEqual(self.run_to(INC), [INC])
+        due = INC + 5 * DAY_MS
+        self.assertEqual(self.run_to(due), [])
+        self.assertIn("not replayed", self.sh.waiting)
+        self.assertEqual([int(r["day"]) for r in self.led.rows()], [INC])
+        self.led.seal_gap(gap_from=INC + DAY_MS, gap_to=due, sealed_at=self.clock.t, sealed_by="admin-id",
+                          note="outage", prev_day=INC, prev_nav=float(self.led.last()["nav"]), next_start_nav=10_000.0)
+        self.assertEqual(self.run_to(due), [])
+        self.assertIn("gap sealed", self.sh.waiting)
+        self.assertEqual(self.sh.summary()["forwardDays"], 0)
+        self.assertEqual(self.sh.summary()["historyForwardDays"], 0)
+        self.assertFalse(self.sh.summary()["continuous"])
+        self.assertEqual(len(self.led.rows()), 1)
+        self.assertEqual(self.run_to(due + DAY_MS), [due + DAY_MS])
+        self.assertEqual([int(r["day"]) for r in self.led.rows()], [INC, due + DAY_MS])
+        self.assertEqual(self.sh.summary()["forwardDays"], 1)
+        self.assertEqual(self.led.q("SELECT COUNT(*) AS n FROM evaluations")[0]["n"], 0)
 
 
 if __name__ == "__main__":

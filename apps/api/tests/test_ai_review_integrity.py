@@ -167,9 +167,15 @@ class LocaleNamespaceTests(unittest.TestCase):
         for lang in LOCALES:
             old = json.loads(subprocess.check_output(["git", "show", f"main:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT))
             new = json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
-            self.assertEqual(set(new) - set(old), {"aiReview"}, lang)
-            old.pop("aiReview", None)
-            new.pop("aiReview", None)
+            # The review lab and the spot screener each add one root object.
+            # Whichever of those is already on main is not a new key here.
+            self.assertTrue(set(new) - set(old) <= {"aiReview", "screener"}, lang)
+            for key in ("aiReview", "screener"):
+                old.pop(key, None)
+                new.pop(key, None)
+            extra = set(new.get("apiErr", {})) - set(old.get("apiErr", {}))
+            self.assertTrue(extra <= {"SCREENER_ADMIN"}, lang)
+            new.get("apiErr", {}).pop("SCREENER_ADMIN", None)
             self.assertEqual(old, new, lang)
 
 

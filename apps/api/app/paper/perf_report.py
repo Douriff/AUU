@@ -152,13 +152,25 @@ def attribution(runs: list, fills: list, adjustments: list, risk_fills: list, fu
 
 def build(runner, funding_fn: Optional[FundingFn] = None) -> dict:
     led = runner.ledger
-    runs = led.runs()
-    start_nav = float(led.meta("start_nav") or runner.start_nav)
+    gap = led.latest_gap()
+    all_runs = led.runs()
+    if gap is not None:
+        floor = int(gap["gap_to"])
+        runs = [row for row in all_runs if int(row["day"]) > floor]
+        start_nav = float(gap["next_start_nav"])
+    else:
+        runs = all_runs
+        start_nav = float(led.meta("start_nav") or runner.start_nav)
     days, rets = [int(x["day"]) for x in runs], [float(x["ret"]) for x in runs]
+    day_set = {int(x["day"]) for x in runs}
     with led._lock:
-        fills = led._db.execute("SELECT * FROM fills").fetchall()
-        adjs = led._db.execute("SELECT * FROM adjustments ORDER BY ts").fetchall()
-        rfills = led._db.execute("SELECT * FROM risk_fills").fetchall()
+        fills = list(led._db.execute("SELECT * FROM fills").fetchall())
+        adjs = list(led._db.execute("SELECT * FROM adjustments ORDER BY ts").fetchall())
+        rfills = list(led._db.execute("SELECT * FROM risk_fills").fetchall())
+    if gap is not None:
+        fills = [row for row in fills if int(row["day"]) in day_set]
+        adjs = [row for row in adjs if int(row["day"]) in day_set]
+        rfills = [row for row in rfills if int(row["ts"]) // DAY_MS * DAY_MS in day_set]
     ci = None
     if len(rets) >= 30:
         lo, hi = stats.boot_ci(rets, rng=stats.StdRng(7))  # same block bootstrap as Go/No-Go (annualized mean, 95%)
@@ -169,5 +181,12 @@ def build(runner, funding_fn: Optional[FundingFn] = None) -> dict:
         "metrics": metrics(days, rets), "monthly": monthly(days, rets),
         "drawdown": drawdown_curve(days, rets, start_nav),
         "attribution": attribution(runs, fills, adjs, rfills, funding_fn),
-        "note": "纸面账本（PAPER），实盘锁定。指标只是描述，Go/No-Go 以页顶判定为准（≥250 天且 CI 下限 > 0、跑赢国债）。样本少于 30 天时比率没有统计意义。",
+        "gap": None if gap is None else {
+            "from": ms_day(int(gap["gap_from"])), "to": ms_day(int(gap["gap_to"])),
+            "days": int((int(gap["gap_to"]) - int(gap["gap_from"])) // DAY_MS) + 1,
+            "missing": True, "pending": not runs,
+            "prevNav": None if gap["prev_nav"] is None else float(gap["prev_nav"]),
+            "nextStartNav": start_nav,
+        },
+        "note": "纸面账本（PAPER），实盘锁定。指标只是描述，Go/No-Go 以页顶判定为准（≥250 天且 CI 下限 > 0、跑赢国债）。样本少于 30 天时比率没有统计意义。有封存缺口时，指标只属于缺口之后的新段。",
     }

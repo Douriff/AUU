@@ -10,9 +10,10 @@ final values, the runner:
 
 The result is written to the system mainstream paper ledger
 ``data_dir()/mainstream_strategy.sqlite`` in one transaction per day; ``day`` is the primary key, so a
-restart, a second process, or a re-run of a day can never trade twice. Missed days
-(downtime) are replayed in order on the next tick (flagged ``catchup``) because every day
-only depends on data up to that day. Paper only: nothing here can reach an exchange order API.
+restart, a second process, or a re-run of a day can never trade twice. A gap of more than one day
+is not replayed and is not marked to today's prices. An admin seals it once; history stays, the
+missing days stay missing, and the next close opens a new epoch at ``start_nav`` with a flat book.
+``catchup="replay"`` is the opt-in backtest path. Paper only: nothing here can reach an exchange order API.
 
 Outages (production wiring, ``exec_px_fn`` set): the runner re-checks every minute until the data
 is final. A rebalance booked more than ``AUU_STRATEGY_ON_TIME_MIN`` (15) minutes after the close is
@@ -112,6 +113,17 @@ CREATE TABLE IF NOT EXISTS run_exec (
   prices TEXT,                       -- late: execution price per coin (fills use these)
   drift_funding TEXT,                -- late: funding settled between the close and execution, on the held weights
   reason TEXT                        -- what the runner was waiting for before it could book
+);
+CREATE TABLE IF NOT EXISTS ledger_gaps (
+  id INTEGER PRIMARY KEY,
+  gap_from INTEGER NOT NULL,
+  gap_to INTEGER NOT NULL,
+  sealed_at INTEGER NOT NULL,
+  sealed_by TEXT NOT NULL,
+  note TEXT NOT NULL,
+  prev_day INTEGER,
+  prev_nav REAL,
+  next_start_nav REAL NOT NULL
 );
 """
 
@@ -214,6 +226,56 @@ class StrategyLedger:
     def exec_rows(self, limit: int = 1000) -> list[sqlite3.Row]:
         with self._lock:
             return self._db.execute("SELECT * FROM run_exec ORDER BY day DESC LIMIT ?", (limit,)).fetchall()
+
+    def gaps(self) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._db.execute("SELECT * FROM ledger_gaps ORDER BY id").fetchall()
+
+    def latest_gap(self) -> Optional[sqlite3.Row]:
+        rows = self.gaps()
+        return rows[-1] if rows else None
+
+    def active_runs(self) -> list[sqlite3.Row]:
+        """Runs after the newest sealed gap. With no gap, every historical run."""
+        runs = self.runs()
+        gap = self.latest_gap()
+        if gap is None:
+            return runs
+        floor = int(gap["gap_to"])
+        return [row for row in runs if int(row["day"]) > floor]
+
+    def seal_gap(self, *, gap_from: int, gap_to: int, sealed_at: int, sealed_by: str, note: str,
+                 prev_day: Optional[int], prev_nav: Optional[float], next_start_nav: float) -> tuple[sqlite3.Row, str]:
+        """Record a missing range. Does not insert runs or fills. Returns (row, created|extended|replayed)."""
+        with self._lock:
+            db = self._db
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                existing = db.execute(
+                    "SELECT * FROM ledger_gaps WHERE gap_from=? ORDER BY id DESC LIMIT 1", (int(gap_from),)
+                ).fetchone()
+                if existing is not None and int(existing["gap_to"]) >= int(gap_to):
+                    db.execute("ROLLBACK")
+                    return existing, "replayed"
+                if existing is not None:
+                    db.execute(
+                        "UPDATE ledger_gaps SET gap_to=?, sealed_at=?, sealed_by=?, note=? WHERE id=?",
+                        (int(gap_to), int(sealed_at), sealed_by, note, int(existing["id"])),
+                    )
+                    row = db.execute("SELECT * FROM ledger_gaps WHERE id=?", (int(existing["id"]),)).fetchone()
+                    db.execute("COMMIT")
+                    return row, "extended"
+                db.execute(
+                    "INSERT INTO ledger_gaps(gap_from, gap_to, sealed_at, sealed_by, note, prev_day, prev_nav, next_start_nav)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
+                    (int(gap_from), int(gap_to), int(sealed_at), sealed_by, note, prev_day, prev_nav, float(next_start_nav)),
+                )
+                row = db.execute("SELECT * FROM ledger_gaps WHERE id=last_insert_rowid()").fetchone()
+                db.execute("COMMIT")
+                return row, "created"
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def universe_changes(self) -> list[sqlite3.Row]:
         with self._lock:
@@ -340,6 +402,24 @@ def _file_lock(path: Path):
         fh.close()
 
 
+def _gap_doc(row: sqlite3.Row) -> dict[str, Any]:
+    span = int((int(row["gap_to"]) - int(row["gap_from"])) // DAY_MS) + 1
+    return {
+        "from": ms_day(int(row["gap_from"])),
+        "to": ms_day(int(row["gap_to"])),
+        "fromMs": int(row["gap_from"]),
+        "toMs": int(row["gap_to"]),
+        "days": span,
+        "missing": True,
+        "sealedAt": int(row["sealed_at"]),
+        "sealedBy": row["sealed_by"],
+        "note": row["note"],
+        "prevDay": ms_day(int(row["prev_day"])) if row["prev_day"] is not None else None,
+        "prevNav": None if row["prev_nav"] is None else float(row["prev_nav"]),
+        "nextStartNav": float(row["next_start_nav"]),
+    }
+
+
 class StrategyRunner:
     def __init__(
         self,
@@ -351,6 +431,7 @@ class StrategyRunner:
         cost: Optional[CostModel] = None,
         start_nav: Optional[float] = None,
         max_catchup_days: int = 30,
+        catchup: str = "refuse",
         exchange_fn: Callable[[], Optional[str]] = lambda: None,
         universe_fn: Callable[[], dict] = lambda: {},
         now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
@@ -380,6 +461,8 @@ class StrategyRunner:
         self.cost = cost or CostModel()
         self.start_nav = float(start_nav if start_nav is not None else _env_float("AUU_STRATEGY_START_USDT", 10_000.0))
         self.max_catchup_days = max_catchup_days
+        self.catchup = "replay" if catchup == "replay" else "refuse"
+        self.resume_required = False
         self.now_ms = now_ms
         self.waiting = ""
         self.last_error = ""
@@ -417,17 +500,49 @@ class StrategyRunner:
             self.last_tick_ms = self.now_ms()
             self._tick_lock.release()
 
-    def _tick(self) -> list[int]:
+    def _schedule(self) -> tuple[list[int], bool, str]:
+        """Days to book, whether the first of them opens a new epoch, or a hold reason.
+
+        More than one missing day is not booked unless ``catchup`` is ``replay``. A sealed gap
+        is never filled; the next close after ``gap_to`` starts flat at ``start_nav``.
+        """
         due = self.due_day()
         last = self.ledger.last_run()
         last_day = int(last["day"]) if last else None
+        seal = self.ledger.latest_gap()
+        floor = int(seal["gap_to"]) if seal is not None else None
+        if floor is not None and (last_day is None or last_day <= floor):
+            start = floor + DAY_MS
+            if due < start:
+                return [], False, f"gap sealed through {ms_day(floor)}; waiting for the next close"
+            days = list(range(start, due + 1, DAY_MS))
+            hold = self._gap_hold(days)
+            return ([], False, hold) if hold else (days, True, "")
         if last_day is not None and last_day >= due:
-            self.waiting = ""
-            return []
+            return [], False, ""
         days = [due] if last_day is None else list(range(last_day + DAY_MS, due + 1, DAY_MS))
+        hold = self._gap_hold(days)
+        return ([], False, hold) if hold else (days, False, "")
+
+    def _gap_hold(self, days: list[int]) -> str:
         if len(days) > self.max_catchup_days:
-            self.waiting = f"missed {len(days)} days (> {self.max_catchup_days}); manual review needed before replaying"
+            return f"missed {len(days)} days (> {self.max_catchup_days}); manual review needed before replaying"
+        if len(days) > 1 and self.catchup != "replay":
+            return f"gap of {len(days)} days is not replayed; admin resume required before any forward day"
+        return ""
+
+    def _tick(self) -> list[int]:
+        due = self.due_day()
+        days, fresh_first, hold = self._schedule()
+        if hold:
+            self.waiting = hold
+            self.resume_required = "resume" in hold or "not replayed" in hold
             return []
+        if not days:
+            self.waiting = ""
+            self.resume_required = False
+            return []
+        self.resume_required = False
         ok, reason = self.ready_fn(due)
         if not ok:
             self._wait(f"waiting for {ms_day(due)} data: {reason}" + self._late_hint(days[0]))
@@ -448,7 +563,8 @@ class StrategyRunner:
                 if px is None:
                     waiting = self.waiting
                     break  # no fresh price yet: never trade on an old one; retry next tick (until the cutoff)
-            if not self._run_day(panel, panel.days.index(d), catchup=d != due, mode=mode, exec_px=px):
+            if not self._run_day(panel, panel.days.index(d), catchup=d != due, mode=mode, exec_px=px,
+                                 fresh_epoch=fresh_first and d == days[0]):
                 break  # someone else wrote it; re-read on the next tick
             written.append(d)
         self.waiting = waiting
@@ -500,9 +616,12 @@ class StrategyRunner:
         return {"prices": prices, "ts": int(m.get("ts") or self.now_ms()), "exchange": m.get("exchange")}
 
     # ---- one day -----------------------------------------------------------------
-    def _run_day(self, panel: Panel, i: int, *, catchup: bool, mode: str = "close", exec_px: Optional[dict] = None) -> bool:
+    def _run_day(self, panel: Panel, i: int, *, catchup: bool, mode: str = "close", exec_px: Optional[dict] = None,
+                 fresh_epoch: bool = False) -> bool:
         day = panel.days[i]
-        last = self.ledger.last_run()
+        stored = self.ledger.last_run()
+        # A new epoch keeps the old row for history but does not inherit its weights or NAV.
+        last = None if fresh_epoch else stored
         coins = list(panel.coins)
         prev_w = json.loads(last["weights"]) if last else {}
         nav_open = float(last["nav_close"]) if last else self.start_nav
@@ -616,7 +735,7 @@ class StrategyRunner:
                     "prices": json.dumps(px_exec) if mode == "late" else None,
                     "drift_funding": json.dumps(f_drift) if mode == "late" else None,
                     "reason": self._wait_reason or None}
-        ok = self.ledger.commit_day(run, fills, expect_prev=int(last["day"]) if last else None, meta=meta, universe_change=change,
+        ok = self.ledger.commit_day(run, fills, expect_prev=int(stored["day"]) if stored else None, meta=meta, universe_change=change,
                                     risk_events=r_events, risk_state=r_state, exec_row=xrow)
         if ok:
             tag = {"late": " (延迟补做 at execution prices, %.0f min late)" % xrow["delay_min"] if xrow else "",
@@ -881,21 +1000,40 @@ class StrategyRunner:
     def status(self) -> dict[str, Any]:
         now = self.now_ms()
         last = self.ledger.last_run()
-        if last:
-            since = int(last["day"]) + DAY_MS  # the close the last rebalance traded at
+        gap = self.ledger.latest_gap()
+        sealed_open = gap is not None and (last is None or int(last["day"]) <= int(gap["gap_to"]))
+        if sealed_open:
+            # The old segment's age is not a stall. The clock starts at the next close.
+            nxt = int(gap["gap_to"]) + DAY_MS
+            scheduled_close = nxt + DAY_MS
+            if now < scheduled_close:
+                hours, stalled, phase = 0.0, False, "waiting_close"
+            else:
+                hours = max(0.0, (now - scheduled_close) / 3_600_000)
+                stalled = hours > STALL_HOURS
+                phase = "stalled" if stalled else "waiting_data"
         else:
-            since = int(self.ledger.meta("created_at") or now)
-        hours = max(0.0, (now - since) / 3_600_000)
-        stalled = hours > STALL_HOURS
+            nxt = (int(last["day"]) if last else self.due_day() - DAY_MS) + DAY_MS
+            if last:
+                since = int(last["day"]) + DAY_MS
+            else:
+                since = int(self.ledger.meta("created_at") or now)
+            hours = max(0.0, (now - since) / 3_600_000)
+            stalled = hours > STALL_HOURS
+            phase = "stalled" if stalled else "ok"
         return {
             "active": True,
             "strategy": self.strategy.name,
             "lastDay": ms_day(int(last["day"])) if last else None,
+            "historyLastDay": ms_day(int(last["day"])) if last else None,
             "lastRunAt": int(last["ran_at"]) if last else None,
-            "nextDueDay": ms_day((int(last["day"]) if last else self.due_day() - DAY_MS) + DAY_MS),
+            "nextDueDay": ms_day(nxt),
+            "gap": _gap_doc(gap) if gap is not None else None,
+            "resumeRequired": bool(self.resume_required),
             "hoursSinceRebalance": round(hours, 2),
             "stallHours": STALL_HOURS,
             "stalled": stalled,
+            "phase": phase,
             "idleMin": int(hours * 60),
             "reason": ("no rebalance for %.1fh (> %gh)" % (hours, STALL_HOURS)) if stalled else "",
             "waiting": self.waiting,
@@ -909,9 +1047,11 @@ class StrategyRunner:
     def outage_policy(self) -> dict:
         return {"lateMode": self.exec_px_fn is not None, "onTimeMin": round(self.on_time_ms / 60_000, 1),
                 "cutoffBJ": bj_hm(self.cutoff_ms)[-5:] if self.exec_px_fn is not None else None,
+                "catchup": self.catchup,
                 "rule": ("收盘后 %d 分钟内按收盘价调仓；之后到北京时间 %s 前为“延迟补做”，按执行时的最新价格记账；"
-                         "过截止时间当日不调仓、保持原仓位（按收盘价估值）。断网期间每分钟重查，不会用旧价下单，也不会重复调仓。")
-                        % (round(self.on_time_ms / 60_000), bj_hm(self.cutoff_ms)[-5:]) if self.exec_px_fn is not None else
+                         "过截止时间当日不调仓、保持原仓位（按收盘价估值）。断网期间每分钟重查，不会用旧价下单，也不会重复调仓。"
+                         "超过一个交易日的缺口不补记，需管理员封存后从下一根收盘重新开始。")
+                        % (round(self.on_time_ms / 60_000), bj_hm(self.cutoff_ms)[-5:]) if self.catchup != "replay" else
                         "回放模式：错过的日子按各自收盘价补记"}
 
     @staticmethod
@@ -939,9 +1079,10 @@ class StrategyRunner:
             return int(self.ledger._db.execute("SELECT COUNT(*) FROM runs").fetchone()[0])
 
     def go_no_go(self, runs: Optional[list] = None) -> dict[str, Any]:
-        runs = self.ledger.runs() if runs is None else runs
+        runs = self.ledger.active_runs() if runs is None else runs
         n = len(runs)
-        if self._go_cache and self._go_cache[0] == n:
+        cache_key = (n, int(runs[0]["day"]) if n else 0)
+        if self._go_cache and self._go_cache[0] == cache_key:
             return self._go_cache[1]
         base = {"standard": "daily_returns", "days": n, "minDays": GO_MIN_DAYS, "tbill": stats.TBILL}
         if n < GO_MIN_DAYS:
@@ -961,30 +1102,44 @@ class StrategyRunner:
                    "reasons": [] if go else (["CI_LO"] if not ci_ok else []) + (["TBILL"] if not tb_ok else []),
                    "stats": {k: (None if isinstance(s.get(k), float) and s[k] != s[k] else s.get(k))
                              for k in ("ann_mean", "cagr", "ci_lo", "ci_hi", "sharpe", "mdd", "excess_vs_tbill")}}
-        self._go_cache = (n, out)
+        self._go_cache = (cache_key, out)
         return out
 
     def summary(self) -> dict[str, Any]:
         runs = self.ledger.runs()
+        gap_rows = self.ledger.gaps()
+        floor = max((int(g["gap_to"]) for g in gap_rows), default=None)
+        active = [x for x in runs if floor is None or int(x["day"]) > floor]
+        epoch_nav = float(gap_rows[-1]["next_start_nav"]) if gap_rows else None
         start_nav = float(self.ledger.meta("start_nav") or self.start_nav)
-        curve, btc0 = [], None
+        curve = []
         xmodes = {int(x["day"]): x["mode"] for x in self.ledger.exec_rows(100_000)}
-        for j, x in enumerate(runs):
+        epoch_i: dict[int, int] = {}
+        epoch_btc: dict[int, float] = {}
+        for x in runs:
             closes = json.loads(x["closes"])
             btc = closes.get("BTC")
-            if btc0 is None and btc:
-                btc0 = btc
+            epoch = 1 if floor is None or int(x["day"]) <= floor else 1 + sum(1 for g in gap_rows if int(g["gap_to"]) < int(x["day"]))
+            j = epoch_i.get(epoch, 0)
+            epoch_i[epoch] = j + 1
+            if epoch not in epoch_btc and btc:
+                epoch_btc[epoch] = float(btc)
+            base = epoch_nav if epoch > 1 and epoch_nav else start_nav
+            b0 = epoch_btc.get(epoch)
             curve.append({
                 "day": ms_day(int(x["day"])), "ts": int(x["day"]), "nav": float(x["nav_close"]),
-                "strategy": float(x["nav_close"]) / start_nav, "ret": float(x["ret"]),
+                "strategy": float(x["nav_close"]) / base, "ret": float(x["ret"]),
                 "cost": float(x["cost"]), "funding": float(x["funding"]), "gross": float(x["gross_after"]),
-                "btc": (btc / btc0) if (btc and btc0) else None,
+                "btc": (float(btc) / b0) if (btc and b0) else None,
                 "tbill": (1 + stats.TBILL) ** (j / 365), "catchup": bool(x["catchup"]),
                 "exec": xmodes.get(int(x["day"]), "close"),
+                "epoch": epoch,
+                "breakBefore": epoch > 1 and j == 0,
             })
         positions = []
-        if runs:
-            last = runs[-1]
+        book = active[-1] if active else None
+        if book is not None:
+            last = book
             nav = float(last["nav_close"])
             closes = json.loads(last["closes"])
             for c, w in sorted(json.loads(last["weights"]).items(), key=lambda kv: -abs(kv[1])):
@@ -992,15 +1147,34 @@ class StrategyRunner:
                 positions.append({"coin": c, "weight": w, "notional": w * nav, "price": px,
                                   "qty": (w * nav / px) if px else None,
                                   "target": json.loads(last["targets"]).get(c)})
-        bench = {}
-        if curve:
-            bench = {"strategy": curve[-1]["strategy"] - 1, "btc": (curve[-1]["btc"] - 1) if curve[-1]["btc"] else None,
-                     "tbill": curve[-1]["tbill"] - 1}
+        pending = bool(gap_rows) and not active
+        current_epoch = (1 + len(gap_rows)) if pending else (curve[-1]["epoch"] if curve else 1)
+        current_pts = [p for p in curve if p["epoch"] == current_epoch]
+        if not gap_rows and not current_pts:
+            bench = {}
+        elif pending or not current_pts:
+            bench = {"strategy": None, "btc": None, "tbill": None}
+        else:
+            tail = current_pts[-1]
+            bench = {"strategy": tail["strategy"] - 1, "btc": (tail["btc"] - 1) if tail["btc"] else None,
+                     "tbill": tail["tbill"] - 1}
+        hist_pts = [p for p in curve if p["epoch"] == 1] if gap_rows else []
+        history = None if not gap_rows else {
+            "epoch": 1,
+            "days": len(hist_pts),
+            "endDay": hist_pts[-1]["day"] if hist_pts else None,
+            "endNav": hist_pts[-1]["nav"] if hist_pts else None,
+            "startNav": start_nav,
+            "strategy": (hist_pts[-1]["strategy"] - 1) if hist_pts else None,
+        }
+        display_start = float(epoch_nav) if gap_rows and epoch_nav is not None else start_nav
+        display_nav = float(book["nav_close"]) if book is not None else display_start
         try:
             uni = dict(self.universe_fn() or {})
         except Exception as exc:
             uni = {"error": f"{type(exc).__name__}: {exc}"[:200]}
-        current = json.loads(runs[-1]["universe"]) if runs and runs[-1]["universe"] else (list(json.loads(runs[-1]["targets"])) if runs else [])
+        shown = book if book is not None else (None if gap_rows else (runs[-1] if runs else None))
+        current = json.loads(shown["universe"]) if shown is not None and shown["universe"] else (list(json.loads(shown["targets"])) if shown is not None else [])
         uni["current"] = current
         uni["changes"] = [{"day": ms_day(int(x["day"])), "coins": json.loads(x["coins"]), "prev": json.loads(x["prev"]),
                            "recordedAt": int(x["recorded_at"]), "note": x["note"]} for x in self.ledger.universe_changes()]
@@ -1012,15 +1186,28 @@ class StrategyRunner:
             "ledger": "mainstream_strategy.sqlite",
             "mode": "paper",
             "live": {"enabled": False, "reason": "LIVE_API_LOCKED", "message": "实盘未开启"},
-            "startNav": start_nav,
-            "nav": curve[-1]["nav"] if curve else start_nav,
+            "startNav": display_start,
+            "nav": display_nav,
+            "segment": {
+                "epoch": current_epoch,
+                "days": len(active),
+                "pending": pending,
+                "startNav": display_start,
+                "nav": display_nav,
+                "lastDay": None if pending or not current_pts else current_pts[-1]["day"],
+                "lastRet": None if pending or not current_pts else current_pts[-1]["ret"],
+                "totals": bench,
+            },
+            "history": history,
+            "gaps": [_gap_doc(g) for g in gap_rows],
+            "historyDays": len(runs) - len(active),
             "cost": {"taker": self.cost.taker, "slippage": self.cost.slippage, "slippageDefault": self.cost.slippage_default,
                      "band": BAND, "funding": "store funding rates, longs pay positive"},
             "curve": curve,
             "positions": positions,
-            "fills": [dict(r) for r in self.ledger.fills(30)],
+            "fills": [dict(r) for r in self.ledger.fills(30) if floor is None or int(r["day"]) > floor],
             "totals": bench,
-            "goNoGo": self.go_no_go(runs),
+            "goNoGo": {**self.go_no_go(active), "historyDays": len(runs) - len(active)},
             "status": self.status(),
             "risk": self.risk_summary(),
             "execShadow": _exec_shadow_summary(),
@@ -1233,6 +1420,58 @@ def not_started_status() -> dict[str, Any]:
             "reason": "runner never started" if stalled else "", "waiting": "runner starting"}
 
 
+RESUME_CONFIRM = "resume-forward"
+
+
+def resume_forward(*, now_ms: int, by: str, note: str = "", strategy_path: Optional[Path | str] = None,
+                   h2_path: Optional[Path | str] = None) -> dict[str, Any]:
+    """Seal the strategy gap and the same range on H2. Does not insert runs, fills, or H2 days."""
+    actor = (by or "").strip()
+    text = (note or "").strip()
+    if not actor or len(actor) > 64:
+        raise ValueError("BAD_ACTOR")
+    if len(text) > 200:
+        raise ValueError("BAD_NOTE")
+    led = StrategyLedger(strategy_path, now_ms=lambda: now_ms)
+    try:
+        with _file_lock(led.path.with_suffix(".lock")) as got:
+            if not got:
+                return {"ok": False, "code": "BUSY", "message": "策略账本正被别的进程使用"}
+            last = led.last_run()
+            if last is None:
+                return {"ok": False, "code": "NO_HISTORY", "message": "没有可保留的策略历史，未写入缺口"}
+            due = now_ms // DAY_MS * DAY_MS - DAY_MS
+            last_day = int(last["day"])
+            if due <= last_day:
+                return {"ok": False, "code": "NO_GAP", "message": "账本已到最新收盘，没有需要封存的缺口"}
+            runs_before = len(led.runs())
+            fills_before = int(led._db.execute("SELECT COUNT(*) FROM fills").fetchone()[0])
+            row, how = led.seal_gap(
+                gap_from=last_day + DAY_MS, gap_to=due, sealed_at=now_ms, sealed_by=actor, note=text or "sealed gap",
+                prev_day=last_day, prev_nav=float(last["nav_close"]), next_start_nav=float(led.meta("start_nav") or _env_float("AUU_STRATEGY_START_USDT", 10_000.0)),
+            )
+            if len(led.runs()) != runs_before or int(led._db.execute("SELECT COUNT(*) FROM fills").fetchone()[0]) != fills_before:
+                raise RuntimeError("resume changed historical runs")
+            h2_doc = _seal_h2(int(row["gap_from"]), int(row["gap_to"]), now_ms, actor, text or "sealed gap", h2_path)
+            return {"ok": True, "how": how, "gap": _gap_doc(row), "runs": runs_before, "fills": fills_before, "h2": h2_doc,
+                    "liveEnabled": False}
+    finally:
+        led.close()
+
+
+def _seal_h2(gap_from: int, gap_to: int, now_ms: int, actor: str, note: str, path: Optional[Path | str]) -> dict[str, Any]:
+    from app.paper.shadow_h2 import H2Ledger
+
+    led = H2Ledger(path)
+    try:
+        days_before = len(led.rows())
+        row, how = led.seal_gap(gap_from=gap_from, gap_to=gap_to, sealed_at=now_ms, sealed_by=actor, note=note,
+                                prev_day=None, prev_nav=None, next_start_nav=float(led.meta("start_nav") or 10_000.0))
+        return {"how": how, "days": days_before, "daysAfter": len(led.rows()), "gapTo": ms_day(int(row["gap_to"]))}
+    finally:
+        led.close()
+
+
 def get_runner() -> StrategyRunner:
     global _runner
     with _rlock:
@@ -1241,7 +1480,8 @@ def get_runner() -> StrategyRunner:
                                      exchange_fn=_store_exchange, universe_fn=_store_universe,
                                      risk_limits=RiskLimits() if risk.risk_enabled() else None,
                                      marks_fn=_store_marks, funding_fn=_store_funding, on_commit=_exec_shadow_hook(),
-                                     exec_px_fn=_store_exec_prices if late_rebalance_enabled() else None)
+                                     exec_px_fn=_store_exec_prices if late_rebalance_enabled() else None,
+                                     catchup="refuse")
         return _runner
 
 

@@ -10,7 +10,9 @@ server for the seconds of a run and is removed afterwards.
   credentials), `/etc/auu/auu.env`, any key.
 - Method: on the server, as `auu`, `sqlite3.Connection.backup()` (online backup API, consistent under WAL while the
   API runs) → `PRAGMA integrity_check` → SHA-256 → SFTP to the box → hash re-checked → gzip → `MANIFEST.json`
-  (hashes, sizes, per-table row counts, server git rev) + `SHA256SUMS`.
+  (hashes, sizes, per-table row counts, server rev) + `SHA256SUMS`. The rev is `git rev-parse --short HEAD`
+  when `/opt/auu/.git` exists, otherwise the hex token in `/opt/auu/COMMIT`. A missing or non-hex COMMIT is recorded
+  as missing; the script does not invent a revision.
 - Every run ends with a restore drill (`RESTORE_TEST.json`): hashes → decompress to a temp dir → integrity_check →
   row counts equal the manifest → the app's own `StrategyLedger` opens the restored ledger (runs, last day, NAV, fills).
 - Retention: 30 days (`AUU_BACKUP_KEEP_DAYS`); the newest snapshot is never pruned.
@@ -22,18 +24,30 @@ Box-local config `auu_backup.env` next to the installed scripts (not committed):
 
 ```
 AUU_BACKUP_HOST=<server ip>
-AUU_BACKUP_KEY=<path to the existing ssh private key>
+AUU_BACKUP_PORT=22                      # omit for 22; the new host uses 16683
+AUU_BACKUP_USER=root                    # omit for root; restricted account is auubackup
+AUU_BACKUP_KEY=<path to this backup's ssh private key>
 AUU_BACKUP_KNOWN_HOSTS=<pinned known_hosts>
 AUU_BACKUP_DIR=<backup dir>
 AUU_BACKUP_PY=<python with paramiko>
 AUU_BACKUP_APP=<checkout>/apps/api        # for the restore drill
 ```
 
+Port 22 pins the bare host name. Any other port pins exactly `[host]:port` and does not reuse the port-22 line.
+The pinned file is the only host-key source. See `ssh-access.md` for the restricted account, the new-host
+values, and how to replace the script under the scheduler that is already running.
+
 ```
-cp ops/backup/auu_backup.{py,sh} <bin>/ && <bin>/auu_backup.sh start   # install / start
+cp ops/backup/auu_backup.py ops/backup/auu_remote_snapshot.py ops/backup/auu_backup.sh <bin>/
+<bin>/auu_backup.sh stop || true    # first install: kill the pid printed in backup.log, then start
+<bin>/auu_backup.sh start
 <bin>/auu_backup.sh now                                                 # one backup now
 <bin>/auu_backup.sh list | verify [DIR] | restore-test [DIR]            # via the same config
 ```
+
+`users.json` and `AUU_SESSION_SECRET` are not in this backup. Their encrypted bundle and the
+check/restore steps are in `identity-backup.md` (`identity_backup.py`). Do not commit the
+bundle or the passphrase.
 
 Manual restore of one file (server, API stopped, outside 07:30–08:45, keep the current file first):
 `gunzip -c mainstream_strategy.sqlite.gz > /tmp/x.sqlite`, check `sha256sum` against `SHA256SUMS`, copy to

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.gate import AuthGateMiddleware
 from app.security.shield import ApiHeadersMiddleware, ShieldMiddleware, reset_shield
 from app.legacy import legacy_pump_enabled
-from app.routes import airdrops, auth, chart_drawings, events, exchange, health, live, mainstream, mainstream_paper, pnl, mainstream_shadow, mainstream_signal, mainstream_strategy, majors, news, points, points_trading, price_alerts as price_alerts_routes, stats, status, ws
+from app.routes import airdrops, auth, chart_drawings, events, exchange, health, live, mainstream, mainstream_paper, pnl, mainstream_shadow, mainstream_signal, mainstream_strategy, majors, news, points, points_trading, price_alerts as price_alerts_routes, screener, stats, status, strategy_resume, ws
 from app.routes.envelope import API_VERSION
 
 # Tests set AUU_SKIP_DOTENV so a developer .env (AUTO_PAPER_ORDERS=true)
@@ -205,7 +205,7 @@ def create_app(legacy: bool | None = None) -> FastAPI:
         response.headers["X-Api-Version"] = API_VERSION
         return response
 
-    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, airdrops, chart_drawings, price_alerts_routes, points, points_trading, exchange):
+    for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, airdrops, chart_drawings, price_alerts_routes, points, points_trading, exchange, screener, strategy_resume):
         app.include_router(mod.router)
     from app.ai_review.routes import router as ai_review_router
 
@@ -239,6 +239,8 @@ def root(legacy: bool = False):
                     "paperAccount": "GET /api/v1/mainstream/paper/account?symbol=",
                     "paperOrder": "POST /api/v1/mainstream/paper/orders (paper only; login required)",
                     "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go, risk caps)",
+                    "strategyResume": "POST /api/v1/strategy/resume (admin, confirm resume-forward; seals a gap, does not backfill)",
+                    "aiReview": "GET /api/v1/ai-review (admin lab; no trading)",
                     "shadowS3": "GET /api/v1/mainstream/shadow/s3 (shadow hypothesis, no capital, not evidence)",
                     "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
                     "auuSignal": "GET /api/v1/mainstream/signal?symbol=&tf=1d (auu_signal_v0 experimental overlay; shadow record-only)",

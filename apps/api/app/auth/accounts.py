@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import threading
 import time
 import uuid
@@ -27,7 +28,10 @@ _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
 _BOOKS: dict[str, PaperTradeJournal] = {}
 _ATTEMPTS: dict[str, list[float]] = {}
-_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch", "totp", "totp_code"}
+_HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch", "sessions", "totp", "totp_code"}
+# One cookie is one device. Logout revokes that device only; other devices stay until
+# revoke-others, a password change, or this cap drops the oldest.
+MAX_DEVICES = 8
 
 
 def reset_accounts() -> None:
@@ -323,6 +327,7 @@ def reset_password(email: str, code: str, new: str) -> dict[str, Any]:
     with _LOCK:
         user["password_hash"] = hash_password(new)
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
+        user["sessions"] = []
         _save()
     return _public(user)
 
@@ -345,6 +350,7 @@ def change_password(user_id: str, current: str, new: str, totp_code: str = "") -
                 raise ValueError("TOTP_BAD")
         user["password_hash"] = hash_password(new)
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
+        user["sessions"] = []
         _save()
 
 
@@ -363,7 +369,36 @@ def bump_epoch(user_id: str) -> None:
         raise ValueError("BAD_LOGIN")
     with _LOCK:
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
+        user["sessions"] = []
         _save()
+
+
+def _sessions(user: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for row in (user or {}).get("sessions") or []:
+        if isinstance(row, dict) and isinstance(row.get("id"), str) and row["id"]:
+            try:
+                issued = int(row.get("issued_ts") or 0)
+            except (TypeError, ValueError):
+                issued = 0
+            rows.append({"id": row["id"], "issued_ts": issued})
+    return rows
+
+
+def session_count(user_id: str) -> int:
+    return len(_sessions(user_by_id(user_id)))
+
+
+def revoke_session(user_id: str, sid: str) -> bool:
+    """Drop one device. Other devices of this user keep their cookies."""
+    user = user_by_id(user_id)
+    if user is None or not sid:
+        return False
+    with _LOCK:
+        before = _sessions(user)
+        user["sessions"] = [row for row in before if row["id"] != sid]
+        _save()
+        return len(user["sessions"]) != len(before)
 
 
 # Interface languages the web app ships (apps/web/src/i18n/locales/*.json).
@@ -534,9 +569,8 @@ def user_by_id(user_id: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def _token_sig(user_id: str, exp: str, epoch: int) -> str:
-    # Epoch 0 keeps the pre-epoch message so sessions issued before this change stay valid.
-    message = f"{user_id}.{exp}" if epoch <= 0 else f"{user_id}.{exp}.e{epoch}"
+def _token_sig(user_id: str, exp: str, sid: str, epoch: int) -> str:
+    message = f"{user_id}.{exp}.{sid}.e{epoch}"
     return hmac.new(_session_secret(), message.encode("utf-8"), sha256).hexdigest()
 
 
@@ -549,24 +583,38 @@ def _epoch_of(user_id: str) -> int:
 
 
 def issue_token(user_id: str) -> str:
+    """Issue one device cookie. Tokens without a device id are not accepted."""
+    user = user_by_id(user_id)
+    if user is None:
+        raise ValueError("BAD_LOGIN")
+    sid = secrets.token_hex(16)
+    with _LOCK:
+        rows = _sessions(user)
+        rows.append({"id": sid, "issued_ts": int(time.time() * 1000)})
+        if len(rows) > MAX_DEVICES:
+            rows = rows[-MAX_DEVICES:]
+        user["sessions"] = rows
+        _save()
     exp = str(int(time.time()) + 14 * 24 * 3600)
-    return f"{user_id}.{exp}.{_token_sig(user_id, exp, _epoch_of(user_id))}"
+    sig = _token_sig(user_id, exp, sid, _epoch_of(user_id))
+    return f"{user_id}.{exp}.{sid}.{sig}"
 
 
 def user_from_token(token: str) -> Optional[dict[str, Any]]:
     parts = (token or "").split(".")
-    if len(parts) != 3:
+    # Three-part cookies from before device ids cannot be revoked individually, so they are refused.
+    if len(parts) != 4:
         return None
-    user_id, exp, sig = parts
+    user_id, exp, sid, sig = parts
     try:
         if int(exp) < int(time.time()):
             return None
     except ValueError:
         return None
     user = user_by_id(user_id)
-    if user is None:
+    if user is None or not any(row["id"] == sid for row in _sessions(user)):
         return None
-    expected = _token_sig(user_id, exp, _epoch_of(user_id))
+    expected = _token_sig(user_id, exp, sid, _epoch_of(user_id))
     if not hmac.compare_digest(sig, expected):
         return None
     return user

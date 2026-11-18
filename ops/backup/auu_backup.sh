@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Box-side daily scheduler for auu_backup.py (the box has no cron). Single instance (flock).
-#   auu_backup.sh start | status | now | run | list | verify [DIR] | restore-test [DIR]
+#   auu_backup.sh start | stop | status | now | run | list | verify [DIR] | restore-test [DIR]
 # Daily at AUU_BACKUP_AT_BJ (default 09:30 Beijing: after the 08:00 rebalance and 08:30 digest,
 # outside the 07:30-08:45 no-touch window). A missed day (box down) runs at the next check.
 set -uo pipefail
@@ -18,7 +18,8 @@ mkdir -p "$(dirname "$LOG")"
 now() { "$PY" "$HERE/auu_backup.py" backup >>"$LOG" 2>&1; }
 loop() {
   exec 9>"$LOCK"; flock -n 9 || { echo "backup scheduler already running"; exit 0; }
-  echo "$(TZ=Asia/Shanghai date '+%F %T') scheduler started pid $$ (daily $AT BJ)" >>"$LOG"
+  echo $$ > "$DEST/.scheduler.pid"
+  echo "$(TZ=Asia/Shanghai date '+%F %T') scheduler started pid $$ (daily $AT BJ) host ${AUU_BACKUP_HOST:-unset} port ${AUU_BACKUP_PORT:-22} user ${AUU_BACKUP_USER:-root}" >>"$LOG"
   while true; do
     day=$(TZ=Asia/Shanghai date +%F); hm=$(TZ=Asia/Shanghai date +%H:%M)
     if [[ "$hm" > "$AT" || "$hm" == "$AT" ]] && [[ "$(cat "$STAMP" 2>/dev/null)" != "$day" ]]; then
@@ -29,11 +30,31 @@ loop() {
     sleep 60
   done
 }
+stop() {
+  pid=$(cat "$DEST/.scheduler.pid" 2>/dev/null || true)
+  if [ -z "${pid:-}" ]; then
+    echo "no scheduler pid file; stop the old loop with the pid from backup.log (scheduler started pid)" >&2
+    exit 1
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "backup scheduler NOT running"
+    rm -f "$DEST/.scheduler.pid"
+    exit 1
+  fi
+  cmd=$(ps -p "$pid" -o args= 2>/dev/null || true)
+  case "$cmd" in
+    *auu_backup.sh*) ;;
+    *) echo "pid $pid is not auu_backup.sh; not killing it" >&2; exit 1 ;;
+  esac
+  kill "$pid"
+  echo "stopped $pid"
+}
 case "${1:-status}" in
   start) setsid nohup "$0" run >/dev/null 2>&1 </dev/null & sleep 1; "$0" status ;;
+  stop) stop ;;
   run) loop ;;
   now) now; rc=$?; tail -n 3 "$LOG"; exit $rc ;;
   list|verify|restore-test) exec "$PY" "$HERE/auu_backup.py" "$@" ;;
   status) if flock -n "$LOCK" true 2>/dev/null; then echo "backup scheduler NOT running"; exit 1; else echo "backup scheduler running"; fi ;;
-  *) echo "usage: $0 start|status|now|run|list|verify|restore-test" >&2; exit 2 ;;
+  *) echo "usage: $0 start|stop|status|now|run|list|verify|restore-test" >&2; exit 2 ;;
 esac
