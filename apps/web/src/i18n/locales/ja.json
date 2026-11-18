@@ -985,7 +985,13 @@
       "state": "リバランス状態",
       "stalled": "{{h}} 時間停止",
       "ok": "正常 · {{h}} 時間前",
-      "running": "稼働 {{days}} 日 · {{h}} 時間超で警告"
+      "running": "稼働 {{days}} 日 · {{h}} 時間超で警告",
+      "waitingClose": "{{day}} の終値を待っています",
+      "awaitClose": "最初の終値を待っています（{{day}}）",
+      "gapTitle": "{{days}} 日分が欠測（{{from}} ～ {{to}}）",
+      "gapReset": "旧区間の最終純資産は {{oldNav}}、新区間の起点は {{newNav}}。模擬元本のリセットであり、この期間の損益ではありません。",
+      "gapHistory": "旧区間は残しています（{{days}} 日、{{day}} まで、累計 {{ret}}）。",
+      "waitingData": "{{day}} のデータ確定を待っています"
     },
     "goStd": "（基準：日次リターン {{min}} 日以上、ブートストラップ信頼区間の下限が0超、かつ T-bill を上回る）",
     "positions": "ポジション（{{n}}）",

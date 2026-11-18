@@ -985,7 +985,13 @@
       "state": "Rebalance status",
       "stalled": "Stalled {{h}}h",
       "ok": "OK · {{h}}h ago",
-      "running": "Running {{days}} days · alert after {{h}}h"
+      "running": "Running {{days}} days · alert after {{h}}h",
+      "waitingClose": "Waiting for the {{day}} close",
+      "awaitClose": "Waiting for the first close ({{day}})",
+      "gapTitle": "{{days}} days missing ({{from}} – {{to}})",
+      "gapReset": "The previous segment ended at {{oldNav}}. The new segment starts at {{newNav}}. That is a reset of simulated capital, not a profit or loss.",
+      "gapHistory": "The previous segment is kept ({{days}} days, through {{day}}, cumulative {{ret}}).",
+      "waitingData": "Waiting for the {{day}} data to finalize"
     },
     "goStd": "(criteria: ≥ {{min}} days of daily returns, bootstrap CI lower bound > 0 and beats T-bills)",
     "positions": "Positions ({{n}})",

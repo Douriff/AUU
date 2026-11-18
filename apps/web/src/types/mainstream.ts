@@ -227,6 +227,8 @@ export interface StrategyCurvePoint {
   btc: number | null;
   tbill: number;
   catchup: boolean;
+  epoch?: number;
+  breakBefore?: boolean;
 }
 export interface StrategyPosition {
   coin: string;
@@ -255,6 +257,8 @@ export interface StrategyStatus {
   lastDay: string | null;
   lastRunAt?: number | null;
   nextDueDay?: string;
+  historyLastDay?: string | null;
+  phase?: "ok" | "waiting_close" | "waiting_data" | "stalled";
   hoursSinceRebalance: number;
   stallHours: number;
   stalled: boolean;
@@ -292,11 +296,24 @@ export interface StrategySummary {
   live: { enabled: false; reason: string; message: string };
   startNav: number;
   nav: number;
+  segment?: {
+    epoch: number;
+    days: number;
+    pending: boolean;
+    startNav: number;
+    nav: number;
+    lastDay: string | null;
+    lastRet: number | null;
+    totals: { strategy?: number | null; btc?: number | null; tbill?: number | null };
+  };
+  history?: { epoch: number; days: number; endDay: string | null; endNav: number | null; startNav: number; strategy: number | null } | null;
+  gaps?: { from: string; to: string; days: number; missing: boolean; prevNav?: number | null; nextStartNav?: number }[];
+  historyDays?: number;
   cost: { taker: number; slippage: Record<string, number>; slippageDefault: number; band: number; funding: string };
   curve: StrategyCurvePoint[];
   positions: StrategyPosition[];
   fills: StrategyFill[];
-  totals: { strategy?: number; btc?: number | null; tbill?: number };
+  totals: { strategy?: number | null; btc?: number | null; tbill?: number | null };
   goNoGo: StrategyGoNoGo;
   status: StrategyStatus;
   risk?: StrategyRisk;
@@ -504,6 +521,7 @@ export interface StrategyReport {
     segmentsFromAdjustments: number;
   };
   note: string;
+  gap?: { from: string; to: string; days: number; missing: boolean; pending: boolean; prevNav: number | null; nextStartNav: number } | null;
 }
 
 export interface MarketRow {

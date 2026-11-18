@@ -985,7 +985,13 @@
       "state": "Rebalancing-Status",
       "stalled": "Stillstand {{h}} h",
       "ok": "OK · vor {{h}} h",
-      "running": "Läuft seit {{days}} Tagen · Alarm nach {{h}} h"
+      "running": "Läuft seit {{days}} Tagen · Alarm nach {{h}} h",
+      "waitingClose": "Warten auf den Schluss {{day}}",
+      "awaitClose": "Warten auf den ersten Schluss ({{day}})",
+      "gapTitle": "{{days}} Tage fehlen ({{from}} – {{to}})",
+      "gapReset": "Das alte Segment endete bei {{oldNav}}. Das neue beginnt bei {{newNav}}. Das ist zurückgesetztes Simulationskapital, kein Gewinn oder Verlust.",
+      "gapHistory": "Das alte Segment bleibt ({{days}} Tage, bis {{day}}, kumuliert {{ret}}).",
+      "waitingData": "Warten auf die Daten zum {{day}}"
     },
     "goStd": "(Kriterien: ≥ {{min}} Tage Tagesrenditen, Bootstrap-CI-Untergrenze > 0 und besser als T-Bills)",
     "positions": "Positionen ({{n}})",

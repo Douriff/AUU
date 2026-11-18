@@ -1818,6 +1818,7 @@ code.hl { color: var(--accent); }
 .strat-go { margin: 0.55rem 0.9rem 0; font-size: 0.8rem; color: #c6c6ce; }
 .strat-go.lamp-green { color: #3ee08f; }
 .strat-go.lamp-red { color: #ff5d5d; }
+.strat-gap { margin: 10px 14px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--warn, #c9a227) 12%, transparent); font-size: 12.5px; line-height: 1.45; }
 .strat-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem 1rem; padding: 0.7rem 0.9rem 0.2rem; }
 .strat-kpis small { font-size: 0.68rem; }
 .strat-legend { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; padding: 0.3rem 0.9rem 0; font-size: 0.72rem; color: #8d8d96; }

@@ -58,6 +58,13 @@ export function PerformancePage() {
         <p>{rep ? t("perf.sub", { strategy: rep.strategy, asOf: rep.asOf ?? "—", start: fmtMax(rep.startNav, 2) }) : <Sk w={260} h={11} />}</p>
         <Link to="/console" className="pro-head-link">{t("perf.consoleLink")} ›</Link>
       </header>
+      {rep?.gap ? (
+        <p className="strat-gap">
+          {t("strat.k.gapTitle", { days: rep.gap.days, from: rep.gap.from, to: rep.gap.to })}
+          {" "}
+          {t("strat.k.gapReset", { oldNav: fmtMax(rep.gap.prevNav ?? 0, 2), newNav: fmtMax(rep.gap.nextStartNav, 2) })}
+        </p>
+      ) : null}
       {err ? <div className="pro-alert">{err}</div> : null}
       {!rep && !err ? (
         <>

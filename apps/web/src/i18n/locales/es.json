@@ -985,7 +985,13 @@
       "state": "Estado del rebalanceo",
       "stalled": "Detenido {{h}} h",
       "ok": "OK · hace {{h}} h",
-      "running": "En marcha {{days}} días · alerta tras {{h}} h"
+      "running": "En marcha {{days}} días · alerta tras {{h}} h",
+      "waitingClose": "Esperando el cierre del {{day}}",
+      "awaitClose": "Esperando el primer cierre ({{day}})",
+      "gapTitle": "Faltan {{days}} días ({{from}} – {{to}})",
+      "gapReset": "El tramo anterior terminó en {{oldNav}}. El nuevo empieza en {{newNav}}. Es capital simulado reiniciado, no una ganancia ni una pérdida.",
+      "gapHistory": "El tramo anterior se conserva ({{days}} días, hasta {{day}}, acumulado {{ret}}).",
+      "waitingData": "Esperando que se cierren los datos del {{day}}"
     },
     "goStd": "(criterios: ≥ {{min}} días de rentabilidad diaria, límite inferior del IC bootstrap > 0 y supera a los T-bills)",
     "positions": "Posiciones ({{n}})",

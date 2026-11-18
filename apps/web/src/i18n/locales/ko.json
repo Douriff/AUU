@@ -985,7 +985,13 @@
       "state": "리밸런싱 상태",
       "stalled": "{{h}}시간 정지",
       "ok": "정상 · {{h}}시간 전",
-      "running": "{{days}}일째 운영 · {{h}}시간 초과 시 경고"
+      "running": "{{days}}일째 운영 · {{h}}시간 초과 시 경고",
+      "waitingClose": "{{day}} 종가 대기",
+      "awaitClose": "첫 종가 대기 ({{day}})",
+      "gapTitle": "{{days}}일 결측 ({{from}} ~ {{to}})",
+      "gapReset": "이전 구간은 {{oldNav}}에서 끝났고 새 구간은 {{newNav}}에서 시작합니다. 모의 원금의 재설정이며 그 사이 손익이 아닙니다.",
+      "gapHistory": "이전 구간은 그대로 둡니다 ({{days}}일, {{day}}까지, 누적 {{ret}}).",
+      "waitingData": "{{day}} 데이터 확정 대기"
     },
     "goStd": "(기준: 일간 수익률 {{min}}일 이상, 부트스트랩 신뢰구간 하한 > 0이며 T-bill보다 우수)",
     "positions": "포지션({{n}})",

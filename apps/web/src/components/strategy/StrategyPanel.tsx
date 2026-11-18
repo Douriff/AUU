@@ -1,6 +1,6 @@
 import { msgText } from "@/i18n/msg";
 import { useEffect, useRef, useState } from "react";
-import { ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { ColorType, createChart, type IChartApi, type ISeriesApi } from "lightweight-charts";
 import { Link } from "react-router-dom";
 import { marketProvider } from "@/providers/HttpWsProvider";
 import { SkCards } from "@/components/ui/Skeleton";
@@ -11,6 +11,7 @@ import i18n from "i18next";
 import { errText } from "@/i18n/errors";
 import { fmtBjShort, fmtDate, fmtFixed, intlLocale } from "@/i18n/format";
 import { goMessage, goVerdict } from "@/i18n/strategy";
+import { linePoints } from "@/components/strategy/segmentSeries";
 
 /** M3: daily paper runner (trend_tsmom_v1) — equity vs BTC buy&hold vs T-bill, daily returns, positions. */
 
@@ -86,13 +87,12 @@ export function StrategyPanel() {
 
   useEffect(() => {
     if (!data || !chart.current) return;
-    const t = (ts: number) => (ts / 1000) as UTCTimestamp;
     const { s, b, t: tb, r } = series.current;
     const COLR = chartColors();
-    s?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.strategy - 1) * 100 })));
-    b?.setData(data.curve.filter((p) => p.btc != null).map((p) => ({ time: t(p.ts), value: ((p.btc as number) - 1) * 100 })));
-    tb?.setData(data.curve.map((p) => ({ time: t(p.ts), value: (p.tbill - 1) * 100 })));
-    r?.setData(data.curve.map((p) => ({ time: t(p.ts), value: p.ret * 100, color: p.ret >= 0 ? COLR.up : COLR.down })));
+    s?.setData(linePoints(data.curve, (p) => (p.strategy - 1) * 100));
+    b?.setData(linePoints(data.curve.filter((p) => p.btc != null), (p) => ((p.btc as number) - 1) * 100));
+    tb?.setData(linePoints(data.curve, (p) => (p.tbill - 1) * 100));
+    r?.setData(linePoints(data.curve, (p) => p.ret * 100).map((p) => ("value" in p ? { ...p, color: (p.value as number) >= 0 ? COLR.up : COLR.down } : p)));
     const ts = chart.current.timeScale();
     if (data.curve.length >= 30) ts.fitContent();
     else {
@@ -104,12 +104,17 @@ export function StrategyPanel() {
   useEffect(() => {
     if (!colorRev || !data) return;
     const COLR = chartColors();
-    series.current.r?.setData(data.curve.map((p) => ({ time: (p.ts / 1000) as UTCTimestamp, value: p.ret * 100, color: p.ret >= 0 ? COLR.up : COLR.down })));
+    series.current.r?.setData(linePoints(data.curve, (p) => p.ret * 100).map((p) => ("value" in p ? { ...p, color: (p.value as number) >= 0 ? COLR.up : COLR.down } : p)));
   }, [colorRev]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const g = data?.goNoGo;
   const st = data?.status;
-  const last = data?.curve[data.curve.length - 1];
+  const pending = Boolean(data?.segment?.pending);
+  const epoch = data?.segment?.epoch ?? 1;
+  const current = data?.curve.filter((p) => (p.epoch ?? 1) === epoch) ?? [];
+  const last = pending || current.length === 0 ? undefined : current[current.length - 1];
+  const gap = data?.gaps?.[0];
+  const waiting = st?.phase === "waiting_close" || st?.phase === "waiting_data";
   return (
     <section className="console-card strat" aria-label={t("ms.stratCard")}>
       <header className="console-card-bar strat-head">
@@ -124,23 +129,31 @@ export function StrategyPanel() {
       </header>
       {err ? <p className="console-err">{err}</p> : null}
       {!data && !err ? <SkCards n={8} h={62} /> : null}
+      {gap ? (
+        <p className="strat-gap">
+          {t("strat.k.gapTitle", { days: gap.days, from: gap.from, to: gap.to })}
+          {" "}
+          {t("strat.k.gapReset", { oldNav: num(data?.history?.endNav), newNav: num(data?.segment?.startNav ?? data?.startNav) })}
+          {data?.history?.endDay ? ` ${t("strat.k.gapHistory", { days: data.history.days, day: data.history.endDay, ret: pct(data.history.strategy) })}` : ""}
+        </p>
+      ) : null}
       <div className="strat-kpis" hidden={!data}>
         <Kpi label={t("strat.k.nav")} value={num(data?.nav)} />
-        <Kpi label={t("strat.k.cum")} value={pct(data?.totals.strategy)} tone={tone(data?.totals.strategy)} />
-        <Kpi label={t("strat.k.btc")} value={pct(data?.totals.btc)} tone={tone(data?.totals.btc ?? 0)} />
-        <Kpi label={t("strat.k.tbill", { r: "3.99%" })} value={pct(data?.totals.tbill)} />
-        <Kpi label={t("strat.k.lastRet")} value={pct(last?.ret, 3)} tone={tone(last?.ret)} />
+        <Kpi label={t("strat.k.cum")} value={pct(pending ? null : data?.totals.strategy)} tone={tone(pending ? null : data?.totals.strategy)} />
+        <Kpi label={t("strat.k.btc")} value={pct(pending ? null : data?.totals.btc)} tone={tone(pending ? null : data?.totals.btc)} />
+        <Kpi label={t("strat.k.tbill", { r: "3.99%" })} value={pct(pending ? null : data?.totals.tbill)} />
+        <Kpi label={t("strat.k.lastRet")} value={pct(pending ? null : last?.ret, 3)} tone={tone(pending ? null : last?.ret)} />
         <Kpi label={t("ms.grossExposure")} value={last ? `${fmtFixed(last.gross * 100, 1)}%` : "—"} />
         <Kpi
           label={t("status.lastRebalance")}
-          value={st?.lastDay ? t("strat.k.close", { day: st.lastDay }) : t("strat.k.none")}
-          sub={st?.lastRunAt ? t("strat.k.ranAt", { time: SH.format(new Date(st.lastRunAt)) }) : st?.waiting || ""}
+          value={pending && st?.nextDueDay ? t("strat.k.awaitClose", { day: st.nextDueDay }) : (data?.segment?.lastDay || st?.lastDay) ? t("strat.k.close", { day: (data?.segment?.lastDay || st?.lastDay) as string }) : t("strat.k.none")}
+          sub={pending ? (st?.waiting || "") : st?.lastRunAt ? t("strat.k.ranAt", { time: SH.format(new Date(st.lastRunAt)) }) : st?.waiting || ""}
         />
         <Kpi
           label={t("strat.k.state")}
-          value={st ? (st.stalled ? t("strat.k.stalled", { h: fmtFixed(st.hoursSinceRebalance, 1) }) : t("strat.k.ok", { h: fmtFixed(st.hoursSinceRebalance, 1) })) : "—"}
-          tone={st?.stalled ? "bad" : "ok"}
-          sub={st ? t("strat.k.running", { days: st.days, h: st.stallHours }) : ""}
+          value={st ? (st.stalled ? t("strat.k.stalled", { h: fmtFixed(st.hoursSinceRebalance, 1) }) : st.phase === "waiting_data" && st.nextDueDay ? t("strat.k.waitingData", { day: st.nextDueDay }) : waiting && st.nextDueDay ? t("strat.k.waitingClose", { day: st.nextDueDay }) : t("strat.k.ok", { h: fmtFixed(st.hoursSinceRebalance, 1) })) : "—"}
+          tone={st?.stalled ? "bad" : waiting ? "flat" : "ok"}
+          sub={st ? (waiting ? (st.waiting || "") : t("strat.k.running", { days: data?.segment?.days ?? st.days, h: st.stallHours })) : ""}
         />
       </div>
       {g ? <p className={`strat-go lamp-${g.lamp}`}>{goMessage(g)} {t("strat.goStd", { min: g.minDays })}</p> : null}
