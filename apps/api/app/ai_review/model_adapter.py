@@ -80,32 +80,44 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
     return out
 
 
-def validate_model_output(raw: Any, facts: dict[str, Any]) -> Optional[dict[str, Any]]:
-    if not isinstance(raw, dict) or set(raw) != {"summary", "citations"}:
-        return None
+def classify_model_output(raw: Any, facts: dict[str, Any]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    """Return the checked note, or a reason code. The code is not the model text."""
+    if not isinstance(raw, dict):
+        return None, "not_object"
+    if set(raw) != {"summary", "citations"}:
+        return None, "wrong_keys"
     summary = raw.get("summary")
     citations = raw.get("citations")
     if not isinstance(summary, str):
-        return None
+        return None, "bad_summary"
     text = summary.strip()
-    if not text or len(text) > _MAX_SUMMARY:
-        return None
-    if _INJECTION.search(text) or not _numbers_allowed(text, facts):
-        return None
+    if not text:
+        return None, "summary_empty"
+    if len(text) > _MAX_SUMMARY:
+        return None, "summary_too_long"
     if any(ord(ch) < 32 and ch != "\n" for ch in text):
-        return None
+        return None, "control_char"
+    if _INJECTION.search(text):
+        return None, "injection"
+    if not _numbers_allowed(text, facts):
+        return None, "number_not_in_facts"
     if not isinstance(citations, list) or not citations or len(citations) > 12:
-        return None
+        return None, "citations_missing"
     flat = _flatten(facts)
     checked = []
     for item in citations:
         if not isinstance(item, dict) or set(item) != {"key", "value"}:
-            return None
+            return None, "citation_shape"
         key = item.get("key")
         if not isinstance(key, str) or key not in flat or flat[key] != item.get("value"):
-            return None
+            return None, "citation_mismatch"
         checked.append({"key": key, "value": item["value"]})
-    return {"summary": text, "citations": checked}
+    return {"summary": text, "citations": checked}, None
+
+
+def validate_model_output(raw: Any, facts: dict[str, Any]) -> Optional[dict[str, Any]]:
+    checked, _reason = classify_model_output(raw, facts)
+    return checked
 
 
 def _fact_numbers(facts: dict[str, Any]) -> list[float]:
@@ -170,10 +182,10 @@ def run_model(facts: dict[str, Any], client: Optional[ModelClient], *, timeout_s
         return {"status": "timeout", "reason": "timeout", "live": False, "external": False, "text": None, "mock": bool(getattr(client, "is_mock", False))}
     except Exception:
         return {"status": "failed", "reason": "client_error", "live": False, "external": False, "text": None, "mock": bool(getattr(client, "is_mock", False))}
-    checked = validate_model_output(raw, facts)
+    checked, reason = classify_model_output(raw, facts)
     mock = bool(getattr(client, "is_mock", False))
     if checked is None:
-        return {"status": "rejected", "reason": "unverified", "live": False, "external": False, "text": None, "mock": mock}
+        return {"status": "rejected", "reason": reason or "unverified", "live": False, "external": False, "text": None, "mock": mock}
     payload = {
         "status": "mock" if mock else "accepted",
         "reason": None,
