@@ -149,6 +149,10 @@ export function loadExplain(strategy: string, symbol: string, asof: number, sign
   });
 }
 
+export async function askNote(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return postJson("/api/v1/ai-review/interpret", body);
+}
+
 export async function previewRelay(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   return postJson("/api/v1/ai-review/relay/preview", body);
 }

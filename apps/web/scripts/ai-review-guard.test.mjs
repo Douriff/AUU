@@ -18,4 +18,17 @@ if (router.includes('to: "/lab/ai-review"')) {
   console.error("lab route was added to navigation");
   process.exit(1);
 }
+if (!api.includes("/api/v1/ai-review/interpret") || !page.includes("askNote(")) {
+  console.error("click-to-call path missing");
+  process.exit(1);
+}
+if (page.includes("gpt-4o-mini")) {
+  console.error("page hardcodes a model");
+  process.exit(1);
+}
+const pull = page.slice(page.indexOf("const pull"), page.indexOf("const tick"));
+if (pull.includes("askNote")) {
+  console.error("plaza refresh calls the model");
+  process.exit(1);
+}
 console.log("ai-review guard OK");

@@ -224,6 +224,25 @@ async def execution_preview(request: Request):
     return _finish(request, ok(result))
 
 
+@router.post("/interpret")
+async def interpret(request: Request):
+    denied = require_admin(request)
+    if denied is not None:
+        return denied
+    from app.ai_review.invoke import interpret_request
+
+    body = await _json_body(request)
+    if not isinstance(body, dict) or body.get("_too_large") or body.get("_bad"):
+        return err("BAD_REQUEST", "bad_body", 400)
+    result = interpret_request(body)
+    if not result.get("ok"):
+        reason = str(result.get("reason") or "bad_body")
+        status = 404 if reason == "not_found" else 400
+        code = "NOT_FOUND" if reason == "not_found" else "BAD_REQUEST"
+        return err(code, reason, status)
+    return _finish(request, ok(result))
+
+
 async def _json_body(request: Request):
     raw = await request.body()
     if len(raw) > 8000:

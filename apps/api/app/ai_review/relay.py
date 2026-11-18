@@ -2,7 +2,9 @@
 
 The API key is read from ``AUU_AI_RELAY_API_KEY`` only. It is never returned,
 logged, or accepted from a request. Calls stay off unless the enable flag,
-a model name, a key, and a positive budget are all set. Redirects are refused.
+a model name, a key, and a positive budget are all set. The budget counts
+parsed responses for this process and UTC day. It is not a dollar amount.
+Redirects are refused. Nothing here runs until a caller invokes ``complete``.
 """
 from __future__ import annotations
 
@@ -10,17 +12,26 @@ import ipaddress
 import json
 import os
 import socket
+import threading
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import urlsplit
 
 ALLOWED_HOST = "ai.orbitlink.me"
 ALLOWED_BASE = "https://ai.orbitlink.me/v1"
+# Ops checked this id once. It is not the model that is sent unless the env says so.
+VERIFIED_CANDIDATE = "gpt-4o-mini"
+OUTPUT_CHAR_CAP = 2000
 _SECRET_FIELDS = {"api_key", "apikey", "authorization", "secret", "token", "password", "exchange_key"}
 
+_lock = threading.Lock()
 _used = 0
+_reserved = 0
 _invoked = 0
+_active = 0
+_day = ""
 
 
 class RelayError(RuntimeError):
@@ -34,10 +45,30 @@ class RelayDisabled(RelayError):
         super().__init__("relay_off")
 
 
+def _utc_day() -> str:
+    if os.getenv("AUU_TEST") == "1":
+        override = os.getenv("AUU_AI_RELAY_DAY_FOR_TEST", "").strip()
+        if override:
+            return override
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _roll_day_locked() -> None:
+    global _used, _day
+    today = _utc_day()
+    if _day != today:
+        _used = 0
+        _day = today
+
+
 def reset_budget() -> None:
-    global _used, _invoked
-    _used = 0
-    _invoked = 0
+    global _used, _reserved, _invoked, _active, _day
+    with _lock:
+        _used = 0
+        _reserved = 0
+        _invoked = 0
+        _active = 0
+        _day = _utc_day()
 
 
 def _flag(name: str) -> bool:
@@ -90,7 +121,17 @@ def _key() -> str:
 
 
 def public_status() -> dict[str, Any]:
-    """Status safe to show to an administrator. The key itself is absent."""
+    """Status safe to show to an administrator. The key itself is absent.
+
+    ``budget_used`` counts parsed relay responses for this process and UTC day.
+    A connection failure is not counted. There is no token price here, so this
+    is not a dollar cost and not a guaranteed spend limit. A restart clears it.
+    """
+    with _lock:
+        _roll_day_locked()
+        used = _used
+        invoked = _invoked
+        day = _day
     enabled = _flag("AUU_AI_RELAY")
     model = os.getenv("AUU_AI_RELAY_MODEL", "").strip()
     budget = _int_env("AUU_AI_RELAY_BUDGET", 0, 0, 1000)
@@ -104,10 +145,10 @@ def public_status() -> dict[str, Any]:
     elif not model:
         status = "missing_model"
         reason = "missing_model"
-    elif budget <= 0 or _used >= budget:
+    elif budget <= 0 or used >= budget:
         status = "budget_blocked"
         reason = "budget"
-    elif _invoked:
+    elif invoked:
         status = "called"
     else:
         status = "configured_not_called"
@@ -118,12 +159,22 @@ def public_status() -> dict[str, Any]:
         "base_host": ALLOWED_HOST,
         "base_path": "/v1",
         "model": model or None,
+        "verified_candidate": VERIFIED_CANDIDATE,
+        "candidate_is_default": False,
         "key_configured": key_set,
         "timeout_sec": _int_env("AUU_AI_RELAY_TIMEOUT_SEC", 8, 1, 20),
         "max_tokens": _int_env("AUU_AI_RELAY_MAX_TOKENS", 400, 32, 800),
+        "output_char_cap": OUTPUT_CHAR_CAP,
+        "concurrency_limit": _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4),
+        "budget_unit": "parsed_relay_response_per_utc_day",
         "budget_limit": budget,
-        "budget_used": _used,
-        "invoked": _invoked > 0,
+        "budget_used": used,
+        "budget_day": day,
+        "budget_currency": None,
+        "budget_guaranteed": False,
+        "budget_resets": "utc_day_and_process_restart",
+        "invoked": invoked > 0,
+        "auto_call": False,
         "live_site_verified": False,
     }
 
@@ -208,7 +259,7 @@ class RelayClient:
         self.transport = transport or urllib_transport
 
     def complete(self, facts: dict[str, Any], timeout_s: float = 8.0) -> Any:
-        global _used, _invoked
+        global _used, _reserved, _invoked, _active
         if not ready():
             raise RelayDisabled()
         model = os.getenv("AUU_AI_RELAY_MODEL", "").strip()
@@ -219,20 +270,40 @@ class RelayClient:
         body = json.dumps(chat_body(facts, model, limit), separators=(",", ":")).encode("utf-8")
         if key.encode("utf-8") in body:
             raise RelayError("secret_in_body")
-        _used += 1
-        _invoked += 1
-        status, payload = self.transport(url, body, key, timeout)
-        interpret_status(status)
+        slots = _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4)
+        budget = _int_env("AUU_AI_RELAY_BUDGET", 0, 0, 1000)
+        with _lock:
+            _roll_day_locked()
+            if _active >= slots:
+                raise RelayError("busy")
+            if _used + _reserved >= budget:
+                raise RelayDisabled()
+            _active += 1
+            _reserved += 1
         try:
-            content = payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RelayError("bad_upstream") from exc
-        if not isinstance(content, str):
-            raise RelayError("bad_upstream")
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise RelayError("bad_upstream") from exc
+            status, payload = self.transport(url, body, key, timeout)
+            interpret_status(status)
+            try:
+                content = payload["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as exc:
+                raise RelayError("bad_upstream") from exc
+            if not isinstance(content, str) or len(content) > OUTPUT_CHAR_CAP:
+                raise RelayError("output_limit")
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError as exc:
+                raise RelayError("bad_upstream") from exc
+        except BaseException:
+            with _lock:
+                _reserved = max(0, _reserved - 1)
+                _active = max(0, _active - 1)
+            raise
+        with _lock:
+            _used += 1
+            _invoked += 1
+            _reserved = max(0, _reserved - 1)
+            _active = max(0, _active - 1)
+        return parsed
 
 
 def draft_problem(body: Any) -> Optional[str]:

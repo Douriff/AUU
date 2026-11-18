@@ -2047,6 +2047,20 @@
     "execPlan": "以后的连接会走现有交易所层、确定性风控、幂等订单号，并需要另一次启用授权。这份草稿不是那个授权。",
     "relayMissingKey": "服务器没有配置中转密钥。没有发送请求。",
     "relayMissingModel": "没有设置模型名。没有发送请求。",
-    "relayBudgetBlocked": "请求额度是关闭的。没有发送请求。"
+    "relayBudgetBlocked": "请求额度是关闭的。没有发送请求。",
+    "askSignal": "为这条信号请求一次核对过的说明",
+    "askDecision": "为这一行请求一次核对过的说明",
+    "noteTitle": "模型说明",
+    "noteDisclaimer": "模型说明不是收益、利润数字或下单指令。",
+    "noteNone": "这次点击没有发送请求。",
+    "noteDeduped": "这条已存储记录已经请求过。没有发送第二次调用。",
+    "noteBusy": "已有一次调用在进行。这次点击没有发送。",
+    "noteFailed": "中转没有返回可用说明。重复的失败不会再次计数。",
+    "noteNotOrder": "这段文字不能下单，也不能打开实盘。",
+    "budgetUnit": "额度按本进程、本 UTC 日已解析的中转响应计数。它不是美元成本，进程重启会清零，所以不是有保证的花费上限。",
+    "budgetCount": "已计数 {{used}} / {{limit}}。",
+    "candidateHint": "已核验候选，不是实际发送的模型：",
+    "draftDoesNotSend": "下面的字段只是草稿。不会保存，也不会发送请求。",
+    "clickSends": "只有这个按钮会发送说明，而且只有服务器开关、模型名和额度都已设置时才会发送。"
   }
 }
