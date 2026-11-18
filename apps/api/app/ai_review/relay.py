@@ -8,13 +8,13 @@ Redirects are refused. Nothing here runs until a caller invokes ``complete``.
 """
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import os
 import socket
+import ssl
 import threading
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import urlsplit
@@ -98,18 +98,28 @@ def normalize_base(raw: Optional[str] = None) -> str:
     return ALLOWED_BASE
 
 
-def assert_public_host(host: str = ALLOWED_HOST) -> None:
-    """Refuse a relay hostname that resolves to a local or private address."""
+def public_addresses(host: str) -> list[str]:
+    """Global addresses from one lookup. Any private answer refuses the name."""
     try:
         infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise RelayError("name_lookup_failed") from exc
     if not infos:
         raise RelayError("name_lookup_failed")
+    found: list[str] = []
     for info in infos:
-        address = ipaddress.ip_address(info[4][0])
+        raw = info[4][0]
+        address = ipaddress.ip_address(raw)
         if not address.is_global:
             raise RelayError("host_not_allowed")
+        if raw not in found:
+            found.append(raw)
+    return found
+
+
+def assert_public_host(host: str = ALLOWED_HOST) -> None:
+    """Refuse a relay hostname that resolves to a local or private address."""
+    public_addresses(host)
 
 
 def endpoint_for(base: Optional[str] = None) -> str:
@@ -211,30 +221,46 @@ def interpret_status(status: int) -> None:
 
 
 def urllib_transport(url: str, payload: bytes, key: str, timeout: float) -> tuple[int, dict[str, Any]]:
-    assert_public_host(urlsplit(url).hostname or "")
-    request = urllib.request.Request(
-        url,
-        data=payload,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    opener = urllib.request.build_opener(_NoRedirect())
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "https" or host != ALLOWED_HOST or parts.port not in {None, 443}:
+        raise RelayError("host_not_allowed")
+    if parts.path != "/v1/chat/completions":
+        raise RelayError("host_not_allowed")
+    addresses = public_addresses(host)
+    return _post_pinned(addresses[0], host, payload, key, timeout)
+
+
+def _post_pinned(address: str, host: str, payload: bytes, key: str, timeout: float) -> tuple[int, dict[str, Any]]:
+    """Dial the address from the check. Do not resolve the name again."""
+    checked = ipaddress.ip_address(address)
+    if not checked.is_global:
+        raise RelayError("host_not_allowed")
+    context = ssl.create_default_context()
+    conn = _PinnedConnection(host, address, timeout, context)
     try:
-        with opener.open(request, timeout=timeout) as response:
-            status = int(getattr(response, "status", 200))
-            interpret_status(status)
-            raw = response.read(65_536)
+        conn.request(
+            "POST",
+            "/v1/chat/completions",
+            body=payload,
+            headers={
+                "Host": host,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        response = conn.getresponse()
+        status = int(response.status)
+        interpret_status(status)
+        raw = response.read(65_536)
     except RelayError:
         raise
-    except urllib.error.HTTPError as exc:
-        interpret_status(int(exc.code))
-        raise RelayError("upstream_error") from exc
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+    except (TimeoutError, socket.timeout, ssl.SSLError, OSError) as exc:
         raise RelayError("connection_error") from exc
+    finally:
+        conn.close()
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as exc:
@@ -244,9 +270,14 @@ def urllib_transport(url: str, payload: bytes, key: str, timeout: float) -> tupl
     return status, parsed
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise RelayError("redirect_refused")
+class _PinnedConnection(http.client.HTTPSConnection):
+    def __init__(self, host: str, address: str, timeout: float, context: ssl.SSLContext):
+        super().__init__(host, port=443, timeout=timeout, context=context)
+        self._address = address
+
+    def connect(self) -> None:
+        raw = socket.create_connection((self._address, 443), self.timeout)
+        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
 
 
 Transport = Callable[[str, bytes, str, float], tuple[int, dict[str, Any]]]

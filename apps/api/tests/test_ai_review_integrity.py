@@ -175,7 +175,8 @@ class LocaleNamespaceTests(unittest.TestCase):
                 new.pop(key, None)
             extra = set(new.get("apiErr", {})) - set(old.get("apiErr", {}))
             self.assertTrue(extra <= {"SCREENER_ADMIN"}, lang)
-            new.get("apiErr", {}).pop("SCREENER_ADMIN", None)
+            if "SCREENER_ADMIN" not in old.get("apiErr", {}):
+                new.get("apiErr", {}).pop("SCREENER_ADMIN", None)
             self.assertEqual(old, new, lang)
 
 
@@ -240,6 +241,54 @@ class RelayAndDraftTests(unittest.TestCase):
         finally:
             relay.socket.getaddrinfo = previous
         self.assertEqual(blocked.exception.reason, "host_not_allowed")
+
+    def test_transport_dials_the_checked_address_and_ignores_a_later_lookup(self):
+        import app.ai_review.relay as relay
+
+        lookups = {"n": 0}
+
+        def lookup(host, port, type):
+            lookups["n"] += 1
+            if lookups["n"] == 1:
+                return [(socket_family(), None, None, None, ("8.8.8.8", 443))]
+            return [(socket_family(), None, None, None, ("127.0.0.1", 443))]
+
+        seen = {}
+        posts = {"n": 0}
+
+        def post(address, host, payload, key, timeout):
+            posts["n"] += 1
+            seen["address"] = address
+            seen["host"] = host
+            return 200, {"ok": True}
+
+        previous_lookup = relay.socket.getaddrinfo
+        previous_post = relay._post_pinned
+        relay.socket.getaddrinfo = lookup
+        relay._post_pinned = post
+        try:
+            status, body = relay.urllib_transport(
+                "https://ai.orbitlink.me/v1/chat/completions",
+                b"{}",
+                "test-relay-key",
+                2,
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(body, {"ok": True})
+            self.assertEqual(seen["address"], "8.8.8.8")
+            self.assertEqual(seen["host"], "ai.orbitlink.me")
+            self.assertEqual(lookups["n"], 1)
+            with self.assertRaises(relay.RelayError) as blocked:
+                relay.urllib_transport("https://ai.orbitlink.me/v1/chat/completions", b"{}", "test-relay-key", 2)
+            self.assertEqual(blocked.exception.reason, "host_not_allowed")
+            self.assertEqual(posts["n"], 1)
+            with self.assertRaises(relay.RelayError) as foreign:
+                relay.urllib_transport("https://example.com/v1/chat/completions", b"{}", "test-relay-key", 2)
+            self.assertEqual(foreign.exception.reason, "host_not_allowed")
+            self.assertEqual(posts["n"], 1)
+        finally:
+            relay.socket.getaddrinfo = previous_lookup
+            relay._post_pinned = previous_post
 
     def test_enabled_client_uses_the_transport_once_and_rejects_a_rewritten_number(self):
         os.environ["AUU_AI_RELAY"] = "on"
