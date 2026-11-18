@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from app.backtest.panel import DAY_MS
+from app.paper import perf_report
 from app.paper import strategy_runner as sr
 from app.paper.shadow_h2 import H2Ledger
 from tests.test_strategy_runner import Clock, _Base
@@ -52,6 +53,46 @@ class GapSealTests(_Base):
         again = sr.resume_forward(now_ms=clock.t, by="admin-id", note="outage", strategy_path=r.ledger.path, h2_path=h2_path)
         self.assertEqual(again["how"], "replayed")
         self.assertEqual(len(r.ledger.runs()), before_runs)
+        held = r.summary()
+        old_ret = (anchor_nav / 10_000.0) - 1
+        self.assertTrue(held["segment"]["pending"])
+        self.assertEqual(held["segment"]["days"], 0)
+        self.assertEqual(held["nav"], 10_000.0)
+        self.assertEqual(held["startNav"], 10_000.0)
+        self.assertIsNone(held["totals"]["strategy"])
+        self.assertIsNone(held["totals"]["btc"])
+        self.assertIsNone(held["segment"]["lastRet"])
+        self.assertAlmostEqual(held["history"]["strategy"], old_ret)
+        self.assertAlmostEqual(held["history"]["endNav"], anchor_nav)
+        self.assertTrue(all(p["epoch"] == 1 for p in held["curve"]))
+        self.assertFalse(r.status()["stalled"])
+        self.assertEqual(r.status()["phase"], "waiting_close")
+        self.assertEqual(r.status()["hoursSinceRebalance"], 0)
+        report = perf_report.build(r)
+        self.assertEqual(report["metrics"]["days"], 0)
+        self.assertTrue(report["gap"]["pending"])
+        self.assertEqual(report["goNoGo"]["days"], 0)
+        self.assertEqual(held["fills"], [])
+        late = clock.t
+        scheduled = self.panel.days[anchor + 18] + 2 * DAY_MS
+        clock.t = scheduled + 3_600_000
+        self.ready = False
+        self.assertEqual(r.tick(), [])
+        settling = r.status()
+        self.assertFalse(settling["stalled"])
+        self.assertEqual(settling["phase"], "waiting_data")
+        self.assertGreater(settling["hoursSinceRebalance"], 0)
+        self.assertLess(settling["hoursSinceRebalance"], 26)
+        clock.t = scheduled + 30 * 3_600_000
+        self.ready = False
+        self.assertEqual(r.tick(), [])
+        overdue = r.status()
+        self.assertTrue(overdue["stalled"])
+        self.assertEqual(overdue["phase"], "stalled")
+        self.assertLess(overdue["hoursSinceRebalance"], 40)
+        self.assertEqual(len(r.ledger.runs()), before_runs)
+        clock.t = late
+        self.ready = True
 
         nxt = anchor + 19
         clock.to_after(self.panel.days[nxt])
@@ -74,7 +115,20 @@ class GapSealTests(_Base):
         self.assertEqual(summary["goNoGo"]["historyDays"], 1)
         self.assertEqual(summary["curve"][0]["epoch"], 1)
         self.assertEqual(summary["curve"][-1]["epoch"], 2)
+        self.assertTrue(summary["curve"][-1]["breakBefore"])
+        self.assertEqual(summary["curve"][-1]["tbill"], 1.0)
+        self.assertFalse(summary["segment"]["pending"])
+        self.assertEqual(summary["segment"]["days"], 1)
+        self.assertEqual(r.status()["phase"], "ok")
+        self.assertTrue(all(int(f["day"]) == self.panel.days[nxt] for f in summary["fills"]))
+        fresh = perf_report.build(r)
+        self.assertEqual(fresh["metrics"]["days"], 1)
+        self.assertFalse(fresh["gap"]["pending"])
+        self.assertEqual(fresh["startNav"], 10_000.0)
+        self.assertAlmostEqual(summary["totals"]["strategy"], summary["curve"][-1]["strategy"] - 1)
+        self.assertNotAlmostEqual(summary["totals"]["strategy"], old_ret)
         self.assertEqual(summary["gaps"][0]["days"], 18)
+        self.assertFalse(r.status()["stalled"])
         self.assertEqual(len(r.ledger.runs()), 2)
 
     def test_same_day_late_path_still_books_one_day(self):

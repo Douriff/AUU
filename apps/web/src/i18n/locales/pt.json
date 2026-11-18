@@ -985,7 +985,13 @@
       "state": "Status do rebalanceamento",
       "stalled": "Parado há {{h}} h",
       "ok": "OK · há {{h}} h",
-      "running": "Rodando há {{days}} dias · alerta após {{h}} h"
+      "running": "Rodando há {{days}} dias · alerta após {{h}} h",
+      "waitingClose": "Aguardando o fechamento de {{day}}",
+      "awaitClose": "Aguardando o primeiro fechamento ({{day}})",
+      "gapTitle": "{{days}} dias ausentes ({{from}} – {{to}})",
+      "gapReset": "O trecho anterior terminou em {{oldNav}}. O novo começa em {{newNav}}. É capital simulado reiniciado, não lucro nem prejuízo.",
+      "gapHistory": "O trecho anterior permanece ({{days}} dias, até {{day}}, acumulado {{ret}}).",
+      "waitingData": "Aguardando os dados de {{day}}"
     },
     "goStd": "(critérios: ≥ {{min}} dias de retornos diários, limite inferior do IC bootstrap > 0 e supera os T-bills)",
     "positions": "Posições ({{n}})",

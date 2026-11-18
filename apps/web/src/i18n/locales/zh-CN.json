@@ -985,7 +985,13 @@
       "state": "调仓状态",
       "stalled": "停滞 {{h}}h",
       "ok": "正常 · {{h}}h 前",
-      "running": "已运行 {{days}} 天 · 超过 {{h}}h 报警"
+      "running": "已运行 {{days}} 天 · 超过 {{h}}h 报警",
+      "waitingClose": "等待 {{day}} 收盘",
+      "awaitClose": "待首个收盘（{{day}}）",
+      "gapTitle": "缺失 {{days}} 天（{{from}} ~ {{to}}）",
+      "gapReset": "旧段末净值 {{oldNav}}，新段起点 {{newNav}}。这是重置后的模拟本金，不是这段时间的盈亏。",
+      "gapHistory": "旧段仍保留 {{days}} 天，止于 {{day}}，旧段累计 {{ret}}。",
+      "waitingData": "等待 {{day}} 数据定稿"
     },
     "goStd": "（标准：日收益 ≥ {{min}} 天，bootstrap CI 下限 > 0 且跑赢国债）",
     "positions": "持仓（{{n}}）",

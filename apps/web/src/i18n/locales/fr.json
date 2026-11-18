@@ -985,7 +985,13 @@
       "state": "État du rééquilibrage",
       "stalled": "Bloqué {{h}} h",
       "ok": "OK · il y a {{h}} h",
-      "running": "En cours depuis {{days}} jours · alerte après {{h}} h"
+      "running": "En cours depuis {{days}} jours · alerte après {{h}} h",
+      "waitingClose": "En attente de la clôture du {{day}}",
+      "awaitClose": "En attente de la première clôture ({{day}})",
+      "gapTitle": "{{days}} jours manquants ({{from}} – {{to}})",
+      "gapReset": "L'ancien segment s'arrête à {{oldNav}}. Le nouveau part de {{newNav}}. C'est un capital simulé réinitialisé, pas un gain ni une perte.",
+      "gapHistory": "L'ancien segment est conservé ({{days}} jours, jusqu'au {{day}}, cumul {{ret}}).",
+      "waitingData": "En attente des données du {{day}}"
     },
     "goStd": "(critères : ≥ {{min}} jours de rendements quotidiens, borne inférieure de l’IC bootstrap > 0 et supérieur aux T-bills)",
     "positions": "Positions ({{n}})",

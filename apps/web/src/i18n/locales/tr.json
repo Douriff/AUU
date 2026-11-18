@@ -985,7 +985,13 @@
       "state": "Dengeleme durumu",
       "stalled": "{{h}} sa durdu",
       "ok": "Normal · {{h}} sa önce",
-      "running": "{{days}} gündür çalışıyor · {{h}} sa sonra alarm"
+      "running": "{{days}} gündür çalışıyor · {{h}} sa sonra alarm",
+      "waitingClose": "{{day}} kapanışı bekleniyor",
+      "awaitClose": "İlk kapanış bekleniyor ({{day}})",
+      "gapTitle": "{{days}} gün eksik ({{from}} – {{to}})",
+      "gapReset": "Eski bölüm {{oldNav}} ile bitti. Yeni bölüm {{newNav}} ile başlar. Bu, simülasyon sermayesinin sıfırlanmasıdır; kâr veya zarar değildir.",
+      "gapHistory": "Eski bölüm duruyor ({{days}} gün, {{day}} tarihine kadar, birikimli {{ret}}).",
+      "waitingData": "{{day}} verisinin kesinleşmesi bekleniyor"
     },
     "goStd": "(kriter: ≥ {{min}} gün günlük getiri, bootstrap GA alt sınırı > 0 ve T-bill'i geçmesi)",
     "positions": "Pozisyonlar ({{n}})",

@@ -1000,21 +1000,32 @@ class StrategyRunner:
     def status(self) -> dict[str, Any]:
         now = self.now_ms()
         last = self.ledger.last_run()
-        if last:
-            since = int(last["day"]) + DAY_MS  # the close the last rebalance traded at
-        else:
-            since = int(self.ledger.meta("created_at") or now)
-        hours = max(0.0, (now - since) / 3_600_000)
-        stalled = hours > STALL_HOURS
         gap = self.ledger.latest_gap()
-        if gap is not None and (last is None or int(last["day"]) <= int(gap["gap_to"])):
+        sealed_open = gap is not None and (last is None or int(last["day"]) <= int(gap["gap_to"]))
+        if sealed_open:
+            # The old segment's age is not a stall. The clock starts at the next close.
             nxt = int(gap["gap_to"]) + DAY_MS
+            scheduled_close = nxt + DAY_MS
+            if now < scheduled_close:
+                hours, stalled, phase = 0.0, False, "waiting_close"
+            else:
+                hours = max(0.0, (now - scheduled_close) / 3_600_000)
+                stalled = hours > STALL_HOURS
+                phase = "stalled" if stalled else "waiting_data"
         else:
             nxt = (int(last["day"]) if last else self.due_day() - DAY_MS) + DAY_MS
+            if last:
+                since = int(last["day"]) + DAY_MS
+            else:
+                since = int(self.ledger.meta("created_at") or now)
+            hours = max(0.0, (now - since) / 3_600_000)
+            stalled = hours > STALL_HOURS
+            phase = "stalled" if stalled else "ok"
         return {
             "active": True,
             "strategy": self.strategy.name,
             "lastDay": ms_day(int(last["day"])) if last else None,
+            "historyLastDay": ms_day(int(last["day"])) if last else None,
             "lastRunAt": int(last["ran_at"]) if last else None,
             "nextDueDay": ms_day(nxt),
             "gap": _gap_doc(gap) if gap is not None else None,
@@ -1022,6 +1033,7 @@ class StrategyRunner:
             "hoursSinceRebalance": round(hours, 2),
             "stallHours": STALL_HOURS,
             "stalled": stalled,
+            "phase": phase,
             "idleMin": int(hours * 60),
             "reason": ("no rebalance for %.1fh (> %gh)" % (hours, STALL_HOURS)) if stalled else "",
             "waiting": self.waiting,
@@ -1100,23 +1112,29 @@ class StrategyRunner:
         active = [x for x in runs if floor is None or int(x["day"]) > floor]
         epoch_nav = float(gap_rows[-1]["next_start_nav"]) if gap_rows else None
         start_nav = float(self.ledger.meta("start_nav") or self.start_nav)
-        curve, btc0 = [], None
+        curve = []
         xmodes = {int(x["day"]): x["mode"] for x in self.ledger.exec_rows(100_000)}
-        for j, x in enumerate(runs):
+        epoch_i: dict[int, int] = {}
+        epoch_btc: dict[int, float] = {}
+        for x in runs:
             closes = json.loads(x["closes"])
             btc = closes.get("BTC")
-            if btc0 is None and btc:
-                btc0 = btc
             epoch = 1 if floor is None or int(x["day"]) <= floor else 1 + sum(1 for g in gap_rows if int(g["gap_to"]) < int(x["day"]))
+            j = epoch_i.get(epoch, 0)
+            epoch_i[epoch] = j + 1
+            if epoch not in epoch_btc and btc:
+                epoch_btc[epoch] = float(btc)
             base = epoch_nav if epoch > 1 and epoch_nav else start_nav
+            b0 = epoch_btc.get(epoch)
             curve.append({
                 "day": ms_day(int(x["day"])), "ts": int(x["day"]), "nav": float(x["nav_close"]),
                 "strategy": float(x["nav_close"]) / base, "ret": float(x["ret"]),
                 "cost": float(x["cost"]), "funding": float(x["funding"]), "gross": float(x["gross_after"]),
-                "btc": (btc / btc0) if (btc and btc0) else None,
+                "btc": (float(btc) / b0) if (btc and b0) else None,
                 "tbill": (1 + stats.TBILL) ** (j / 365), "catchup": bool(x["catchup"]),
                 "exec": xmodes.get(int(x["day"]), "close"),
                 "epoch": epoch,
+                "breakBefore": epoch > 1 and j == 0,
             })
         positions = []
         book = active[-1] if active else None
@@ -1129,10 +1147,28 @@ class StrategyRunner:
                 positions.append({"coin": c, "weight": w, "notional": w * nav, "price": px,
                                   "qty": (w * nav / px) if px else None,
                                   "target": json.loads(last["targets"]).get(c)})
-        bench = {}
-        if curve:
-            bench = {"strategy": curve[-1]["strategy"] - 1, "btc": (curve[-1]["btc"] - 1) if curve[-1]["btc"] else None,
-                     "tbill": curve[-1]["tbill"] - 1}
+        pending = bool(gap_rows) and not active
+        current_epoch = (1 + len(gap_rows)) if pending else (curve[-1]["epoch"] if curve else 1)
+        current_pts = [p for p in curve if p["epoch"] == current_epoch]
+        if not gap_rows and not current_pts:
+            bench = {}
+        elif pending or not current_pts:
+            bench = {"strategy": None, "btc": None, "tbill": None}
+        else:
+            tail = current_pts[-1]
+            bench = {"strategy": tail["strategy"] - 1, "btc": (tail["btc"] - 1) if tail["btc"] else None,
+                     "tbill": tail["tbill"] - 1}
+        hist_pts = [p for p in curve if p["epoch"] == 1] if gap_rows else []
+        history = None if not gap_rows else {
+            "epoch": 1,
+            "days": len(hist_pts),
+            "endDay": hist_pts[-1]["day"] if hist_pts else None,
+            "endNav": hist_pts[-1]["nav"] if hist_pts else None,
+            "startNav": start_nav,
+            "strategy": (hist_pts[-1]["strategy"] - 1) if hist_pts else None,
+        }
+        display_start = float(epoch_nav) if gap_rows and epoch_nav is not None else start_nav
+        display_nav = float(book["nav_close"]) if book is not None else display_start
         try:
             uni = dict(self.universe_fn() or {})
         except Exception as exc:
@@ -1150,15 +1186,26 @@ class StrategyRunner:
             "ledger": "mainstream_strategy.sqlite",
             "mode": "paper",
             "live": {"enabled": False, "reason": "LIVE_API_LOCKED", "message": "实盘未开启"},
-            "startNav": start_nav,
-            "nav": float(book["nav_close"]) if book is not None else (epoch_nav if epoch_nav is not None else start_nav),
+            "startNav": display_start,
+            "nav": display_nav,
+            "segment": {
+                "epoch": current_epoch,
+                "days": len(active),
+                "pending": pending,
+                "startNav": display_start,
+                "nav": display_nav,
+                "lastDay": None if pending or not current_pts else current_pts[-1]["day"],
+                "lastRet": None if pending or not current_pts else current_pts[-1]["ret"],
+                "totals": bench,
+            },
+            "history": history,
             "gaps": [_gap_doc(g) for g in gap_rows],
             "historyDays": len(runs) - len(active),
             "cost": {"taker": self.cost.taker, "slippage": self.cost.slippage, "slippageDefault": self.cost.slippage_default,
                      "band": BAND, "funding": "store funding rates, longs pay positive"},
             "curve": curve,
             "positions": positions,
-            "fills": [dict(r) for r in self.ledger.fills(30)],
+            "fills": [dict(r) for r in self.ledger.fills(30) if floor is None or int(r["day"]) > floor],
             "totals": bench,
             "goNoGo": {**self.go_no_go(active), "historyDays": len(runs) - len(active)},
             "status": self.status(),
