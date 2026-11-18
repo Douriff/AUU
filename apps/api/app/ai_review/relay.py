@@ -3,8 +3,10 @@
 The API key is read from ``AUU_AI_RELAY_API_KEY`` only. It is never returned,
 logged, or accepted from a request. Calls stay off unless the enable flag,
 a model name, a key, and a positive budget are all set. The budget counts
-parsed responses for this process and UTC day. It is not a dollar amount.
-Redirects are refused. Nothing here runs until a caller invokes ``complete``.
+upstream dispatch attempts for the UTC day and is stored outside the
+strategy ledgers. It is not a dollar amount. A restart does not clear it.
+Redirects are refused. Nothing here runs until a reserved attempt calls
+``complete``.
 """
 from __future__ import annotations
 
@@ -27,11 +29,8 @@ OUTPUT_CHAR_CAP = 2000
 _SECRET_FIELDS = {"api_key", "apikey", "authorization", "secret", "token", "password", "exchange_key"}
 
 _lock = threading.Lock()
-_used = 0
-_reserved = 0
-_invoked = 0
 _active = 0
-_day = ""
+_pin = threading.local()
 
 
 class RelayError(RuntimeError):
@@ -53,22 +52,38 @@ def _utc_day() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def _roll_day_locked() -> None:
-    global _used, _day
-    today = _utc_day()
-    if _day != today:
-        _used = 0
-        _day = today
-
-
 def reset_budget() -> None:
-    global _used, _reserved, _invoked, _active, _day
+    global _active
     with _lock:
-        _used = 0
-        _reserved = 0
-        _invoked = 0
         _active = 0
-        _day = _utc_day()
+    from app.ai_review.dispatch_quota import reset_store
+
+    reset_store()
+
+
+def try_begin() -> bool:
+    """Take one local concurrency slot. A miss does not touch the daily count."""
+    global _active
+    slots = _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4)
+    with _lock:
+        if _active >= slots:
+            return False
+        _active += 1
+        return True
+
+
+def end_begin() -> None:
+    global _active
+    with _lock:
+        _active = max(0, _active - 1)
+
+
+def set_pinned_address(address: Optional[str]) -> None:
+    if address is None:
+        if hasattr(_pin, "address"):
+            del _pin.address
+        return
+    _pin.address = address
 
 
 def _flag(name: str) -> bool:
@@ -133,15 +148,14 @@ def _key() -> str:
 def public_status() -> dict[str, Any]:
     """Status safe to show to an administrator. The key itself is absent.
 
-    ``budget_used`` counts parsed relay responses for this process and UTC day.
-    A connection failure is not counted. There is no token price here, so this
-    is not a dollar cost and not a guaranteed spend limit. A restart clears it.
+    ``budget_used`` is the number of upstream dispatch attempts stored for this
+    UTC day. The file survives a process restart. No token price is known, so
+    this is not a dollar cap and not a guaranteed spend limit.
     """
-    with _lock:
-        _roll_day_locked()
-        used = _used
-        invoked = _invoked
-        day = _day
+    from app.ai_review.dispatch_quota import attempts_today
+
+    day = _utc_day()
+    used = attempts_today(day)
     enabled = _flag("AUU_AI_RELAY")
     model = os.getenv("AUU_AI_RELAY_MODEL", "").strip()
     budget = _int_env("AUU_AI_RELAY_BUDGET", 0, 0, 1000)
@@ -158,7 +172,7 @@ def public_status() -> dict[str, Any]:
     elif budget <= 0 or used >= budget:
         status = "budget_blocked"
         reason = "budget"
-    elif invoked:
+    elif used:
         status = "called"
     else:
         status = "configured_not_called"
@@ -176,17 +190,25 @@ def public_status() -> dict[str, Any]:
         "max_tokens": _int_env("AUU_AI_RELAY_MAX_TOKENS", 400, 32, 800),
         "output_char_cap": OUTPUT_CHAR_CAP,
         "concurrency_limit": _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4),
-        "budget_unit": "parsed_relay_response_per_utc_day",
-        "budget_limit": budget,
+        "budget_unit": "upstream_dispatch_attempt_per_utc_day",
         "budget_used": used,
+        "budget_limit": budget,
         "budget_day": day,
         "budget_currency": None,
         "budget_guaranteed": False,
-        "budget_resets": "utc_day_and_process_restart",
-        "invoked": invoked > 0,
+        "budget_persistent": True,
+        "budget_resets": "utc_day",
+        "price_known": False,
+        "idempotency": "sha256_of_server_facts",
+        "idempotency_boundary": "one_dispatch_per_fact_hash",
+        "invoked": used > 0,
         "auto_call": False,
         "live_site_verified": False,
     }
+
+
+def configured() -> bool:
+    return _flag("AUU_AI_RELAY") and bool(_key()) and bool(os.getenv("AUU_AI_RELAY_MODEL", "").strip())
 
 
 def ready() -> bool:
@@ -227,8 +249,14 @@ def urllib_transport(url: str, payload: bytes, key: str, timeout: float) -> tupl
         raise RelayError("host_not_allowed")
     if parts.path != "/v1/chat/completions":
         raise RelayError("host_not_allowed")
-    addresses = public_addresses(host)
-    return _post_pinned(addresses[0], host, payload, key, timeout)
+    pinned = getattr(_pin, "address", None)
+    if pinned:
+        if not ipaddress.ip_address(pinned).is_global:
+            raise RelayError("host_not_allowed")
+        address = pinned
+    else:
+        address = public_addresses(host)[0]
+    return _post_pinned(address, host, payload, key, timeout)
 
 
 def _post_pinned(address: str, host: str, payload: bytes, key: str, timeout: float) -> tuple[int, dict[str, Any]]:
@@ -289,9 +317,10 @@ class RelayClient:
     def __init__(self, transport: Optional[Transport] = None):
         self.transport = transport or urllib_transport
 
-    def complete(self, facts: dict[str, Any], timeout_s: float = 8.0) -> Any:
-        global _used, _reserved, _invoked, _active
-        if not ready():
+    def complete(self, facts: dict[str, Any], timeout_s: float = 8.0, reservation: Optional[str] = None) -> Any:
+        from app.ai_review.dispatch_quota import begin_send, mark
+
+        if not configured():
             raise RelayDisabled()
         model = os.getenv("AUU_AI_RELAY_MODEL", "").strip()
         key = _key()
@@ -301,16 +330,8 @@ class RelayClient:
         body = json.dumps(chat_body(facts, model, limit), separators=(",", ":")).encode("utf-8")
         if key.encode("utf-8") in body:
             raise RelayError("secret_in_body")
-        slots = _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4)
-        budget = _int_env("AUU_AI_RELAY_BUDGET", 0, 0, 1000)
-        with _lock:
-            _roll_day_locked()
-            if _active >= slots:
-                raise RelayError("busy")
-            if _used + _reserved >= budget:
-                raise RelayDisabled()
-            _active += 1
-            _reserved += 1
+        if not begin_send(reservation or ""):
+            raise RelayError("not_reserved")
         try:
             status, payload = self.transport(url, body, key, timeout)
             interpret_status(status)
@@ -324,17 +345,30 @@ class RelayClient:
                 parsed = json.loads(content)
             except json.JSONDecodeError as exc:
                 raise RelayError("bad_upstream") from exc
-        except BaseException:
-            with _lock:
-                _reserved = max(0, _reserved - 1)
-                _active = max(0, _active - 1)
+        except RelayError as exc:
+            mark(reservation or "", _outcome(exc.reason))
             raise
-        with _lock:
-            _used += 1
-            _invoked += 1
-            _reserved = max(0, _reserved - 1)
-            _active = max(0, _active - 1)
+        except (TimeoutError, socket.timeout):
+            mark(reservation or "", "timeout")
+            raise
+        except Exception:
+            mark(reservation or "", "connection_error")
+            raise
         return parsed
+
+
+def _outcome(reason: str) -> str:
+    if reason == "output_limit":
+        return "output_limit"
+    if reason in {"bad_upstream", "bad_json"}:
+        return "bad_json"
+    if reason == "upstream_error":
+        return "upstream_error"
+    if reason == "connection_error":
+        return "connection_error"
+    if reason == "timeout":
+        return "timeout"
+    return "connection_error"
 
 
 def draft_problem(body: Any) -> Optional[str]:

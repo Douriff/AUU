@@ -2135,10 +2135,10 @@
     "noteNone": "This click has not sent a request.",
     "noteDeduped": "This stored row was already requested. No second call was sent.",
     "noteBusy": "A call is already running. This click was not sent.",
-    "noteFailed": "The relay did not return a usable note. A repeated failure is not counted again.",
+    "noteFailed": "The relay did not return a usable note. That upstream request was counted and was not sent again.",
     "noteNotOrder": "This text cannot place or arm an order.",
-    "budgetUnit": "The budget counts parsed relay responses for this process and UTC day. It is not a dollar cost, and a restart clears it, so it is not a guaranteed spend limit.",
-    "budgetCount": "Counted {{used}} of {{limit}}.",
+    "budgetUnit": "The limit is upstream requests per UTC day for this server. One request handed to the relay counts as one. No price is known, so this is not a dollar cap. A restart does not clear today's count.",
+    "budgetCount": "Upstream requests today: {{used}} of {{limit}}.",
     "candidateHint": "Checked candidate, not the sent model:",
     "draftDoesNotSend": "The fields below are a draft. They are not saved and they do not send a request.",
     "clickSends": "A note is sent only by this button, and only when the server switch, model, and budget are set."

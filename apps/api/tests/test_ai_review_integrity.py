@@ -304,20 +304,26 @@ class RelayAndDraftTests(unittest.TestCase):
             content = json.dumps({"summary": "Stored score is 0.28.", "citations": [{"key": "score", "value": 0.28}]})
             return 200, {"choices": [{"message": {"content": content}}]}
 
-        from app.ai_review.relay import RelayClient, public_status
+        from app.ai_review.dispatch_quota import reserve
+        from app.ai_review.relay import RelayClient, RelayError, _utc_day, public_status
 
+        fact = "ab" * 32
+        self.assertTrue(reserve(fact, _utc_day(), 1)["ok"])
         client = RelayClient(transport=transport)
-        parsed = client.complete({"score": 0.28}, timeout_s=2)
+        parsed = client.complete({"score": 0.28}, timeout_s=2, reservation=fact)
         self.assertEqual(parsed["summary"], "Stored score is 0.28.")
         self.assertEqual(seen["url"], "https://ai.orbitlink.me/v1/chat/completions")
         self.assertNotIn(b"test-relay-key", seen["body"])
-        self.assertTrue(public_status()["invoked"])
-        self.assertFalse(public_status()["live_site_verified"])
+        self.assertEqual(public_status()["budget_used"], 1)
+        self.assertFalse(public_status()["budget_guaranteed"])
+        self.assertIsNone(public_status()["budget_currency"])
+        self.assertFalse(public_status()["price_known"])
         again = RelayClient(transport=transport)
-        from app.ai_review.relay import RelayDisabled
-
-        with self.assertRaises(RelayDisabled):
-            again.complete({"score": 0.28}, timeout_s=1)
+        with self.assertRaises(RelayError) as blocked:
+            again.complete({"score": 0.28}, timeout_s=1, reservation=fact)
+        self.assertEqual(blocked.exception.reason, "not_reserved")
+        self.assertEqual(seen["url"], "https://ai.orbitlink.me/v1/chat/completions")
+        self.assertEqual(public_status()["budget_used"], 1)
 
     def test_execution_draft_rejects_secrets_and_stays_disarmed(self):
         from app.ai_review.execution import validate_draft

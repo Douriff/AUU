@@ -1,36 +1,36 @@
-"""One administrator click, one checked note.
+"""One administrator click, one upstream attempt.
 
-GET handlers do not call this. A click builds facts from the stored row, then
-sends them only when the relay is ready. The same stored facts are not sent
-twice while the first result is still remembered. A failed send is remembered
-too, so the repeat does not call again and does not count again.
+GET handlers do not call this. A click builds facts on the server, checks the
+pinned host, then reserves one persistent attempt before the socket is opened.
+The same fact hash is never dispatched again. A failed send stays counted.
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import threading
-import time
 from typing import Any, Callable, Optional
 
+from app.ai_review.dispatch_quota import mark, release_unsent, reserve
 from app.ai_review.model_adapter import facts_for_model, validate_model_output
-from app.ai_review.relay import RelayDisabled, RelayError, public_status, ready
+from app.ai_review.relay import (
+    ALLOWED_HOST,
+    RelayDisabled,
+    RelayError,
+    end_begin,
+    public_addresses,
+    public_status,
+    ready,
+    set_pinned_address,
+    try_begin,
+)
 from app.ai_review.schema import STRATEGY_ID, SYMBOL
 
-_TTL = 120.0
-_lock = threading.Lock()
-_cache: dict[str, tuple[float, dict[str, Any]]] = {}
-_flight: dict[str, threading.Event] = {}
-_box: dict[str, dict[str, Any]] = {}
-
 ClientFactory = Callable[[], Any]
+_RELEASE = {"not_reserved", "secret_in_body", "host_not_allowed", "name_lookup_failed", "busy", "relay_off"}
 
 
 def clear_clicks() -> None:
-    with _lock:
-        _cache.clear()
-        _flight.clear()
-        _box.clear()
+    return None
 
 
 def network_client():
@@ -115,70 +115,75 @@ def _public_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _once(key: str, facts: dict[str, Any], factory: ClientFactory) -> dict[str, Any]:
-    now = time.monotonic()
-    with _lock:
-        cached = _cache.get(key)
-        if cached is not None and now - cached[0] <= _TTL:
-            found = dict(cached[1])
-            found["deduped"] = True
-            found["charged_now"] = False
-            return found
-        event = _flight.get(key)
-        if event is None:
-            event = threading.Event()
-            _flight[key] = event
-            owner = True
+    if not try_begin():
+        return _fail("busy", sent=False)
+    try:
+        try:
+            address = public_addresses(ALLOWED_HOST)[0]
+        except RelayError as exc:
+            return _fail(exc.reason, sent=False)
+        state = public_status()
+        claimed = reserve(key, str(state["budget_day"]), int(state["budget_limit"]))
+        if not claimed["ok"]:
+            if claimed["reason"] == "duplicate":
+                return {**_fail("already_dispatched", sent=False), "deduped": True, "charged_now": False}
+            return {**_fail("budget", sent=False), "deduped": False, "charged_now": False}
+        set_pinned_address(address)
+        try:
+            result = _send(key, facts, factory)
+        finally:
+            set_pinned_address(None)
+        if result.get("release"):
+            release_unsent(key)
+            result["charged_now"] = False
         else:
-            owner = False
-    if not owner:
-        event.wait(_TTL)
-        with _lock:
-            found = dict(_box.get(key) or {})
-        found["deduped"] = True
-        found["charged_now"] = False
-        return found
-    result = _fail("client_error", remember=False)
-    try:
-        before = int(public_status()["budget_used"])
-        result = _send(facts, factory)
-        result["charged_now"] = int(public_status()["budget_used"]) > before
+            if result.get("mark"):
+                mark(key, str(result["mark"]))
+            result["charged_now"] = True
         result["deduped"] = False
-        with _lock:
-            if result.get("remember"):
-                _cache[key] = (time.monotonic(), dict(result))
-            _box[key] = dict(result)
-            _flight.pop(key, None)
+        return result
     finally:
-        event.set()
-    return result
+        end_begin()
 
 
-def _send(facts: dict[str, Any], factory: ClientFactory) -> dict[str, Any]:
+def _send(key: str, facts: dict[str, Any], factory: ClientFactory) -> dict[str, Any]:
     try:
-        raw = factory().complete(facts, timeout_s=float(public_status()["timeout_sec"]))
-    except RelayDisabled as exc:
-        return _fail(exc.reason, remember=False)
+        raw = factory().complete(facts, timeout_s=float(public_status()["timeout_sec"]), reservation=key)
+    except RelayDisabled:
+        return {**_fail("relay_off", sent=False), "release": True}
     except RelayError as exc:
-        return _fail(exc.reason, remember=exc.reason not in {"busy", "relay_off"})
+        if exc.reason in _RELEASE:
+            return {**_fail(exc.reason, sent=False), "release": True}
+        return {**_fail(exc.reason, sent=True), "release": False}
     except TimeoutError:
-        return _fail("timeout", remember=True)
+        return {**_fail("timeout", sent=True), "release": False}
+    except OSError:
+        return {**_fail("connection_error", sent=True), "release": False}
     except Exception:
-        return _fail("client_error", remember=True)
+        return {**_fail("client_error", sent=True), "release": False}
     checked = validate_model_output(raw, facts)
     if checked is None:
-        return _fail("unverified", remember=True)
+        return {**_fail("unverified", sent=True), "release": False, "mark": "unverified"}
     return {
         "status": "accepted",
         "reason": None,
         "text": checked["summary"],
         "citations": checked["citations"],
         "sent": True,
-        "remember": True,
+        "release": False,
+        "mark": "accepted",
     }
 
 
-def _fail(reason: str, *, remember: bool) -> dict[str, Any]:
-    return {"status": "failed", "reason": reason, "text": None, "citations": [], "sent": reason not in {"busy", "relay_off"}, "remember": remember}
+def _fail(reason: str, *, sent: bool) -> dict[str, Any]:
+    quiet = reason in {"busy", "budget", "already_dispatched", "relay_off", "host_not_allowed", "name_lookup_failed"}
+    return {
+        "status": "not_sent" if quiet else "failed",
+        "reason": reason,
+        "text": None,
+        "citations": [],
+        "sent": sent,
+    }
 
 
 def _pack(target: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -216,6 +221,7 @@ def _pack(target: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
             "day": state["budget_day"],
             "currency": None,
             "guaranteed": False,
+            "price_known": False,
         },
     }
 
