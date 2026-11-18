@@ -14,6 +14,64 @@ from app.data_paths import data_dir
 
 ROOT = Path(__file__).resolve().parents[3]
 LOCALES = ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]
+# New relative to 1e9c986, and only when that path is absent from the baseline.
+# 1e9c986 -> 2905d287 added these and changed no existing value. On current main
+# they are already in the baseline, so a later edit is drift.
+_NEW_TREES = frozenset({"aiReview", "screener"})
+_NEW_PATHS = frozenset({
+    "apiErr.SCREENER_ADMIN",
+    "strat.k.awaitClose",
+    "strat.k.gapHistory",
+    "strat.k.gapReset",
+    "strat.k.gapTitle",
+    "strat.k.waitingClose",
+    "strat.k.waitingData",
+})
+
+
+def _flat_locale(obj: dict) -> dict:
+    out = {}
+
+    def walk(node, prefix: str) -> None:
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                walk(value, path)
+            else:
+                out[path] = value
+
+    walk(obj, "")
+    return out
+
+
+def _addition_allowed(path: str, baseline: set[str]) -> bool:
+    if path in _NEW_PATHS:
+        return True
+    # New strings inside the lab are allowed. A change to a lab string that
+    # is already on main is still drift.
+    if path.startswith("aiReview.") and path not in baseline:
+        return True
+    for tree in _NEW_TREES:
+        if path == tree or path.startswith(tree + "."):
+            return not any(old == tree or old.startswith(tree + ".") for old in baseline)
+    return False
+
+
+def locale_drift(old: dict, new: dict) -> list[str]:
+    """Differences that are not an explicitly named addition absent from old."""
+    old_paths, new_paths = _flat_locale(old), _flat_locale(new)
+    problems = []
+    removed = sorted(set(old_paths) - set(new_paths))
+    if removed:
+        problems.append("removed " + ", ".join(removed))
+    added = sorted(set(new_paths) - set(old_paths))
+    unknown = [path for path in added if not _addition_allowed(path, set(old_paths))]
+    if unknown:
+        problems.append("unexpected " + ", ".join(unknown))
+    changed = sorted(path for path in set(old_paths) & set(new_paths) if old_paths[path] != new_paths[path])
+    if changed:
+        problems.append("changed " + ", ".join(changed))
+    return problems
 
 
 def _signal_db() -> sqlite3.Connection:
@@ -163,21 +221,39 @@ class GapTests(unittest.TestCase):
 
 
 class LocaleNamespaceTests(unittest.TestCase):
+    def _baseline(self, lang: str) -> dict:
+        raw = subprocess.check_output(["git", "show", f"main:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT)
+        return json.loads(raw)
+
     def test_old_locale_keys_are_unchanged(self):
         for lang in LOCALES:
-            old = json.loads(subprocess.check_output(["git", "show", f"main:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT))
+            old = self._baseline(lang)
             new = json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
-            # The review lab and the spot screener each add one root object.
-            # Whichever of those is already on main is not a new key here.
-            self.assertTrue(set(new) - set(old) <= {"aiReview", "screener"}, lang)
-            for key in ("aiReview", "screener"):
-                old.pop(key, None)
-                new.pop(key, None)
-            extra = set(new.get("apiErr", {})) - set(old.get("apiErr", {}))
-            self.assertTrue(extra <= {"SCREENER_ADMIN"}, lang)
-            if "SCREENER_ADMIN" not in old.get("apiErr", {}):
-                new.get("apiErr", {}).pop("SCREENER_ADMIN", None)
-            self.assertEqual(old, new, lang)
+            self.assertEqual(locale_drift(old, new), [], lang)
+
+    def test_changing_an_old_key_is_rejected(self):
+        old = self._baseline("zh-CN")
+        changed = json.loads(json.dumps(old))
+        changed["strat"]["k"]["nav"] += "（已改）"
+        drift = locale_drift(old, changed)
+        self.assertTrue(any(item.startswith("changed strat.k.nav") for item in drift), drift)
+        merged = json.loads(json.dumps(old))
+        merged["apiErr"]["SCREENER_ADMIN"] += "（已改）"
+        drift = locale_drift(old, merged)
+        self.assertTrue(any("apiErr.SCREENER_ADMIN" in item for item in drift), drift)
+
+    def test_only_named_additions_missing_from_the_baseline_are_allowed(self):
+        old = {"keep": "原", "apiErr": {"BAD_LOGIN": "登录失败"}, "strat": {"k": {"nav": "净值"}}}
+        added = json.loads(json.dumps(old))
+        added["screener"] = {"title": "筛币"}
+        added["apiErr"]["SCREENER_ADMIN"] = "预览"
+        added["strat"]["k"]["waitingClose"] = "等待收盘"
+        self.assertEqual(locale_drift(old, added), [])
+        added["strat"]["k"]["nav"] = "改过"
+        self.assertTrue(locale_drift(old, added))
+        unknown = json.loads(json.dumps(old))
+        unknown["brandNew"] = {"title": "不在名单"}
+        self.assertTrue(locale_drift(old, unknown))
 
 
 class RelayAndDraftTests(unittest.TestCase):
