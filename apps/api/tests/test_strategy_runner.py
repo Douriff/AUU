@@ -70,6 +70,8 @@ class _Base(unittest.TestCase):
     def runner(self, clock, **kw):
         led = sr.StrategyLedger(self.path, now_ms=clock)
         self.ledgers.append(led)
+        # Production refuses a multi-day gap. These equivalence tests opt into close replay.
+        kw.setdefault("catchup", "replay")
         return sr.StrategyRunner(led, panel_fn=self.panel_fn, ready_fn=lambda d: (self.ready, "" if self.ready else "BTC:1d"),
                                  start_nav=10_000.0, now_ms=clock, **kw)
 

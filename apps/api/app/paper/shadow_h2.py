@@ -319,6 +319,17 @@ CREATE TABLE IF NOT EXISTS perp_daily (exchange TEXT NOT NULL, coin TEXT NOT NUL
   close REAL NOT NULL, PRIMARY KEY (exchange, coin, day));
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, day INTEGER, kind TEXT NOT NULL, detail TEXT);
 CREATE TABLE IF NOT EXISTS evaluations (milestone INTEGER PRIMARY KEY, ts INTEGER NOT NULL, verdict TEXT NOT NULL, stats TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS ledger_gaps (
+  id INTEGER PRIMARY KEY,
+  gap_from INTEGER NOT NULL,
+  gap_to INTEGER NOT NULL,
+  sealed_at INTEGER NOT NULL,
+  sealed_by TEXT NOT NULL,
+  note TEXT NOT NULL,
+  prev_day INTEGER,
+  prev_nav REAL,
+  next_start_nav REAL NOT NULL
+);
 """
 
 
@@ -369,6 +380,33 @@ class H2Ledger:
         r = self.q("SELECT * FROM days ORDER BY day DESC LIMIT 1")
         return r[0] if r else None
 
+    def gaps(self) -> list[sqlite3.Row]:
+        return self.q("SELECT * FROM ledger_gaps ORDER BY id")
+
+    def latest_gap(self) -> Optional[sqlite3.Row]:
+        rows = self.gaps()
+        return rows[-1] if rows else None
+
+    def seal_gap(self, *, gap_from: int, gap_to: int, sealed_at: int, sealed_by: str, note: str,
+                 prev_day: Optional[int], prev_nav: Optional[float], next_start_nav: float) -> tuple[sqlite3.Row, str]:
+        """Record a missing range. Does not insert day rows."""
+        def write(db):
+            existing = db.execute("SELECT * FROM ledger_gaps WHERE gap_from=? ORDER BY id DESC LIMIT 1", (int(gap_from),)).fetchone()
+            if existing is not None and int(existing["gap_to"]) >= int(gap_to):
+                return existing, "replayed"
+            if existing is not None:
+                db.execute("UPDATE ledger_gaps SET gap_to=?, sealed_at=?, sealed_by=?, note=? WHERE id=?",
+                           (int(gap_to), int(sealed_at), sealed_by, note, int(existing["id"])))
+                return db.execute("SELECT * FROM ledger_gaps WHERE id=?", (int(existing["id"]),)).fetchone(), "extended"
+            db.execute(
+                "INSERT INTO ledger_gaps(gap_from, gap_to, sealed_at, sealed_by, note, prev_day, prev_nav, next_start_nav)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (int(gap_from), int(gap_to), int(sealed_at), sealed_by, note, prev_day, prev_nav, float(next_start_nav)),
+            )
+            return db.execute("SELECT * FROM ledger_gaps WHERE id=last_insert_rowid()").fetchone(), "created"
+
+        return self.tx(write)
+
 
 PanelFn = Callable[[int], Optional[Panel]]
 PerpFn = Callable[[str, str, int, int], list[list]]  # exchange, coin, since_day, until_day -> klines [ts,o,h,l,c,v]
@@ -379,12 +417,13 @@ class ShadowH2:
                  ready_fn: Callable[[int], tuple[bool, str]] = lambda d: (True, ""), after_fn: Callable[[int], bool] = lambda d: True,
                  now_ms: Callable[[], int] = lambda: int(time.time() * 1000), registry: Optional[Path] = None,
                  inception_day: Optional[int] = None, params: Optional[dict] = None, settle_ms: int = 15 * 60_000,
-                 max_catchup: int = 10):
+                 max_catchup: int = 10, catchup: str = "replay"):
         self.ledger, self.panel_fn, self.perp_fn, self.exchange_fn = ledger, panel_fn, perp_fn, exchange_fn
         self.ready_fn, self.after_fn, self.now_ms, self.registry = ready_fn, after_fn, now_ms, registry
         self.p = PARAMS if params is None else params
         self.inception = int(inception_day if inception_day is not None else day_ms(self.p["start"]["inception_day"]))
         self.settle_ms, self.max_catchup = settle_ms, max_catchup
+        self.catchup = "replay" if catchup == "replay" else "refuse"
         self.waiting = ""
         self.waiting_msg: Optional[dict] = None
         self.last_error = ""
@@ -445,10 +484,21 @@ class ShadowH2:
                 self._wait(f"{ms_day(start)} closed < {self.settle_ms // 60_000} min ago",
                            m("srv.h2.wait.settling", day=ms_day(start), min=self.settle_ms // 60_000))
                 return []
+        gap = self.ledger.latest_gap()
+        if gap is not None:
+            start = max(start, int(gap["gap_to"]) + DAY_MS)
+            if due < start:
+                self._wait(f"gap sealed through {ms_day(int(gap['gap_to']))}; waiting for the next close",
+                           raw(f"gap sealed through {ms_day(int(gap['gap_to']))}"))
+                return []
         days = list(range(start, due + 1, DAY_MS))
         if len(days) > self.max_catchup:
             self._wait(f"behind {len(days)} days (> {self.max_catchup}); manual review",
                        m("srv.h2.wait.behind", n=len(days), max=self.max_catchup))
+            return []
+        if len(days) > 1 and self.catchup != "replay":
+            self._wait(f"gap of {len(days)} days is not replayed; admin resume required",
+                       raw(f"gap of {len(days)} days is not replayed"))
             return []
         if not self.after_fn(due):
             self._wait(f"waiting for the paper rebalance of {ms_day(due)}", m("srv.h2.wait.paper", day=ms_day(due)))
@@ -604,9 +654,17 @@ class ShadowH2:
         return row
 
     # ---- evaluation ------------------------------------------------------------------
+    def _segment(self) -> tuple[list[sqlite3.Row], Optional[sqlite3.Row]]:
+        rows = self.ledger.rows()
+        gap = self.ledger.latest_gap()
+        if gap is None:
+            return rows, None
+        floor = int(gap["gap_to"])
+        return [row for row in rows if int(row["day"]) > floor], gap
+
     def _maybe_evaluate(self) -> Optional[dict]:
         n = self.p["gate"]["forward_days"]
-        rows = self.ledger.rows()
+        rows, _gap = self._segment()
         if len(rows) < n + 1 or self.ledger.q("SELECT 1 FROM evaluations WHERE milestone=?", (n,)):
             return None
         sample = rows[: n + 1]
@@ -621,8 +679,10 @@ class ShadowH2:
 
     # ---- read side -------------------------------------------------------------------
     def summary(self, *, rows: int = 200) -> dict[str, Any]:
-        rs = self.ledger.rows()
+        history = self.ledger.rows()
+        rs, gap = self._segment()
         n_fw = sum(1 for r in rs if not r["inception"])
+        history_fw = sum(1 for r in history if not r["inception"]) - n_fw
         last = rs[-1] if rs else None
         cum = None
         if last is not None:
@@ -640,7 +700,9 @@ class ShadowH2:
             except Exception as exc:
                 interim = {"error": f"{type(exc).__name__}: {exc}"[:200]}
         lag = None
-        if last is not None:
+        if gap is not None and last is None:
+            lag = max(0, int((self.due_day() - int(gap["gap_to"])) // DAY_MS))
+        elif last is not None:
             lag = int((self.due_day() - int(last["day"])) // DAY_MS)
         stored = self.ledger.meta("params_sha256")
         try:
@@ -655,7 +717,12 @@ class ShadowH2:
             "registry": "docs/hypotheses/H2_trend_carry_idle.{md,json}",
             "inceptionDay": ms_day(self.inception), "gate": self.p["gate"], "abort": self.p["abort"],
             "aborted": self.ledger.meta("aborted"), "abortedMsg": aborted_msg(self.ledger.meta("aborted")), "progress": min(n_fw, self.p["gate"]["forward_days"]),
-            "forwardDays": n_fw, "lagDays": lag,
+            "forwardDays": n_fw, "historyForwardDays": history_fw, "lagDays": lag,
+            "continuous": gap is None,
+            "gap": None if gap is None else {
+                "from": ms_day(int(gap["gap_from"])), "to": ms_day(int(gap["gap_to"])),
+                "days": int((int(gap["gap_to"]) - int(gap["gap_from"])) // DAY_MS) + 1, "missing": True,
+            },
             "paused": bool(lag is not None and lag > self.p["abort"]["lag_days_pause"]),
             "voidByLag": bool(lag is not None and lag > self.p["abort"]["lag_days_void"]),
             "last": None if last is None else {k: last[k] for k in last.keys() if k not in ("state", "detail")} | {
@@ -664,7 +731,7 @@ class ShadowH2:
             "evaluations": [{"milestone": int(e["milestone"]), "ts": int(e["ts"]), "verdict": e["verdict"], **json.loads(e["stats"])}
                             for e in self.ledger.q("SELECT * FROM evaluations ORDER BY milestone")],
             "events": [dict(e) for e in self.ledger.q("SELECT * FROM events ORDER BY id DESC LIMIT 50")],
-            "rows": [{k: r[k] for k in r.keys() if k not in ("state", "detail", "targets")} for r in rs[-rows:]],
+            "rows": [{k: r[k] for k in r.keys() if k not in ("state", "detail", "targets")} for r in history[-rows:]],
             "waiting": self.waiting, "waitingMsg": (self.waiting_msg or raw(self.waiting)) if self.waiting else None,
             "lastError": self.last_error,
         }
@@ -748,7 +815,7 @@ def get_shadow() -> ShadowH2:
     with _slock:
         if _shadow is None:
             _shadow = ShadowH2(H2Ledger(), panel_fn=_panel, perp_fn=_perp_klines, exchange_fn=_exchange, ready_fn=_ready,
-                               after_fn=_after_paper)
+                               after_fn=_after_paper, catchup="refuse")
         return _shadow
 
 

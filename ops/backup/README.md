@@ -35,6 +35,10 @@ cp ops/backup/auu_backup.{py,sh} <bin>/ && <bin>/auu_backup.sh start   # install
 <bin>/auu_backup.sh list | verify [DIR] | restore-test [DIR]            # via the same config
 ```
 
+`users.json` and `AUU_SESSION_SECRET` are not in this backup. Their encrypted bundle and the
+check/restore steps are in `identity-backup.md` (`identity_backup.py`). Do not commit the
+bundle or the passphrase.
+
 Manual restore of one file (server, API stopped, outside 07:30–08:45, keep the current file first):
 `gunzip -c mainstream_strategy.sqlite.gz > /tmp/x.sqlite`, check `sha256sum` against `SHA256SUMS`, copy to
 `/var/lib/auu/data/`, `chown auu:auu`, remove stale `-wal`/`-shm` of that file, start the API, check GUARD OK.

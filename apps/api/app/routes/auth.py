@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 
 from app.auth.accounts import (
+    MAX_DEVICES,
     account_locked,
     account_row,
     clear_login_failures,
@@ -28,6 +29,8 @@ from app.auth.accounts import (
     invite_code,
     issue_token,
     journal_for,
+    revoke_session,
+    session_count,
     leaderboard,
     list_users,
     locale_view,
@@ -220,6 +223,8 @@ def _me_payload(user: Optional[dict]) -> dict:
     }
     if user is not None:
         body["user"] = {**account_row(user), **locale_view(user)}
+        # Not named "sessions": that key is stripped because it holds device ids on the stored user.
+        body["devices"] = {"count": session_count(str(user["id"])), "max": MAX_DEVICES}
     return body
 
 
@@ -397,7 +402,8 @@ def auth_security(request: Request):
         return bad
     logins = security.login_log().recent(str(actor["id"]), 20)
     return ok({**security_view(actor), "logins": logins, "liveEnabled": False,
-               "sessions_note": "会话是签名 Cookie（14 天）。“退出其他会话”会让其他设备的登录立即失效，当前设备保持登录。"})
+               "sessions_note": "会话是签名 Cookie（14 天）。退出登录只使本机失效，其他设备保持登录。"
+               "退出其他会话使其他设备立即失效，当前设备保持登录。修改密码会使全部设备失效，并由当前设备换发新登录。"})
 
 
 async def _sec_body(request: Request, actor) -> dict | object:
@@ -479,7 +485,7 @@ async def auth_revoke_others(request: Request):
         return err("RATE_LIMIT", _MESSAGES["RATE_LIMIT"], 429)
     bump_epoch(str(actor["id"]))
     _record(request, str(actor["id"]), "revoked_other_sessions", "settings")
-    return _stamp(ok({"ok": True, "liveEnabled": False, "message": "其他设备的登录已失效"}), str(actor["id"]))
+    return _stamp(ok({"ok": True, "liveEnabled": False, "message": "其他设备的登录已失效。本机保持登录。"}), str(actor["id"]))
 
 
 @router.post("/auth/password")
@@ -525,8 +531,15 @@ async def auth_locale(request: Request):
 
 
 @router.post("/auth/logout")
-def auth_logout():
-    response = ok({"ok": True, "liveEnabled": False})
+def auth_logout(request: Request):
+    """Revoke this device's cookie. Other devices stay logged in."""
+    token = request.cookies.get(COOKIE) or ""
+    if auth_enabled():
+        user = user_from_token(token)
+        parts = token.split(".")
+        if user is not None and len(parts) == 4:
+            revoke_session(str(user["id"]), parts[2])
+    response = ok({"ok": True, "liveEnabled": False, "message": "本机登录已失效。其他设备保持登录。"})
     response.delete_cookie(COOKIE, path="/")
     return response
 

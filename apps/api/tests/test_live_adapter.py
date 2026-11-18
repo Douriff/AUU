@@ -20,6 +20,13 @@ from app.live.gate import (
     LOCKED_MAX_DAY_LOSS_PCT,
     LOCKED_MAX_NOTIONAL_SOL,
     LOCKED_MAX_OPEN_MINTS,
+    ENV_LIVE_ACCOUNT,
+    ENV_LIVE_CURRENCY,
+    ENV_LIVE_LEVERAGE,
+    ENV_LIVE_MAX_LOSS,
+    ENV_LIVE_QUOTA,
+    ENV_LIVE_STOP,
+    REASON_ARM_INCOMPLETE,
     REASON_LIMITS_MISSING,
     REASON_LIVE_DISABLED,
     REASON_NO_KEYPAIR,
@@ -62,6 +69,12 @@ _LIVE_ENV = (
     ENV_MAX_NOTIONAL_SOL,
     ENV_MAX_DAY_LOSS_PCT,
     ENV_MAX_OPEN_MINTS,
+    ENV_LIVE_ACCOUNT,
+    ENV_LIVE_CURRENCY,
+    ENV_LIVE_QUOTA,
+    ENV_LIVE_LEVERAGE,
+    ENV_LIVE_STOP,
+    ENV_LIVE_MAX_LOSS,
     "LIVE_TRADING",
 )
 
@@ -100,10 +113,21 @@ def _assert_pubkey(testcase: unittest.TestCase, pubkey: str) -> None:
     testcase.assertNotIn("...", pubkey)
 
 
+def _confirm_live_arm() -> None:
+    """Test-only explicit fields. Production has no defaults for these."""
+    os.environ[ENV_LIVE_ACCOUNT] = "test-account"
+    os.environ[ENV_LIVE_CURRENCY] = "USDT"
+    os.environ[ENV_LIVE_QUOTA] = "1"
+    os.environ[ENV_LIVE_LEVERAGE] = "1"
+    os.environ[ENV_LIVE_STOP] = "0.02"
+    os.environ[ENV_LIVE_MAX_LOSS] = "0.05"
+
+
 def _arm(tmp: str) -> None:
     os.environ[ENV_LIVE_DISABLED] = "false"
     os.environ[ENV_LIVE_ARMED] = "true"
     os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
+    _confirm_live_arm()
     reset_live_state()
 
 
@@ -148,9 +172,12 @@ class LiveGateDefaultTests(unittest.TestCase):
             st = evaluate()
             self.assertEqual(st.limits.as_dict(), LOCKED_LIMITS)
             self.assertNotIn(REASON_LIMITS_MISSING, st.reasons)
-            self.assertTrue(st.armed)
+            self.assertFalse(st.armed)
+            self.assertIn(REASON_ARM_INCOMPLETE, st.reasons)
             self.assertTrue(st.live_enabled)
             self.assertTrue(st.live_confirmed)
+            self.assertFalse(st.as_dict()["armConfirmation"]["complete"])
+            self.assertNotIn("test-account", json.dumps(st.as_dict()))
 
     def test_env_cannot_loosen_locked_caps(self):
         os.environ[ENV_MAX_NOTIONAL_SOL] = "9"
@@ -214,12 +241,21 @@ class LiveGateDefaultTests(unittest.TestCase):
         self.assertIn(REASON_LIVE_DISABLED, st.reasons)
         with tempfile.TemporaryDirectory() as tmp:
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
+            refused, blocked = try_set_enabled_with_confirm(True, confirmed=True)
+            self.assertFalse(refused)
+            self.assertIn(REASON_ARM_INCOMPLETE, blocked.reasons)
+            self.assertFalse(blocked.armed)
+            _confirm_live_arm()
             ok2, st2 = try_set_enabled_with_confirm(True, confirmed=True)
             self.assertTrue(ok2)
             self.assertTrue(st2.live_enabled)
             self.assertTrue(st2.live_confirmed)
             self.assertTrue(st2.armed)
             self.assertNotIn(REASON_LIVE_DISABLED, st2.reasons)
+            self.assertNotIn(REASON_ARM_INCOMPLETE, st2.reasons)
+            self.assertFalse(st2.live_send_wired)
+            self.assertTrue(st2.live_disabled)
+            self.assertFalse(send_allowed())
 
     def test_paper_risk_limits_do_not_hold_live_caps(self):
         fields = set(RiskLimits.__dataclass_fields__)
@@ -632,6 +668,10 @@ class LiveRouteAndPaperTests(unittest.TestCase):
             os.environ[ENV_LIVE_ARMED] = "true"
             os.environ[ENV_KEYPAIR_PATH] = _dummy_keypair(tmp)
             reset_live_state()
+            closed = self.client.get("/api/v1/live/status").json()["data"]
+            self.assertFalse(closed["liveArmed"])
+            self.assertIn(REASON_ARM_INCOMPLETE, closed["reasons"])
+            _confirm_live_arm()
             st = self.client.get("/api/v1/live/status").json()["data"]
             self.assertTrue(st["liveArmed"])
             self.assertTrue(st["liveEnabled"])
