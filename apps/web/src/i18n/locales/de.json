@@ -2141,6 +2141,8 @@
     "budgetCount": "Upstream requests today: {{used}} of {{limit}}.",
     "candidateHint": "Checked candidate, not the sent model:",
     "draftDoesNotSend": "The fields below are a draft. They are not saved and they do not send a request.",
-    "clickSends": "A note is sent only by this button, and only when the server switch, model, and budget are set."
+    "clickSends": "A note is sent only by this button, and only when the server switch, model, and budget are set.",
+    "budgetUnlimited": "No daily request cap. Requests sent today: {{used}}. This is not a dollar limit.",
+    "budgetInvalid": "The daily setting is not a whole number from 0 to 1000 and is not unlimited. No request was sent."
   }
 }

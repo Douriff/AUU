@@ -351,6 +351,34 @@ class ClickTests(unittest.TestCase):
         self.assertEqual(self.calls["n"], 1)
         self.assertEqual(public_status()["budget_used"], 1)
 
+    def test_unlimited_sends_and_a_bad_ceiling_does_not(self):
+        from app.ai_review.relay import public_status
+
+        admin = self._user("clickadmin")
+        self._install_fake()
+        self._ready()
+        os.environ["AUU_AI_RELAY_BUDGET"] = "unlimited"
+        headers = {"Origin": "http://testserver"}
+        sent = admin.post("/api/v1/ai-review/interpret", json=self._signal(), headers=headers)
+        self.assertEqual(sent.status_code, 200, sent.text)
+        body = sent.json()["data"]
+        self.assertTrue(body["sent"])
+        self.assertEqual(body["budget"]["mode"], "unlimited")
+        self.assertEqual(body["budget"]["limit"], "unlimited")
+        self.assertTrue(body["budget"]["unlimited"])
+        self.assertEqual(body["budget"]["used"], 1)
+        self.assertIsNone(body["budget"]["currency"])
+        self.assertFalse(body["budget"]["price_known"])
+        status = admin.get("/api/v1/ai-review/relay").json()["data"]
+        self.assertEqual(status["budget_limit"], "unlimited")
+        self.assertEqual(status["budget_used"], 1)
+        os.environ["AUU_AI_RELAY_BUDGET"] = "none"
+        refused = admin.post("/api/v1/ai-review/interpret", json=self._signal(), headers=headers)
+        self.assertFalse(refused.json()["data"]["sent"])
+        self.assertEqual(public_status()["status"], "budget_invalid")
+        self.assertEqual(public_status()["budget_used"], 1)
+        self.assertEqual(self.calls["n"], 1)
+
     def test_private_dns_and_busy_do_not_reserve(self):
         from app.ai_review.relay import end_begin, public_status, try_begin
 

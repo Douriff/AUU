@@ -123,7 +123,14 @@ def _once(key: str, facts: dict[str, Any], factory: ClientFactory) -> dict[str, 
         except RelayError as exc:
             return _fail(exc.reason, sent=False)
         state = public_status()
-        claimed = reserve(key, str(state["budget_day"]), int(state["budget_limit"]))
+        if state.get("budget_mode") == "invalid":
+            return _fail("budget_invalid", sent=False)
+        if state.get("budget_mode") == "unlimited":
+            claimed = reserve(key, str(state["budget_day"]), None)
+        elif state.get("budget_mode") == "count" and isinstance(state.get("budget_limit"), int):
+            claimed = reserve(key, str(state["budget_day"]), int(state["budget_limit"]))
+        else:
+            return _fail("budget_invalid", sent=False)
         if not claimed["ok"]:
             if claimed["reason"] == "duplicate":
                 return {**_fail("already_dispatched", sent=False), "deduped": True, "charged_now": False}
@@ -176,7 +183,7 @@ def _send(key: str, facts: dict[str, Any], factory: ClientFactory) -> dict[str, 
 
 
 def _fail(reason: str, *, sent: bool) -> dict[str, Any]:
-    quiet = reason in {"busy", "budget", "already_dispatched", "relay_off", "host_not_allowed", "name_lookup_failed"}
+    quiet = reason in {"busy", "budget", "budget_invalid", "already_dispatched", "relay_off", "host_not_allowed", "name_lookup_failed"}
     return {
         "status": "not_sent" if quiet else "failed",
         "reason": reason,
@@ -218,6 +225,8 @@ def _pack(target: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
             "unit": state["budget_unit"],
             "used": state["budget_used"],
             "limit": state["budget_limit"],
+            "mode": state["budget_mode"],
+            "unlimited": state["budget_unlimited"],
             "day": state["budget_day"],
             "currency": None,
             "guaranteed": False,

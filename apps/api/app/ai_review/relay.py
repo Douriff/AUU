@@ -98,6 +98,29 @@ def _int_env(name: str, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, value))
 
 
+def parse_budget(raw: Optional[str] = None) -> dict[str, Any]:
+    """Daily dispatch ceiling.
+
+    Missing, empty, and ``0`` stay closed. ``1``..``1000`` are exact counts.
+    The only unlimited token is ``unlimited``. Anything else fails closed and
+    is not clamped to 1000.
+    """
+    if raw is None:
+        raw = os.getenv("AUU_AI_RELAY_BUDGET")
+    if raw is None or raw.strip() == "":
+        return {"mode": "count", "limit": 0, "unlimited": False}
+    text = raw.strip()
+    if text == "unlimited":
+        return {"mode": "unlimited", "limit": "unlimited", "unlimited": True}
+    if text == "0":
+        return {"mode": "count", "limit": 0, "unlimited": False}
+    if text.isdigit() and not text.startswith("0"):
+        value = int(text)
+        if 1 <= value <= 1000:
+            return {"mode": "count", "limit": value, "unlimited": False}
+    return {"mode": "invalid", "limit": "invalid", "unlimited": False}
+
+
 def normalize_base(raw: Optional[str] = None) -> str:
     text = (raw if raw is not None else os.getenv("AUU_AI_RELAY_BASE", ALLOWED_BASE)).strip()
     if not text:
@@ -158,7 +181,7 @@ def public_status() -> dict[str, Any]:
     used = attempts_today(day)
     enabled = _flag("AUU_AI_RELAY")
     model = os.getenv("AUU_AI_RELAY_MODEL", "").strip()
-    budget = _int_env("AUU_AI_RELAY_BUDGET", 0, 0, 1000)
+    budget = parse_budget()
     key_set = bool(_key())
     reason = None
     if not enabled:
@@ -169,7 +192,10 @@ def public_status() -> dict[str, Any]:
     elif not model:
         status = "missing_model"
         reason = "missing_model"
-    elif budget <= 0 or used >= budget:
+    elif budget["mode"] == "invalid":
+        status = "budget_invalid"
+        reason = "budget_invalid"
+    elif budget["mode"] == "count" and (int(budget["limit"]) <= 0 or used >= int(budget["limit"])):
         status = "budget_blocked"
         reason = "budget"
     elif used:
@@ -191,8 +217,10 @@ def public_status() -> dict[str, Any]:
         "output_char_cap": OUTPUT_CHAR_CAP,
         "concurrency_limit": _int_env("AUU_AI_RELAY_CONCURRENCY", 1, 1, 4),
         "budget_unit": "upstream_dispatch_attempt_per_utc_day",
+        "budget_mode": budget["mode"],
         "budget_used": used,
-        "budget_limit": budget,
+        "budget_limit": budget["limit"],
+        "budget_unlimited": budget["unlimited"],
         "budget_day": day,
         "budget_currency": None,
         "budget_guaranteed": False,

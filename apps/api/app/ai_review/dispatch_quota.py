@@ -65,11 +65,15 @@ def lookup(fact_key: str) -> Optional[str]:
     return None if row is None else str(row[0])
 
 
-def reserve(fact_key: str, day: str, limit: int) -> dict[str, Any]:
-    """Claim one attempt, or refuse without changing the count."""
+def reserve(fact_key: str, day: str, limit: Optional[int]) -> dict[str, Any]:
+    """Claim one attempt, or refuse without changing the count.
+
+    ``limit is None`` means the operator set ``unlimited``. There is still one
+    row per fact hash, and the day's count is still stored.
+    """
     if _KEY.fullmatch(fact_key or "") is None:
         return {"ok": False, "reason": "bad_key", "used": attempts_today(day)}
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         return {"ok": False, "reason": "budget", "used": attempts_today(day)}
     con = _connect(quota_path(), create=True)
     assert con is not None
@@ -81,7 +85,7 @@ def reserve(fact_key: str, day: str, limit: int) -> dict[str, Any]:
             con.execute("COMMIT")
             return {"ok": False, "reason": "duplicate", "outcome": str(existing[0]), "used": used}
         used = _used(con, day)
-        if used >= limit:
+        if limit is not None and used >= limit:
             con.execute("COMMIT")
             return {"ok": False, "reason": "budget", "used": used}
         if used == 0:
