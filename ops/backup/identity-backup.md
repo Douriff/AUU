@@ -32,6 +32,12 @@ unset AUU_IDENTITY_BACKUP_PASSPHRASE
 
 输出为 `ok users=N`。口令错误或文件被改过时以非零状态退出，并只说明失败类别。
 
+## 与每日 SQLite 备份的关系
+
+`auu_backup.sh` 每天 09:30（北京时间）只跑 `auu_backup.py`，文件列表只有 SQLite。不要把 `users.json`、`/etc/auu/auu.env`、`AUU_SESSION_SECRET` 或 AI 密钥加进这个列表，也不要把它们的明文复制到 box。口令不要写进 `auu_backup.env`。
+
+身份和 env 的密文继续用本脚本，不新做一套加密。需要更新时，在服务器上按上面的命令重新生成 `/root/auu-identity.bin`，再把这个密文文件单独放到与 SQLite 快照不同的离线目录。box 上的 09:30 任务不调用本脚本，也不传输口令。已经校验过的一次性密文在下一次有意更新之前仍然是恢复副本。
+
 ## 恢复
 
 1. 停止 API。确认 `AUU_STRATEGY_RUNNER`、`AUU_SHADOW_H2`、`AUU_SHADOW_S3`、`AUU_SIGNAL_SHADOW`、`AUU_ALERTS`、`AUU_PRICE_ALERTS`、`AUU_LIVE_ENABLED` 都是 `off`。

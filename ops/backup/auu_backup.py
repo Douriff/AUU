@@ -11,6 +11,9 @@ ledger code) and prunes snapshots older than 30 days. The server temp dir is rem
 
 Usage: auu_backup.py backup | verify [DIR] | restore-test [DIR] | list
 No exchange keys, SMTP passwords, session secrets or users.json are copied.
+``AUU_BACKUP_PORT`` defaults to 22. Any other port is pinned as ``[host]:port`` and does not reuse a
+bare known_hosts line. The recorded revision is ``git rev-parse --short HEAD`` when ``.git`` exists,
+otherwise the hex token in ``COMMIT``; a missing file is left missing rather than replaced with a made-up id.
 """
 from __future__ import annotations
 
@@ -18,6 +21,8 @@ import gzip
 import hashlib
 import json
 import os
+import re
+import shlex
 import shutil
 import sqlite3
 import sys
@@ -30,8 +35,8 @@ BJ = timezone(timedelta(hours=8))
 DEST = Path(os.environ.get("AUU_BACKUP_DIR") or Path.home() / "backups" / "auu")
 KEEP_DAYS = int(os.environ.get("AUU_BACKUP_KEEP_DAYS", "30"))
 # Host, key and pinned known_hosts come from the box-local config (auu_backup.env next to the installed script).
+# Port, user and remote paths are read per run so an already-imported module still sees the scheduler env.
 HOST = os.environ.get("AUU_BACKUP_HOST", "")
-SSH_USER = "root"
 KEY = os.environ.get("AUU_BACKUP_KEY", "")
 KNOWN_HOSTS = os.environ.get("AUU_BACKUP_KNOWN_HOSTS", "")
 DATA = os.environ.get("AUU_BACKUP_REMOTE_DATA", "/var/lib/auu/data")
@@ -93,15 +98,150 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def backup_port(raw: str | None = None) -> int:
+    """``AUU_BACKUP_PORT``; empty means 22 so an old env file keeps the previous port."""
+    if raw is None:
+        raw = os.environ.get("AUU_BACKUP_PORT", "")
+    text = (raw or "").strip()
+    if text == "":
+        return 22
+    if not text.isdigit():
+        raise SystemExit("AUU_BACKUP_PORT must be an integer from 1 to 65535")
+    port = int(text)
+    if not 1 <= port <= 65535:
+        raise SystemExit("AUU_BACKUP_PORT must be an integer from 1 to 65535")
+    return port
+
+
+def backup_user() -> str:
+    """``AUU_BACKUP_USER``; empty means root, which keeps the old runuser path."""
+    user = os.environ.get("AUU_BACKUP_USER", "").strip() or "root"
+    if user.startswith("-") or not user.replace("-", "").replace("_", "").isalnum():
+        raise SystemExit("AUU_BACKUP_USER must be a plain account name")
+    return user
+
+
+def backup_host() -> str:
+    host = os.environ.get("AUU_BACKUP_HOST", "").strip()
+    if any(ch in host for ch in " \t\r\n'\"\\$[]"):
+        raise SystemExit("AUU_BACKUP_HOST has illegal characters")
+    return host
+
+
+def hostkey_name(host: str, port: int) -> str:
+    """OpenSSH known_hosts name. Port 22 is the bare host; any other port is ``[host]:port``."""
+    if port == 22:
+        return host
+    return f"[{host}]:{port}"
+
+
+def _remote_path(raw: str, label: str) -> str:
+    path = raw.strip()
+    if not path.startswith("/") or any(ch in path for ch in "\n\r\x00"):
+        raise SystemExit(f"{label} must be an absolute path")
+    return path
+
+
+def remote_helper() -> str:
+    return _remote_path(os.environ.get("AUU_BACKUP_REMOTE_HELPER", "/usr/local/sbin/auu_remote_snapshot.py"),
+                        "AUU_BACKUP_REMOTE_HELPER")
+
+
+def pinned_host_keys(path: str, host: str, port: int):
+    """Load only the pinned file and require the exact host:port entry.
+
+    A bare hostname line is not a match for a non-22 port, and system ``known_hosts``
+    is not consulted. Missing or mismatched keys never get auto-accepted.
+    """
+    import paramiko
+
+    name = hostkey_name(host, port)
+    try:
+        keys = paramiko.HostKeys(path)
+    except OSError as exc:
+        raise SystemExit(f"cannot read AUU_BACKUP_KNOWN_HOSTS ({exc.__class__.__name__})") from exc
+    found = keys.lookup(name)
+    if not found:
+        raise SystemExit(f"known_hosts has no key for {name}; refusing to connect")
+    return name
+
+
+def root_rev_stdin() -> str:
+    """Server-side rev program: the helper module without its CLI, plus one call.
+
+    Root mode has no extra file on the server. Restricted mode runs the installed helper instead.
+    """
+    path = Path(__file__).with_name("auu_remote_snapshot.py")
+    text = path.read_text(encoding="utf-8")
+    marker = "# --- cli ---"
+    if marker not in text:
+        raise RuntimeError("auu_remote_snapshot.py is missing its cli marker")
+    return text.split(marker, 1)[0] + (
+        "import sys\n"
+        "_src, _rev = read_server_rev(sys.argv[1])\n"
+        "print('missing' if not _rev else f'{_src} {_rev}')\n"
+    )
+
+
+def parse_rev_output(text: str) -> tuple[str, str]:
+    """Return ``(rev, source)``. Unrecognized text is missing, not a version string."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "", "missing"
+    parts = lines[-1].split()
+    if parts == ["missing"]:
+        return "", "missing"
+    if len(parts) == 2 and parts[0] in {"git", "commit"}:
+        rev = parts[1].strip().lower()
+        if 7 <= len(rev) <= 64 and set(rev) <= set("0123456789abcdef"):
+            return rev, parts[0]
+    return "", "missing"
+
+
+def remote_snapshot_invocation(user: str | None = None) -> tuple[str, str]:
+    user = backup_user() if user is None else user
+    if user == "root":
+        data = _remote_path(os.environ.get("AUU_BACKUP_REMOTE_DATA", DATA), "AUU_BACKUP_REMOTE_DATA")
+        cmd = "runuser -u auu -- python3 - " + shlex.quote(data) + " " + shlex.quote(",".join(FILES))
+        return cmd, REMOTE
+    cmd = "sudo -n -u auu -- /usr/bin/python3 " + shlex.quote(remote_helper()) + " snapshot"
+    return cmd, ""
+
+
+def remote_rev_invocation(user: str | None = None) -> tuple[str, str]:
+    user = backup_user() if user is None else user
+    if user == "root":
+        repo = _remote_path(os.environ.get("AUU_BACKUP_REMOTE_REPO", REMOTE_REPO), "AUU_BACKUP_REMOTE_REPO")
+        return "python3 - " + shlex.quote(repo), root_rev_stdin()
+    return "/usr/bin/python3 " + shlex.quote(remote_helper()) + " rev", ""
+
+
+def assert_remote_dir(user: str, path: str) -> None:
+    if not path or any(ch in path for ch in "\n\r\x00") or any(part == ".." for part in path.split("/")):
+        raise RuntimeError("unexpected remote dir")
+    prefix = "/tmp/auu-bk-" if user == "root" else "/var/backups/auu-stage/auu-bk-"
+    rest = path[len(prefix):] if path.startswith(prefix) else ""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", rest or ""):
+        raise RuntimeError("unexpected remote dir")
+
+
+def remote_cleanup_command(user: str, path: str) -> str:
+    assert_remote_dir(user, path)
+    return "rm -rf -- " + shlex.quote(path)
+
+
 def connect():
     import paramiko
 
-    if not (HOST and KEY and KNOWN_HOSTS):
+    host, key, known = backup_host(), os.environ.get("AUU_BACKUP_KEY", "").strip(), os.environ.get("AUU_BACKUP_KNOWN_HOSTS", "").strip()
+    if not (host and key and known):
         raise SystemExit("set AUU_BACKUP_HOST, AUU_BACKUP_KEY and AUU_BACKUP_KNOWN_HOSTS (see ops/backup/README.md)")
+    port, user = backup_port(), backup_user()
+    pinned_host_keys(known, host, port)
     c = paramiko.SSHClient()
-    c.load_host_keys(KNOWN_HOSTS)  # pinned host key; never auto-accept
+    c.load_host_keys(known)  # pinned file only; never the system known_hosts, never auto-accept
     c.set_missing_host_key_policy(paramiko.RejectPolicy())
-    c.connect(HOST, username=SSH_USER, key_filename=KEY, timeout=20, allow_agent=False, look_for_keys=False)
+    c.connect(host, port=port, username=user, key_filename=key, timeout=20, allow_agent=False, look_for_keys=False)
     return c
 
 
@@ -119,19 +259,23 @@ def backup() -> Path:
     DEST.mkdir(parents=True, exist_ok=True)
     work = DEST / f".partial-{ts}"
     work.mkdir()
+    user = backup_user()
     c = connect()
     remote_dir = None
     try:
-        rc, out, err = run(c, f"runuser -u auu -- python3 - {DATA} {','.join(FILES)}", stdin=REMOTE)
+        snap_cmd, snap_in = remote_snapshot_invocation(user)
+        rc, out, err = run(c, snap_cmd, stdin=snap_in)
         if rc != 0:
             raise RuntimeError(f"remote snapshot failed rc={rc}: {err[-400:]}")
         res = json.loads(out.strip().splitlines()[-1])
         remote_dir = res["dir"]
-        if not remote_dir.startswith("/tmp/auu-bk-"):
-            raise RuntimeError("unexpected remote dir")
-        _, rev, _ = run(c, f"cd {REMOTE_REPO} && git rev-parse --short HEAD")
+        assert_remote_dir(user, remote_dir)
+        rev_cmd, rev_in = remote_rev_invocation(user)
+        rev_rc, rev_out, _rev_err = run(c, rev_cmd, stdin=rev_in)
+        rev, rev_source = parse_rev_output(rev_out if rev_rc == 0 else "")
         sftp = c.open_sftp()
-        manifest = {"created_bj": datetime.now(BJ).isoformat(timespec="seconds"), "host": HOST, "server_rev": rev.strip(),
+        manifest = {"created_bj": datetime.now(BJ).isoformat(timespec="seconds"), "host": backup_host(),
+                    "port": backup_port(), "ssh_user": user, "server_rev": rev, "server_rev_source": rev_source,
                     "method": "sqlite3 online backup API (server, as auu) -> sftp -> gzip", "files": {}}
         for name, meta in res["files"].items():
             if meta.get("missing"):
@@ -152,8 +296,11 @@ def backup() -> Path:
             manifest["files"][name] = {**meta, "gz": gz.name, "gz_sha256": sha256(gz), "gz_bytes": gz.stat().st_size}
         sftp.close()
     finally:
-        if remote_dir and remote_dir.startswith("/tmp/auu-bk-"):
-            run(c, f"rm -rf -- '{remote_dir}'")
+        if remote_dir:
+            try:
+                run(c, remote_cleanup_command(user, remote_dir))
+            except RuntimeError:
+                log("remote temp dir was not removed (unexpected path)")
         c.close()
     (work / "MANIFEST.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     sums = [f"{m['sha256']}  {n}\n{m['gz_sha256']}  {m['gz']}" for n, m in sorted(manifest["files"].items()) if not m.get("missing")]
@@ -161,7 +308,8 @@ def backup() -> Path:
     final = DEST / ts
     work.rename(final)
     os.chmod(final, 0o700)
-    log(f"backup {final.name}: " + ", ".join(f"{n} {m.get('bytes', 0) // 1024}KB" for n, m in manifest["files"].items() if not m.get("missing")))
+    log(f"backup {final.name} port={manifest['port']} rev={rev or 'missing'}: " + ", ".join(
+        f"{n} {m.get('bytes', 0) // 1024}KB" for n, m in manifest["files"].items() if not m.get("missing")))
     return final
 
 
