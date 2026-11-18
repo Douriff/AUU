@@ -481,18 +481,26 @@ class MainstreamApiTests(_NoNetwork):
         "/api/v1/mainstream/markets",
     ]
 
-    def test_new_api_requires_login(self):
+    def test_anonymous_reads_quotes_but_not_orders_or_strategy(self):
         anon = self.TestClient(self.app)
         for path in self.PATHS:
             with self.subTest(path=path):
                 res = anon.get(path)
+                self.assertEqual(res.status_code, 200, res.text)
+        board = anon.get("/api/v1/mainstream/markets").json()["data"]
+        self.assertTrue(board["items"])
+        self.assertTrue(all(item["weight"] is None and item["held"] is False for item in board["items"]))
+        for path in ("/api/v1/mainstream/strategy", "/api/v1/mainstream/paper/account", "/api/v1/mainstream/signal", "/api/v1/status"):
+            with self.subTest(path=path):
+                res = anon.get(path)
                 self.assertEqual(res.status_code, 401, res.text)
                 self.assertEqual(res.json()["error"]["code"], "AUTH_REQUIRED")
-        from starlette.websockets import WebSocketDisconnect
-
-        with self.assertRaises(WebSocketDisconnect):
-            with anon.websocket_connect("/api/v1/ws") as ws:
-                ws.receive_json()
+        placed = anon.post("/api/v1/mainstream/paper/orders", json={"client_order_id": "x", "symbol": "BTC", "side": "buy", "notional": 10})
+        self.assertEqual(placed.status_code, 401, placed.text)
+        with anon.websocket_connect("/api/v1/ws") as ws:
+            hello = ws.receive_json()
+        self.assertEqual(hello["type"], "hello")
+        self.assertNotIn("fill", hello["eventTypes"])
 
     def test_logged_in_reads(self):
         user = self._signed_in("msuser")

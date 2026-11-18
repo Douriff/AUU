@@ -35,10 +35,10 @@ PRIVATE_GETS = [
     "/api/v1/live/status",
     "/api/v1/markets",
     "/api/v1/symbols",
-    "/api/v1/mainstream/overview",
-    "/api/v1/mainstream/candles?symbol=BTC&tf=1d",
-    "/api/v1/mainstream/funding?symbol=BTC",
-    "/api/v1/mainstream/status",
+    "/api/v1/mainstream/strategy",
+    "/api/v1/mainstream/paper/account",
+    "/api/v1/mainstream/signal",
+    "/api/v1/mainstream/shadow/h2",
 ]
 
 ADMIN_WRITES = [
@@ -65,7 +65,6 @@ class GateDecisionTests(unittest.TestCase):
         self.assertIsNone(gate_decision("/api/v1/auth/login", "POST", None))
         self.assertIsNone(gate_decision("/", "GET", None))
         self.assertEqual(gate_decision("/api/v1/board", "GET", None)[0], 401)
-        self.assertEqual(gate_decision("/api/v1/ws", "GET", None)[0], 401)
         self.assertEqual(gate_decision("//api/v1//strategy/pump-paper-v1/", "PUT", None)[0], 401)
         self.assertEqual(gate_decision("/api/v1/strategy/pump-paper-v1", "PUT", {"is_admin": False})[0], 403)
         self.assertIsNone(gate_decision("/api/v1/strategy/pump-paper-v1", "PUT", {"is_admin": True}))
@@ -75,6 +74,22 @@ class GateDecisionTests(unittest.TestCase):
         self.assertEqual(gate_decision("/api/v1/status", "GET", None)[0], 401)
         self.assertEqual(gate_decision("/api/v1/status", "GET", {"is_admin": False})[0], 403)
         self.assertIsNone(gate_decision("/api/v1/status", "GET", {"is_admin": True}))
+        for path in (
+            "/api/v1/mainstream/markets",
+            "/api/v1/mainstream/overview",
+            "/api/v1/mainstream/candles",
+            "/api/v1/mainstream/orderbook",
+            "/api/v1/mainstream/coin",
+            "/api/v1/mainstream/funding",
+            "/api/v1/majors",
+            "/api/v1/majors/tickers",
+            "/api/v1/ws",
+        ):
+            self.assertIsNone(gate_decision(path, "GET", None), path)
+        self.assertEqual(gate_decision("/api/v1/mainstream/candles", "POST", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/mainstream/paper/orders", "POST", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/exchange/accounts", "GET", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/live/orders", "POST", None)[0], 401)
 
 
 class AuthGateApiTests(unittest.TestCase):
@@ -158,14 +173,12 @@ class AuthGateApiTests(unittest.TestCase):
         finally:
             self.engine.update_params({"auto_paper_orders": self.auto_before})
 
-    def test_websocket_requires_session(self):
-        from starlette.websockets import WebSocketDisconnect
-
+    def test_websocket_market_hello_is_public_and_omits_private_events(self):
         anon = self.TestClient(self.app)
-        with self.assertRaises(WebSocketDisconnect) as ctx:
-            with anon.websocket_connect("/api/v1/ws") as ws:
-                ws.receive_json()
-        self.assertEqual(ctx.exception.code, 1008)
+        with anon.websocket_connect("/api/v1/ws") as ws:
+            hello = ws.receive_json()
+        self.assertEqual(hello["type"], "hello")
+        self.assertNotIn("fill", hello["eventTypes"])
         user = self._signed_in("gatews")
         with user.websocket_connect("/api/v1/ws") as ws:
             self.assertEqual(ws.receive_json()["type"], "hello")

@@ -68,6 +68,9 @@ async def ws_endpoint(websocket: WebSocket):
         if rt is not None:
             hello["eventTypes"] = hello["eventTypes"] + ["ticker", "kline", "rt_status"]
             hello.update(rt.hello_extra())
+    private = bool(websocket.scope.get("auu_user_id"))
+    if not private:
+        hello["eventTypes"] = ["ticker", "kline", "rt_status"] if rt is not None else []
     if rt is None:
         await websocket.send_json(hello)
     else:
@@ -81,7 +84,7 @@ async def ws_endpoint(websocket: WebSocket):
     tasks: dict[str, asyncio.Task] = {}
     stop = asyncio.Event()
     hub = get_hub()
-    hub_q = await hub.subscribe()
+    hub_q = await hub.subscribe() if private else None
 
     async def pump(channel: str, symbol: str, interval: str | None):
         try:
@@ -117,7 +120,7 @@ async def ws_endpoint(websocket: WebSocket):
             return
 
     hb = asyncio.create_task(heartbeat())
-    hub_task = asyncio.create_task(hub_pump())
+    hub_task = asyncio.create_task(hub_pump()) if hub_q is not None else None
     rt_task = asyncio.create_task(rt.sender()) if rt is not None else None
 
     try:
@@ -208,7 +211,8 @@ async def ws_endpoint(websocket: WebSocket):
     finally:
         stop.set()
         hb.cancel()
-        hub_task.cancel()
+        if hub_task is not None:
+            hub_task.cancel()
         for t in tasks.values():
             t.cancel()
         extra = []
@@ -216,8 +220,9 @@ async def ws_endpoint(websocket: WebSocket):
             rt.close()
             rt_task.cancel()
             extra.append(rt_task)
-        await hub.unsubscribe(hub_q)
-        await asyncio.gather(hb, hub_task, *tasks.values(), *extra, return_exceptions=True)
+        if hub_q is not None:
+            await hub.unsubscribe(hub_q)
+        await asyncio.gather(hb, *([hub_task] if hub_task is not None else []), *tasks.values(), *extra, return_exceptions=True)
 
 
 def _rt_session(websocket: WebSocket):
