@@ -1,5 +1,5 @@
 # Purpose: isolated, no-production joint tests of a temporary runner merge of
-#   PR139 55fcd2218e8638db98d5b9f01d3354a97356cd4a
+#   PR139 fe8a4576663d076a835ccb8abf823061f1392c82
 #   PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694
 # against the real main baseline 3211be8c9821c788ae49c863bb210da06c377d29.
 # Start with a one-commit push of this file to branch auu-ci/pr138-df2a6ce
@@ -22,9 +22,10 @@
 # HEAD^{tree}), not the merge commit SHA (author/committer timestamps are
 # written to metadata and are not forced). Both jobs record merge_tree
 # dynamically after the same two-head merge; compare the two recorded
-# values — they must match. Do not pin or expect the previous joint tree
-# a1fcd0a6758863e18d39d77703538789b7ac4185 (that was 06f81be + d3483b79
-# only, before this mobile tab-bar head).
+# values — they must match. Do not pin or expect previous joint trees
+# a1fcd0a6758863e18d39d77703538789b7ac4185 (06f81be + d3483b79) or
+# 70251b613fa0efbe0fafa9b73bfb03ec1bc8ee3c (55fcd22 + d3483b79). This
+# head changes the API test file, so the tree is not 70251b6.
 #
 # How to compare merge_tree with a later official GitHub merge:
 #   official_tree=$(git rev-parse <official-merge-commit>^{tree})
@@ -34,7 +35,7 @@
 # have the same tree; compare trees, not commit SHAs. If main has moved
 # past 3211be8, a merge of both PRs into that later main will contain
 # additional commits and will not equal this tree. In that case recreate
-# the same two-head merge on a detached 55fcd22 and compare HEAD^{tree}.
+# the same two-head merge on a detached fe8a457 and compare HEAD^{tree}.
 # A matching tree is not a deploy, not a preview GUI pass, and not
 # production sign-off.
 #
@@ -97,15 +98,21 @@
 # apps/web/scripts/i18n-check.mjs) counted main 1877, PR138 1879,
 # previous PR139 head 06f81be 1894, and the previous joint union 1896
 # (PR138-only subscribe.accountTitle/accountSub; previous PR139-only
-# nav.ai plus the aiReview.board* keys including boardEntry). The new
-# PR139 head 55fcd22 adds nav.tabPnl (mobile tab bar), so the new joint
-# locale is that previous union plus tabPnl. Both jobs print the
-# merged-tree count from that same flatten. The workflow does not pass
-# or fail solely on a hardcoded key count, including the previous joint
-# 1896. Web `npm run build` still runs i18n-check.mjs, which enforces
+# nav.ai plus the aiReview.board* keys including boardEntry). PR139 head
+# 55fcd22 added nav.tabPnl (mobile tab bar), so that joint locale was
+# the previous union plus tabPnl. Head fe8a457 does not change locales;
+# the key set is unchanged. Both jobs print the merged-tree count from
+# that same flatten. The workflow does not pass or fail solely on a
+# hardcoded key count, including the previous joint 1896. Web
+# `npm run build` still runs i18n-check.mjs, which enforces
 # cross-locale parity.
 #
-# Board guard: on PR139 head 55fcd22, apps/web/scripts/ai-review-guard.test.mjs
+# API suite: discover command, assertions, and isolation are unchanged.
+# fe8a457 adds one LocaleNamespaceTests case relative to the 55fcd22
+# joint (run 44520074264, 1255 tests). Expect one more collected API
+# test. Do not shrink, skip, or rerun the suite.
+#
+# Board guard: on PR139 head fe8a457, apps/web/scripts/ai-review-guard.test.mjs
 # (blob c6619e808f24b52e6c86bdd581e204ae058f7c5b) is the board guard. It
 # reads BoardAiPanel.tsx and asserts the panel does not call the model on
 # open and that ask() is behind an explicit click. No separate
@@ -151,7 +158,7 @@ jobs:
       - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 55fcd2218e8638db98d5b9f01d3354a97356cd4a
+          ref: fe8a4576663d076a835ccb8abf823061f1392c82
           fetch-depth: 0
           persist-credentials: false
 
@@ -160,7 +167,7 @@ jobs:
           set -euo pipefail
           LOGDIR="$GITHUB_WORKSPACE/test-logs"
           mkdir -p "$LOGDIR"
-          PR139_SHA="55fcd2218e8638db98d5b9f01d3354a97356cd4a"
+          PR139_SHA="fe8a4576663d076a835ccb8abf823061f1392c82"
           PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
           MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
 
@@ -243,7 +250,7 @@ jobs:
             exit 1
           fi
 
-          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 55fcd2218e8638db98d5b9f01d3354a97356cd4a with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 fe8a4576663d076a835ccb8abf823061f1392c82 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
 
           MERGE_COMMIT="$(git rev-parse --verify HEAD)"
           MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
@@ -362,7 +369,7 @@ jobs:
           RUNNER_GID="$(id -g)"
           RUNNER_USER="$(id -un)"
           {
-            echo "intended_pr139=55fcd2218e8638db98d5b9f01d3354a97356cd4a"
+            echo "intended_pr139=fe8a4576663d076a835ccb8abf823061f1392c82"
             echo "intended_pr138=d3483b7943579ae7ce2b50d8c21fdfc272d96694"
             echo "intended_main_base=3211be8c9821c788ae49c863bb210da06c377d29"
             echo -n "checked_out_head="
@@ -530,7 +537,7 @@ jobs:
       - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 55fcd2218e8638db98d5b9f01d3354a97356cd4a
+          ref: fe8a4576663d076a835ccb8abf823061f1392c82
           fetch-depth: 0
           persist-credentials: false
 
@@ -539,7 +546,7 @@ jobs:
           set -euo pipefail
           LOGDIR="$GITHUB_WORKSPACE/test-logs"
           mkdir -p "$LOGDIR"
-          PR139_SHA="55fcd2218e8638db98d5b9f01d3354a97356cd4a"
+          PR139_SHA="fe8a4576663d076a835ccb8abf823061f1392c82"
           PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
           MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
 
@@ -622,7 +629,7 @@ jobs:
             exit 1
           fi
 
-          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 55fcd2218e8638db98d5b9f01d3354a97356cd4a with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 fe8a4576663d076a835ccb8abf823061f1392c82 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
 
           MERGE_COMMIT="$(git rev-parse --verify HEAD)"
           MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
@@ -815,7 +822,7 @@ jobs:
           done
           shopt -u nullglob
           if [ "\$extra_found" = "0" ]; then
-            echo "no additional board guard scripts present (expected on 55fcd22)" | tee "$LOGDIR/web-extra-board-guard.log"
+            echo "no additional board guard scripts present (expected on fe8a457)" | tee "$LOGDIR/web-extra-board-guard.log"
             r7=0
           fi
           run_timed 300 "$LOGDIR/web-build.log" npm run build
