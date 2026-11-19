@@ -916,6 +916,17 @@ button.ov-card:hover, a.ov-card:hover { border-color: var(--border2); background
 
 /* Long labels (German / Russian / French …): never let the nav or pills overflow the bar */
 .topnav-links a, .tabbar a span { overflow: hidden; text-overflow: ellipsis; }
+/* 7-tab phone bar: keep each label inside its column (min-width:0 + ellipsis). Touch target ≥44px. */
+.tabbar a { min-width: 0; min-height: 44px; box-sizing: border-box; }
+.tabbar a span {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
 .mode-pill { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
 /* RTL: flex/grid mirror by themselves via dir="rtl" on <html>; prices, numbers, charts and the order book stay LTR */
