@@ -1,5 +1,5 @@
 # Purpose: isolated, no-production tests of PR 138 at
-# df2a6ce61723d45639b39f2616c54c3d9f2d1e6f. Start with a one-commit push of
+# d3483b7943579ae7ce2b50d8c21fdfc272d96694. Start with a one-commit push of
 # this file to branch auu-ci/pr138-df2a6ce (not main).
 # Repo path: .github/workflows/pr138-df2a6ce-isolated-tests.yml
 # workflow_dispatch is omitted so the first run does not depend on this file
@@ -23,8 +23,54 @@
 # Action pins are lightweight tags from the official actions/* repos:
 #   checkout@v7.0.1, setup-python@v7.1.0, setup-node@v7.1.0, upload-artifact@v7.0.2
 #
-# On df2a6ce the prior report is: isolated health test passes, full API suite
-# has one failure. A red job on that expected failure is still a failure.
+# Node: use 22, not 20. apps/web/package.json has no engines field. Run
+# 44487985877 on Node v20.20.2 showed EBADENGINE for transitive
+# react-native@0.87.1 / @react-native/*@0.87.1 requiring
+# ^22.13.0 || ^24.3.0 || >=26.0.0, and commander@15.0.0 requiring >=22.12.0.
+# The same run failed node scripts/subscription-gate.test.mjs and
+# scripts/strategy-gap.test.mjs with ERR_UNKNOWN_FILE_EXTENSION for their
+# direct .ts imports (subscription.ts, segmentSeries.ts). Those files use
+# only erasable TypeScript (types, interfaces, import type, `as`). Official
+# Node 22.18.0+ enables type stripping by default, so the same `node file.mjs`
+# commands can load those imports without a new loader, without deleting
+# assertions, and without skipping tests.
+# https://nodejs.org/en/blog/release/v22.18.0/
+# https://nodejs.org/learn/typescript/run-natively
+# Production apps/web/Dockerfile stays node:20; this change is CI-only.
+#
+# AUU_LEGACY_PUMP is intentionally left unset. Product default is off
+# (README). The unittest harness (app.data_paths.install_test_isolation)
+# does setdefault("AUU_LEGACY_PUMP", "on") so the legacy_pump suite can
+# exercise those routes; MainstreamApiTests still build create_app(legacy=False).
+# Run 44487985877 exported AUU_LEGACY_PUMP=off and blocked that setdefault,
+# producing dozens of 404/cex_public failures that the CloudAgent baseline
+# (1253 pass / 1 fail) did not have. Do not set the flag on or off here just
+# to change the result.
+#
+# Each test command has its own timeout and unbuffered tee'd progress.
+# Isolation stays on; a hang must not sit until the 45-minute job cap.
+#
+# On df2a6ce the prior CloudAgent report and GitHub run 44487985877 both show:
+# isolated health test passes, full API suite fails
+# test_health_mainstream_mode (autopaperStall.stalled). A red job on that
+# expected failure is still a failure. This workflow does not apply a source
+# patch, skip tests, or relax assertions. It still pins
+# d3483b7943579ae7ce2b50d8c21fdfc272d96694. After the health isolation test
+# file is committed on cursor/free-market-board-906f, replace every occurrence
+# of that SHA in checkout refs and comments, then push this workflow. Do not
+# push a known-red run against the unfixed SHA.
+#
+# Restore drill (ops/backup/auu_backup.py _app_read): APP_API defaults to
+# <repo>/apps/api (or $AUU_BACKUP_APP). It execs APP_API/.venv/bin/python -c
+# with cwd=APP_API and PYTHONPATH=APP_API. CI creates a real venv at
+# apps/api/.venv and runs tests with that interpreter. AUU_BACKUP_APP is left
+# unset. Do not symlink a dummy python into a fake .venv.
+#
+# git show main: baseline (test_ai_review_integrity) needs a local ref named
+# main. API checkout uses fetch-depth: 0. A later step creates local main
+# pointing at the already-fetched origin/main (or fetches that one ref if the
+# checkout did not leave it). The remote is not updated. HEAD stays on the
+# pinned SHA; main is not checked out.
 
 name: Isolated no-production tests
 
@@ -44,11 +90,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Only names already documented in docker-compose.yml, apps/api/Dockerfile, or README.
-    # AUU_LIVE_API_ENABLE and AUU_AUTH are left unset on purpose (documented defaults).
+    # AUU_LIVE_API_ENABLE, AUU_AUTH, and AUU_LEGACY_PUMP are left unset on purpose.
     env:
       PYTHONUNBUFFERED: "1"
       DATA_PROVIDER: mock
-      AUU_LEGACY_PUMP: "off"
       AUU_LIVE_ENABLED: "false"
       AUU_LIVE_DISABLED: "true"
       AUU_LIVE_ARMED: "false"
@@ -56,22 +101,77 @@ jobs:
       - name: Check out hardcoded PR138 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: df2a6ce61723d45639b39f2616c54c3d9f2d1e6f
+          ref: d3483b7943579ae7ce2b50d8c21fdfc272d96694
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Point local main at fetched origin/main
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/test-logs"
+          # Public fetch of one branch ref if checkout left it out. No push,
+          # no credential, no checkout of main, no change to origin/main.
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          fi
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            echo "origin/main was not fetched; refusing to invent a local main"
+            exit 1
+          fi
+          git update-ref refs/heads/main refs/remotes/origin/main
+          HEAD_SHA="$(git rev-parse --verify HEAD)"
+          MAIN_SHA="$(git rev-parse --verify main)"
+          ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          {
+            echo "head_sha=$HEAD_SHA"
+            echo "local_main_sha=$MAIN_SHA"
+            echo "origin_main_sha=$ORIGIN_MAIN_SHA"
+          } | tee -a "$GITHUB_WORKSPACE/test-logs/meta.txt"
+          if [ "$MAIN_SHA" != "$ORIGIN_MAIN_SHA" ]; then
+            echo "local main does not match origin/main"
+            exit 1
+          fi
+          if [ "$HEAD_SHA" != "d3483b7943579ae7ce2b50d8c21fdfc272d96694" ]; then
+            echo "HEAD moved off the pinned SHA: $HEAD_SHA"
+            exit 1
+          fi
+          if [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
+            echo "warning: pinned SHA equals origin/main; git show main is still a real ref"
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
-      - name: Install API test dependencies
+      - name: Install API test dependencies into apps/api/.venv
         run: |
+          set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/test-logs"
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/api/requirements-dev.txt
+          VENV="$GITHUB_WORKSPACE/apps/api/.venv"
+          VENV_PY="$VENV/bin/python"
+          # Real venv at the exact path ops/backup/auu_backup.py _app_read uses:
+          # Path(APP_API) / ".venv/bin/python" with APP_API defaulting to
+          # <repo>/apps/api. No AUU_BACKUP_APP, no symlink stand-in.
+          python -m venv "$VENV"
+          test -f "$VENV/pyvenv.cfg"
+          test -x "$VENV_PY"
+          "$VENV_PY" -m pip install --upgrade pip
+          "$VENV_PY" -m pip install -r apps/api/requirements-dev.txt
           # CI-only extra, not a checked-in requirement. See file header.
-          python -m pip install "paramiko==5.1.0"
-          python -m pip show paramiko | tee "$GITHUB_WORKSPACE/test-logs/paramiko-show.txt"
+          "$VENV_PY" -m pip install "paramiko==5.1.0"
+          "$VENV_PY" -m pip show paramiko | tee "$GITHUB_WORKSPACE/test-logs/paramiko-show.txt"
+          {
+            echo "venv=$VENV"
+            echo -n "venv_python="
+            "$VENV_PY" -c "import sys; print(sys.executable)"
+            echo -n "venv_prefix="
+            "$VENV_PY" -c "import sys; print(sys.prefix)"
+          } | tee -a "$GITHUB_WORKSPACE/test-logs/meta.txt"
+          case "$("$VENV_PY" -c "import sys; print(sys.executable)")" in
+            */apps/api/.venv/bin/python) ;;
+            *) echo "venv interpreter is not apps/api/.venv/bin/python"; exit 1 ;;
+          esac
 
       - name: Run API tests in a loopback-only network namespace
         run: |
@@ -82,24 +182,30 @@ jobs:
           RUNNER_GID="$(id -g)"
           RUNNER_USER="$(id -un)"
           {
-            echo "intended_sha=df2a6ce61723d45639b39f2616c54c3d9f2d1e6f"
+            echo "intended_sha=d3483b7943579ae7ce2b50d8c21fdfc272d96694"
             echo -n "checked_out="
             git -C "$GITHUB_WORKSPACE" rev-parse HEAD
             echo "runner_uid=$RUNNER_UID"
             echo "runner_gid=$RUNNER_GID"
             echo "runner_user=$RUNNER_USER"
-          } > "$LOGDIR/meta.txt"
+          } >> "$LOGDIR/meta.txt"
 
+          VENV_PY="$GITHUB_WORKSPACE/apps/api/.venv/bin/python"
+          if [ ! -x "$VENV_PY" ] || [ ! -f "$GITHUB_WORKSPACE/apps/api/.venv/pyvenv.cfg" ]; then
+            echo "apps/api/.venv is missing or is not a real venv" >&2
+            exit 1
+          fi
           {
-            echo "export PATH=$(printf '%q' "$PATH")"
+            echo "export PATH=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv/bin:$PATH")"
             echo "export HOME=$(printf '%q' "$HOME")"
             echo "export LANG=$(printf '%q' "${LANG:-C.UTF-8}")"
             echo "export PYTHONUNBUFFERED=1"
             echo "export DATA_PROVIDER=mock"
-            echo "export AUU_LEGACY_PUMP=off"
             echo "export AUU_LIVE_ENABLED=false"
             echo "export AUU_LIVE_DISABLED=true"
             echo "export AUU_LIVE_ARMED=false"
+            echo "export VIRTUAL_ENV=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv")"
+            echo "export VENV_PY=$(printf '%q' "$VENV_PY")"
             echo "export GITHUB_WORKSPACE=$(printf '%q' "$GITHUB_WORKSPACE")"
             echo "export LOGDIR=$(printf '%q' "$LOGDIR")"
           } > "$LOGDIR/test-env.sh"
@@ -119,15 +225,36 @@ jobs:
             echo "cd apps/api failed" > "$LOGDIR/netns-error.log"
             exit 91
           }
+          solo=99
+          full=99
+          finish() {
+            echo "solo_exit=\$solo" >> "$LOGDIR/meta.txt"
+            echo "full_exit=\$full" >> "$LOGDIR/meta.txt"
+            date +%s > "$LOGDIR/tests-completed.flag"
+          }
+          trap finish EXIT
+          run_timed() {
+            local secs="\$1" log="\$2"
+            shift 2
+            echo "===== BEGIN \$(date -u +%Y-%m-%dT%H:%M:%SZ) timeout=\${secs}s: \$* ====="
+            set -o pipefail
+            stdbuf -oL -eL timeout --foreground --kill-after=30s "\${secs}s" "\$@" 2>&1 | tee "\$log"
+            local rc=\${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "\$rc" = "124" ]; then
+              echo "===== COMMAND TIMED OUT after \${secs}s: \$* ====="
+            elif [ "\$rc" = "137" ]; then
+              echo "===== COMMAND KILLED after timeout: \$* ====="
+            fi
+            echo "===== END \$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=\$rc: \$* ====="
+            return "\$rc"
+          }
           set +e
-          python -m unittest tests.test_mainstream_data.MainstreamApiTests.test_health_mainstream_mode -v > "$LOGDIR/api-health-solo.log" 2>&1
+          run_timed 180 "$LOGDIR/api-health-solo.log" "\$VENV_PY" -u -m unittest tests.test_mainstream_data.MainstreamApiTests.test_health_mainstream_mode -v
           solo=\$?
-          python -m unittest discover -s tests -p 'test_*.py' -v > "$LOGDIR/api-full.log" 2>&1
+          run_timed 900 "$LOGDIR/api-full.log" "\$VENV_PY" -u -m unittest discover -s tests -p 'test_*.py' -v
           full=\$?
           set -e
-          echo "solo_exit=\$solo" >> "$LOGDIR/meta.txt"
-          echo "full_exit=\$full" >> "$LOGDIR/meta.txt"
-          date +%s > "$LOGDIR/tests-completed.flag"
           if [ "\$solo" != "0" ] || [ "\$full" != "0" ]; then
             exit 1
           fi
@@ -165,8 +292,8 @@ jobs:
           chmod 0755 "$LOGDIR/enter-netns.sh"
 
           set +e
-          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" > "$LOGDIR/netns-outer.log" 2>&1
-          rc=$?
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" 2>&1 | tee "$LOGDIR/netns-outer.log"
+          rc=${PIPESTATUS[0]}
           set -e
           if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
             echo "Namespace setup failed; tests were not run unisolated."
@@ -210,19 +337,21 @@ jobs:
       - name: Check out hardcoded PR138 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: df2a6ce61723d45639b39f2616c54c3d9f2d1e6f
+          ref: d3483b7943579ae7ce2b50d8c21fdfc272d96694
           persist-credentials: false
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: apps/web
-        run: npm ci
+        run: |
+          node -v
+          npm ci
 
       - name: Run frontend checks and build in a loopback-only network namespace
         run: |
@@ -236,6 +365,8 @@ jobs:
             echo "runner_uid=$RUNNER_UID"
             echo "runner_gid=$RUNNER_GID"
             echo "runner_user=$RUNNER_USER"
+            echo -n "node_version="
+            node -v
           } > "$LOGDIR/web-meta.txt"
 
           {
@@ -259,27 +390,45 @@ jobs:
             echo "cd apps/web failed" > "$LOGDIR/netns-error.log"
             exit 91
           }
+          r1=99 r2=99 r3=99 r4=99 r5=99 r6=99
+          finish() {
+            echo "subscription_gate=\$r1" >> "$LOGDIR/web-meta.txt"
+            echo "screener_route=\$r2" >> "$LOGDIR/web-meta.txt"
+            echo "ai_review_format=\$r3" >> "$LOGDIR/web-meta.txt"
+            echo "ai_review_guard=\$r4" >> "$LOGDIR/web-meta.txt"
+            echo "strategy_gap=\$r5" >> "$LOGDIR/web-meta.txt"
+            echo "build=\$r6" >> "$LOGDIR/web-meta.txt"
+            date +%s > "$LOGDIR/tests-completed.flag"
+          }
+          trap finish EXIT
+          run_timed() {
+            local secs="\$1" log="\$2"
+            shift 2
+            echo "===== BEGIN \$(date -u +%Y-%m-%dT%H:%M:%SZ) timeout=\${secs}s: \$* ====="
+            set -o pipefail
+            stdbuf -oL -eL timeout --foreground --kill-after=30s "\${secs}s" "\$@" 2>&1 | tee "\$log"
+            local rc=\${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "\$rc" = "124" ] || [ "\$rc" = "137" ]; then
+              echo "===== COMMAND STOPPED rc=\$rc after \${secs}s: \$* ====="
+            fi
+            echo "===== END \$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=\$rc: \$* ====="
+            return "\$rc"
+          }
           set +e
-          node scripts/subscription-gate.test.mjs > "$LOGDIR/web-subscription-gate.log" 2>&1
+          run_timed 120 "$LOGDIR/web-subscription-gate.log" node scripts/subscription-gate.test.mjs
           r1=\$?
-          node scripts/screener-route.test.mjs > "$LOGDIR/web-screener-route.log" 2>&1
+          run_timed 120 "$LOGDIR/web-screener-route.log" node scripts/screener-route.test.mjs
           r2=\$?
-          node scripts/ai-review-format.test.mjs > "$LOGDIR/web-ai-review-format.log" 2>&1
+          run_timed 120 "$LOGDIR/web-ai-review-format.log" node scripts/ai-review-format.test.mjs
           r3=\$?
-          node scripts/ai-review-guard.test.mjs > "$LOGDIR/web-ai-review-guard.log" 2>&1
+          run_timed 120 "$LOGDIR/web-ai-review-guard.log" node scripts/ai-review-guard.test.mjs
           r4=\$?
-          node scripts/strategy-gap.test.mjs > "$LOGDIR/web-strategy-gap.log" 2>&1
+          run_timed 120 "$LOGDIR/web-strategy-gap.log" node scripts/strategy-gap.test.mjs
           r5=\$?
-          npm run build > "$LOGDIR/web-build.log" 2>&1
+          run_timed 480 "$LOGDIR/web-build.log" npm run build
           r6=\$?
           set -e
-          echo "subscription_gate=\$r1" >> "$LOGDIR/web-meta.txt"
-          echo "screener_route=\$r2" >> "$LOGDIR/web-meta.txt"
-          echo "ai_review_format=\$r3" >> "$LOGDIR/web-meta.txt"
-          echo "ai_review_guard=\$r4" >> "$LOGDIR/web-meta.txt"
-          echo "strategy_gap=\$r5" >> "$LOGDIR/web-meta.txt"
-          echo "build=\$r6" >> "$LOGDIR/web-meta.txt"
-          date +%s > "$LOGDIR/tests-completed.flag"
           if [ "\$r1" != "0" ] || [ "\$r2" != "0" ] || [ "\$r3" != "0" ] || [ "\$r4" != "0" ] || [ "\$r5" != "0" ] || [ "\$r6" != "0" ]; then
             exit 1
           fi
@@ -317,8 +466,8 @@ jobs:
           chmod 0755 "$LOGDIR/enter-netns.sh"
 
           set +e
-          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" > "$LOGDIR/netns-outer.log" 2>&1
-          rc=$?
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" 2>&1 | tee "$LOGDIR/netns-outer.log"
+          rc=${PIPESTATUS[0]}
           set -e
           if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
             echo "Namespace setup failed; tests were not run unisolated."
