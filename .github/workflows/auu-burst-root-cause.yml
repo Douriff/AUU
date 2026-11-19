@@ -1,0 +1,1157 @@
+# BOX DRAFT ONLY. No workflow has been submitted or run.
+# Target path: .github/workflows/auu-burst-root-cause.yml
+# One push to the existing isolated CI branch would trigger this workflow.
+# Both jobs pin PR139 7f983d3 + PR138 e736bfb, main baseline 3211be8,
+# and fail closed unless merged tree == 0f3d85119d9c79c300d9d20cd4b7f035660844f1.
+# Only the hosted runner checks out/merges; it never pushes. No production.
+# Original health + full discover run ONCE in acceptance, no retry/continue-on-error.
+# Diagnosis follows even after acceptance failure, on another hosted runner;
+# its single full suite keeps original order/assertions, with 3s same-process
+# probe baselines before and after, and ONE declared post-suite target control.
+# That control is causal context, never a retry or replacement acceptance.
+# Observer overhead means diagnosis green is NOT acceptance/release clearance.
+# Both tests use real Python3.12 venv and nonroot loopback-only network namespaces.
+# Dependencies/artifacts use host network only; no secrets, real AI, trading, global
+# firewall/OS changes, threshold changes, added skips, or preview source changes.
+# Bounds: each command <=900s, health<=180s, each job<=25m; cancellation stops diagnosis.
+# paramiko5.1.0 remains the CI-only dependency from the previous workflow.
+# Prior web build/behavior evidence is retained; this run does not rebuild web or claim GUI pass.
+name: AUU fixed-head burst root-cause evidence (not release)
+
+"on":
+  push:
+    branches:
+      - "auu-ci/pr138-df2a6ce"
+    paths:
+      - ".github/workflows/auu-burst-root-cause.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Original API acceptance once (unmodified assertion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Only names already documented in docker-compose.yml, apps/api/Dockerfile, or README.
+    # AUU_LIVE_API_ENABLE, AUU_AUTH, and AUU_LEGACY_PUMP are left unset on purpose.
+    env:
+      PYTHONUNBUFFERED: "1"
+      DATA_PROVIDER: mock
+      AUU_LIVE_ENABLED: "false"
+      AUU_LIVE_DISABLED: "true"
+      AUU_LIVE_ARMED: "false"
+    steps:
+      - name: Check out hardcoded PR139 SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 7f983d3d69455d2f8183fb7f14402e661b83036b
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch exact refs, pin main to 3211be8, merge PR138, record tree
+        run: |
+          set -euo pipefail
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          PR139_SHA="7f983d3d69455d2f8183fb7f14402e661b83036b"
+          PR138_SHA="e736bfb867f6abc2e98931ca854d8cad655bc881"
+          MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
+
+          ensure_commit() {
+            local sha="$1"
+            if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "already have $sha"
+              return 0
+            fi
+            echo "missing $sha; fetching exact ref only"
+            git fetch --no-tags origin "$sha"
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "failed to fetch exact commit $sha"
+              exit 1
+            fi
+          }
+
+          HEAD_SHA="$(git rev-parse --verify HEAD)"
+          if [ "$HEAD_SHA" != "$PR139_SHA" ]; then
+            echo "HEAD is not the pinned PR139 SHA: $HEAD_SHA"
+            exit 1
+          fi
+
+          ensure_commit "$PR138_SHA"
+          ensure_commit "$MAIN_BASE_SHA"
+
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          fi
+          ORIGIN_MAIN_SHA="absent"
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          fi
+
+          # Pin local main to the real baseline, not a later origin/main tip.
+          git update-ref refs/heads/main "$MAIN_BASE_SHA"
+          if [ "$(git rev-parse --verify HEAD)" != "$PR139_SHA" ]; then
+            echo "HEAD moved while pinning local main"
+            exit 1
+          fi
+          if [ "$(git rev-parse --verify main)" != "$MAIN_BASE_SHA" ]; then
+            echo "local main is not the pinned 3211be8 baseline"
+            exit 1
+          fi
+
+          # Git 2.56 on ubuntu-latest still requires a committer ident for
+          # `merge --no-commit`. Run 44508354790 failed both jobs here with
+          # merge_rc=128, unmerged_paths empty, and
+          # "fatal: empty ident name ... not allowed". Identity is set only
+          # in this local worktree (not --global, not pushed).
+          git config user.name "AUU Joint CI"
+          git config user.email "auu-joint-ci@localhost"
+          git config commit.gpgsign false
+          set +e
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c core.editor=true -c rerere.enabled=false -c commit.gpgsign=false merge --no-commit --no-ff "$PR138_SHA" 2>&1 | tee "$LOGDIR/merge-attempt.log"
+          merge_rc=${PIPESTATUS[0]}
+          set -e
+          UNMERGED="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+          {
+            echo "pr139_head=$PR139_SHA"
+            echo "pr138_head=$PR138_SHA"
+            echo "main_base=$MAIN_BASE_SHA"
+            echo "origin_main_sha=$ORIGIN_MAIN_SHA"
+            echo "merge_rc=$merge_rc"
+            echo "unmerged_paths=$UNMERGED"
+          } | tee "$LOGDIR/merge-meta.txt"
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
+            git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
+            echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            exit 1
+          fi
+          if [ "$merge_rc" -ne 0 ]; then
+            echo "git merge exited $merge_rc with no unmerged paths. This is not a content conflict."
+            echo "===== BEGIN complete log merge-attempt.log ====="
+            if [ -f "$LOGDIR/merge-attempt.log" ]; then cat "$LOGDIR/merge-attempt.log"; else echo "(missing)"; fi
+            echo "===== END complete log merge-attempt.log ====="
+            exit 1
+          fi
+
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 7f983d3d69455d2f8183fb7f14402e661b83036b with PR138 e736bfb867f6abc2e98931ca854d8cad655bc881"
+
+          MERGE_COMMIT="$(git rev-parse --verify HEAD)"
+          MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
+          test "$MERGE_TREE" = "0f3d85119d9c79c300d9d20cd4b7f035660844f1" || { echo "fixed tree mismatch"; exit 1; }
+          PARENT1="$(git rev-parse --verify HEAD^1)"
+          PARENT2="$(git rev-parse --verify HEAD^2)"
+          if [ "$PARENT1" != "$PR139_SHA" ] || [ "$PARENT2" != "$PR138_SHA" ]; then
+            echo "merge parents are not PR139 then PR138: $PARENT1 $PARENT2"
+            exit 1
+          fi
+
+          python3 - <<'PY' | tee "$LOGDIR/locale-count.txt"
+          import json
+          from pathlib import Path
+          def flat(obj, pre=""):
+              out = {}
+              for k, v in obj.items():
+                  key = (pre + "." + k) if pre else k
+                  if isinstance(v, dict):
+                      out.update(flat(v, key))
+                  else:
+                      out[key] = v
+              return out
+          p = Path("apps/web/src/i18n/locales/zh-CN.json")
+          print(len(flat(json.loads(p.read_text(encoding="utf-8")))))
+          PY
+          LOCALE_KEYS="$(tr -d '\n' < "$LOGDIR/locale-count.txt")"
+
+          UTC_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SHANGHAI_TS="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S%z)"
+          {
+            echo "merge_commit=$MERGE_COMMIT"
+            echo "merge_tree=$MERGE_TREE"
+            echo "merge_parent1=$PARENT1"
+            echo "merge_parent2=$PARENT2"
+            echo "locale_zh_cn_keys=$LOCALE_KEYS"
+            echo "recorded_at_utc=$UTC_TS"
+            echo "recorded_at_asia_shanghai=$SHANGHAI_TS"
+            echo "ci_identity=AUU Joint CI <auu-joint-ci@localhost>"
+            echo "pushed=false"
+          } | tee -a "$LOGDIR/merge-meta.txt"
+
+          TAR_TMP="${RUNNER_TEMP:-/tmp}/auu-joint-source.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" -czf "$TAR_TMP" \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets' \
+            --exclude='users' \
+            --exclude='users.json' \
+            --exclude='data' \
+            --exclude='test-logs' \
+            --exclude='*.log' \
+            --exclude='apps/web/dist' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.ssh' \
+            --exclude='.netrc' \
+            --exclude='*.pem' \
+            --exclude='*.key' \
+            .
+          mkdir -p "$GITHUB_WORKSPACE/joint-artifacts"
+          TAR_OUT="$GITHUB_WORKSPACE/joint-artifacts/auu-joint-source-${MERGE_TREE:0:12}.tar.gz"
+          cp "$TAR_TMP" "$TAR_OUT"
+          TAR_SHA="$(sha256sum "$TAR_OUT" | awk '{print $1}')"
+          echo "source_tar=$(basename "$TAR_OUT")" | tee -a "$LOGDIR/merge-meta.txt"
+          echo "source_tar_sha256=$TAR_SHA" | tee -a "$LOGDIR/merge-meta.txt"
+          if tar -tzf "$TAR_OUT" | grep -E '(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.venv(/|$)|(^|/)\.env(/|$)|(^|/)\.env\.[^/]+$|(^|/)secrets(/|$)|(^|/)users(/|$)|(^|/)users\.json$|(^|/)data(/|$)|(^|/)test-logs(/|$)|(^|/)apps/web/dist(/|$)' ; then
+            echo "source tar contains a forbidden path"
+            exit 1
+          fi
+          date +%s > "$LOGDIR/merge-ok.flag"
+          cat "$LOGDIR/merge-meta.txt" >> "$LOGDIR/meta.txt"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install API test dependencies into apps/api/.venv
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/test-logs"
+          VENV="$GITHUB_WORKSPACE/apps/api/.venv"
+          VENV_PY="$VENV/bin/python"
+          # Real venv at the exact path ops/backup/auu_backup.py _app_read uses:
+          # Path(APP_API) / ".venv/bin/python" with APP_API defaulting to
+          # <repo>/apps/api. No AUU_BACKUP_APP, no symlink stand-in.
+          python -m venv "$VENV"
+          test -f "$VENV/pyvenv.cfg"
+          test -x "$VENV_PY"
+          "$VENV_PY" -m pip install --upgrade pip
+          "$VENV_PY" -m pip install -r apps/api/requirements-dev.txt
+          # CI-only extra, not a checked-in requirement. See file header.
+          "$VENV_PY" -m pip install "paramiko==5.1.0"
+          "$VENV_PY" -m pip show paramiko | tee "$GITHUB_WORKSPACE/test-logs/paramiko-show.txt"
+          "$VENV_PY" -m pip freeze > "$GITHUB_WORKSPACE/test-logs/pip-freeze.txt"
+          uname -a > "$GITHUB_WORKSPACE/test-logs/kernel.txt"
+          sha256sum apps/api/tests/test_realtime_ws.py apps/api/tests/rt_mock_exchange.py apps/api/app/marketdata/realtime/{feeds,manager,bus,ws_session}.py > "$GITHUB_WORKSPACE/test-logs/source-hashes.txt"
+          python --version > "$GITHUB_WORKSPACE/test-logs/python.txt"
+          {
+            echo "venv=$VENV"
+            echo -n "venv_python="
+            "$VENV_PY" -c "import sys; print(sys.executable)"
+            echo -n "venv_prefix="
+            "$VENV_PY" -c "import sys; print(sys.prefix)"
+          } | tee -a "$GITHUB_WORKSPACE/test-logs/meta.txt"
+          case "$("$VENV_PY" -c "import sys; print(sys.executable)")" in
+            */apps/api/.venv/bin/python) ;;
+            *) echo "venv interpreter is not apps/api/.venv/bin/python"; exit 1 ;;
+          esac
+
+      - name: Run API tests in a loopback-only network namespace
+        run: |
+          set -u
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          RUNNER_UID="$(id -u)"
+          RUNNER_GID="$(id -g)"
+          RUNNER_USER="$(id -un)"
+          {
+            echo "intended_pr139=7f983d3d69455d2f8183fb7f14402e661b83036b"
+            echo "intended_pr138=e736bfb867f6abc2e98931ca854d8cad655bc881"
+            echo "intended_main_base=3211be8c9821c788ae49c863bb210da06c377d29"
+            echo -n "checked_out_head="
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+            echo -n "checked_out_tree="
+            git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
+            echo "runner_uid=$RUNNER_UID"
+            echo "runner_gid=$RUNNER_GID"
+            echo "runner_user=$RUNNER_USER"
+          } >> "$LOGDIR/meta.txt"
+
+          VENV_PY="$GITHUB_WORKSPACE/apps/api/.venv/bin/python"
+          if [ ! -x "$VENV_PY" ] || [ ! -f "$GITHUB_WORKSPACE/apps/api/.venv/pyvenv.cfg" ]; then
+            echo "apps/api/.venv is missing or is not a real venv" >&2
+            exit 1
+          fi
+          {
+            echo "export PATH=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv/bin:$PATH")"
+            echo "export HOME=$(printf '%q' "$HOME")"
+            echo "export LANG=$(printf '%q' "${LANG:-C.UTF-8}")"
+            echo "export PYTHONUNBUFFERED=1"
+            echo "export DATA_PROVIDER=mock"
+            echo "export AUU_LIVE_ENABLED=false"
+            echo "export AUU_LIVE_DISABLED=true"
+            echo "export AUU_LIVE_ARMED=false"
+            echo "export VIRTUAL_ENV=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv")"
+            echo "export VENV_PY=$(printf '%q' "$VENV_PY")"
+            echo "export GITHUB_WORKSPACE=$(printf '%q' "$GITHUB_WORKSPACE")"
+            echo "export LOGDIR=$(printf '%q' "$LOGDIR")"
+          } > "$LOGDIR/test-env.sh"
+
+          # Paths are baked in at write time so the script still works after
+          # sudo env_reset. Runtime dollars are escaped.
+          cat > "$LOGDIR/run-api-tests.sh" << EOF
+          #!/bin/bash
+          set -u
+          . "$LOGDIR/test-env.sh"
+          unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_RUNTIME_URL
+          if [ "\$(id -u)" -eq 0 ]; then
+            echo "refusing to run tests as root" > "$LOGDIR/netns-error.log"
+            exit 92
+          fi
+          cd "$GITHUB_WORKSPACE/apps/api" || {
+            echo "cd apps/api failed" > "$LOGDIR/netns-error.log"
+            exit 91
+          }
+          solo=99
+          full=99
+          finish() {
+            echo "solo_exit=\$solo" >> "$LOGDIR/meta.txt"
+            echo "full_exit=\$full" >> "$LOGDIR/meta.txt"
+            date +%s > "$LOGDIR/tests-completed.flag"
+          }
+          trap finish EXIT
+          run_timed() {
+            local secs="\$1" log="\$2"
+            shift 2
+            echo "===== BEGIN \$(date -u +%Y-%m-%dT%H:%M:%SZ) timeout=\${secs}s: \$* ====="
+            set -o pipefail
+            stdbuf -oL -eL timeout --foreground --kill-after=30s "\${secs}s" "\$@" 2>&1 | tee "\$log"
+            local rc=\${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "\$rc" = "124" ]; then
+              echo "===== COMMAND TIMED OUT after \${secs}s: \$* ====="
+            elif [ "\$rc" = "137" ]; then
+              echo "===== COMMAND KILLED after timeout: \$* ====="
+            fi
+            echo "===== END \$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=\$rc: \$* ====="
+            return "\$rc"
+          }
+          set +e
+          run_timed 180 "$LOGDIR/api-health-solo.log" "\$VENV_PY" -u -m unittest tests.test_mainstream_data.MainstreamApiTests.test_health_mainstream_mode -v
+          solo=\$?
+          run_timed 900 "$LOGDIR/api-full.log" "\$VENV_PY" -u -m unittest discover -s tests -p 'test_*.py' -v
+          full=\$?
+          set -e
+          if [ "\$solo" != "0" ] || [ "\$full" != "0" ]; then
+            exit 1
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/run-api-tests.sh"
+          chmod 0755 "$LOGDIR/run-api-tests.sh" "$LOGDIR/test-env.sh"
+
+          cat > "$LOGDIR/enter-netns.sh" << EOF
+          #!/bin/bash
+          set -euo pipefail
+          if ! ip link set lo up > "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link set lo up failed" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! ip -o link show lo >> "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link show lo failed" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! grep -q "UP" "$LOGDIR/netns-setup.log"; then
+            echo "lo is not UP" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if command -v setpriv >/dev/null 2>&1; then
+            exec setpriv --reuid=$RUNNER_UID --regid=$RUNNER_GID --init-groups --inh-caps=-all -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          elif command -v runuser >/dev/null 2>&1; then
+            exec runuser -u $RUNNER_USER -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          else
+            echo "no setpriv or runuser to drop privileges" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/enter-netns.sh"
+          chmod 0755 "$LOGDIR/enter-netns.sh"
+
+          set +e
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" 2>&1 | tee "$LOGDIR/netns-outer.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
+            echo "Namespace setup failed; tests were not run unisolated."
+            echo "===== BEGIN complete log netns-error.log ====="
+            if [ -f "$LOGDIR/netns-error.log" ]; then cat "$LOGDIR/netns-error.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-error.log ====="
+            echo "===== BEGIN complete log netns-outer.log ====="
+            if [ -f "$LOGDIR/netns-outer.log" ]; then cat "$LOGDIR/netns-outer.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-outer.log ====="
+            exit 1
+          fi
+          if [ "$rc" != "0" ]; then
+            if [ -f "$LOGDIR/api-health-solo.log" ] && ! grep -q '^solo_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-health-solo.log ====="
+              cat "$LOGDIR/api-health-solo.log"
+              echo "===== END complete log api-health-solo.log ====="
+            fi
+            if [ -f "$LOGDIR/api-full.log" ] && ! grep -q '^full_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-full.log ====="
+              cat "$LOGDIR/api-full.log"
+              echo "===== END complete log api-full.log ====="
+            fi
+            echo "solo/full exits are in meta.txt; expected failure is still a failure."
+            exit 1
+          fi
+
+      - name: Upload API test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-test-logs
+          path: test-logs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload API secret-free source tar
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-joint-source
+          path: joint-artifacts/auu-joint-source-*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 14
+
+  diagnosis:
+    needs: acceptance
+    if: ${{ !cancelled() }}
+    name: Instrumented full suite + same-process controls (NOT acceptance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Only names already documented in docker-compose.yml, apps/api/Dockerfile, or README.
+    # AUU_LIVE_API_ENABLE, AUU_AUTH, and AUU_LEGACY_PUMP are left unset on purpose.
+    env:
+      PYTHONUNBUFFERED: "1"
+      DATA_PROVIDER: mock
+      AUU_LIVE_ENABLED: "false"
+      AUU_LIVE_DISABLED: "true"
+      AUU_LIVE_ARMED: "false"
+    steps:
+      - name: Check out hardcoded PR139 SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 7f983d3d69455d2f8183fb7f14402e661b83036b
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch exact refs, pin main to 3211be8, merge PR138, record tree
+        run: |
+          set -euo pipefail
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          PR139_SHA="7f983d3d69455d2f8183fb7f14402e661b83036b"
+          PR138_SHA="e736bfb867f6abc2e98931ca854d8cad655bc881"
+          MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
+
+          ensure_commit() {
+            local sha="$1"
+            if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "already have $sha"
+              return 0
+            fi
+            echo "missing $sha; fetching exact ref only"
+            git fetch --no-tags origin "$sha"
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "failed to fetch exact commit $sha"
+              exit 1
+            fi
+          }
+
+          HEAD_SHA="$(git rev-parse --verify HEAD)"
+          if [ "$HEAD_SHA" != "$PR139_SHA" ]; then
+            echo "HEAD is not the pinned PR139 SHA: $HEAD_SHA"
+            exit 1
+          fi
+
+          ensure_commit "$PR138_SHA"
+          ensure_commit "$MAIN_BASE_SHA"
+
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          fi
+          ORIGIN_MAIN_SHA="absent"
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          fi
+
+          # Pin local main to the real baseline, not a later origin/main tip.
+          git update-ref refs/heads/main "$MAIN_BASE_SHA"
+          if [ "$(git rev-parse --verify HEAD)" != "$PR139_SHA" ]; then
+            echo "HEAD moved while pinning local main"
+            exit 1
+          fi
+          if [ "$(git rev-parse --verify main)" != "$MAIN_BASE_SHA" ]; then
+            echo "local main is not the pinned 3211be8 baseline"
+            exit 1
+          fi
+
+          # Git 2.56 on ubuntu-latest still requires a committer ident for
+          # `merge --no-commit`. Run 44508354790 failed both jobs here with
+          # merge_rc=128, unmerged_paths empty, and
+          # "fatal: empty ident name ... not allowed". Identity is set only
+          # in this local worktree (not --global, not pushed).
+          git config user.name "AUU Joint CI"
+          git config user.email "auu-joint-ci@localhost"
+          git config commit.gpgsign false
+          set +e
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c core.editor=true -c rerere.enabled=false -c commit.gpgsign=false merge --no-commit --no-ff "$PR138_SHA" 2>&1 | tee "$LOGDIR/merge-attempt.log"
+          merge_rc=${PIPESTATUS[0]}
+          set -e
+          UNMERGED="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+          {
+            echo "pr139_head=$PR139_SHA"
+            echo "pr138_head=$PR138_SHA"
+            echo "main_base=$MAIN_BASE_SHA"
+            echo "origin_main_sha=$ORIGIN_MAIN_SHA"
+            echo "merge_rc=$merge_rc"
+            echo "unmerged_paths=$UNMERGED"
+          } | tee "$LOGDIR/merge-meta.txt"
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
+            git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
+            echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            exit 1
+          fi
+          if [ "$merge_rc" -ne 0 ]; then
+            echo "git merge exited $merge_rc with no unmerged paths. This is not a content conflict."
+            echo "===== BEGIN complete log merge-attempt.log ====="
+            if [ -f "$LOGDIR/merge-attempt.log" ]; then cat "$LOGDIR/merge-attempt.log"; else echo "(missing)"; fi
+            echo "===== END complete log merge-attempt.log ====="
+            exit 1
+          fi
+
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 7f983d3d69455d2f8183fb7f14402e661b83036b with PR138 e736bfb867f6abc2e98931ca854d8cad655bc881"
+
+          MERGE_COMMIT="$(git rev-parse --verify HEAD)"
+          MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
+          test "$MERGE_TREE" = "0f3d85119d9c79c300d9d20cd4b7f035660844f1" || { echo "fixed tree mismatch"; exit 1; }
+          PARENT1="$(git rev-parse --verify HEAD^1)"
+          PARENT2="$(git rev-parse --verify HEAD^2)"
+          if [ "$PARENT1" != "$PR139_SHA" ] || [ "$PARENT2" != "$PR138_SHA" ]; then
+            echo "merge parents are not PR139 then PR138: $PARENT1 $PARENT2"
+            exit 1
+          fi
+
+          python3 - <<'PY' | tee "$LOGDIR/locale-count.txt"
+          import json
+          from pathlib import Path
+          def flat(obj, pre=""):
+              out = {}
+              for k, v in obj.items():
+                  key = (pre + "." + k) if pre else k
+                  if isinstance(v, dict):
+                      out.update(flat(v, key))
+                  else:
+                      out[key] = v
+              return out
+          p = Path("apps/web/src/i18n/locales/zh-CN.json")
+          print(len(flat(json.loads(p.read_text(encoding="utf-8")))))
+          PY
+          LOCALE_KEYS="$(tr -d '\n' < "$LOGDIR/locale-count.txt")"
+
+          UTC_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SHANGHAI_TS="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S%z)"
+          {
+            echo "merge_commit=$MERGE_COMMIT"
+            echo "merge_tree=$MERGE_TREE"
+            echo "merge_parent1=$PARENT1"
+            echo "merge_parent2=$PARENT2"
+            echo "locale_zh_cn_keys=$LOCALE_KEYS"
+            echo "recorded_at_utc=$UTC_TS"
+            echo "recorded_at_asia_shanghai=$SHANGHAI_TS"
+            echo "ci_identity=AUU Joint CI <auu-joint-ci@localhost>"
+            echo "pushed=false"
+          } | tee -a "$LOGDIR/merge-meta.txt"
+
+          TAR_TMP="${RUNNER_TEMP:-/tmp}/auu-joint-source.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" -czf "$TAR_TMP" \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets' \
+            --exclude='users' \
+            --exclude='users.json' \
+            --exclude='data' \
+            --exclude='test-logs' \
+            --exclude='*.log' \
+            --exclude='apps/web/dist' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.ssh' \
+            --exclude='.netrc' \
+            --exclude='*.pem' \
+            --exclude='*.key' \
+            .
+          mkdir -p "$GITHUB_WORKSPACE/joint-artifacts"
+          TAR_OUT="$GITHUB_WORKSPACE/joint-artifacts/auu-joint-source-${MERGE_TREE:0:12}.tar.gz"
+          cp "$TAR_TMP" "$TAR_OUT"
+          TAR_SHA="$(sha256sum "$TAR_OUT" | awk '{print $1}')"
+          echo "source_tar=$(basename "$TAR_OUT")" | tee -a "$LOGDIR/merge-meta.txt"
+          echo "source_tar_sha256=$TAR_SHA" | tee -a "$LOGDIR/merge-meta.txt"
+          if tar -tzf "$TAR_OUT" | grep -E '(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.venv(/|$)|(^|/)\.env(/|$)|(^|/)\.env\.[^/]+$|(^|/)secrets(/|$)|(^|/)users(/|$)|(^|/)users\.json$|(^|/)data(/|$)|(^|/)test-logs(/|$)|(^|/)apps/web/dist(/|$)' ; then
+            echo "source tar contains a forbidden path"
+            exit 1
+          fi
+          date +%s > "$LOGDIR/merge-ok.flag"
+          cat "$LOGDIR/merge-meta.txt" >> "$LOGDIR/meta.txt"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install API test dependencies into apps/api/.venv
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/test-logs"
+          VENV="$GITHUB_WORKSPACE/apps/api/.venv"
+          VENV_PY="$VENV/bin/python"
+          # Real venv at the exact path ops/backup/auu_backup.py _app_read uses:
+          # Path(APP_API) / ".venv/bin/python" with APP_API defaulting to
+          # <repo>/apps/api. No AUU_BACKUP_APP, no symlink stand-in.
+          python -m venv "$VENV"
+          test -f "$VENV/pyvenv.cfg"
+          test -x "$VENV_PY"
+          "$VENV_PY" -m pip install --upgrade pip
+          "$VENV_PY" -m pip install -r apps/api/requirements-dev.txt
+          # CI-only extra, not a checked-in requirement. See file header.
+          "$VENV_PY" -m pip install "paramiko==5.1.0"
+          "$VENV_PY" -m pip show paramiko | tee "$GITHUB_WORKSPACE/test-logs/paramiko-show.txt"
+          "$VENV_PY" -m pip freeze > "$GITHUB_WORKSPACE/test-logs/pip-freeze.txt"
+          uname -a > "$GITHUB_WORKSPACE/test-logs/kernel.txt"
+          sha256sum apps/api/tests/test_realtime_ws.py apps/api/tests/rt_mock_exchange.py apps/api/app/marketdata/realtime/{feeds,manager,bus,ws_session}.py > "$GITHUB_WORKSPACE/test-logs/source-hashes.txt"
+          python --version > "$GITHUB_WORKSPACE/test-logs/python.txt"
+          {
+            echo "venv=$VENV"
+            echo -n "venv_python="
+            "$VENV_PY" -c "import sys; print(sys.executable)"
+            echo -n "venv_prefix="
+            "$VENV_PY" -c "import sys; print(sys.prefix)"
+          } | tee -a "$GITHUB_WORKSPACE/test-logs/meta.txt"
+          case "$("$VENV_PY" -c "import sys; print(sys.executable)")" in
+            */apps/api/.venv/bin/python) ;;
+            *) echo "venv interpreter is not apps/api/.venv/bin/python"; exit 1 ;;
+          esac
+
+      - name: Write observer wrapper outside product and test sources
+        run: |
+          cat > "$GITHUB_WORKSPACE/test-logs/diagnose_burst.py" <<'AUU_DIAG_PY'
+          #!/usr/bin/env python3
+          """DIAGNOSTIC ONLY: one ordered full suite, then one declared post-suite control.
+          Never substitutes for separate unmodified acceptance. No thresholds, GC policy,
+          loop debug flags, scheduling, test source, or product source are changed.
+          """
+          from __future__ import annotations
+          import asyncio
+          import collections
+          import functools
+          import gc
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import resource
+          import sys
+          import threading
+          import time
+          import unittest
+          
+          API = Path.cwd()
+          sys.path.insert(0, str(API))
+          OUT = Path(os.environ['LOGDIR'])
+          TARGET = 'test_realtime_ws.ManagerTests.test_burst_of_frames_does_not_block_event_loop'
+          EVENTS = collections.deque(maxlen=100000)
+          DROPPED = 0
+          FOCUS = False
+          PHASE = 'import'
+          CURRENT = ''
+          MAIN_TID = threading.get_native_id()
+          ORIGINS = {}
+          COUNTS = {}
+          LOOPS = set()
+          WATCH = threading.Event()
+          STOP_WATCH = threading.Event()
+          START = time.perf_counter_ns()
+          
+          def emit(kind, **fields):
+              global DROPPED
+              if len(EVENTS) == EVENTS.maxlen:
+                  DROPPED += 1
+              EVENTS.append(dict(kind=kind, at_ns=time.perf_counter_ns(), phase=PHASE,
+                                 test=CURRENT, tid=threading.get_native_id(), **fields))
+          
+          def read(path):
+              try:
+                  return Path(path).read_text()
+              except OSError as e:
+                  return 'unavailable:' + type(e).__name__
+          
+          def stack(frame):
+              # No locals, source/linecache I/O, arguments, environment, or user data.
+              out = []
+              for _ in range(12):
+                  if frame is None:
+                      break
+                  out.append(dict(file=frame.f_code.co_filename, line=frame.f_lineno, fn=frame.f_code.co_name))
+                  frame = frame.f_back
+              return list(reversed(out))
+          
+          def stamp():
+              r = resource.getrusage(resource.RUSAGE_THREAD)
+              sched = read(f'/proc/self/task/{MAIN_TID}/schedstat')
+              return dict(wall_ns=time.perf_counter_ns(), thread_ns=time.thread_time_ns(),
+                          process_ns=time.process_time_ns(), schedstat=sched,
+                          voluntary=r.ru_nvcsw, involuntary=r.ru_nivcsw,
+                          cgroup_cpu=read('/sys/fs/cgroup/cpu.stat'))
+          
+          def inventory(label):
+              frames = sys._current_frames()
+              threads = [dict(name=t.name, ident=t.ident, native=t.native_id, daemon=t.daemon,
+                              stack=stack(frames[t.ident]) if t.ident in frames else [],
+                              origin=ORIGINS.get(t.ident, {})) for t in threading.enumerate()]
+              # Classification counts only; never upload fd contents or paths.
+              fds = collections.Counter()
+              for p in Path('/proc/self/fd').iterdir():
+                  try:
+                      name = os.readlink(p)
+                  except OSError:
+                      continue
+                  kind = ('socket' if name.startswith('socket:') else
+                          'pipe' if name.startswith('pipe:') else
+                          'sqlite' if any(s in name for s in ('.sqlite', '.db', '-wal', '-shm')) else
+                          'anon_inode' if name.startswith('anon_inode:') else 'other')
+                  fds[kind] += 1
+              emit('inventory', label=label, threads=threads, fds=dict(fds), gc_count=gc.get_count(),
+                   gc_stats=gc.get_stats(), gc_enabled=gc.isenabled(), gc_threshold=gc.get_threshold(),
+                   rss_max_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, clocks=stamp(),
+                   children=read(f'/proc/self/task/{MAIN_TID}/children'))
+          
+          def observer():
+              # GIL-obtaining samples: gaps during a C/GIL-held stall are evidence too,
+              # not proof of an empty stack. Does not signal/interrupt the measured loop.
+              while not STOP_WATCH.is_set():
+                  WATCH.wait()
+                  if STOP_WATCH.is_set():
+                      return
+                  while WATCH.is_set() and not STOP_WATCH.is_set():
+                      frames = sys._current_frames()
+                      frame = frames.get(threading.main_thread().ident)
+                      emit('watchdog_sample', main_schedstat=read(f'/proc/self/task/{MAIN_TID}/schedstat'),
+                           main_stat=read(f'/proc/self/task/{MAIN_TID}/stat'),
+                           main_stack=stack(frame) if frame else [], cgroup_cpu=read('/sys/fs/cgroup/cpu.stat'))
+                      STOP_WATCH.wait(.01)
+          
+          
+          def flush():
+              with (OUT / 'timeline.jsonl').open('a') as f:
+                  while EVENTS:
+                      f.write(json.dumps(EVENTS.popleft(), ensure_ascii=False) + '\n')
+          
+          orig_start = threading.Thread.start
+          def thread_start(self, *a, **kw):
+              origin = dict(name=self.name, test=CURRENT, phase=PHASE,
+                            stack=stack(sys._getframe(1)))
+              result = orig_start(self, *a, **kw)
+              ORIGINS[self.ident] = origin
+              emit('thread_start', native=self.native_id, origin=origin)
+              return result
+          threading.Thread.start = thread_start
+          
+          GC_STARTS = {}
+          def gc_event(action, info):
+              tid = threading.get_native_id()
+              key = (tid, info['generation'])
+              now = (time.perf_counter_ns(), time.thread_time_ns(), time.process_time_ns())
+              if action == 'start':
+                  GC_STARTS[key] = now
+                  emit('gc_start', generation=info['generation'], clocks=now,
+                       trigger=stack(sys._getframe(1)) if FOCUS and info['generation'] == 2 else [])
+              else:
+                  before = GC_STARTS.pop(key, now)
+                  emit('gc_stop', generation=info['generation'], collected=info.get('collected'),
+                       uncollectable=info.get('uncollectable'), start_clocks=before, stop_clocks=now,
+                       wall_ns=now[0]-before[0], thread_ns=now[1]-before[1], process_ns=now[2]-before[2])
+          gc.callbacks.append(gc_event)
+          
+          orig_handle = asyncio.Handle._run
+          def handle_run(self):
+              if not FOCUS:
+                  return orig_handle(self)
+              a = (time.perf_counter_ns(), time.thread_time_ns(), time.process_time_ns())
+              try:
+                  return orig_handle(self)
+              finally:
+                  b = (time.perf_counter_ns(), time.thread_time_ns(), time.process_time_ns())
+                  if b[0]-a[0] >= 10_000_000:
+                      owner = getattr(self._callback, '__self__', None)
+                      frames = owner.get_stack(limit=8) if isinstance(owner, asyncio.Task) else []
+                      emit('slow_handle', callback=repr(self._callback)[:600], start_clocks=a,
+                           stop_clocks=b, wall_ns=b[0]-a[0], thread_ns=b[1]-a[1], process_ns=b[2]-a[2],
+                           suspended_stack=[dict(file=f.f_code.co_filename, line=f.f_lineno,
+                                                 fn=f.f_code.co_name) for f in frames])
+          asyncio.Handle._run = handle_run
+          
+          orig_once = asyncio.BaseEventLoop._run_once
+          def run_once(self):
+              if not FOCUS:
+                  return orig_once(self)
+              if id(self) not in LOOPS:
+                  LOOPS.add(id(self))
+                  emit('loop_settings', debug=self.get_debug(), slow_callback_duration=self.slow_callback_duration)
+              # Never set debug or slow_callback_duration. Merely report existing values.
+              a = (time.perf_counter_ns(), time.thread_time_ns(), time.process_time_ns())
+              try:
+                  return orig_once(self)
+              finally:
+                  b = (time.perf_counter_ns(), time.thread_time_ns(), time.process_time_ns())
+                  if b[0]-a[0] >= 10_000_000:
+                      emit('slow_loop_iteration', start_clocks=a, stop_clocks=b,
+                           wall_ns=b[0]-a[0], thread_ns=b[1]-a[1], process_ns=b[2]-a[2],
+                           ready=len(self._ready), scheduled=len(self._scheduled),
+                           debug=self.get_debug(), slow_callback_duration=self.slow_callback_duration)
+          asyncio.BaseEventLoop._run_once = run_once
+          
+          # Selector waits distinguished from CPU/callback work. Linux default selector only.
+          import selectors
+          Selector = selectors.DefaultSelector
+          orig_select = Selector.select
+          def select(self, timeout=None):
+              if not FOCUS:
+                  return orig_select(self, timeout)
+              a = time.perf_counter_ns()
+              result = orig_select(self, timeout)
+              b = time.perf_counter_ns()
+              if b-a >= 10_000_000:
+                  emit('selector_wait', start_ns=a, end_ns=b, requested_s=timeout, ready=len(result))
+              return result
+          Selector.select = select
+          
+          orig_sleep = asyncio.sleep
+          async def observed_probe_sleep(delay, result):
+              a = stamp()
+              try:
+                  return await orig_sleep(delay, result)
+              finally:
+                  b = stamp()
+                  emit('original_probe_sleep', start=a, stop=b, delay_s=delay,
+                       elapsed_ns=b['wall_ns']-a['wall_ns'],
+                       thread_ns=b['thread_ns']-a['thread_ns'],
+                       process_ns=b['process_ns']-a['process_ns'])
+          def sleep(delay, result=None):
+              if FOCUS and delay == .005:
+                  task = asyncio.current_task()
+                  q = getattr(task.get_coro(), '__qualname__', '') if task else ''
+                  if q.endswith('test_burst_of_frames_does_not_block_event_loop.<locals>.probe'):
+                      return observed_probe_sleep(delay, result)
+              return orig_sleep(delay, result)
+          asyncio.sleep = sleep
+          
+          # These wrappers count coverage as well as timing: selected/published may be zero!
+          def timed(cls, method):
+              original = getattr(cls, method)
+              key = cls.__name__ + '.' + method
+              @functools.wraps(original)
+              def wrapped(self, *a, **kw):
+                  if not FOCUS:
+                      return original(self, *a, **kw)
+                  begin = (time.perf_counter_ns(), time.thread_time_ns())
+                  try:
+                      return original(self, *a, **kw)
+                  finally:
+                      end = (time.perf_counter_ns(), time.thread_time_ns())
+                      dt, cpu = end[0]-begin[0], end[1]-begin[1]
+                      count = COUNTS.setdefault(key, dict(calls=0, wall_ns=0, cpu_ns=0, max_ns=0))
+                      count['calls'] += 1
+                      count['wall_ns'] += dt
+                      count['cpu_ns'] += cpu
+                      count['max_ns'] = max(count['max_ns'], dt)
+                      if key == 'BinanceSpotFeed.handle' and (count['calls'] == 1 or count['calls'] % 50 == 0):
+                          emit('feed_progress', messages=self.state.messages, parse_errors=self.state.parse_errors,
+                               selected=self.sink.selected, published=self.bus.published, clocks=end)
+                      if dt >= 2_000_000:
+                          emit('slow_sync', method=key, start_ns=begin[0], stop_ns=end[0], wall_ns=dt, thread_ns=cpu)
+              setattr(cls, method, wrapped)
+          
+          class Result(unittest.TextTestResult):
+              def startTest(self, test):
+                  global CURRENT, FOCUS
+                  CURRENT = test.id()
+                  inventory('before_test')
+                  FOCUS = CURRENT == TARGET
+                  if FOCUS:
+                      COUNTS.clear()
+                      WATCH.set()
+                      emit('focus_start', clocks=stamp())
+                  super().startTest(test)
+              def stopTest(self, test):
+                  global FOCUS
+                  if FOCUS:
+                      emit('focus_end', counts=dict(COUNTS), clocks=stamp())
+                  FOCUS = False
+                  WATCH.clear()
+                  inventory('after_test')
+                  flush()
+                  super().stopTest(test)
+          
+          async def baseline():
+              # Same IsolatedAsyncioTestCase debug mode, 5ms probe, 3s window. No manual GC.
+              loop = asyncio.get_running_loop()
+              emit('baseline_start', debug=loop.get_debug(), slow_callback_duration=loop.slow_callback_duration)
+              end = time.perf_counter() + 3
+              while time.perf_counter() < end:
+                  a = stamp()
+                  await orig_sleep(.005)
+                  b = stamp()
+                  emit('baseline_probe', start=a, stop=b, lag_ns=b['wall_ns']-a['wall_ns']-5_000_000)
+              emit('baseline_end')
+          
+          def run_baseline():
+              with asyncio.Runner(debug=True) as runner:
+                  runner.run(baseline())
+              flush()
+          
+          def flatten(suite):
+              for test in suite:
+                  if isinstance(test, unittest.TestSuite):
+                      yield from flatten(test)
+                  else:
+                      yield test
+          
+          def main():
+              global PHASE
+              OUT.mkdir(parents=True, exist_ok=True)
+              emit('diagnostic_metadata', python=sys.version, executable=sys.executable,
+                   script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                   note='Not acceptance; instrumentation adds overhead; all original assertions retained.')
+              suite = unittest.defaultTestLoader.discover('tests', pattern='test_*.py')
+              ids = [t.id() for t in flatten(suite)]
+              (OUT / 'test-order.json').write_text(json.dumps(ids, indent=2))
+              if ids.count(TARGET) != 1:
+                  raise RuntimeError('target must occur once in original full discovery')
+              from app.marketdata.realtime.feeds import BinanceSpotFeed
+              from app.marketdata.realtime.manager import RealtimeManager
+              from app.marketdata.realtime.bus import MarketBus
+              for cls, method in [(BinanceSpotFeed, 'handle'), (RealtimeManager, 'on_ticker'),
+                                  (MarketBus, 'set_ticker'), (MarketBus, 'publish')]:
+                  timed(cls, method)
+              watcher = threading.Thread(target=observer, name='auu-diagnostic-observer', daemon=True)
+              watcher.start()
+              original_run = RealtimeManager.run
+              async def manager_run(self):
+                  try:
+                      return await original_run(self)
+                  finally:
+                      if FOCUS:
+                          emit('manager_final', selected=self.selected, published=self.bus.published,
+                               subscriber_count=self.bus.subscriber_count(),
+                               feeds=[dict(messages=f.state.messages, parse_errors=f.state.parse_errors)
+                                      for f in self.feeds])
+              RealtimeManager.run = manager_run
+              PHASE = 'baseline_before_suite'
+              run_baseline()
+              PHASE = 'full_suite_original_order'
+              first = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
+              PHASE = 'baseline_after_suite_same_process'
+              run_baseline()
+              PHASE = 'post_suite_single_control_not_retry'
+              control = unittest.defaultTestLoader.loadTestsFromName(TARGET)
+              second = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(control)
+              STOP_WATCH.set()
+              WATCH.set()
+              watcher.join(timeout=2)
+              emit('diagnostic_verdict', full_ok=first.wasSuccessful(), full_count=first.testsRun,
+                   control_ok=second.wasSuccessful(), control_count=second.testsRun, dropped=DROPPED)
+              flush()
+              # Preserve original full-suite failures AND control failures. No always-exit-0.
+              return 0 if first.wasSuccessful() and second.wasSuccessful() and not DROPPED else 1
+          
+          if __name__ == '__main__':
+              try:
+                  raise SystemExit(main())
+              finally:
+                  flush()
+          AUU_DIAG_PY
+          sha256sum "$GITHUB_WORKSPACE/test-logs/diagnose_burst.py" > "$GITHUB_WORKSPACE/test-logs/observer.sha256"
+
+      - name: Run API tests in a loopback-only network namespace
+        run: |
+          set -u
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          RUNNER_UID="$(id -u)"
+          RUNNER_GID="$(id -g)"
+          RUNNER_USER="$(id -un)"
+          {
+            echo "intended_pr139=7f983d3d69455d2f8183fb7f14402e661b83036b"
+            echo "intended_pr138=e736bfb867f6abc2e98931ca854d8cad655bc881"
+            echo "intended_main_base=3211be8c9821c788ae49c863bb210da06c377d29"
+            echo -n "checked_out_head="
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+            echo -n "checked_out_tree="
+            git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
+            echo "runner_uid=$RUNNER_UID"
+            echo "runner_gid=$RUNNER_GID"
+            echo "runner_user=$RUNNER_USER"
+          } >> "$LOGDIR/meta.txt"
+
+          VENV_PY="$GITHUB_WORKSPACE/apps/api/.venv/bin/python"
+          if [ ! -x "$VENV_PY" ] || [ ! -f "$GITHUB_WORKSPACE/apps/api/.venv/pyvenv.cfg" ]; then
+            echo "apps/api/.venv is missing or is not a real venv" >&2
+            exit 1
+          fi
+          {
+            echo "export PATH=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv/bin:$PATH")"
+            echo "export HOME=$(printf '%q' "$HOME")"
+            echo "export LANG=$(printf '%q' "${LANG:-C.UTF-8}")"
+            echo "export PYTHONUNBUFFERED=1"
+            echo "export DATA_PROVIDER=mock"
+            echo "export AUU_LIVE_ENABLED=false"
+            echo "export AUU_LIVE_DISABLED=true"
+            echo "export AUU_LIVE_ARMED=false"
+            echo "export VIRTUAL_ENV=$(printf '%q' "$GITHUB_WORKSPACE/apps/api/.venv")"
+            echo "export VENV_PY=$(printf '%q' "$VENV_PY")"
+            echo "export GITHUB_WORKSPACE=$(printf '%q' "$GITHUB_WORKSPACE")"
+            echo "export LOGDIR=$(printf '%q' "$LOGDIR")"
+          } > "$LOGDIR/test-env.sh"
+
+          # Paths are baked in at write time so the script still works after
+          # sudo env_reset. Runtime dollars are escaped.
+          cat > "$LOGDIR/run-api-tests.sh" << EOF
+          #!/bin/bash
+          set -u
+          . "$LOGDIR/test-env.sh"
+          unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_RUNTIME_URL
+          if [ "\$(id -u)" -eq 0 ]; then
+            echo "refusing to run tests as root" > "$LOGDIR/netns-error.log"
+            exit 92
+          fi
+          cd "$GITHUB_WORKSPACE/apps/api" || {
+            echo "cd apps/api failed" > "$LOGDIR/netns-error.log"
+            exit 91
+          }
+          solo=99
+          full=99
+          finish() {
+            echo "solo_exit=\$solo" >> "$LOGDIR/meta.txt"
+            echo "full_exit=\$full" >> "$LOGDIR/meta.txt"
+            date +%s > "$LOGDIR/tests-completed.flag"
+          }
+          trap finish EXIT
+          run_timed() {
+            local secs="\$1" log="\$2"
+            shift 2
+            echo "===== BEGIN \$(date -u +%Y-%m-%dT%H:%M:%SZ) timeout=\${secs}s: \$* ====="
+            set -o pipefail
+            stdbuf -oL -eL timeout --foreground --kill-after=30s "\${secs}s" "\$@" 2>&1 | tee "\$log"
+            local rc=\${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "\$rc" = "124" ]; then
+              echo "===== COMMAND TIMED OUT after \${secs}s: \$* ====="
+            elif [ "\$rc" = "137" ]; then
+              echo "===== COMMAND KILLED after timeout: \$* ====="
+            fi
+            echo "===== END \$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=\$rc: \$* ====="
+            return "\$rc"
+          }
+          set +e
+          run_timed 180 "$LOGDIR/api-health-solo.log" "\$VENV_PY" -u -m unittest tests.test_mainstream_data.MainstreamApiTests.test_health_mainstream_mode -v
+          solo=\$?
+          run_timed 900 "$LOGDIR/api-full.log" "\$VENV_PY" -u "$LOGDIR/diagnose_burst.py"
+          full=\$?
+          set -e
+          if [ "\$solo" != "0" ] || [ "\$full" != "0" ]; then
+            exit 1
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/run-api-tests.sh"
+          chmod 0755 "$LOGDIR/run-api-tests.sh" "$LOGDIR/test-env.sh"
+
+          cat > "$LOGDIR/enter-netns.sh" << EOF
+          #!/bin/bash
+          set -euo pipefail
+          if ! ip link set lo up > "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link set lo up failed" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! ip -o link show lo >> "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link show lo failed" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! grep -q "UP" "$LOGDIR/netns-setup.log"; then
+            echo "lo is not UP" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if command -v setpriv >/dev/null 2>&1; then
+            exec setpriv --reuid=$RUNNER_UID --regid=$RUNNER_GID --init-groups --inh-caps=-all -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          elif command -v runuser >/dev/null 2>&1; then
+            exec runuser -u $RUNNER_USER -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          else
+            echo "no setpriv or runuser to drop privileges" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/enter-netns.sh"
+          chmod 0755 "$LOGDIR/enter-netns.sh"
+
+          set +e
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" 2>&1 | tee "$LOGDIR/netns-outer.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
+            echo "Namespace setup failed; tests were not run unisolated."
+            echo "===== BEGIN complete log netns-error.log ====="
+            if [ -f "$LOGDIR/netns-error.log" ]; then cat "$LOGDIR/netns-error.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-error.log ====="
+            echo "===== BEGIN complete log netns-outer.log ====="
+            if [ -f "$LOGDIR/netns-outer.log" ]; then cat "$LOGDIR/netns-outer.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-outer.log ====="
+            exit 1
+          fi
+          if [ "$rc" != "0" ]; then
+            if [ -f "$LOGDIR/api-health-solo.log" ] && ! grep -q '^solo_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-health-solo.log ====="
+              cat "$LOGDIR/api-health-solo.log"
+              echo "===== END complete log api-health-solo.log ====="
+            fi
+            if [ -f "$LOGDIR/api-full.log" ] && ! grep -q '^full_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-full.log ====="
+              cat "$LOGDIR/api-full.log"
+              echo "===== END complete log api-full.log ====="
+            fi
+            echo "solo/full exits are in meta.txt; expected failure is still a failure."
+            exit 1
+          fi
+
+      - name: Upload API test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnosis-not-acceptance-logs
+          path: test-logs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload API secret-free source tar
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnosis-joint-source
+          path: joint-artifacts/auu-joint-source-*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 14
+
