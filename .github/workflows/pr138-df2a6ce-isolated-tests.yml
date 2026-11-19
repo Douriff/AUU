@@ -14,7 +14,10 @@
 #   git merge --no-commit --no-ff d3483b7943579ae7ce2b50d8c21fdfc272d96694
 # Conflicts fail the job immediately. There is no -X ours/theirs, no rerere,
 # and no automatic resolution. A local merge commit is then created with a
-# fixed CI identity for artifact metadata only. It is never pushed. The
+# fixed CI identity for artifact metadata only. The same local identity is
+# also passed to `git merge --no-commit` (run 44508354790: Git 2.56.1 on
+# ubuntu-latest exits 128 with 'empty ident name' before any merge commit,
+# with no unmerged paths; that was not a content conflict). It is never pushed. The
 # invariant across the api and web jobs is merge_tree (git rev-parse
 # HEAD^{tree}), not the merge commit SHA (author/committer timestamps are
 # written to metadata and are not forced).
@@ -194,26 +197,40 @@ jobs:
             exit 1
           fi
 
+          # Git 2.56 on ubuntu-latest still requires a committer ident for
+          # `merge --no-commit`. Run 44508354790 failed both jobs here with
+          # merge_rc=128, unmerged_paths empty, and
+          # "fatal: empty ident name ... not allowed". Identity is set only
+          # in this local worktree (not --global, not pushed).
+          git config user.name "AUU Joint CI"
+          git config user.email "auu-joint-ci@localhost"
+          git config commit.gpgsign false
           set +e
-          git -c core.editor=true -c rerere.enabled=false merge --no-commit --no-ff "$PR138_SHA"
-          merge_rc=$?
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c core.editor=true -c rerere.enabled=false -c commit.gpgsign=false merge --no-commit --no-ff "$PR138_SHA" 2>&1 | tee "$LOGDIR/merge-attempt.log"
+          merge_rc=${PIPESTATUS[0]}
           set -e
+          UNMERGED="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
           {
             echo "pr139_head=$PR139_SHA"
             echo "pr138_head=$PR138_SHA"
             echo "main_base=$MAIN_BASE_SHA"
             echo "origin_main_sha=$ORIGIN_MAIN_SHA"
             echo "merge_rc=$merge_rc"
-            echo -n "unmerged_paths="
-            git diff --name-only --diff-filter=U | tr '\n' ' '
-            echo
+            echo "unmerged_paths=$UNMERGED"
           } | tee "$LOGDIR/merge-meta.txt"
-          if [ "$merge_rc" -ne 0 ] || [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
             echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
             git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
             echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
             git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
             git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            exit 1
+          fi
+          if [ "$merge_rc" -ne 0 ]; then
+            echo "git merge exited $merge_rc with no unmerged paths. This is not a content conflict."
+            echo "===== BEGIN complete log merge-attempt.log ====="
+            if [ -f "$LOGDIR/merge-attempt.log" ]; then cat "$LOGDIR/merge-attempt.log"; else echo "(missing)"; fi
+            echo "===== END complete log merge-attempt.log ====="
             exit 1
           fi
 
@@ -559,26 +576,40 @@ jobs:
             exit 1
           fi
 
+          # Git 2.56 on ubuntu-latest still requires a committer ident for
+          # `merge --no-commit`. Run 44508354790 failed both jobs here with
+          # merge_rc=128, unmerged_paths empty, and
+          # "fatal: empty ident name ... not allowed". Identity is set only
+          # in this local worktree (not --global, not pushed).
+          git config user.name "AUU Joint CI"
+          git config user.email "auu-joint-ci@localhost"
+          git config commit.gpgsign false
           set +e
-          git -c core.editor=true -c rerere.enabled=false merge --no-commit --no-ff "$PR138_SHA"
-          merge_rc=$?
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c core.editor=true -c rerere.enabled=false -c commit.gpgsign=false merge --no-commit --no-ff "$PR138_SHA" 2>&1 | tee "$LOGDIR/merge-attempt.log"
+          merge_rc=${PIPESTATUS[0]}
           set -e
+          UNMERGED="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
           {
             echo "pr139_head=$PR139_SHA"
             echo "pr138_head=$PR138_SHA"
             echo "main_base=$MAIN_BASE_SHA"
             echo "origin_main_sha=$ORIGIN_MAIN_SHA"
             echo "merge_rc=$merge_rc"
-            echo -n "unmerged_paths="
-            git diff --name-only --diff-filter=U | tr '\n' ' '
-            echo
+            echo "unmerged_paths=$UNMERGED"
           } | tee "$LOGDIR/merge-meta.txt"
-          if [ "$merge_rc" -ne 0 ] || [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
             echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
             git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
             echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
             git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
             git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            exit 1
+          fi
+          if [ "$merge_rc" -ne 0 ]; then
+            echo "git merge exited $merge_rc with no unmerged paths. This is not a content conflict."
+            echo "===== BEGIN complete log merge-attempt.log ====="
+            if [ -f "$LOGDIR/merge-attempt.log" ]; then cat "$LOGDIR/merge-attempt.log"; else echo "(missing)"; fi
+            echo "===== END complete log merge-attempt.log ====="
             exit 1
           fi
 
