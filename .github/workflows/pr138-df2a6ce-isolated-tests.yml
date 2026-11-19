@@ -1,11 +1,35 @@
-# Purpose: isolated, no-production tests of PR 138 at
-# d3483b7943579ae7ce2b50d8c21fdfc272d96694. Start with a one-commit push of
-# this file to branch auu-ci/pr138-df2a6ce (not main).
-# Repo path: .github/workflows/pr138-df2a6ce-isolated-tests.yml
+# Purpose: isolated, no-production joint tests of a temporary runner merge of
+#   PR139 06f81be7c7dfca4a63c528e72bdc8c75b401b989
+#   PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694
+# against the real main baseline 3211be8c9821c788ae49c863bb210da06c377d29.
+# Start with a one-commit push of this file to branch auu-ci/pr138-df2a6ce
+# (not main), at repo path:
+#   .github/workflows/pr138-df2a6ce-isolated-tests.yml
 # workflow_dispatch is omitted so the first run does not depend on this file
 # already being on the default branch.
 #
-# Checkout is the hardcoded PR 138 SHA, not the CI branch tip.
+# Checkout is the hardcoded PR139 SHA (fetch-depth: 0), not the CI branch tip.
+# Each job then fetches only a missing exact commit SHA (PR138 and, if needed,
+# the main baseline), pins a local main ref to 3211be8, and runs
+#   git merge --no-commit --no-ff d3483b7943579ae7ce2b50d8c21fdfc272d96694
+# Conflicts fail the job immediately. There is no -X ours/theirs, no rerere,
+# and no automatic resolution. A local merge commit is then created with a
+# fixed CI identity for artifact metadata only. It is never pushed. The
+# invariant across the api and web jobs is merge_tree (git rev-parse
+# HEAD^{tree}), not the merge commit SHA (author/committer timestamps are
+# written to metadata and are not forced).
+#
+# How to compare merge_tree with a later official GitHub merge:
+#   official_tree=$(git rev-parse <official-merge-commit>^{tree})
+# official_tree equals this workflow's merge_tree when the official merge
+# uses the default merge strategy on the same two heads, with no conflict
+# resolution and no extra files. A squash merge can still have the same
+# tree; compare trees, not commit SHAs. If main has moved past 3211be8, a
+# merge of both PRs into that later main will contain additional commits
+# and will not equal this tree. In that case recreate the same two-head
+# merge on a detached 06f81be and compare HEAD^{tree}. A matching tree is
+# not a deploy, not a preview GUI pass, and not production sign-off.
+#
 # No secrets, no exchange keys, no production SSH, no AI/relay calls.
 # Dependency install and artifact upload stay on the host network.
 # Test/build subprocesses run in a new network namespace (unshare --net,
@@ -13,6 +37,9 @@
 # sudo is used only to create the netns; tests then run as the looked-up
 # runner UID with capabilities dropped. If the namespace cannot be
 # established, the job fails closed and does not run tests unisolated.
+# Web build dist and the secret-free source tar are uploaded after the
+# isolated step (install/build already finished). This workflow does not
+# start a preview server, open a browser, or claim a GUI pass.
 #
 # paramiko==5.1.0 is installed only in this CI test environment. It is not in
 # apps/api/requirements.txt or requirements-dev.txt. The earlier cloud
@@ -42,23 +69,10 @@
 # (README). The unittest harness (app.data_paths.install_test_isolation)
 # does setdefault("AUU_LEGACY_PUMP", "on") so the legacy_pump suite can
 # exercise those routes; MainstreamApiTests still build create_app(legacy=False).
-# Run 44487985877 exported AUU_LEGACY_PUMP=off and blocked that setdefault,
-# producing dozens of 404/cex_public failures that the CloudAgent baseline
-# (1253 pass / 1 fail) did not have. Do not set the flag on or off here just
-# to change the result.
+# Do not set the flag on or off here just to change the result.
 #
 # Each test command has its own timeout and unbuffered tee'd progress.
-# Isolation stays on; a hang must not sit until the 45-minute job cap.
-#
-# On df2a6ce the prior CloudAgent report and GitHub run 44487985877 both show:
-# isolated health test passes, full API suite fails
-# test_health_mainstream_mode (autopaperStall.stalled). A red job on that
-# expected failure is still a failure. This workflow does not apply a source
-# patch, skip tests, or relax assertions. It still pins
-# d3483b7943579ae7ce2b50d8c21fdfc272d96694. After the health isolation test
-# file is committed on cursor/free-market-board-906f, replace every occurrence
-# of that SHA in checkout refs and comments, then push this workflow. Do not
-# push a known-red run against the unfixed SHA.
+# Isolation stays on; a hang must not sit until the job cap.
 #
 # Restore drill (ops/backup/auu_backup.py _app_read): APP_API defaults to
 # <repo>/apps/api (or $AUU_BACKUP_APP). It execs APP_API/.venv/bin/python -c
@@ -67,12 +81,36 @@
 # unset. Do not symlink a dummy python into a fake .venv.
 #
 # git show main: baseline (test_ai_review_integrity) needs a local ref named
-# main. API checkout uses fetch-depth: 0. A later step creates local main
-# pointing at the already-fetched origin/main (or fetches that one ref if the
-# checkout did not leave it). The remote is not updated. HEAD stays on the
-# pinned SHA; main is not checked out.
+# main. That ref is pinned to the real 3211be8 baseline, not whatever
+# origin/main happens to be if it has moved. origin/main is recorded only.
+# HEAD is the local merge commit; main is not checked out.
+#
+# Locale keys: a remote flatten of zh-CN.json (same algorithm as
+# apps/web/scripts/i18n-check.mjs) counted main 1877, PR138 1879,
+# PR139 1894, union 1896 (PR138-only subscribe.accountTitle/accountSub;
+# PR139-only nav.ai plus the aiReview.board* keys including boardEntry).
+# The job prints the merged-tree count from that same flatten. It does
+# not pass or fail solely on a hardcoded 1896. Web `npm run build` still
+# runs i18n-check.mjs, which enforces cross-locale parity.
+#
+# Board guard: on PR139 head 06f81be, apps/web/scripts/ai-review-guard.test.mjs
+# (blob c6619e808f24b52e6c86bdd581e204ae058f7c5b) is the board guard. It
+# reads BoardAiPanel.tsx and asserts the panel does not call the model on
+# open and that ask() is behind an explicit click. No separate
+# *board*guard* script exists in apps/web/scripts on that head. PR138's
+# copy of this file is identical to main, so a 3-way merge preview kept
+# the PR139 file cleanly. The web job runs this script if it exists after
+# the merge (it must), and will also run any additional
+# scripts/*board*guard*.mjs or scripts/*board-ai*.test.mjs only if those
+# files are actually present. Missing unexpected extras are not invented
+# and are not treated as a pass.
+#
+# Source tar exclusions are explicit: .git, .venv, node_modules, .env,
+# .env.*, secrets, users, users.json, data, test-logs, *.log, plus the
+# web dist (uploaded separately) and bytecode. The archive must not carry
+# credentials or stored ledgers. This is not a GUI preview verdict.
 
-name: Isolated no-production tests
+name: Isolated joint no-production tests
 
 "on":
   push:
@@ -86,7 +124,7 @@ permissions:
 
 jobs:
   api:
-    name: API tests on pinned PR138 SHA
+    name: API tests on temporary PR139+PR138 merge
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Only names already documented in docker-compose.yml, apps/api/Dockerfile, or README.
@@ -98,46 +136,162 @@ jobs:
       AUU_LIVE_DISABLED: "true"
       AUU_LIVE_ARMED: "false"
     steps:
-      - name: Check out hardcoded PR138 SHA
+      - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: d3483b7943579ae7ce2b50d8c21fdfc272d96694
+          ref: 06f81be7c7dfca4a63c528e72bdc8c75b401b989
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Point local main at fetched origin/main
+      - name: Fetch exact refs, pin main to 3211be8, merge PR138, record tree
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/test-logs"
-          # Public fetch of one branch ref if checkout left it out. No push,
-          # no credential, no checkout of main, no change to origin/main.
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          PR139_SHA="06f81be7c7dfca4a63c528e72bdc8c75b401b989"
+          PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
+
+          ensure_commit() {
+            local sha="$1"
+            if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "already have $sha"
+              return 0
+            fi
+            echo "missing $sha; fetching exact ref only"
+            git fetch --no-tags origin "$sha"
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "failed to fetch exact commit $sha"
+              exit 1
+            fi
+          }
+
+          HEAD_SHA="$(git rev-parse --verify HEAD)"
+          if [ "$HEAD_SHA" != "$PR139_SHA" ]; then
+            echo "HEAD is not the pinned PR139 SHA: $HEAD_SHA"
+            exit 1
+          fi
+
+          ensure_commit "$PR138_SHA"
+          ensure_commit "$MAIN_BASE_SHA"
+
           if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
             git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
           fi
-          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
-            echo "origin/main was not fetched; refusing to invent a local main"
+          ORIGIN_MAIN_SHA="absent"
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          fi
+
+          # Pin local main to the real baseline, not a later origin/main tip.
+          git update-ref refs/heads/main "$MAIN_BASE_SHA"
+          if [ "$(git rev-parse --verify HEAD)" != "$PR139_SHA" ]; then
+            echo "HEAD moved while pinning local main"
             exit 1
           fi
-          git update-ref refs/heads/main refs/remotes/origin/main
-          HEAD_SHA="$(git rev-parse --verify HEAD)"
-          MAIN_SHA="$(git rev-parse --verify main)"
-          ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          if [ "$(git rev-parse --verify main)" != "$MAIN_BASE_SHA" ]; then
+            echo "local main is not the pinned 3211be8 baseline"
+            exit 1
+          fi
+
+          set +e
+          git -c core.editor=true -c rerere.enabled=false merge --no-commit --no-ff "$PR138_SHA"
+          merge_rc=$?
+          set -e
           {
-            echo "head_sha=$HEAD_SHA"
-            echo "local_main_sha=$MAIN_SHA"
+            echo "pr139_head=$PR139_SHA"
+            echo "pr138_head=$PR138_SHA"
+            echo "main_base=$MAIN_BASE_SHA"
             echo "origin_main_sha=$ORIGIN_MAIN_SHA"
-          } | tee -a "$GITHUB_WORKSPACE/test-logs/meta.txt"
-          if [ "$MAIN_SHA" != "$ORIGIN_MAIN_SHA" ]; then
-            echo "local main does not match origin/main"
+            echo "merge_rc=$merge_rc"
+            echo -n "unmerged_paths="
+            git diff --name-only --diff-filter=U | tr '\n' ' '
+            echo
+          } | tee "$LOGDIR/merge-meta.txt"
+          if [ "$merge_rc" -ne 0 ] || [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
+            git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
+            echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
             exit 1
           fi
-          if [ "$HEAD_SHA" != "d3483b7943579ae7ce2b50d8c21fdfc272d96694" ]; then
-            echo "HEAD moved off the pinned SHA: $HEAD_SHA"
+
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 06f81be7c7dfca4a63c528e72bdc8c75b401b989 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+
+          MERGE_COMMIT="$(git rev-parse --verify HEAD)"
+          MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
+          PARENT1="$(git rev-parse --verify HEAD^1)"
+          PARENT2="$(git rev-parse --verify HEAD^2)"
+          if [ "$PARENT1" != "$PR139_SHA" ] || [ "$PARENT2" != "$PR138_SHA" ]; then
+            echo "merge parents are not PR139 then PR138: $PARENT1 $PARENT2"
             exit 1
           fi
-          if [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
-            echo "warning: pinned SHA equals origin/main; git show main is still a real ref"
+
+          python3 - <<'PY' | tee "$LOGDIR/locale-count.txt"
+          import json
+          from pathlib import Path
+          def flat(obj, pre=""):
+              out = {}
+              for k, v in obj.items():
+                  key = (pre + "." + k) if pre else k
+                  if isinstance(v, dict):
+                      out.update(flat(v, key))
+                  else:
+                      out[key] = v
+              return out
+          p = Path("apps/web/src/i18n/locales/zh-CN.json")
+          print(len(flat(json.loads(p.read_text(encoding="utf-8")))))
+          PY
+          LOCALE_KEYS="$(tr -d '\n' < "$LOGDIR/locale-count.txt")"
+
+          UTC_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SHANGHAI_TS="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S%z)"
+          {
+            echo "merge_commit=$MERGE_COMMIT"
+            echo "merge_tree=$MERGE_TREE"
+            echo "merge_parent1=$PARENT1"
+            echo "merge_parent2=$PARENT2"
+            echo "locale_zh_cn_keys=$LOCALE_KEYS"
+            echo "recorded_at_utc=$UTC_TS"
+            echo "recorded_at_asia_shanghai=$SHANGHAI_TS"
+            echo "ci_identity=AUU Joint CI <auu-joint-ci@localhost>"
+            echo "pushed=false"
+          } | tee -a "$LOGDIR/merge-meta.txt"
+
+          TAR_TMP="${RUNNER_TEMP:-/tmp}/auu-joint-source.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" -czf "$TAR_TMP" \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets' \
+            --exclude='users' \
+            --exclude='users.json' \
+            --exclude='data' \
+            --exclude='test-logs' \
+            --exclude='*.log' \
+            --exclude='apps/web/dist' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.ssh' \
+            --exclude='.netrc' \
+            --exclude='*.pem' \
+            --exclude='*.key' \
+            .
+          mkdir -p "$GITHUB_WORKSPACE/joint-artifacts"
+          TAR_OUT="$GITHUB_WORKSPACE/joint-artifacts/auu-joint-source-${MERGE_TREE:0:12}.tar.gz"
+          cp "$TAR_TMP" "$TAR_OUT"
+          TAR_SHA="$(sha256sum "$TAR_OUT" | awk '{print $1}')"
+          echo "source_tar=$(basename "$TAR_OUT")" | tee -a "$LOGDIR/merge-meta.txt"
+          echo "source_tar_sha256=$TAR_SHA" | tee -a "$LOGDIR/merge-meta.txt"
+          if tar -tzf "$TAR_OUT" | grep -E '(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.venv(/|$)|(^|/)\.env(/|$)|(^|/)\.env\.[^/]+$|(^|/)secrets(/|$)|(^|/)users(/|$)|(^|/)users\.json$|(^|/)data(/|$)|(^|/)test-logs(/|$)|(^|/)apps/web/dist(/|$)' ; then
+            echo "source tar contains a forbidden path"
+            exit 1
           fi
+          date +%s > "$LOGDIR/merge-ok.flag"
+          cat "$LOGDIR/merge-meta.txt" >> "$LOGDIR/meta.txt"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -182,9 +336,13 @@ jobs:
           RUNNER_GID="$(id -g)"
           RUNNER_USER="$(id -un)"
           {
-            echo "intended_sha=d3483b7943579ae7ce2b50d8c21fdfc272d96694"
-            echo -n "checked_out="
+            echo "intended_pr139=06f81be7c7dfca4a63c528e72bdc8c75b401b989"
+            echo "intended_pr138=d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+            echo "intended_main_base=3211be8c9821c788ae49c863bb210da06c377d29"
+            echo -n "checked_out_head="
             git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+            echo -n "checked_out_tree="
+            git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
             echo "runner_uid=$RUNNER_UID"
             echo "runner_gid=$RUNNER_GID"
             echo "runner_user=$RUNNER_USER"
@@ -329,16 +487,176 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload API secret-free source tar
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-joint-source
+          path: joint-artifacts/auu-joint-source-*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 14
+
   web:
-    name: Web checks and build on pinned PR138 SHA
+    name: Web checks and build on temporary PR139+PR138 merge
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Check out hardcoded PR138 SHA
+      - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: d3483b7943579ae7ce2b50d8c21fdfc272d96694
+          ref: 06f81be7c7dfca4a63c528e72bdc8c75b401b989
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Fetch exact refs, pin main to 3211be8, merge PR138, record tree
+        run: |
+          set -euo pipefail
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          PR139_SHA="06f81be7c7dfca4a63c528e72bdc8c75b401b989"
+          PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
+
+          ensure_commit() {
+            local sha="$1"
+            if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "already have $sha"
+              return 0
+            fi
+            echo "missing $sha; fetching exact ref only"
+            git fetch --no-tags origin "$sha"
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "failed to fetch exact commit $sha"
+              exit 1
+            fi
+          }
+
+          HEAD_SHA="$(git rev-parse --verify HEAD)"
+          if [ "$HEAD_SHA" != "$PR139_SHA" ]; then
+            echo "HEAD is not the pinned PR139 SHA: $HEAD_SHA"
+            exit 1
+          fi
+
+          ensure_commit "$PR138_SHA"
+          ensure_commit "$MAIN_BASE_SHA"
+
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          fi
+          ORIGIN_MAIN_SHA="absent"
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            ORIGIN_MAIN_SHA="$(git rev-parse --verify origin/main)"
+          fi
+
+          # Pin local main to the real baseline, not a later origin/main tip.
+          git update-ref refs/heads/main "$MAIN_BASE_SHA"
+          if [ "$(git rev-parse --verify HEAD)" != "$PR139_SHA" ]; then
+            echo "HEAD moved while pinning local main"
+            exit 1
+          fi
+          if [ "$(git rev-parse --verify main)" != "$MAIN_BASE_SHA" ]; then
+            echo "local main is not the pinned 3211be8 baseline"
+            exit 1
+          fi
+
+          set +e
+          git -c core.editor=true -c rerere.enabled=false merge --no-commit --no-ff "$PR138_SHA"
+          merge_rc=$?
+          set -e
+          {
+            echo "pr139_head=$PR139_SHA"
+            echo "pr138_head=$PR138_SHA"
+            echo "main_base=$MAIN_BASE_SHA"
+            echo "origin_main_sha=$ORIGIN_MAIN_SHA"
+            echo "merge_rc=$merge_rc"
+            echo -n "unmerged_paths="
+            git diff --name-only --diff-filter=U | tr '\n' ' '
+            echo
+          } | tee "$LOGDIR/merge-meta.txt"
+          if [ "$merge_rc" -ne 0 ] || [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Merge conflict; failing closed. No -X ours/theirs, no rerere, no auto resolve."
+            git status --porcelain | tee -a "$LOGDIR/merge-conflict.log"
+            echo "===== unmerged files =====" | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --name-only --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            git diff --diff-filter=U | tee -a "$LOGDIR/merge-conflict.log"
+            exit 1
+          fi
+
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 06f81be7c7dfca4a63c528e72bdc8c75b401b989 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+
+          MERGE_COMMIT="$(git rev-parse --verify HEAD)"
+          MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
+          PARENT1="$(git rev-parse --verify HEAD^1)"
+          PARENT2="$(git rev-parse --verify HEAD^2)"
+          if [ "$PARENT1" != "$PR139_SHA" ] || [ "$PARENT2" != "$PR138_SHA" ]; then
+            echo "merge parents are not PR139 then PR138: $PARENT1 $PARENT2"
+            exit 1
+          fi
+
+          python3 - <<'PY' | tee "$LOGDIR/locale-count.txt"
+          import json
+          from pathlib import Path
+          def flat(obj, pre=""):
+              out = {}
+              for k, v in obj.items():
+                  key = (pre + "." + k) if pre else k
+                  if isinstance(v, dict):
+                      out.update(flat(v, key))
+                  else:
+                      out[key] = v
+              return out
+          p = Path("apps/web/src/i18n/locales/zh-CN.json")
+          print(len(flat(json.loads(p.read_text(encoding="utf-8")))))
+          PY
+          LOCALE_KEYS="$(tr -d '\n' < "$LOGDIR/locale-count.txt")"
+
+          UTC_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SHANGHAI_TS="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S%z)"
+          {
+            echo "merge_commit=$MERGE_COMMIT"
+            echo "merge_tree=$MERGE_TREE"
+            echo "merge_parent1=$PARENT1"
+            echo "merge_parent2=$PARENT2"
+            echo "locale_zh_cn_keys=$LOCALE_KEYS"
+            echo "recorded_at_utc=$UTC_TS"
+            echo "recorded_at_asia_shanghai=$SHANGHAI_TS"
+            echo "ci_identity=AUU Joint CI <auu-joint-ci@localhost>"
+            echo "pushed=false"
+          } | tee -a "$LOGDIR/merge-meta.txt"
+
+          TAR_TMP="${RUNNER_TEMP:-/tmp}/auu-joint-source.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" -czf "$TAR_TMP" \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets' \
+            --exclude='users' \
+            --exclude='users.json' \
+            --exclude='data' \
+            --exclude='test-logs' \
+            --exclude='*.log' \
+            --exclude='apps/web/dist' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.ssh' \
+            --exclude='.netrc' \
+            --exclude='*.pem' \
+            --exclude='*.key' \
+            .
+          mkdir -p "$GITHUB_WORKSPACE/joint-artifacts"
+          TAR_OUT="$GITHUB_WORKSPACE/joint-artifacts/auu-joint-source-${MERGE_TREE:0:12}.tar.gz"
+          cp "$TAR_TMP" "$TAR_OUT"
+          TAR_SHA="$(sha256sum "$TAR_OUT" | awk '{print $1}')"
+          echo "source_tar=$(basename "$TAR_OUT")" | tee -a "$LOGDIR/merge-meta.txt"
+          echo "source_tar_sha256=$TAR_SHA" | tee -a "$LOGDIR/merge-meta.txt"
+          if tar -tzf "$TAR_OUT" | grep -E '(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.venv(/|$)|(^|/)\.env(/|$)|(^|/)\.env\.[^/]+$|(^|/)secrets(/|$)|(^|/)users(/|$)|(^|/)users\.json$|(^|/)data(/|$)|(^|/)test-logs(/|$)|(^|/)apps/web/dist(/|$)' ; then
+            echo "source tar contains a forbidden path"
+            exit 1
+          fi
+          date +%s > "$LOGDIR/merge-ok.flag"
+          cat "$LOGDIR/merge-meta.txt" >> "$LOGDIR/web-meta.txt"
 
       - name: Set up Node 22
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -367,7 +685,11 @@ jobs:
             echo "runner_user=$RUNNER_USER"
             echo -n "node_version="
             node -v
-          } > "$LOGDIR/web-meta.txt"
+            echo -n "checked_out_head="
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+            echo -n "checked_out_tree="
+            git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
+          } >> "$LOGDIR/web-meta.txt"
 
           {
             echo "export PATH=$(printf '%q' "$PATH")"
@@ -390,13 +712,15 @@ jobs:
             echo "cd apps/web failed" > "$LOGDIR/netns-error.log"
             exit 91
           }
-          r1=99 r2=99 r3=99 r4=99 r5=99 r6=99
+          r0=99 r1=99 r2=99 r3=99 r4=99 r5=99 r6=99 r7=99
           finish() {
+            echo "i18n_check=\$r0" >> "$LOGDIR/web-meta.txt"
             echo "subscription_gate=\$r1" >> "$LOGDIR/web-meta.txt"
             echo "screener_route=\$r2" >> "$LOGDIR/web-meta.txt"
             echo "ai_review_format=\$r3" >> "$LOGDIR/web-meta.txt"
             echo "ai_review_guard=\$r4" >> "$LOGDIR/web-meta.txt"
             echo "strategy_gap=\$r5" >> "$LOGDIR/web-meta.txt"
+            echo "extra_board_guard=\$r7" >> "$LOGDIR/web-meta.txt"
             echo "build=\$r6" >> "$LOGDIR/web-meta.txt"
             date +%s > "$LOGDIR/tests-completed.flag"
           }
@@ -416,20 +740,48 @@ jobs:
             return "\$rc"
           }
           set +e
+          run_timed 120 "$LOGDIR/web-i18n-check.log" node scripts/i18n-check.mjs
+          r0=\$?
           run_timed 120 "$LOGDIR/web-subscription-gate.log" node scripts/subscription-gate.test.mjs
           r1=\$?
           run_timed 120 "$LOGDIR/web-screener-route.log" node scripts/screener-route.test.mjs
           r2=\$?
           run_timed 120 "$LOGDIR/web-ai-review-format.log" node scripts/ai-review-format.test.mjs
           r3=\$?
-          run_timed 120 "$LOGDIR/web-ai-review-guard.log" node scripts/ai-review-guard.test.mjs
-          r4=\$?
+          if [ -f scripts/ai-review-guard.test.mjs ]; then
+            run_timed 120 "$LOGDIR/web-ai-review-guard.log" node scripts/ai-review-guard.test.mjs
+            r4=\$?
+          else
+            echo "ai-review-guard.test.mjs missing after merge" | tee "$LOGDIR/web-ai-review-guard.log"
+            r4=1
+          fi
           run_timed 120 "$LOGDIR/web-strategy-gap.log" node scripts/strategy-gap.test.mjs
           r5=\$?
-          run_timed 480 "$LOGDIR/web-build.log" npm run build
+          r7=0
+          extra_found=0
+          shopt -s nullglob
+          for extra in scripts/*board*guard*.mjs scripts/*board-ai*.test.mjs; do
+            base=\$(basename "\$extra")
+            if [ "\$base" = "ai-review-guard.test.mjs" ]; then
+              continue
+            fi
+            extra_found=1
+            run_timed 120 "$LOGDIR/web-extra-\$base.log" node "\$extra"
+            erc=\$?
+            echo "extra_board_script=\$extra exit=\$erc" >> "$LOGDIR/web-meta.txt"
+            if [ "\$erc" != "0" ]; then
+              r7=\$erc
+            fi
+          done
+          shopt -u nullglob
+          if [ "\$extra_found" = "0" ]; then
+            echo "no additional board guard scripts present (expected on 06f81be)" | tee "$LOGDIR/web-extra-board-guard.log"
+            r7=0
+          fi
+          run_timed 300 "$LOGDIR/web-build.log" npm run build
           r6=\$?
           set -e
-          if [ "\$r1" != "0" ] || [ "\$r2" != "0" ] || [ "\$r3" != "0" ] || [ "\$r4" != "0" ] || [ "\$r5" != "0" ] || [ "\$r6" != "0" ]; then
+          if [ "\$r0" != "0" ] || [ "\$r1" != "0" ] || [ "\$r2" != "0" ] || [ "\$r3" != "0" ] || [ "\$r4" != "0" ] || [ "\$r5" != "0" ] || [ "\$r7" != "0" ] || [ "\$r6" != "0" ]; then
             exit 1
           fi
           EOF
@@ -480,11 +832,18 @@ jobs:
             exit 1
           fi
           if [ "$rc" != "0" ]; then
-            for file in web-subscription-gate.log web-screener-route.log web-ai-review-format.log web-ai-review-guard.log web-strategy-gap.log web-build.log; do
+            for file in web-i18n-check.log web-subscription-gate.log web-screener-route.log web-ai-review-format.log web-ai-review-guard.log web-strategy-gap.log web-extra-board-guard.log web-build.log; do
               echo "===== BEGIN complete log $file ====="
               if [ -f "$LOGDIR/$file" ]; then cat "$LOGDIR/$file"; else echo "(missing)"; fi
               echo "===== END complete log $file ====="
             done
+            shopt -s nullglob
+            for file in "$LOGDIR"/web-extra-*.log; do
+              echo "===== BEGIN complete log $(basename "$file") ====="
+              cat "$file"
+              echo "===== END complete log $(basename "$file") ====="
+            done
+            shopt -u nullglob
             exit 1
           fi
 
@@ -494,5 +853,23 @@ jobs:
         with:
           name: web-test-logs
           path: test-logs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload web secret-free source tar
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-joint-source
+          path: joint-artifacts/auu-joint-source-*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload web build dist
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-build-dist
+          path: apps/web/dist/
           if-no-files-found: error
           retention-days: 14
