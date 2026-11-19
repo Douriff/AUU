@@ -171,15 +171,21 @@ def explain(request: Request, strategy: str = Query(""), symbol: str = Query("")
 
 
 @router.get("/decisions")
-def decisions(request: Request, strategy: str = Query("")):
+def decisions(request: Request, strategy: str = Query(""), symbol: str = Query("")):
     denied = _guard(request)
     if denied is not None:
         return denied
     if strategy and _strategy(strategy) is None:
         return err("BAD_REQUEST", "策略编号无效。", 400)
+    parsed_symbol = _symbol(symbol)
+    if parsed_symbol is None:
+        return err("BAD_REQUEST", "币种无效。", 400)
     from app.ai_review.service import decisions_payload
 
-    return _finish(request, ok(decisions_payload(strategy or None)))
+    body = decisions_payload(strategy or None)
+    if parsed_symbol:
+        body["events"] = [row for row in body["events"] if row.get("symbol") == parsed_symbol]
+    return _finish(request, ok(body))
 
 
 @router.get("/relay")

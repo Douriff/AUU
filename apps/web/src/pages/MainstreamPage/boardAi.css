@@ -1,0 +1,162 @@
+.board-ai {
+  background: #101218;
+  color: #f4f4f5;
+  border: 1px solid rgba(228, 194, 122, 0.45);
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 70vh;
+  overflow: auto;
+  font-size: 0.82rem;
+}
+.board-ai header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.board-ai header strong { letter-spacing: 0.04em; }
+.board-ai header button, .board-ai li button {
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0.25rem 0.45rem;
+}
+.board-ai-warn { color: #e4c27a; margin: 0; }
+.board-ai-sample { color: #ffb020; margin: 0; }
+.board-ai ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.board-ai li { display: flex; flex-wrap: wrap; gap: 0.35rem 0.6rem; align-items: baseline; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.45rem; }
+.board-ai time { font-variant-numeric: tabular-nums; }
+.board-ai-result { flex-basis: 100%; color: #d4d4d8; }
+@media (min-width: 901px) {
+  .ms-trade-grid { position: relative; }
+  .board-ai {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    max-height: 100%;
+    z-index: 6;
+    box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Chart-side labeled entry. Lives in boardAi.css so the compact .ms-lay tools
+   and .ms-tfs period row stay intact. The button is a sibling of .ms-lay, not
+   an icon inside it. Opening only toggles ?ai=1; it does not call the model. */
+.ms-trade-chart .ph {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 38px;
+  row-gap: 6px;
+}
+.ms-trade-chart.is-fs .ph {
+  height: auto;
+  min-height: 34px;
+}
+.ms-board-ai-entry {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 32px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(228, 194, 122, 0.55);
+  border-radius: 8px;
+  background: rgba(228, 194, 122, 0.14);
+  color: #f3e2b8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ms-board-ai-entry.is-on,
+.ms-board-ai-entry[aria-pressed="true"] {
+  background: rgba(228, 194, 122, 0.3);
+  border-color: #e4c27a;
+  color: #fff6da;
+  box-shadow: inset 0 0 0 1px rgba(228, 194, 122, 0.4);
+}
+@media (pointer: coarse) {
+  .ms-board-ai-entry {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 15px;
+  }
+}
+@media (max-width: 900px) {
+  .ms-board-ai-entry {
+    flex: 1 0 100%;
+    min-height: 44px;
+  }
+  .ms-trade-chart .ph .ms-tfs,
+  .ms-trade-chart .ph .mk-tabs.ms-tfs {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* Layout shim: desktop keeps .board-ai as a grid-positioned child of .ms-trade-grid. */
+.board-ai-layer { display: contents; }
+
+/* ≤900px: the panel is otherwise below the order book + sign-in in normal flow.
+   Lift it into a sheet between the top nav and (when present) the tab bar so
+   opening AI immediately shows the panel and close control. */
+@media (max-width: 900px) {
+  .board-ai-layer {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: fixed;
+    z-index: 40;
+    top: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+  .board-ai {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 100%;
+    min-height: min(70vh, 100%);
+    z-index: auto;
+    margin: 0;
+    border-top: 1px solid var(--border2, #2a303a);
+    border-radius: 12px 12px 0 0;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+  .board-ai header button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 760px) {
+  .board-ai-layer {
+    bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .board-ai {
+    animation: board-ai-sheet-in 160ms ease-out;
+  }
+}
+
+@keyframes board-ai-sheet-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

@@ -17,9 +17,12 @@ LOCALES = ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]
 # New relative to 1e9c986, and only when that path is absent from the baseline.
 # 1e9c986 -> 2905d287 added these and changed no existing value. On current main
 # they are already in the baseline, so a later edit is drift.
+# nav.tabPnl is the exact mobile tab-bar short label added on 55fcd22; not nav.*.
 _NEW_TREES = frozenset({"aiReview", "screener"})
 _NEW_PATHS = frozenset({
     "apiErr.SCREENER_ADMIN",
+    "nav.ai",
+    "nav.tabPnl",
     "strat.k.awaitClose",
     "strat.k.gapHistory",
     "strat.k.gapReset",
@@ -254,6 +257,20 @@ class LocaleNamespaceTests(unittest.TestCase):
         unknown = json.loads(json.dumps(old))
         unknown["brandNew"] = {"title": "不在名单"}
         self.assertTrue(locale_drift(old, unknown))
+        tab = json.loads(json.dumps(old))
+        tab["nav"] = {"tabPnl": "P&L"}
+        self.assertEqual(locale_drift(old, tab), [])
+        tab["nav"]["tabFoo"] = "nope"
+        self.assertTrue(any("unexpected nav.tabFoo" in item for item in locale_drift(old, tab)), locale_drift(old, tab))
+
+    def test_tab_pnl_short_labels_exist_and_desktop_pnl_is_unchanged(self):
+        for lang in LOCALES:
+            old = _flat_locale(self._baseline(lang))
+            new = _flat_locale(json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8")))
+            label = new.get("nav.tabPnl")
+            self.assertIsInstance(label, str, lang)
+            self.assertTrue(label.strip(), lang)
+            self.assertEqual(new.get("nav.pnl"), old.get("nav.pnl"), lang)
 
 
 class RelayAndDraftTests(unittest.TestCase):
