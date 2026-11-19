@@ -2147,6 +2147,7 @@
     "budgetInvalid": "The daily setting is not a whole number from 0 to 1000 and is not unlimited. No request was sent.",
     "noteCheckFailed": "The note was not accepted. Check code: {{code}}. The model text was not stored. This is not a dollar charge.",
     "boardTitle": "AI note",
+    "boardEntry": "AI解説",
     "boardClose": "Close",
     "boardNotNow": "These are stored records. The time shown is the record time, not the current quote.",
     "boardSample": "Sample data. This is not a live model response.",

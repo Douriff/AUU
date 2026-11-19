@@ -2147,6 +2147,7 @@
     "budgetInvalid": "每日次数不是 0 到 1000 的整数，也不是 unlimited。没有发送请求。",
     "noteCheckFailed": "说明没有通过核对。核对代码：{{code}}。没有保存模型原文。这不是美元费用。",
     "boardTitle": "AI 解读",
+    "boardEntry": "AI解读",
     "boardClose": "关闭",
     "boardNotNow": "这里是已存储的记录。显示的时间是记录时间，不是当前行情。",
     "boardSample": "样本数据。这不是真实模型回复。",
