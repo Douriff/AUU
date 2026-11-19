@@ -650,6 +650,7 @@
       "alerts": "Alerts"
     },
     "pnl": "Assets/P&L",
+    "tabPnl": "P&L",
     "airdrops": "Airdrops",
     "exchange": "Exchange",
     "ai": "AI"

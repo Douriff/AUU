@@ -650,6 +650,7 @@
       "alerts": "Warnungen"
     },
     "pnl": "Vermögen/GuV",
+    "tabPnl": "GuV",
     "airdrops": "Airdrops",
     "exchange": "Exchange",
     "ai": "AI"
