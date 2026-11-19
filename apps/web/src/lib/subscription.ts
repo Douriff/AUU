@@ -5,15 +5,10 @@ export const SUB_PREVIEW_KEY = "auu.sub.preview";
 export type SubPreview = "on" | "off" | null;
 
 const PREMIUM = new Set([
-  "/",
-  "/mainstream",
-  "/majors",
   "/pnl",
   "/console",
   "/performance",
   "/leaderboard",
-  "/markets",
-  "/market",
   "/board",
   "/strategy",
   "/review",
@@ -25,10 +20,17 @@ const PREMIUM = new Set([
   "/screener",
 ]);
 
-/** Market quotes and starred/premium desk routes (not news, settings, or account pages). */
+const ACCOUNT = ["/exchange", "/points", "/positions", "/settings"];
+
+/** Starred desk routes. Quotes, candles, and the majors board are not in this set. */
 export function isPremiumPath(pathname: string): boolean {
   if (PREMIUM.has(pathname)) return true;
-  return pathname.startsWith("/trade") || pathname.startsWith("/watch/") || pathname.startsWith("/market/");
+  return pathname.startsWith("/trade") || pathname.startsWith("/watch/");
+}
+
+/** Account, orders, balances, and exchange keys. Login is required; this is not a billing wall. */
+export function isAccountPath(pathname: string): boolean {
+  return ACCOUNT.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export function readSubPreview(): SubPreview {

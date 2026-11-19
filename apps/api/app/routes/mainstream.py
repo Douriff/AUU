@@ -1,14 +1,18 @@
 """Read-only mainstream market data: /api/v1/mainstream/*.
 
-GET only. Login is enforced by AuthGateMiddleware like every other /api path.
-Data comes from the local SQLite store; requests never wait on the exchange (tickers and the
-display-only order book refresh small caches in the background).
+GET only. Quotes, candles, the display order book, funding, and majors tickers are public.
+Strategy, paper orders, signals, and shadows stay behind the login gate. Data comes from the
+local SQLite store; requests never wait on the exchange (tickers and the display-only order
+book refresh small caches in the background).
 """
 from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
+
+from app.auth.accounts import auth_enabled
+from app.routes.auth import session_user
 
 from app.marketdata.mainstream import get_service
 from app.marketdata.mainstream.config import CHART_TFS
@@ -141,19 +145,26 @@ def orderbook(symbol: str = Query(...), depth: int = Query(12, ge=1, le=20), ven
     return ok(get_book_cache().get(base, depth))
 
 
+def markets_payload(request: Optional[Request] = None):
+    """Market list body. No request means the in-process caller, which still sees strategy weights."""
+    signed_in = request is None or (not auth_enabled()) or session_user(request) is not None
+    data = get_service().markets(holdings=_strategy_holdings() if signed_in else None)
+    caps = _rt_caps()
+    if caps is not None:
+        data = {**data, "realtime": caps}
+    return ok(data)
+
+
 @router.get("/markets")
-def markets():
+def markets(request: Request):
     """Market list: every display + strategy coin in one batched response (store + cached tickers).
 
     While the realtime feed runs with push on (``AUU_RT_WS=on``), the response also carries ``realtime`` (what
     ``/api/v1/ws`` can stream) so the page knows it may subscribe; with the switch off the response is unchanged
     and the frontend never opens a market-data WebSocket (step 3 of docs/realtime-ws-plan.md).
+    Anonymous readers get quotes only. Strategy weights are attached for a signed-in session.
     """
-    data = get_service().markets(holdings=_strategy_holdings())
-    caps = _rt_caps()
-    if caps is not None:
-        data = {**data, "realtime": caps}
-    return ok(data)
+    return markets_payload(request)
 
 
 def _rt_caps():

@@ -40,7 +40,8 @@ class ExtraRouteTests(M.MainstreamApiTests):
     def test_coin_candles_book_and_validation(self):
         user = self._signed_in("xuser")
         anon = self.TestClient(self.app)
-        self.assertEqual(anon.get("/api/v1/mainstream/coin?symbol=PEPE&venue=binance").status_code, 401)
+        self.assertNotEqual(anon.get("/api/v1/mainstream/coin?symbol=PEPE&venue=binance").status_code, 401)
+        self.assertEqual(anon.post("/api/v1/mainstream/paper/orders", json={"client_order_id": "x", "symbol": "BTC", "side": "buy", "notional": 10}).status_code, 401)
         c = user.get("/api/v1/mainstream/coin?symbol=pepe&venue=binance").json()["data"]
         self.assertEqual((c["symbol"], c["dataVenue"], c["tradable"], c["inPool"]), ("PEPE", "binance", True, False))
         self.assertGreater(c["price"], 0)  # last 1m close from the venue

@@ -12,7 +12,7 @@ import i18n from "i18next";
 import { LangSwitch } from "@/components/ui/LangSwitch";
 import { onExplicitLang, reconcileAccountLocale, setLang } from "@/i18n";
 import { fmtDate } from "@/i18n/format";
-import { isPremiumPath, readSubPreview, subscribedPreview, writeSubPreview, type SubPreview } from "@/lib/subscription";
+import { isAccountPath, isPremiumPath, readSubPreview, subscribedPreview, writeSubPreview, type SubPreview } from "@/lib/subscription";
 import { SubscribeLock, SubscriptionProvider, useSubscription, type SubscriptionState } from "@/components/subscribe/SubscribeGate";
 
 // Legacy pump nav (AUU_LEGACY_PUMP=on only). Labels are i18n keys under nav.legacy.*
@@ -199,7 +199,7 @@ const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 type Gate = "loading" | "anon" | "ok";
 
-/** Signed-out visitors see the shell only. Market data stays behind the subscription gate. */
+/** Signed-out visitors can open quotes and charts. Starred tools and account pages stay gated. */
 export function AppShell() {
   const [gate, setGate] = useState<Gate>("loading");
   const [who, setWho] = useState("");
@@ -390,8 +390,8 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
 function GatedOutlet() {
   const { anon, subscribed } = useSubscription();
   const { pathname } = useLocation();
-  if (anon && pathname !== "/subscribe") return <SubscribeLock variant="shell" />;
-  if (!anon && !subscribed && isPremiumPath(pathname)) return <SubscribeLock variant="locked" />;
+  if (anon && isAccountPath(pathname)) return <SubscribeLock variant="account" />;
+  if (!subscribed && isPremiumPath(pathname)) return <SubscribeLock variant={anon ? "shell" : "locked"} />;
   return <Outlet />;
 }
 

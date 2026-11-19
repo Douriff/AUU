@@ -35,6 +35,24 @@ PUBLIC_PATHS = frozenset(
     }
 )
 
+# Public quotes and candles. Exact paths only: /strategy, /paper, /signal and /shadow stay private.
+PUBLIC_MARKET_GETS = frozenset(
+    {
+        "/api/v1/mainstream/markets",
+        "/api/v1/mainstream/overview",
+        "/api/v1/mainstream/candles",
+        "/api/v1/mainstream/orderbook",
+        "/api/v1/mainstream/coin",
+        "/api/v1/mainstream/status",
+        "/api/v1/mainstream/funding",
+        "/api/v1/mainstream/realtime",
+        "/api/v1/majors",
+        "/api/v1/majors/tickers",
+        "/api/v1/majors/compare",
+        "/api/v1/ws",
+    }
+)
+
 # Coarse ops status (uptime, rebalance, live lock). Not part of the public login flow.
 ADMIN_READ_PATHS = frozenset({"/api/v1/status"})
 
@@ -96,6 +114,8 @@ def gate_decision(path: str, method: str, user: Optional[dict[str, Any]]) -> Opt
         return None
     method = (method or "GET").upper()
     if method == "OPTIONS" or path in PUBLIC_PATHS:
+        return None
+    if method in {"GET", "HEAD"} and path in PUBLIC_MARKET_GETS:
         return None
     if user is None:
         return (401, "AUTH_REQUIRED", "请先登录")

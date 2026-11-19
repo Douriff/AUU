@@ -191,8 +191,18 @@ class BinanceFeedTests(_Loopback):
         feed = BinanceSpotFeed(cfg, ["BTC"], "USDT", bus, _Sink(bus))
         task = asyncio.create_task(feed.run())
         try:
-            self.assertTrue(await _until(lambda: mock.conns, timeout=5))
+            # Wait until the feed has actually recorded the mock URL. mock.conns
+            # becomes true when the server handler starts, which can be before
+            # the client's connect() context has assigned state.url.
+            landed = await _until(
+                lambda: bool(mock.conns) and bool(feed.state.url) and feed.state.url.startswith(mock.url),
+                timeout=5,
+            )
+            self.assertTrue(landed)
             self.assertTrue(feed.state.url.startswith(mock.url))
+            self.assertGreaterEqual(feed.state.connects, 1)
+            err = feed.state.last_error or ""
+            self.assertTrue("127.0.0.1" in err and ("ConnectionRefusedError" in err or "Connect call failed" in err), err)
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
