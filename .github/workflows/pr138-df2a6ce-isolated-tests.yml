@@ -1,0 +1,349 @@
+# Purpose: isolated, no-production tests of PR 138 at
+# df2a6ce61723d45639b39f2616c54c3d9f2d1e6f. Start with a one-commit push of
+# this file to branch auu-ci/pr138-df2a6ce (not main).
+# Repo path: .github/workflows/pr138-df2a6ce-isolated-tests.yml
+# workflow_dispatch is omitted so the first run does not depend on this file
+# already being on the default branch.
+#
+# Checkout is the hardcoded PR 138 SHA, not the CI branch tip.
+# No secrets, no exchange keys, no production SSH, no AI/relay calls.
+# Dependency install and artifact upload stay on the host network.
+# Test/build subprocesses run in a new network namespace (unshare --net,
+# loopback only). The runner's global packet filter is not modified.
+# sudo is used only to create the netns; tests then run as the looked-up
+# runner UID with capabilities dropped. If the namespace cannot be
+# established, the job fails closed and does not run tests unisolated.
+#
+# paramiko==5.1.0 is installed only in this CI test environment. It is not in
+# apps/api/requirements.txt or requirements-dev.txt. The earlier cloud
+# acceptance run used this version. PyPI (https://pypi.org/pypi/paramiko/5.1.0)
+# lists 5.1.0, yanked=false, requires-python>=3.9, Python 3.12 classifier,
+# wheel+sdist uploaded 2026-10-18, vulnerabilities=[] at the time of that read.
+#
+# Action pins are lightweight tags from the official actions/* repos:
+#   checkout@v7.0.1, setup-python@v7.1.0, setup-node@v7.1.0, upload-artifact@v7.0.2
+#
+# On df2a6ce the prior report is: isolated health test passes, full API suite
+# has one failure. A red job on that expected failure is still a failure.
+
+name: Isolated no-production tests
+
+"on":
+  push:
+    branches:
+      - "auu-ci/pr138-df2a6ce"
+    paths:
+      - ".github/workflows/pr138-df2a6ce-isolated-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API tests on pinned PR138 SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Only names already documented in docker-compose.yml, apps/api/Dockerfile, or README.
+    # AUU_LIVE_API_ENABLE and AUU_AUTH are left unset on purpose (documented defaults).
+    env:
+      PYTHONUNBUFFERED: "1"
+      DATA_PROVIDER: mock
+      AUU_LEGACY_PUMP: "off"
+      AUU_LIVE_ENABLED: "false"
+      AUU_LIVE_DISABLED: "true"
+      AUU_LIVE_ARMED: "false"
+    steps:
+      - name: Check out hardcoded PR138 SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: df2a6ce61723d45639b39f2616c54c3d9f2d1e6f
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install API test dependencies
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-logs"
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements-dev.txt
+          # CI-only extra, not a checked-in requirement. See file header.
+          python -m pip install "paramiko==5.1.0"
+          python -m pip show paramiko | tee "$GITHUB_WORKSPACE/test-logs/paramiko-show.txt"
+
+      - name: Run API tests in a loopback-only network namespace
+        run: |
+          set -u
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          RUNNER_UID="$(id -u)"
+          RUNNER_GID="$(id -g)"
+          RUNNER_USER="$(id -un)"
+          {
+            echo "intended_sha=df2a6ce61723d45639b39f2616c54c3d9f2d1e6f"
+            echo -n "checked_out="
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+            echo "runner_uid=$RUNNER_UID"
+            echo "runner_gid=$RUNNER_GID"
+            echo "runner_user=$RUNNER_USER"
+          } > "$LOGDIR/meta.txt"
+
+          {
+            echo "export PATH=$(printf '%q' "$PATH")"
+            echo "export HOME=$(printf '%q' "$HOME")"
+            echo "export LANG=$(printf '%q' "${LANG:-C.UTF-8}")"
+            echo "export PYTHONUNBUFFERED=1"
+            echo "export DATA_PROVIDER=mock"
+            echo "export AUU_LEGACY_PUMP=off"
+            echo "export AUU_LIVE_ENABLED=false"
+            echo "export AUU_LIVE_DISABLED=true"
+            echo "export AUU_LIVE_ARMED=false"
+            echo "export GITHUB_WORKSPACE=$(printf '%q' "$GITHUB_WORKSPACE")"
+            echo "export LOGDIR=$(printf '%q' "$LOGDIR")"
+          } > "$LOGDIR/test-env.sh"
+
+          # Paths are baked in at write time so the script still works after
+          # sudo env_reset. Runtime dollars are escaped.
+          cat > "$LOGDIR/run-api-tests.sh" << EOF
+          #!/bin/bash
+          set -u
+          . "$LOGDIR/test-env.sh"
+          unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_RUNTIME_URL
+          if [ "\$(id -u)" -eq 0 ]; then
+            echo "refusing to run tests as root" > "$LOGDIR/netns-error.log"
+            exit 92
+          fi
+          cd "$GITHUB_WORKSPACE/apps/api" || {
+            echo "cd apps/api failed" > "$LOGDIR/netns-error.log"
+            exit 91
+          }
+          set +e
+          python -m unittest tests.test_mainstream_data.MainstreamApiTests.test_health_mainstream_mode -v > "$LOGDIR/api-health-solo.log" 2>&1
+          solo=\$?
+          python -m unittest discover -s tests -p 'test_*.py' -v > "$LOGDIR/api-full.log" 2>&1
+          full=\$?
+          set -e
+          echo "solo_exit=\$solo" >> "$LOGDIR/meta.txt"
+          echo "full_exit=\$full" >> "$LOGDIR/meta.txt"
+          date +%s > "$LOGDIR/tests-completed.flag"
+          if [ "\$solo" != "0" ] || [ "\$full" != "0" ]; then
+            exit 1
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/run-api-tests.sh"
+          chmod 0755 "$LOGDIR/run-api-tests.sh" "$LOGDIR/test-env.sh"
+
+          cat > "$LOGDIR/enter-netns.sh" << EOF
+          #!/bin/bash
+          set -euo pipefail
+          if ! ip link set lo up > "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link set lo up failed" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! ip -o link show lo >> "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link show lo failed" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! grep -q "UP" "$LOGDIR/netns-setup.log"; then
+            echo "lo is not UP" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if command -v setpriv >/dev/null 2>&1; then
+            exec setpriv --reuid=$RUNNER_UID --regid=$RUNNER_GID --init-groups --inh-caps=-all -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          elif command -v runuser >/dev/null 2>&1; then
+            exec runuser -u $RUNNER_USER -- /bin/bash "$LOGDIR/run-api-tests.sh"
+          else
+            echo "no setpriv or runuser to drop privileges" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/enter-netns.sh"
+          chmod 0755 "$LOGDIR/enter-netns.sh"
+
+          set +e
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" > "$LOGDIR/netns-outer.log" 2>&1
+          rc=$?
+          set -e
+          if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
+            echo "Namespace setup failed; tests were not run unisolated."
+            echo "===== BEGIN complete log netns-error.log ====="
+            if [ -f "$LOGDIR/netns-error.log" ]; then cat "$LOGDIR/netns-error.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-error.log ====="
+            echo "===== BEGIN complete log netns-outer.log ====="
+            if [ -f "$LOGDIR/netns-outer.log" ]; then cat "$LOGDIR/netns-outer.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-outer.log ====="
+            exit 1
+          fi
+          if [ "$rc" != "0" ]; then
+            if [ -f "$LOGDIR/api-health-solo.log" ] && ! grep -q '^solo_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-health-solo.log ====="
+              cat "$LOGDIR/api-health-solo.log"
+              echo "===== END complete log api-health-solo.log ====="
+            fi
+            if [ -f "$LOGDIR/api-full.log" ] && ! grep -q '^full_exit=0$' "$LOGDIR/meta.txt"; then
+              echo "===== BEGIN complete log api-full.log ====="
+              cat "$LOGDIR/api-full.log"
+              echo "===== END complete log api-full.log ====="
+            fi
+            echo "solo/full exits are in meta.txt; expected failure is still a failure."
+            exit 1
+          fi
+
+      - name: Upload API test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-test-logs
+          path: test-logs/
+          if-no-files-found: error
+          retention-days: 14
+
+  web:
+    name: Web checks and build on pinned PR138 SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out hardcoded PR138 SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: df2a6ce61723d45639b39f2616c54c3d9f2d1e6f
+          persist-credentials: false
+
+      - name: Set up Node 20
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Run frontend checks and build in a loopback-only network namespace
+        run: |
+          set -u
+          LOGDIR="$GITHUB_WORKSPACE/test-logs"
+          mkdir -p "$LOGDIR"
+          RUNNER_UID="$(id -u)"
+          RUNNER_GID="$(id -g)"
+          RUNNER_USER="$(id -un)"
+          {
+            echo "runner_uid=$RUNNER_UID"
+            echo "runner_gid=$RUNNER_GID"
+            echo "runner_user=$RUNNER_USER"
+          } > "$LOGDIR/web-meta.txt"
+
+          {
+            echo "export PATH=$(printf '%q' "$PATH")"
+            echo "export HOME=$(printf '%q' "$HOME")"
+            echo "export LANG=$(printf '%q' "${LANG:-C.UTF-8}")"
+            echo "export GITHUB_WORKSPACE=$(printf '%q' "$GITHUB_WORKSPACE")"
+            echo "export LOGDIR=$(printf '%q' "$LOGDIR")"
+          } > "$LOGDIR/web-test-env.sh"
+
+          cat > "$LOGDIR/run-web-tests.sh" << EOF
+          #!/bin/bash
+          set -u
+          . "$LOGDIR/web-test-env.sh"
+          unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_RUNTIME_URL
+          if [ "\$(id -u)" -eq 0 ]; then
+            echo "refusing to run tests as root" > "$LOGDIR/netns-error.log"
+            exit 92
+          fi
+          cd "$GITHUB_WORKSPACE/apps/web" || {
+            echo "cd apps/web failed" > "$LOGDIR/netns-error.log"
+            exit 91
+          }
+          set +e
+          node scripts/subscription-gate.test.mjs > "$LOGDIR/web-subscription-gate.log" 2>&1
+          r1=\$?
+          node scripts/screener-route.test.mjs > "$LOGDIR/web-screener-route.log" 2>&1
+          r2=\$?
+          node scripts/ai-review-format.test.mjs > "$LOGDIR/web-ai-review-format.log" 2>&1
+          r3=\$?
+          node scripts/ai-review-guard.test.mjs > "$LOGDIR/web-ai-review-guard.log" 2>&1
+          r4=\$?
+          node scripts/strategy-gap.test.mjs > "$LOGDIR/web-strategy-gap.log" 2>&1
+          r5=\$?
+          npm run build > "$LOGDIR/web-build.log" 2>&1
+          r6=\$?
+          set -e
+          echo "subscription_gate=\$r1" >> "$LOGDIR/web-meta.txt"
+          echo "screener_route=\$r2" >> "$LOGDIR/web-meta.txt"
+          echo "ai_review_format=\$r3" >> "$LOGDIR/web-meta.txt"
+          echo "ai_review_guard=\$r4" >> "$LOGDIR/web-meta.txt"
+          echo "strategy_gap=\$r5" >> "$LOGDIR/web-meta.txt"
+          echo "build=\$r6" >> "$LOGDIR/web-meta.txt"
+          date +%s > "$LOGDIR/tests-completed.flag"
+          if [ "\$r1" != "0" ] || [ "\$r2" != "0" ] || [ "\$r3" != "0" ] || [ "\$r4" != "0" ] || [ "\$r5" != "0" ] || [ "\$r6" != "0" ]; then
+            exit 1
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/run-web-tests.sh"
+          chmod 0755 "$LOGDIR/run-web-tests.sh" "$LOGDIR/web-test-env.sh"
+
+          cat > "$LOGDIR/enter-netns.sh" << EOF
+          #!/bin/bash
+          set -euo pipefail
+          if ! ip link set lo up > "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link set lo up failed" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! ip -o link show lo >> "$LOGDIR/netns-setup.log" 2>&1; then
+            echo "ip link show lo failed" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if ! grep -q "UP" "$LOGDIR/netns-setup.log"; then
+            echo "lo is not UP" > "$LOGDIR/netns-error.log"
+            cat "$LOGDIR/netns-setup.log" >> "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          if command -v setpriv >/dev/null 2>&1; then
+            exec setpriv --reuid=$RUNNER_UID --regid=$RUNNER_GID --init-groups --inh-caps=-all -- /bin/bash "$LOGDIR/run-web-tests.sh"
+          elif command -v runuser >/dev/null 2>&1; then
+            exec runuser -u $RUNNER_USER -- /bin/bash "$LOGDIR/run-web-tests.sh"
+          else
+            echo "no setpriv or runuser to drop privileges" > "$LOGDIR/netns-error.log"
+            exit 90
+          fi
+          EOF
+          sed -i 's/^          //' "$LOGDIR/enter-netns.sh"
+          chmod 0755 "$LOGDIR/enter-netns.sh"
+
+          set +e
+          sudo -n unshare --net /bin/bash "$LOGDIR/enter-netns.sh" > "$LOGDIR/netns-outer.log" 2>&1
+          rc=$?
+          set -e
+          if [ -f "$LOGDIR/netns-error.log" ] || [ ! -f "$LOGDIR/tests-completed.flag" ]; then
+            echo "Namespace setup failed; tests were not run unisolated."
+            echo "===== BEGIN complete log netns-error.log ====="
+            if [ -f "$LOGDIR/netns-error.log" ]; then cat "$LOGDIR/netns-error.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-error.log ====="
+            echo "===== BEGIN complete log netns-outer.log ====="
+            if [ -f "$LOGDIR/netns-outer.log" ]; then cat "$LOGDIR/netns-outer.log"; else echo "(missing)"; fi
+            echo "===== END complete log netns-outer.log ====="
+            exit 1
+          fi
+          if [ "$rc" != "0" ]; then
+            for file in web-subscription-gate.log web-screener-route.log web-ai-review-format.log web-ai-review-guard.log web-strategy-gap.log web-build.log; do
+              echo "===== BEGIN complete log $file ====="
+              if [ -f "$LOGDIR/$file" ]; then cat "$LOGDIR/$file"; else echo "(missing)"; fi
+              echo "===== END complete log $file ====="
+            done
+            exit 1
+          fi
+
+      - name: Upload web test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-test-logs
+          path: test-logs/
+          if-no-files-found: error
+          retention-days: 14
