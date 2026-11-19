@@ -930,12 +930,51 @@ jobs:
                   else:
                       yield test
           
+          def initialize_test_isolation():
+              # This wrapper is not a native `python -m unittest` entry. Bootstrap BEFORE
+              # discovery or any app import; importing unittest alone is intentionally insufficient.
+              evidence = {'checks': {}, 'ok': False}
+              try:
+                  clean = not any(n == 'app' or n.startswith('app.') for n in sys.modules)
+                  evidence['checks']['before_first_app_import'] = clean
+                  if not clean:
+                      raise RuntimeError('app imported before diagnostic test isolation')
+                  os.environ['AUU_TEST'] = '1'
+                  from app import data_paths as dp
+                  dp.install_test_isolation()  # Native helper, idempotent; no product defaults rewritten.
+                  root = dp.data_dir().resolve()
+                  owned = getattr(dp, '_TMPDIR', None)
+                  evidence['checks'].update({
+                      'test_mode': dp.tests_active() and os.environ.get('AUU_TEST') == '1',
+                      'skip_dotenv': os.environ.get('AUU_SKIP_DOTENV') == '1',
+                      'legacy_default': os.environ.get('AUU_LEGACY_PUMP') == 'on',
+                      'refresh_disabled': os.environ.get('AUU_MAINSTREAM_REFRESH') == 'off',
+                      'native_temporary_root': owned is not None and root == Path(owned.name).resolve() and root.is_dir(),
+                      'outside_repo_data': not root.is_relative_to(dp.repo_data_dir().resolve()),
+                  })
+                  blocked = False
+                  try:
+                      dp.guarded_path(dp.repo_data_dir() / 'diagnostic-startup-probe.sqlite')
+                  except dp.DataDirGuardError:
+                      blocked = True  # No file is opened or written by this probe.
+                  evidence['checks']['repo_write_guard'] = blocked
+                  evidence['ok'] = all(evidence['checks'].values())
+                  if not evidence['ok']:
+                      raise RuntimeError('diagnostic startup isolation checks failed')
+              except Exception as exc:
+                  evidence['error_type'] = type(exc).__name__  # No environment/credential dump.
+                  raise
+              finally:
+                  (OUT / 'startup-isolation.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          
+          
           def main():
               global PHASE
               OUT.mkdir(parents=True, exist_ok=True)
               emit('diagnostic_metadata', python=sys.version, executable=sys.executable,
                    script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    note='Not acceptance; instrumentation adds overhead; all original assertions retained.')
+              initialize_test_isolation()
               suite = unittest.defaultTestLoader.discover('tests', pattern='test_*.py')
               ids = [t.id() for t in flatten(suite)]
               (OUT / 'test-order.json').write_text(json.dumps(ids, indent=2))
