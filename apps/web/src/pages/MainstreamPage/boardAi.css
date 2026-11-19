@@ -97,3 +97,66 @@
     min-width: 0;
   }
 }
+
+/* Layout shim: desktop keeps .board-ai as a grid-positioned child of .ms-trade-grid. */
+.board-ai-layer { display: contents; }
+
+/* ≤900px: the panel is otherwise below the order book + sign-in in normal flow.
+   Lift it into a sheet between the top nav and (when present) the tab bar so
+   opening AI immediately shows the panel and close control. */
+@media (max-width: 900px) {
+  .board-ai-layer {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: fixed;
+    z-index: 40;
+    top: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+  .board-ai {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 100%;
+    min-height: min(70vh, 100%);
+    z-index: auto;
+    margin: 0;
+    border-top: 1px solid var(--border2, #2a303a);
+    border-radius: 12px 12px 0 0;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+  .board-ai header button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 760px) {
+  .board-ai-layer {
+    bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .board-ai {
+    animation: board-ai-sheet-in 160ms ease-out;
+  }
+}
+
+@keyframes board-ai-sheet-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

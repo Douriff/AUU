@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { askNote, ReviewHttpError } from "@/pages/AiReviewPage/api";
+import { BOARD_AI_SHEET_MQ, bindPageScrollLockHost, createPageScrollLock } from "./boardAiSheet";
 import "./boardAi.css";
 
 type Gate = "loading" | "anon" | "admin" | "member" | "off";
@@ -41,6 +42,13 @@ async function readJson(path: string): Promise<{ status: number; code: string; d
 
 export function BoardAiPanel({ symbol, onClose }: { symbol: string; onClose: () => void }) {
   const { t } = useTranslation();
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const [sheet, setSheet] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia(BOARD_AI_SHEET_MQ).matches,
+  );
   const [gate, setGate] = useState<Gate>("loading");
   const [rows, setRows] = useState<EventRow[]>([]);
   const [partial, setPartial] = useState(false);
@@ -49,6 +57,37 @@ export function BoardAiPanel({ symbol, onClose }: { symbol: string; onClose: () 
   const [asking, setAsking] = useState("");
   const [note, setNote] = useState<Note | null>(null);
   const [picked, setPicked] = useState("");
+
+  useEffect(() => {
+    const mq = window.matchMedia(BOARD_AI_SHEET_MQ);
+    const sync = () => setSheet(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    const lock = createPageScrollLock(bindPageScrollLockHost(window));
+    lock.apply();
+    const mq = window.matchMedia(BOARD_AI_SHEET_MQ);
+    mq.addEventListener("change", lock.apply);
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      mq.removeEventListener("change", lock.apply);
+      window.removeEventListener("keydown", onKey);
+      lock.release();
+      const entry = document.querySelector<HTMLElement>('[data-testid="board-ai"]');
+      (entry ?? opener)?.focus();
+    };
+  }, []);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -114,11 +153,23 @@ export function BoardAiPanel({ symbol, onClose }: { symbol: string; onClose: () 
     }
   }
 
+  const onLayerClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (sheet && e.target === e.currentTarget) onClose();
+  };
+
   return (
-    <aside className="board-ai" aria-label={t("aiReview.boardTitle")}>
+    <div className="board-ai-layer" onClick={onLayerClick}>
+      <aside
+        className="board-ai"
+        role={sheet ? "dialog" : undefined}
+        aria-modal={sheet ? true : undefined}
+        aria-labelledby={titleId}
+        aria-label={t("aiReview.boardTitle")}
+        tabIndex={-1}
+      >
       <header>
-        <strong>AI · {symbol}</strong>
-        <button type="button" onClick={onClose} aria-label={t("aiReview.boardClose")}>{t("aiReview.boardClose")}</button>
+        <strong id={titleId}>AI · {symbol}</strong>
+        <button ref={closeRef} type="button" onClick={onClose} aria-label={t("aiReview.boardClose")}>{t("aiReview.boardClose")}</button>
       </header>
       <p className="board-ai-warn">{t("aiReview.boardNotNow")}</p>
       {sample ? <p className="board-ai-sample">{t("aiReview.boardSample")}</p> : null}
@@ -141,7 +192,8 @@ export function BoardAiPanel({ symbol, onClose }: { symbol: string; onClose: () 
           ))}
         </ul>
       ) : null}
-    </aside>
+      </aside>
+    </div>
   );
 }
 
