@@ -1,6 +1,6 @@
 # Purpose: isolated, no-production joint tests of a temporary runner merge of
-#   PR139 fe8a4576663d076a835ccb8abf823061f1392c82
-#   PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694
+#   PR139 7f983d3d69455d2f8183fb7f14402e661b83036b
+#   PR138 e736bfb867f6abc2e98931ca854d8cad655bc881
 # against the real main baseline 3211be8c9821c788ae49c863bb210da06c377d29.
 # Start with a one-commit push of this file to branch auu-ci/pr138-df2a6ce
 # (not main), at repo path:
@@ -11,7 +11,7 @@
 # Checkout is the hardcoded PR139 SHA (fetch-depth: 0), not the CI branch tip.
 # Each job then fetches only a missing exact commit SHA (PR138 and, if needed,
 # the main baseline), pins a local main ref to 3211be8, and runs
-#   git merge --no-commit --no-ff d3483b7943579ae7ce2b50d8c21fdfc272d96694
+#   git merge --no-commit --no-ff e736bfb867f6abc2e98931ca854d8cad655bc881
 # Conflicts fail the job immediately. There is no -X ours/theirs, no rerere,
 # and no automatic resolution. A local merge commit is then created with a
 # fixed CI identity for artifact metadata only. The same local identity is
@@ -23,9 +23,11 @@
 # written to metadata and are not forced). Both jobs record merge_tree
 # dynamically after the same two-head merge; compare the two recorded
 # values — they must match. Do not pin or expect previous joint trees
-# a1fcd0a6758863e18d39d77703538789b7ac4185 (06f81be + d3483b79) or
-# 70251b613fa0efbe0fafa9b73bfb03ec1bc8ee3c (55fcd22 + d3483b79). This
-# head changes the API test file, so the tree is not 70251b6.
+# a1fcd0a6758863e18d39d77703538789b7ac4185 (06f81be + d3483b79),
+# 70251b613fa0efbe0fafa9b73bfb03ec1bc8ee3c (55fcd22 + d3483b79), or
+# 100ad48f2058c9587c629f42b37cacf1eed38cde (fe8a457 + d3483b79). Both
+# heads change files relative to that last tree, so the new merge_tree
+# is recorded dynamically and is not 100ad48.
 #
 # How to compare merge_tree with a later official GitHub merge:
 #   official_tree=$(git rev-parse <official-merge-commit>^{tree})
@@ -35,7 +37,7 @@
 # have the same tree; compare trees, not commit SHAs. If main has moved
 # past 3211be8, a merge of both PRs into that later main will contain
 # additional commits and will not equal this tree. In that case recreate
-# the same two-head merge on a detached fe8a457 and compare HEAD^{tree}.
+# the same two-head merge on a detached 7f983d3 and compare HEAD^{tree}.
 # A matching tree is not a deploy, not a preview GUI pass, and not
 # production sign-off.
 #
@@ -100,29 +102,36 @@
 # (PR138-only subscribe.accountTitle/accountSub; previous PR139-only
 # nav.ai plus the aiReview.board* keys including boardEntry). PR139 head
 # 55fcd22 added nav.tabPnl (mobile tab bar), so that joint locale was
-# the previous union plus tabPnl. Head fe8a457 does not change locales;
-# the key set is unchanged. Both jobs print the merged-tree count from
+# the previous union plus tabPnl. Heads fe8a457 and 7f983d3 do not
+# change locales; e736bfb is an API test-only change. The key set is
+# unchanged. Both jobs print the merged-tree count from
 # that same flatten. The workflow does not pass or fail solely on a
 # hardcoded key count, including the previous joint 1896. Web
 # `npm run build` still runs i18n-check.mjs, which enforces
 # cross-locale parity.
 #
 # API suite: discover command, assertions, and isolation are unchanged.
-# fe8a457 adds one LocaleNamespaceTests case relative to the 55fcd22
-# joint (run 44520074264, 1255 tests). Expect one more collected API
-# test. Do not shrink, skip, or rerun the suite.
+# fe8a457 already added one LocaleNamespaceTests case relative to the
+# 55fcd22 joint (run 44520074264, 1255 tests). 7f983d3 does not change
+# API tests. e736bfb only adds a bounded wait in the existing
+# test_connect_failure_rotates_gateways; it does not add, remove, skip,
+# or relax the rotation assertions. Do not shrink, skip, or rerun the
+# suite.
 #
-# Board guard: on PR139 head fe8a457, apps/web/scripts/ai-review-guard.test.mjs
-# (blob c6619e808f24b52e6c86bdd581e204ae058f7c5b) is the board guard. It
-# reads BoardAiPanel.tsx and asserts the panel does not call the model on
-# open and that ask() is behind an explicit click. No separate
-# *board*guard* script exists in apps/web/scripts on that head. PR138's
-# copy of this file is identical to main, so a 3-way merge preview kept
-# the PR139 file cleanly. The web job runs this script if it exists after
-# the merge (it must), and will also run any additional
-# scripts/*board*guard*.mjs or scripts/*board-ai*.test.mjs only if those
-# files are actually present. Missing unexpected extras are not invented
-# and are not treated as a pass.
+# Board guard: on PR139 head 7f983d3, apps/web/scripts/ai-review-guard.test.mjs
+# (blob c6619e808f24b52e6c86bdd581e204ae058f7c5b) is still the board
+# open/ask click guard. It reads BoardAiPanel.tsx and asserts the panel
+# does not call the model on open and that ask() is behind an explicit
+# click. No *board*guard* script exists in apps/web/scripts on this head.
+# PR138's copy of ai-review-guard.test.mjs is identical to main, so a
+# 3-way merge preview kept the PR139 file cleanly. The web job runs this
+# script if it exists after the merge (it must), and also runs any
+# additional scripts/*board*guard*.mjs or scripts/*board-ai*.test.mjs
+# that are actually present. Head 7f983d3 adds
+# scripts/board-ai-sheet.test.mjs, which matches
+# scripts/*board-ai*.test.mjs and must be executed. Missing that extra
+# on this head is a failure, not an expected skip. Missing unexpected
+# extras are not invented and are not treated as a pass.
 #
 # Source tar exclusions are explicit: .git, .venv, node_modules, .env,
 # .env.*, secrets, users, users.json, data, test-logs, *.log, plus the
@@ -158,7 +167,7 @@ jobs:
       - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: fe8a4576663d076a835ccb8abf823061f1392c82
+          ref: 7f983d3d69455d2f8183fb7f14402e661b83036b
           fetch-depth: 0
           persist-credentials: false
 
@@ -167,8 +176,8 @@ jobs:
           set -euo pipefail
           LOGDIR="$GITHUB_WORKSPACE/test-logs"
           mkdir -p "$LOGDIR"
-          PR139_SHA="fe8a4576663d076a835ccb8abf823061f1392c82"
-          PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          PR139_SHA="7f983d3d69455d2f8183fb7f14402e661b83036b"
+          PR138_SHA="e736bfb867f6abc2e98931ca854d8cad655bc881"
           MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
 
           ensure_commit() {
@@ -250,7 +259,7 @@ jobs:
             exit 1
           fi
 
-          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 fe8a4576663d076a835ccb8abf823061f1392c82 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 7f983d3d69455d2f8183fb7f14402e661b83036b with PR138 e736bfb867f6abc2e98931ca854d8cad655bc881"
 
           MERGE_COMMIT="$(git rev-parse --verify HEAD)"
           MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
@@ -369,8 +378,8 @@ jobs:
           RUNNER_GID="$(id -g)"
           RUNNER_USER="$(id -un)"
           {
-            echo "intended_pr139=fe8a4576663d076a835ccb8abf823061f1392c82"
-            echo "intended_pr138=d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+            echo "intended_pr139=7f983d3d69455d2f8183fb7f14402e661b83036b"
+            echo "intended_pr138=e736bfb867f6abc2e98931ca854d8cad655bc881"
             echo "intended_main_base=3211be8c9821c788ae49c863bb210da06c377d29"
             echo -n "checked_out_head="
             git -C "$GITHUB_WORKSPACE" rev-parse HEAD
@@ -537,7 +546,7 @@ jobs:
       - name: Check out hardcoded PR139 SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: fe8a4576663d076a835ccb8abf823061f1392c82
+          ref: 7f983d3d69455d2f8183fb7f14402e661b83036b
           fetch-depth: 0
           persist-credentials: false
 
@@ -546,8 +555,8 @@ jobs:
           set -euo pipefail
           LOGDIR="$GITHUB_WORKSPACE/test-logs"
           mkdir -p "$LOGDIR"
-          PR139_SHA="fe8a4576663d076a835ccb8abf823061f1392c82"
-          PR138_SHA="d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          PR139_SHA="7f983d3d69455d2f8183fb7f14402e661b83036b"
+          PR138_SHA="e736bfb867f6abc2e98931ca854d8cad655bc881"
           MAIN_BASE_SHA="3211be8c9821c788ae49c863bb210da06c377d29"
 
           ensure_commit() {
@@ -629,7 +638,7 @@ jobs:
             exit 1
           fi
 
-          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 fe8a4576663d076a835ccb8abf823061f1392c82 with PR138 d3483b7943579ae7ce2b50d8c21fdfc272d96694"
+          git -c user.name="AUU Joint CI" -c user.email="auu-joint-ci@localhost" -c commit.gpgsign=false commit --no-verify -m "ci: local unpushed merge of PR139 7f983d3d69455d2f8183fb7f14402e661b83036b with PR138 e736bfb867f6abc2e98931ca854d8cad655bc881"
 
           MERGE_COMMIT="$(git rev-parse --verify HEAD)"
           MERGE_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
@@ -822,8 +831,8 @@ jobs:
           done
           shopt -u nullglob
           if [ "\$extra_found" = "0" ]; then
-            echo "no additional board guard scripts present (expected on fe8a457)" | tee "$LOGDIR/web-extra-board-guard.log"
-            r7=0
+            echo "scripts/board-ai-sheet.test.mjs was not collected by scripts/*board-ai*.test.mjs after merge (required on 7f983d3)" | tee "$LOGDIR/web-extra-board-guard.log"
+            r7=1
           fi
           run_timed 300 "$LOGDIR/web-build.log" npm run build
           r6=\$?
