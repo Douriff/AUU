@@ -567,20 +567,6 @@ export function MainstreamPage() {
                 ) : null}
                 <button
                   type="button"
-                  className={`ms-lay-fs${aiOn ? " is-on" : ""}`}
-                  aria-pressed={aiOn}
-                  data-testid="board-ai"
-                  onClick={() => {
-                    const next = new URLSearchParams(params);
-                    if (aiOn) next.delete("ai");
-                    else next.set("ai", "1");
-                    setParams(next);
-                  }}
-                >
-                  AI
-                </button>
-                <button
-                  type="button"
                   className={`ms-lay-fs${fs ? " is-on" : ""}`}
                   aria-pressed={fs}
                   title={tr(fs ? "chart.layout.fsExit" : "chart.layout.fsEnter")}
@@ -591,6 +577,22 @@ export function MainstreamPage() {
                   {fs ? "✕" : "⛶"}
                 </button>
               </div>
+              <button
+                type="button"
+                className={`ms-board-ai-entry${aiOn ? " is-on" : ""}`}
+                aria-pressed={aiOn}
+                aria-label={tr("aiReview.boardEntry")}
+                title={tr("aiReview.boardNotNow")}
+                data-testid="board-ai"
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  if (aiOn) next.delete("ai");
+                  else next.set("ai", "1");
+                  setParams(next);
+                }}
+              >
+                {tr("aiReview.boardEntry")}
+              </button>
             </div>
             {extraMode && !dataVenue ? (
               <div className="ms-viewonly-chart">
