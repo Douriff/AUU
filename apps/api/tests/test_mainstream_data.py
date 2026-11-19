@@ -419,7 +419,7 @@ class ConfigTests(unittest.TestCase):
                 self.assertNotIn(needle, text, f"{path.name}: {needle}")
 
 
-_ENV = ("AUU_AUTH", "AUU_ALLOW_SIGNUP", "AUU_INVITE_CODE", "AUU_ADMIN_USER", "AUU_USER_STORE", "AUU_USER_JOURNAL_DIR", "AUU_AUTH_RATE_MAX", "AUU_LEGACY_PUMP")
+_ENV = ("AUU_AUTH", "AUU_ALLOW_SIGNUP", "AUU_INVITE_CODE", "AUU_ADMIN_USER", "AUU_USER_STORE", "AUU_USER_JOURNAL_DIR", "AUU_AUTH_RATE_MAX", "AUU_LEGACY_PUMP", "AUU_DATA_DIR")
 PW = "mainPass123"
 
 
@@ -429,6 +429,7 @@ class MainstreamApiTests(_NoNetwork):
     def setUp(self):
         super().setUp()
         from app.auth.accounts import reset_accounts
+        from app.paper.strategy_runner import reset_runner
 
         self._prev = {k: os.environ.get(k) for k in _ENV}
         root = Path(self.tmp.name)
@@ -440,6 +441,7 @@ class MainstreamApiTests(_NoNetwork):
                 "AUU_USER_JOURNAL_DIR": str(root / "journals"),
                 "AUU_AUTH_RATE_MAX": "1000",
                 "AUU_LEGACY_PUMP": "off",
+                "AUU_DATA_DIR": str(root / "data"),
             }
         )
         os.environ.pop("AUU_INVITE_CODE", None)
@@ -448,6 +450,7 @@ class MainstreamApiTests(_NoNetwork):
         svc = self.svc({"binance": FakeExchange()}, cfg=_cfg(symbols=["BTC", "ETH", "SOL"]))
         svc.refresh_once()
         reset_service(svc)
+        reset_runner(None)
         from fastapi.testclient import TestClient
         from app.main import create_app
 
@@ -456,8 +459,10 @@ class MainstreamApiTests(_NoNetwork):
 
     def tearDown(self):
         from app.auth.accounts import reset_accounts
+        from app.paper.strategy_runner import reset_runner
 
         reset_service(None)
+        reset_runner(None)
         for k, v in self._prev.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -533,11 +538,11 @@ class MainstreamApiTests(_NoNetwork):
         self.assertEqual(h["marketData"], "real")
         self.assertFalse(h["legacyPump"])
         self.assertFalse(h["liveEnabled"])
-        self.assertFalse(h["autopaperStall"]["stalled"])
+        self.assertFalse(h["autopaperStall"]["stalled"], h["autopaperStall"])
         # M3: the daily trend runner is the running strategy (not stalled right after start).
         self.assertEqual(h["autopaperStall"]["reason"], "")
         self.assertEqual(h["runningStrategies"], ["trend_tsmom_v1"])
-        self.assertFalse(h["strategyRunner"]["stalled"])
+        self.assertFalse(h["strategyRunner"]["stalled"], h["strategyRunner"])
         self.assertEqual(h["mainstream"]["exchange"], "binance")
         self.assertFalse(h["mainstream"]["stale"], h["mainstream"])
         self.assertIn("BTC:1h", h["mainstream"]["series"])
