@@ -55,6 +55,7 @@ const mainstreamNav: NavItem[] = [
   { to: "/exchange", label: "exchange", icon: "swap", match: (p) => p.startsWith("/exchange") },
 ];
 // mobile: 行情 · 交易 · AI · 盈亏 · 策略 · 动态 · 我的
+// Tab labels use nav.tabPnl for the P&L item so 7 tabs fit at 390px; title keeps the full nav.pnl string.
 const mobileTabs: NavItem[] = [
   mainstreamNav[0],
   mainstreamNav[1],
@@ -521,10 +522,10 @@ function ShellFrame({ who, onLogout }: { who: string; onLogout: () => void }) {
             const locked = gated(to);
             const on = i.match(location.pathname, location.search);
             return (
-              <Link key={i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? t("subscribe.starLabel") : undefined}>
+              <Link key={i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? `${t(`nav.${i.label}`)} · ${t("subscribe.starLabel")}` : t(`nav.${i.label}`)}>
                 <Icon name={i.icon} />
                 <span>
-                  {t(`nav.${i.label}`)}
+                  {t(`nav.${i.label === "pnl" ? "tabPnl" : i.label}`)}
                   {locked ? <span className="nav-star" aria-hidden="true">★</span> : null}
                 </span>
               </Link>
