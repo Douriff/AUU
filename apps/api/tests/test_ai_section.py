@@ -433,9 +433,15 @@ class CandleValidationTests(unittest.TestCase):
         draft = validate_strategy_body(_draft())
         gapped = _regular_bars(6) + _regular_bars(6, start=BAR_START + 8 * DAY)
         self.assertEqual(simulate_bars(draft, gapped, now_ms=NOW_MS)["reason"], "gap")
-        unclosed = _regular_bars(12)
-        unclosed[-1]["ts"] = NOW_MS - 1_000  # open almost at now, 1d bar not closed
-        self.assertEqual(simulate_bars(draft, unclosed, now_ms=NOW_MS)["reason"], "future_or_unclosed")
+        off_grid_future = _regular_bars(12)
+        off_grid_future[-1]["ts"] = NOW_MS + DAY  # future and off the period grid
+        off_grid = simulate_bars(draft, off_grid_future, now_ms=NOW_MS)
+        self.assertEqual(off_grid["status"], "blocked_bad_data")
+        self.assertIn(off_grid["reason"], {"gap", "non_regular_ts", "future_or_unclosed"})
+        self.assertEqual(off_grid["fills"], [])
+        future = _regular_bars(12, start=NOW_MS + DAY)
+        self.assertEqual(simulate_bars(draft, future, now_ms=NOW_MS)["reason"], "future_or_unclosed")
+        self.assertEqual(simulate_bars(draft, future, now_ms=NOW_MS)["fills"], [])
         envelope = _regular_bars(12)
         envelope[3]["high"] = 1
         envelope[3]["low"] = 2
@@ -812,6 +818,176 @@ class OpenIntrabarOrderTests(unittest.TestCase):
         self.assertFalse([row for row in held["fills"] if row["action"] == "exit"])
         self.assertIsNotNone(held["open_position"])
 
+
+
+
+# Frozen preview replay (PR139 821d619e / local preview sim at 2026-11-23 21:53 Asia/Shanghai).
+# Stored OKX BTC 1d uses UTC midnight opens (OKX 1Dutc). The last bar was the
+# still-forming 2026-11-23 session, not a timestamp-semantic error.
+PREVIEW_SIM_NOW_MS = 1_795_442_039_414
+PREVIEW_BTC_1D_FIRST = 1_785_110_400_000  # 2026-07-27T00:00:00Z
+PREVIEW_BTC_1D_LAST_CLOSED = 1_795_305_600_000  # 2026-11-22T00:00:00Z
+PREVIEW_BTC_1D_FORMING = 1_795_392_000_000  # 2026-11-23T00:00:00Z
+PREVIEW_BTC_1D_COUNT = 120
+
+
+def _preview_like_btc_1d(*, forming_high=63579.5, forming_low=60380.8, forming_close=63379.2, forming_open=61273.9, closed=119, include_forming=True, pattern="up"):
+    rows = _regular_bars(closed, start=PREVIEW_BTC_1D_FIRST, pattern=pattern, close0=100.0)
+    assert rows[0]["ts"] == PREVIEW_BTC_1D_FIRST
+    assert rows[-1]["ts"] == PREVIEW_BTC_1D_LAST_CLOSED
+    if include_forming:
+        rows.append({
+            "ts": PREVIEW_BTC_1D_FORMING,
+            "open": forming_open,
+            "high": forming_high,
+            "low": forming_low,
+            "close": forming_close,
+            "volume": 6723.71746023,
+        })
+    return rows
+
+
+def _fast10_slow30_draft():
+    return validate_strategy_body(_draft(params={"fast": 10, "slow": 30}, risk={"max_weight": 0.2, "long_only": True, "stop_loss_pct": None, "take_profit_pct": None, "fee_bps": 0, "slippage_bps": 0}))
+
+
+class FormingTailCutoffTests(unittest.TestCase):
+    def test_preview_forming_daily_tail_is_excluded_and_sim_can_complete(self):
+        draft = _fast10_slow30_draft()
+        self.assertEqual(draft["need_bars"], 33)
+        rows = _preview_like_btc_1d()
+        self.assertEqual(len(rows), PREVIEW_BTC_1D_COUNT)
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "simulated")
+        self.assertNotEqual(result["reason"], "future_or_unclosed")
+        self.assertEqual(result["bars_excluded_unclosed"], 1)
+        self.assertEqual(result["excluded_unclosed_ts"], [PREVIEW_BTC_1D_FORMING])
+        self.assertEqual(result["data_cutoff_ts"], PREVIEW_BTC_1D_LAST_CLOSED)
+        self.assertEqual(result["data_cutoff_close_at"], PREVIEW_BTC_1D_LAST_CLOSED + DAY)
+        self.assertEqual(result["bars_used"], 119)
+        self.assertGreaterEqual(result["bars_used"], result["bars_required"])
+        self.assertGreaterEqual(result["fill_count"], 1)
+        self.assertTrue(all(fill["ts"] <= PREVIEW_BTC_1D_LAST_CLOSED for fill in result["fills"]))
+        self.assertIsNotNone(result["paper_pnl"])
+
+    def test_changing_forming_tail_prices_does_not_change_closed_result(self):
+        draft = _fast10_slow30_draft()
+        deep = simulate_bars(draft, _preview_like_btc_1d(forming_low=50000.0, forming_high=80000.0, forming_close=79000.0), now_ms=PREVIEW_SIM_NOW_MS)
+        shallow = simulate_bars(draft, _preview_like_btc_1d(forming_low=61000.0, forming_high=61300.0, forming_close=61200.0), now_ms=PREVIEW_SIM_NOW_MS)
+        none = simulate_bars(draft, _preview_like_btc_1d(include_forming=False), now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(deep["status"], "simulated")
+        self.assertEqual(deep["fills"], shallow["fills"])
+        self.assertEqual(deep["paper_pnl"], shallow["paper_pnl"])
+        self.assertEqual(deep["fills"], none["fills"])
+        self.assertEqual(none["bars_excluded_unclosed"], 0)
+        self.assertEqual(none["data_cutoff_ts"], PREVIEW_BTC_1D_LAST_CLOSED)
+
+    def test_short_closed_history_after_excluding_tail_is_blocked_without_inventing(self):
+        draft = _fast10_slow30_draft()
+        # 10 closed daily bars plus the same forming tail; 10 < need 33.
+        rows = _regular_bars(10, start=PREVIEW_BTC_1D_LAST_CLOSED - 9 * DAY, pattern="up")
+        rows.append({"ts": PREVIEW_BTC_1D_FORMING, "open": 61273.9, "high": 63579.5, "low": 60380.8, "close": 63379.2, "volume": 1})
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_no_data")
+        self.assertEqual(result["reason"], "stored_candles_missing_or_short")
+        self.assertEqual(result["bars_used"], 10)
+        self.assertEqual(result["bars_required"], 33)
+        self.assertEqual(result["bars_excluded_unclosed"], 1)
+        self.assertEqual(result["data_cutoff_ts"], PREVIEW_BTC_1D_LAST_CLOSED)
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+
+    def test_true_future_bar_still_blocks(self):
+        draft = _fast10_slow30_draft()
+        rows = _preview_like_btc_1d(include_forming=False)
+        rows.append({"ts": PREVIEW_SIM_NOW_MS + DAY, "open": 64000, "high": 64100, "low": 63900, "close": 64050, "volume": 1})
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_bad_data")
+        # this appended open is both in the future and off the daily grid
+        self.assertIn(result["reason"], {"future_or_unclosed", "gap", "non_regular_ts"})
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+        self.assertEqual(result["bars_used"], 0)
+        # a regular series whose first open is already in the future still fails as future
+        grid = simulate_bars(draft, _regular_bars(40, start=PREVIEW_BTC_1D_FORMING + DAY, pattern="up"), now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(grid["status"], "blocked_bad_data")
+        self.assertEqual(grid["reason"], "future_or_unclosed")
+        self.assertEqual(grid["fills"], [])
+        self.assertIsNone(grid["paper_pnl"])
+
+    def test_forming_tail_plus_later_future_bar_still_blocks(self):
+        draft = _fast10_slow30_draft()
+        rows = _preview_like_btc_1d()
+        rows.append({"ts": PREVIEW_BTC_1D_FORMING + DAY, "open": 64000, "high": 64100, "low": 63900, "close": 64050, "volume": 1})
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_bad_data")
+        self.assertEqual(result["reason"], "future_or_unclosed")
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+
+    def test_gap_duplicate_and_illegal_ohlc_still_block(self):
+        draft = _fast10_slow30_draft()
+        gapped = _preview_like_btc_1d()
+        del gapped[20]  # hole among otherwise regular closed bars
+        self.assertEqual(simulate_bars(draft, gapped, now_ms=PREVIEW_SIM_NOW_MS)["reason"], "gap")
+        dups = _preview_like_btc_1d()
+        dups[5]["ts"] = dups[6]["ts"]
+        self.assertEqual(simulate_bars(draft, dups, now_ms=PREVIEW_SIM_NOW_MS)["reason"], "duplicate_ts")
+        bad = _preview_like_btc_1d()
+        bad[8]["high"] = 1
+        bad[8]["low"] = 2
+        bad[8]["open"] = 3
+        bad[8]["close"] = 4
+        self.assertEqual(simulate_bars(draft, bad, now_ms=PREVIEW_SIM_NOW_MS)["reason"], "bad_ohlc_envelope")
+        # illegal OHLC on the forming tail still blocks; we do not skip a corrupt last bar
+        tail = _preview_like_btc_1d()
+        tail[-1]["high"] = 1
+        tail[-1]["low"] = 2
+        self.assertEqual(simulate_bars(draft, tail, now_ms=PREVIEW_SIM_NOW_MS)["reason"], "bad_ohlc_envelope")
+        for rows in (gapped, dups, bad, tail):
+            blocked = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+            self.assertEqual(blocked["status"], "blocked_bad_data")
+            self.assertEqual(blocked["fills"], [])
+            self.assertIsNone(blocked["paper_pnl"])
+
+
+    def test_review_gap_before_forming_tail_is_not_hidden_by_exclusion(self):
+        draft = _fast10_slow30_draft()
+        rows = _preview_like_btc_1d()
+        del rows[-2]  # last closed to forming tail is now 2 days
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_bad_data")
+        self.assertEqual(result["reason"], "gap")
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+        self.assertEqual(result["bars_used"], 0)
+        self.assertNotEqual(result["status"], "simulated")
+
+    def test_review_offset_forming_timestamp_is_not_hidden_by_exclusion(self):
+        draft = _fast10_slow30_draft()
+        rows = _preview_like_btc_1d()
+        rows[-1]["ts"] = PREVIEW_SIM_NOW_MS - 1_000  # still forming, but off the 1d grid
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_bad_data")
+        self.assertIn(result["reason"], {"gap", "non_regular_ts"})
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+        self.assertEqual(result["bars_used"], 0)
+        self.assertNotEqual(result["status"], "simulated")
+
+    def test_review_overlapping_forming_bars_are_not_hidden_by_exclusion(self):
+        draft = _fast10_slow30_draft()
+        rows = _preview_like_btc_1d()
+        extra = dict(rows[-1])
+        extra["ts"] = PREVIEW_BTC_1D_FORMING + 1_000  # second forming bar, 1s later
+        rows.append(extra)
+        result = simulate_bars(draft, rows, now_ms=PREVIEW_SIM_NOW_MS)
+        self.assertEqual(result["status"], "blocked_bad_data")
+        self.assertEqual(result["reason"], "non_regular_ts")
+        self.assertEqual(result["fills"], [])
+        self.assertIsNone(result["paper_pnl"])
+        self.assertEqual(result["bars_used"], 0)
+        self.assertNotEqual(result["status"], "simulated")
 
 
 

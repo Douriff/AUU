@@ -831,7 +831,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertIsNone(gate_decision("/api/v1/screener/spot", "POST", {"is_admin": False}))
         self.assertIsNone(gate_decision("/api/v1/majors", "GET", {"is_admin": False}))
         self.assertIsNone(gate_decision("/api/v1/mainstream/overview", "GET", {"is_admin": False}))
-        self.assertEqual(gate_decision("/api/v1/majors", "GET", None)[0], 401)
+        self.assertIsNone(gate_decision("/api/v1/majors", "GET", None))
+        self.assertEqual(gate_decision("/api/v1/mainstream/paper/orders", "POST", None)[0], 401)
         catalog = root(False)["data"]["endpoints"]
         self.assertNotIn("screener", catalog)
         for key in ("mainstreamOverview", "majors", "news", "liveStatus", "paperOrder"):
@@ -861,8 +862,11 @@ class RegistrationTests(unittest.TestCase):
         for path in ("/", "/pnl", "/console", "/performance", "/majors", "/news", "/airdrops", "/exchange"):
             self.assertIn(f'to: "{path}"' if path != "/" else 'to: "/"', nav)
         self.assertIn('to: "/?symbol=BTC"', nav)
-        for path in ("/", "/mainstream", "/majors", "/pnl", "/console", "/performance", "/leaderboard", "/markets", "/market", "/board", "/strategy", "/review", "/positions", "/observe", "/alerts", "/backtest", "/watch", "/screener"):
-            self.assertIn(f'"{path}"', premium)
+        premium_set = premium.split("const PREMIUM", 1)[1].split(");", 1)[0]
+        for path in ("/pnl", "/console", "/performance", "/leaderboard", "/board", "/strategy", "/review", "/positions", "/observe", "/alerts", "/backtest", "/watch", "/screener"):
+            self.assertIn(f'"{path}"', premium_set)
+        for path in ("/", "/mainstream", "/majors", "/markets", "/market", "/news"):
+            self.assertNotIn(f'"{path}"', premium_set)
         for path in ('"/news"', '"/settings"', '"/login"', '"/subscribe"', '"/airdrops"'):
             self.assertNotIn(path, premium.split("const PREMIUM", 1)[1].split(");", 1)[0])
         page = (REPO / "apps/web/src/pages/ScreenerPage").read_text(encoding="utf-8") if False else "\n".join(

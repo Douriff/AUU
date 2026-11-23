@@ -1,9 +1,11 @@
 """With AUU_AUTH=on the API is login-only; system-engine writes are admin-only."""
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from app.auth.accounts import reset_accounts
@@ -35,10 +37,10 @@ PRIVATE_GETS = [
     "/api/v1/live/status",
     "/api/v1/markets",
     "/api/v1/symbols",
-    "/api/v1/mainstream/overview",
-    "/api/v1/mainstream/candles?symbol=BTC&tf=1d",
-    "/api/v1/mainstream/funding?symbol=BTC",
-    "/api/v1/mainstream/status",
+    "/api/v1/mainstream/strategy",
+    "/api/v1/mainstream/paper/account",
+    "/api/v1/mainstream/signal",
+    "/api/v1/mainstream/shadow/h2",
 ]
 
 ADMIN_WRITES = [
@@ -65,7 +67,6 @@ class GateDecisionTests(unittest.TestCase):
         self.assertIsNone(gate_decision("/api/v1/auth/login", "POST", None))
         self.assertIsNone(gate_decision("/", "GET", None))
         self.assertEqual(gate_decision("/api/v1/board", "GET", None)[0], 401)
-        self.assertEqual(gate_decision("/api/v1/ws", "GET", None)[0], 401)
         self.assertEqual(gate_decision("//api/v1//strategy/pump-paper-v1/", "PUT", None)[0], 401)
         self.assertEqual(gate_decision("/api/v1/strategy/pump-paper-v1", "PUT", {"is_admin": False})[0], 403)
         self.assertIsNone(gate_decision("/api/v1/strategy/pump-paper-v1", "PUT", {"is_admin": True}))
@@ -75,6 +76,22 @@ class GateDecisionTests(unittest.TestCase):
         self.assertEqual(gate_decision("/api/v1/status", "GET", None)[0], 401)
         self.assertEqual(gate_decision("/api/v1/status", "GET", {"is_admin": False})[0], 403)
         self.assertIsNone(gate_decision("/api/v1/status", "GET", {"is_admin": True}))
+        for path in (
+            "/api/v1/mainstream/markets",
+            "/api/v1/mainstream/overview",
+            "/api/v1/mainstream/candles",
+            "/api/v1/mainstream/orderbook",
+            "/api/v1/mainstream/coin",
+            "/api/v1/mainstream/funding",
+            "/api/v1/majors",
+            "/api/v1/majors/tickers",
+            "/api/v1/ws",
+        ):
+            self.assertIsNone(gate_decision(path, "GET", None), path)
+        self.assertEqual(gate_decision("/api/v1/mainstream/candles", "POST", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/mainstream/paper/orders", "POST", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/exchange/accounts", "GET", None)[0], 401)
+        self.assertEqual(gate_decision("/api/v1/live/orders", "POST", None)[0], 401)
 
 
 class AuthGateApiTests(unittest.TestCase):
@@ -158,14 +175,12 @@ class AuthGateApiTests(unittest.TestCase):
         finally:
             self.engine.update_params({"auto_paper_orders": self.auto_before})
 
-    def test_websocket_requires_session(self):
-        from starlette.websockets import WebSocketDisconnect
-
+    def test_websocket_market_hello_is_public_and_omits_private_events(self):
         anon = self.TestClient(self.app)
-        with self.assertRaises(WebSocketDisconnect) as ctx:
-            with anon.websocket_connect("/api/v1/ws") as ws:
-                ws.receive_json()
-        self.assertEqual(ctx.exception.code, 1008)
+        with anon.websocket_connect("/api/v1/ws") as ws:
+            hello = ws.receive_json()
+        self.assertEqual(hello["type"], "hello")
+        self.assertNotIn("fill", hello["eventTypes"])
         user = self._signed_in("gatews")
         with user.websocket_connect("/api/v1/ws") as ws:
             self.assertEqual(ws.receive_json()["type"], "hello")
@@ -245,3 +260,133 @@ class SecurityHardeningTests(AuthGateApiTests):
         off = admin.put("/api/v1/live/enabled", json={"liveEnabled": False})
         self.assertEqual(off.status_code, 200, off.text)
         reset_live_state()
+
+
+class AnonymousWsChannelTests(AuthGateApiTests):
+    """Public-market WS stays open; private fills/signals/risk must not leak to anonymous clients.
+
+    Hello omitting event names is not sufficient. Covers legacy and mainstream subscribe
+    plus a provider that yields a private frame on a public channel.
+    """
+
+    def _synthetic_provider(self):
+        class SyntheticProvider:
+            name = "synthetic_probe"
+
+            async def stream(self, channel, symbol, interval):
+                if channel == "candles":
+                    yield {"type": "candle", "payload": {"public_marker": "ok", "seq": 1, "symbol": symbol}}
+                    # If subscribe checks were bypassed or a public stream mixed types, this must still be dropped.
+                    yield {"type": "risk", "payload": {"private_marker": "leaked_on_public_channel"}}
+                    yield {"type": "candle", "payload": {"public_marker": "ok", "seq": 2, "symbol": symbol}}
+                elif channel in {"book", "trades"}:
+                    typ = "book" if channel == "book" else "trade"
+                    yield {"type": typ, "payload": {"public_marker": "ok", "symbol": symbol}}
+                elif channel in {"risk", "fills", "signals"}:
+                    typ = {"risk": "risk", "fills": "fill", "signals": "signal"}[channel]
+                    yield {"type": typ, "payload": {"private_marker": "synthetic_probe", "channel": channel}}
+                else:
+                    yield {"type": "error", "payload": {"code": "UNEXPECTED", "message": str(channel)}}
+                await asyncio.Event().wait()
+
+        return SyntheticProvider()
+
+    def test_anonymous_may_emit_rejects_private_and_unknown_frames(self):
+        from app.routes.ws import anonymous_may_emit, PUBLIC_MARKET_CHANNELS, PRIVATE_ACCOUNT_CHANNELS
+
+        self.assertEqual(PUBLIC_MARKET_CHANNELS, frozenset({"candles", "book", "trades"}))
+        self.assertEqual(PRIVATE_ACCOUNT_CHANNELS, frozenset({"signals", "fills", "risk"}))
+        for typ in ("candle", "book", "trade", "ticker", "kline", "rt_status", "hello", "subscribed", "error", "ping"):
+            self.assertTrue(anonymous_may_emit({"type": typ}), typ)
+        for typ in ("risk", "fill", "signal", "reject", "trading_state"):
+            self.assertFalse(anonymous_may_emit({"type": typ, "payload": {"private_marker": "x"}}), typ)
+            self.assertFalse(anonymous_may_emit('{"type":"%s","payload":{"private_marker":"x"}}' % typ), typ)
+        self.assertFalse(anonymous_may_emit({"payload": {"private_marker": "x"}}))
+        self.assertFalse(anonymous_may_emit("not-json"))
+
+    def _assert_private_channels_rejected(self, ws):
+        seen = []
+        for channel in ("risk", "fills", "signals"):
+            ws.send_json({"type": "subscribe", "channel": channel, "symbol": "SOL"})
+            msg = ws.receive_json()
+            seen.append((channel, msg))
+            self.assertEqual(msg.get("type"), "error", msg)
+            self.assertEqual(msg.get("payload", {}).get("code"), "AUTH_REQUIRED", msg)
+            self.assertNotEqual(msg.get("type"), "subscribed")
+        dumped = repr(seen)
+        self.assertNotIn("private_marker", dumped)
+        self.assertNotIn("synthetic_probe", dumped)
+
+    def test_legacy_anonymous_cannot_subscribe_or_receive_private_frames(self):
+        """Reproduces the independent-review probe: legacy on, auth on, anonymous risk subscribe."""
+        self.app.state.legacy_pump = True
+        try:
+            with patch("app.routes.ws.get_provider", return_value=self._synthetic_provider()):
+                anon = self.TestClient(self.app)
+                with anon.websocket_connect("/api/v1/ws") as ws:
+                    hello = ws.receive_json()
+                    self.assertEqual(hello["type"], "hello")
+                    self._assert_private_channels_rejected(ws)
+                    ws.send_json({"type": "subscribe", "channel": "candles", "symbol": "SOL", "interval": "1h"})
+                    frames = [ws.receive_json() for _ in range(3)]
+                    types = [f.get("type") for f in frames]
+                    self.assertEqual(types, ["subscribed", "candle", "candle"], frames)
+                    self.assertEqual(frames[1]["payload"].get("seq"), 1)
+                    self.assertEqual(frames[2]["payload"].get("seq"), 2)
+                    for frame in frames:
+                        self.assertNotIn("private_marker", repr(frame))
+                    ws.send_json({"type": "subscribe", "channel": "book", "symbol": "SOL"})
+                    book = [ws.receive_json() for _ in range(2)]
+                    self.assertEqual([f.get("type") for f in book], ["subscribed", "book"], book)
+                    self.assertIn("public_marker", book[1].get("payload", {}))
+                    ws.send_json({"type": "subscribe", "channel": "trades", "symbol": "SOL"})
+                    trades = [ws.receive_json() for _ in range(2)]
+                    self.assertEqual([f.get("type") for f in trades], ["subscribed", "trade"], trades)
+                    self.assertIn("public_marker", trades[1].get("payload", {}))
+        finally:
+            self.app.state.legacy_pump = False
+
+    def test_legacy_signed_in_still_receives_private_provider_channels(self):
+        """Logged-in permissions are not reduced by the anonymous whitelist."""
+        self.app.state.legacy_pump = True
+        try:
+            with patch("app.routes.ws.get_provider", return_value=self._synthetic_provider()):
+                user = self._signed_in("gatewspriv")
+                with user.websocket_connect("/api/v1/ws") as ws:
+                    hello = ws.receive_json()
+                    self.assertEqual(hello["type"], "hello")
+                    for name in ("risk", "fill", "signal"):
+                        self.assertIn(name, hello.get("eventTypes", []), hello)
+                    for channel, typ in (("risk", "risk"), ("fills", "fill"), ("signals", "signal")):
+                        ws.send_json({"type": "subscribe", "channel": channel, "symbol": "SOL"})
+                        ack = ws.receive_json()
+                        frame = ws.receive_json()
+                        self.assertEqual(ack.get("type"), "subscribed", ack)
+                        self.assertEqual(ack.get("channel"), channel)
+                        self.assertEqual(frame.get("type"), typ, frame)
+                        self.assertEqual(frame.get("payload", {}).get("private_marker"), "synthetic_probe")
+        finally:
+            self.app.state.legacy_pump = False
+
+    def test_mainstream_anonymous_private_subscribe_rejected_public_ws_stays_open(self):
+        """Non-legacy: still a public WS; private channel subscribe is AUTH_REQUIRED, not a data leak."""
+        self.app.state.legacy_pump = False
+        anon = self.TestClient(self.app)
+        with anon.websocket_connect("/api/v1/ws") as ws:
+            hello = ws.receive_json()
+            self.assertEqual(hello["type"], "hello")
+            self.assertNotIn("fill", hello.get("eventTypes", []))
+            self.assertNotIn("risk", hello.get("eventTypes", []))
+            for channel in ("risk", "fills", "signals"):
+                ws.send_json({"type": "subscribe", "channel": channel, "symbol": "SOL"})
+                msg = ws.receive_json()
+                self.assertEqual(msg.get("type"), "error", msg)
+                self.assertEqual(msg.get("payload", {}).get("code"), "AUTH_REQUIRED", msg)
+                self.assertNotIn("private_marker", repr(msg))
+            # Public market provider channels stay unavailable when legacy is off (existing behavior).
+            ws.send_json({"type": "subscribe", "channel": "candles", "symbol": "SOL", "interval": "1h"})
+            candles = ws.receive_json()
+            self.assertEqual(candles.get("type"), "error", candles)
+            self.assertEqual(candles.get("payload", {}).get("code"), "LEGACY_OFF", candles)
+            ws.send_json({"type": "ping"})
+            self.assertEqual(ws.receive_json().get("type"), "pong")

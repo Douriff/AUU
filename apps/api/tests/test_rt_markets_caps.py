@@ -27,7 +27,7 @@ class MarketsCapsTests(unittest.TestCase):
 
     def _call(self):
         with patch.object(R, "get_service", lambda: _Svc()), patch.object(R, "_strategy_holdings", lambda: {}):
-            return _body(R.markets())
+            return _body(R.markets_payload())
 
     def test_switch_off_response_unchanged(self):
         RT.set_manager(None)

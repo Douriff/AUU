@@ -61,7 +61,29 @@ def _addition_allowed(path: str, baseline: set[str]) -> bool:
     return False
 
 
-def locale_drift(old: dict, new: dict) -> list[str]:
+# This joint candidate rewrites these existing subscription strings and adds two login prompts
+# (PR138). They are the only authorized copy *edits* versus main, besides the named AI/nav
+# additions already allowed above. Any other changed path is still drift.
+_AUTHORIZED_SUBSCRIPTION_CHANGES = frozenset({
+    "subscribe.fMarket",
+    "subscribe.lockedSub",
+    "subscribe.shellSub",
+    "subscribe.shellTitle",
+    "subscribe.sub",
+})
+_AUTHORIZED_SUBSCRIPTION_ADDITIONS = frozenset({
+    "subscribe.accountSub",
+    "subscribe.accountTitle",
+})
+
+
+def locale_drift(
+    old: dict,
+    new: dict,
+    *,
+    allow_changed: frozenset[str] = frozenset(),
+    allow_added: frozenset[str] = frozenset(),
+) -> list[str]:
     """Differences that are not an explicitly named addition absent from old."""
     old_paths, new_paths = _flat_locale(old), _flat_locale(new)
     problems = []
@@ -69,10 +91,13 @@ def locale_drift(old: dict, new: dict) -> list[str]:
     if removed:
         problems.append("removed " + ", ".join(removed))
     added = sorted(set(new_paths) - set(old_paths))
-    unknown = [path for path in added if not _addition_allowed(path, set(old_paths))]
+    unknown = [path for path in added if path not in allow_added and not _addition_allowed(path, set(old_paths))]
     if unknown:
         problems.append("unexpected " + ", ".join(unknown))
-    changed = sorted(path for path in set(old_paths) & set(new_paths) if old_paths[path] != new_paths[path])
+    changed = sorted(
+        path for path in set(old_paths) & set(new_paths)
+        if old_paths[path] != new_paths[path] and path not in allow_changed
+    )
     if changed:
         problems.append("changed " + ", ".join(changed))
     return problems
@@ -234,7 +259,16 @@ class LocaleNamespaceTests(unittest.TestCase):
         for lang in LOCALES:
             old = self._baseline(lang)
             new = json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
-            self.assertEqual(locale_drift(old, new), [], lang)
+            self.assertEqual(
+                locale_drift(
+                    old,
+                    new,
+                    allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+                    allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+                ),
+                [],
+                lang,
+            )
 
     def test_changing_an_old_key_is_rejected(self):
         old = self._baseline("zh-CN")
@@ -273,6 +307,35 @@ class LocaleNamespaceTests(unittest.TestCase):
             self.assertIsInstance(label, str, lang)
             self.assertTrue(label.strip(), lang)
             self.assertEqual(new.get("nav.pnl"), old.get("nav.pnl"), lang)
+
+    def test_subscription_copy_allowlist_does_not_hide_other_edits(self):
+        old = self._baseline("zh-CN")
+        current = json.loads((ROOT / "apps/web/src/i18n/locales/zh-CN.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            locale_drift(
+                old,
+                current,
+                allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+                allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+            ),
+            [],
+        )
+        current["strat"]["k"]["nav"] += "（已改）"
+        drift = locale_drift(
+            old,
+            current,
+            allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+            allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+        )
+        self.assertTrue(any("strat.k.nav" in item for item in drift), drift)
+        current["subscribe"]["price"] = "$0"
+        drift = locale_drift(
+            old,
+            current,
+            allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+            allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+        )
+        self.assertTrue(any("subscribe.price" in item for item in drift), drift)
 
 
 class RelayAndDraftTests(unittest.TestCase):
