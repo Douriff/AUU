@@ -18,14 +18,87 @@ from app.providers import AVAILABLE_PROVIDERS, get_provider
 
 router = APIRouter(tags=["ws"])
 
-VALID_CHANNELS = {"candles", "book", "trades", "signals", "fills", "risk"}
+# Public read-only market channels vs account/system channels.
+# Anonymous sockets may only use the public set. Hiding names from hello is not a security boundary.
+PUBLIC_MARKET_CHANNELS = frozenset({"candles", "book", "trades"})
+PRIVATE_ACCOUNT_CHANNELS = frozenset({"signals", "fills", "risk"})
+VALID_CHANNELS = set(PUBLIC_MARKET_CHANNELS | PRIVATE_ACCOUNT_CHANNELS)
 # Event types emitted on the wire (hub + provider):
 # signal | risk | fill | reject | trading_state | candle | book | trade | …
+PUBLIC_MARKET_FRAME_TYPES = frozenset({
+    "hello",
+    "ping",
+    "pong",
+    "subscribed",
+    "unsubscribed",
+    "error",
+    "candle",
+    "book",
+    "trade",
+    "ticker",
+    "kline",
+    "rt_status",
+    "pumpfun_curve",
+    "new_token",
+})
+PRIVATE_ACCOUNT_FRAME_TYPES = frozenset({"signal", "risk", "fill", "reject", "trading_state"})
+
+
+def _frame_type(data) -> str | None:
+    if isinstance(data, dict):
+        typ = data.get("type")
+        return typ if isinstance(typ, str) else None
+    if isinstance(data, (bytes, bytearray)):
+        data = data.decode("utf-8", errors="replace")
+    if isinstance(data, str):
+        try:
+            obj = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if isinstance(obj, dict):
+            typ = obj.get("type")
+            return typ if isinstance(typ, str) else None
+    return None
+
+
+def anonymous_may_emit(data) -> bool:
+    """Whether an anonymous socket may be sent this frame. Unknown types fail closed."""
+    typ = _frame_type(data)
+    if typ is None or typ in PRIVATE_ACCOUNT_FRAME_TYPES:
+        return False
+    return typ in PUBLIC_MARKET_FRAME_TYPES
+
+
+class _AnonymousPublicMarketSocket:
+    """Drop private account/system frames on every send path, including rt.sender().
+
+    Subscribe checks still run separately; this is the broadcast/send backstop.
+    """
+
+    def __init__(self, ws):
+        self._ws = ws
+
+    def __getattr__(self, name):
+        return getattr(self._ws, name)
+
+    async def send_json(self, data, *args, **kwargs):
+        if anonymous_may_emit(data):
+            await self._ws.send_json(data, *args, **kwargs)
+
+    async def send_text(self, data, *args, **kwargs):
+        if anonymous_may_emit(data):
+            await self._ws.send_text(data, *args, **kwargs)
 
 
 @router.websocket("/api/v1/ws")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
+    from app.auth.accounts import auth_enabled
+
+    private = (not auth_enabled()) or bool(websocket.scope.get("auu_user_id"))
+    if not private:
+        # Wrap before rt session / pumps so every later send path is filtered.
+        websocket = _AnonymousPublicMarketSocket(websocket)
     flag = getattr(websocket.app.state, "legacy_pump", None)
     legacy = legacy_pump_enabled() if flag is None else bool(flag)
     rt = None if legacy else _rt_session(websocket)
@@ -68,6 +141,10 @@ async def ws_endpoint(websocket: WebSocket):
         if rt is not None:
             hello["eventTypes"] = hello["eventTypes"] + ["ticker", "kline", "rt_status"]
             hello.update(rt.hello_extra())
+    if not private:
+        # Display-only: still omit private names from hello, but this is not the access check.
+        hidden = {"fill", "reject", "signal", "risk", "trading_state"}
+        hello["eventTypes"] = [name for name in hello["eventTypes"] if name not in hidden]
     if rt is None:
         await websocket.send_json(hello)
     else:
@@ -81,13 +158,15 @@ async def ws_endpoint(websocket: WebSocket):
     tasks: dict[str, asyncio.Task] = {}
     stop = asyncio.Event()
     hub = get_hub()
-    hub_q = await hub.subscribe()
+    hub_q = await hub.subscribe() if private else None
 
     async def pump(channel: str, symbol: str, interval: str | None):
         try:
             async for frame in provider.stream(channel, symbol, interval):
                 if stop.is_set():
                     break
+                if not private and not anonymous_may_emit(frame):
+                    continue
                 await websocket.send_json(frame)
         except asyncio.CancelledError:
             raise
@@ -98,6 +177,8 @@ async def ws_endpoint(websocket: WebSocket):
         """Forward paper-path events (fill/reject/risk/trading_state/signal)."""
         try:
             while not stop.is_set():
+                if not private:
+                    return
                 try:
                     event = await asyncio.wait_for(hub_q.get(), timeout=1.0)
                 except asyncio.TimeoutError:
@@ -117,7 +198,7 @@ async def ws_endpoint(websocket: WebSocket):
             return
 
     hb = asyncio.create_task(heartbeat())
-    hub_task = asyncio.create_task(hub_pump())
+    hub_task = asyncio.create_task(hub_pump()) if hub_q is not None else None
     rt_task = asyncio.create_task(rt.sender()) if rt is not None else None
 
     try:
@@ -171,14 +252,6 @@ async def ws_endpoint(websocket: WebSocket):
             channel = msg.get("channel")
             symbol = msg.get("symbol")
             interval = msg.get("interval")
-            if provider is None:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "payload": {"code": "LEGACY_OFF", "message": "provider channels need AUU_LEGACY_PUMP=on"},
-                    }
-                )
-                continue
             if channel not in VALID_CHANNELS or not symbol:
                 await websocket.send_json(
                     {
@@ -187,6 +260,23 @@ async def ws_endpoint(websocket: WebSocket):
                             "code": "BAD_SUBSCRIBE",
                             "message": "need channel + symbol",
                         },
+                    }
+                )
+                continue
+            if not private and channel not in PUBLIC_MARKET_CHANNELS:
+                # All modes: anonymous may not subscribe to fills/signals/risk (or any non-whitelist channel).
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "payload": {"code": "AUTH_REQUIRED", "message": "请先登录"},
+                    }
+                )
+                continue
+            if provider is None:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "payload": {"code": "LEGACY_OFF", "message": "provider channels need AUU_LEGACY_PUMP=on"},
                     }
                 )
                 continue
@@ -208,7 +298,8 @@ async def ws_endpoint(websocket: WebSocket):
     finally:
         stop.set()
         hb.cancel()
-        hub_task.cancel()
+        if hub_task is not None:
+            hub_task.cancel()
         for t in tasks.values():
             t.cancel()
         extra = []
@@ -216,8 +307,9 @@ async def ws_endpoint(websocket: WebSocket):
             rt.close()
             rt_task.cancel()
             extra.append(rt_task)
-        await hub.unsubscribe(hub_q)
-        await asyncio.gather(hb, hub_task, *tasks.values(), *extra, return_exceptions=True)
+        if hub_q is not None:
+            await hub.unsubscribe(hub_q)
+        await asyncio.gather(hb, *([hub_task] if hub_task is not None else []), *tasks.values(), *extra, return_exceptions=True)
 
 
 def _rt_session(websocket: WebSocket):
