@@ -6,8 +6,11 @@ in the background.
 
 Execution convention (disclosed, not a live fill):
 - timestamps are millisecond bar-open times; a bar is closed when ts+tf_ms <= now
-- only unique, strictly regular, already-closed OHLC bars are accepted
-- a gap, duplicate, future, unclosed, or illegal OHLC bar blocks the run
+- only unique, strictly regular, already-closed OHLC bars are used for signals and fills
+- the full parsed window is checked for uniqueness, OHLC, and exact period spacing before any exclusion
+- only one legitimate still-forming last bar (ts <= now < ts+tf_ms, already on that grid) may be excluded and disclosed; it is not invented
+- a true future bar (ts > now), a gap, an offset or overlapping tail, a duplicate, or illegal OHLC blocks the run
+- if the remaining closed history is shorter than required, the run is blocked and no bars are invented
 - signals use only completed bars; entries and non-stop exits fill at the
   next bar's open (no same-bar close fill)
 - Donchian uses the prior period's high/low channel, not a close-only channel
@@ -27,6 +30,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.ai_section.schema import KIND_SPECS, TF_MS
@@ -98,23 +102,55 @@ def _ms_int(value: Any) -> int | None:
     return ts
 
 
-def validate_bars(rows: list[dict[str, Any]], timeframe: str, now_ms: int) -> tuple[list[dict[str, float]], str | None]:
-    """Return accepted closed bars, or an empty list with a reason to block."""
+@dataclass
+class PreparedBars:
+    """Closed bars ready to walk, plus disclosure about a dropped forming tail."""
+
+    bars: list[dict[str, float]]
+    reason: str | None
+    excluded_unclosed_ts: list[int]
+    data_cutoff_ts: int | None
+    data_cutoff_close_at: int | None
+
+    def disclosure(self) -> dict[str, Any]:
+        return {
+            "bars_excluded_unclosed": len(self.excluded_unclosed_ts),
+            "excluded_unclosed_ts": list(self.excluded_unclosed_ts),
+            "data_cutoff_ts": self.data_cutoff_ts,
+            "data_cutoff_close_at": self.data_cutoff_close_at,
+        }
+
+
+def _empty_prepared(reason: str) -> PreparedBars:
+    return PreparedBars([], reason, [], None, None)
+
+
+def prepare_bars(rows: list[dict[str, Any]], timeframe: str, now_ms: int) -> PreparedBars:
+    """Accept only already-closed bars; drop a single legitimate forming tail.
+
+    The full parsed window is checked first: uniqueness, OHLC, and adjacent
+    period spacing, including any still-forming last bar. Only after that
+    grid is valid may a single trailing bar with ts <= now < ts+tf_ms be
+    excluded and disclosed. A bar with ts > now is a true future open and
+    still blocks; it is not dropped to force a success. A regular
+    single-timeframe series can have at most one forming bar; overlapping
+    or offset tails fail the grid check and are not silently removed.
+    """
     if timeframe not in TF_MS:
-        return [], "bad_timeframe"
+        return _empty_prepared("bad_timeframe")
     period = TF_MS[timeframe]
     if not isinstance(rows, list):
-        return [], "bad_rows"
+        return _empty_prepared("bad_rows")
     bars: list[dict[str, float]] = []
     seen: set[int] = set()
     for row in rows[:MAX_BARS]:
         if not isinstance(row, dict):
-            return [], "bad_row"
+            return _empty_prepared("bad_row")
         ts = _ms_int(row.get("ts"))
         if ts is None:
-            return [], "bad_ts"
+            return _empty_prepared("bad_ts")
         if ts in seen:
-            return [], "duplicate_ts"
+            return _empty_prepared("duplicate_ts")
         seen.add(ts)
         try:
             open_px = float(row["open"])
@@ -122,22 +158,42 @@ def validate_bars(rows: list[dict[str, Any]], timeframe: str, now_ms: int) -> tu
             low_px = float(row["low"])
             close_px = float(row["close"])
         except (KeyError, TypeError, ValueError, OverflowError):
-            return [], "bad_ohlc"
+            return _empty_prepared("bad_ohlc")
         if not all(_finite(v) and v > 0 for v in (open_px, high_px, low_px, close_px)):
-            return [], "bad_ohlc"
+            return _empty_prepared("bad_ohlc")
         if not (low_px <= min(open_px, close_px) and max(open_px, close_px) <= high_px):
-            return [], "bad_ohlc_envelope"
+            return _empty_prepared("bad_ohlc_envelope")
         close_at = ts + period
-        if ts > now_ms or close_at > now_ms:
-            return [], "future_or_unclosed"
         bars.append({"ts": float(ts), "open": open_px, "high": high_px, "low": low_px, "close": close_px, "close_at": float(close_at)})
     bars.sort(key=lambda row: row["ts"])
     if len(bars) >= 2:
         for prev, cur in zip(bars, bars[1:]):
             delta = int(cur["ts"] - prev["ts"])
             if delta != period:
-                return [], "gap" if delta > period else "non_regular_ts"
-    return bars[:MAX_BARS], None
+                return _empty_prepared("gap" if delta > period else "non_regular_ts")
+    for bar in bars:
+        if int(bar["ts"]) > now_ms:
+            return _empty_prepared("future_or_unclosed")
+    excluded: list[int] = []
+    if bars:
+        last = bars[-1]
+        ts = int(last["ts"])
+        close_at = int(last["close_at"])
+        if ts <= now_ms < close_at:
+            bars = bars[:-1]
+            excluded = [ts]
+    cutoff_ts = int(bars[-1]["ts"]) if bars else None
+    cutoff_close = int(bars[-1]["close_at"]) if bars else None
+    for bar in bars:
+        if int(bar["ts"]) > now_ms or int(bar["close_at"]) > now_ms:
+            return PreparedBars([], "future_or_unclosed", excluded, cutoff_ts, cutoff_close)
+    return PreparedBars(bars[:MAX_BARS], None, excluded, cutoff_ts, cutoff_close)
+
+
+def validate_bars(rows: list[dict[str, Any]], timeframe: str, now_ms: int) -> tuple[list[dict[str, float]], str | None]:
+    """Return accepted closed bars, or an empty list with a reason to block."""
+    prepared = prepare_bars(rows, timeframe, now_ms)
+    return prepared.bars, prepared.reason
 
 
 def load_stored_candles(symbol: str, timeframe: str, limit: int = MAX_BARS) -> list[dict[str, Any]]:
@@ -205,7 +261,20 @@ def _fee(weight: float, fee_bps: float) -> float:
     return abs(weight) * (float(fee_bps) / 10_000.0)
 
 
-def _blocked(status: str, reason: str, request: dict[str, Any], bars_used: int = 0) -> dict[str, Any]:
+def _blocked(
+    status: str,
+    reason: str,
+    request: dict[str, Any],
+    bars_used: int = 0,
+    *,
+    disclosure: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    extra = disclosure or {
+        "bars_excluded_unclosed": 0,
+        "excluded_unclosed_ts": [],
+        "data_cutoff_ts": None,
+        "data_cutoff_close_at": None,
+    }
     return {
         "status": status,
         "reason": reason,
@@ -226,6 +295,7 @@ def _blocked(status: str, reason: str, request: dict[str, Any], bars_used: int =
         "live": False,
         "site_runner": False,
         "request": request,
+        **extra,
     }
 
 
@@ -264,11 +334,13 @@ def simulate_bars(
     }
     if not rows:
         return _blocked("blocked_no_data", "stored_candles_missing_or_short", request, 0)
-    bars, reason = validate_bars(rows, strategy["timeframe"], clock)
-    if reason:
-        return _blocked("blocked_bad_data", reason, request, 0)
+    prepared = prepare_bars(rows, strategy["timeframe"], clock)
+    request.update(prepared.disclosure())
+    bars = prepared.bars
+    if prepared.reason:
+        return _blocked("blocked_bad_data", prepared.reason, request, 0, disclosure=prepared.disclosure())
     if len(bars) < need:
-        return _blocked("blocked_no_data", "stored_candles_missing_or_short", request, len(bars))
+        return _blocked("blocked_no_data", "stored_candles_missing_or_short", request, len(bars), disclosure=prepared.disclosure())
 
     closes = [bar["close"] for bar in bars]
     kind = strategy["kind"]
@@ -441,6 +513,7 @@ def simulate_bars(
         "processed_last_ts": int(bars[-1]["ts"]),
         "first_ts": int(bars[0]["ts"]),
         "last_ts": int(bars[-1]["ts"]),
+        **prepared.disclosure(),
         "fills": details,
         "fill_count": len(fills),
         "fills_truncated": truncated,
@@ -462,6 +535,7 @@ def simulate_bars(
         },
         "assumptions": {
             "execution": "signal_on_closed_bar_fill_next_open",
+            "forming_tail": "exclude_trailing_unclosed_disclose_cutoff",
             "event_order": "open_gap_then_pending_open_orders_then_intrabar_then_close_signal",
             "gap_rule": "fill_at_open_when_gapped_through_stop_or_take",
             "dual_trigger": "stop_has_priority",
