@@ -1,0 +1,101 @@
+# Draft only: one-shot bounded verify for the AI section studio loop.
+# For a later web submit, not a live workflow pushed from this box.
+# Main locale baseline is the already-known SHA below; do not invent other SHAs.
+name: ai-section-bounded-verify
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/api/app/ai_section/**"
+      - "apps/api/app/main.py"
+      - "apps/api/tests/test_ai_section.py"
+      - "apps/api/tests/test_ai_review_integrity.py"
+      - "apps/web/src/pages/AiSectionPage/**"
+      - "apps/web/scripts/ai-section.test.mjs"
+      - "apps/web/scripts/board-ai-sheet.test.mjs"
+      - "apps/web/scripts/i18n-check.mjs"
+      - "apps/web/src/i18n/locales/**"
+      - "apps/web/src/app/router.tsx"
+      - "apps/web/src/components/layout/AppShell.tsx"
+      - ".github/workflows/ai-section-bounded-verify.yml"
+      - ".github/ai-section-required-files.txt"
+permissions:
+  contents: read
+env:
+  # Douriff/AUU default main, already verified earlier in this draft thread.
+  AUU_MAIN_SHA: 3211be8c9821c788ae49c863bb210da06c377d29
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Fail if a required verify file is missing
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r path; do
+            case "$path" in
+              ""|\#*) continue ;;
+            esac
+            if [ ! -e "$path" ]; then
+              echo "missing required file: $path"
+              missing=1
+            fi
+          done < .github/ai-section-required-files.txt
+          if [ "$missing" -ne 0 ]; then
+            echo "required files are missing; failing the gate (no skip)"
+            exit 1
+          fi
+      - name: Pin local main to the known baseline SHA
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$AUU_MAIN_SHA"
+          git update-ref refs/heads/main "$AUU_MAIN_SHA"
+          test "$(git rev-parse --verify main)" = "$AUU_MAIN_SHA"
+          git show "main:apps/web/src/i18n/locales/en.json" >/dev/null
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install API and web dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements.txt
+          python -m pip install -r apps/api/requirements-dev.txt
+          test -f apps/web/package-lock.json
+          (cd apps/web && npm ci)
+      - name: Locale parity
+        working-directory: apps/web
+        run: node scripts/i18n-check.mjs
+      - name: AI section guards
+        working-directory: apps/web
+        run: node scripts/ai-section.test.mjs
+      - name: Mobile AI sheet guards
+        working-directory: apps/web
+        run: node scripts/board-ai-sheet.test.mjs
+      - name: Web typecheck and production build
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          test -f tsconfig.json
+          npx tsc --noEmit
+          npm run build
+      - name: API unit, HTTP, CSRF, admin isolation, and locale baseline
+        working-directory: apps/api
+        env:
+          AUU_TEST: "1"
+          AUU_I18N_BASELINE: main
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          export AUU_DATA_DIR="$DATA"
+          export AUU_USER_STORE="$DATA/users.json"
+          export AUU_USER_JOURNAL_DIR="$DATA/journals"
+          python -m unittest tests.test_ai_section tests.test_ai_review_integrity
