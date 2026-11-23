@@ -11,6 +11,7 @@ import { MultiChart } from "@/components/chart/MultiChart";
 import { createCrosshairBus } from "@/components/chart/crosshairBus";
 import { cellsFor, loadLayout, normalizeCells, saveLayout, type Cell, type LayoutN, type MultiLayout } from "@/components/chart/layout";
 import { PaperTradePanel } from "@/components/trade/PaperTradePanel";
+import { useSubscription } from "@/components/subscribe/SubscribeGate";
 import { OrderBook } from "@/components/market/OrderBook";
 import type { MainstreamCoin, MainstreamTf, MarketRow, MarketsResponse } from "@/types/mainstream";
 import { useTranslation } from "react-i18next";
@@ -228,6 +229,7 @@ export function MainstreamPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { t: tr } = useTranslation();
+  const { anon } = useSubscription();
   const pick = (params.get("symbol") || "").toUpperCase();
   const aiOn = params.get("ai") === "1";
   const venueParam = (params.get("venue") || "").toLowerCase() || null;
@@ -624,7 +626,15 @@ export function MainstreamPage() {
                 <p className="dim">{tr("ms.paperScope")}</p>
               </div>
             ) : (
-              <PaperTradePanel symbol={current.symbol} price={current.price} />
+              anon ? (
+                <div className="ms-viewonly">
+                  <b>{tr("subscribe.accountTitle")}</b>
+                  <p><Link to="/login">{tr("subscribe.loginCta")}</Link></p>
+                  <p className="dim">{tr("subscribe.accountSub")}</p>
+                </div>
+              ) : (
+                <PaperTradePanel symbol={current.symbol} price={current.price} />
+              )
             )}
           </div>
           {aiOn ? <BoardAiPanel symbol={current.symbol} onClose={() => {
