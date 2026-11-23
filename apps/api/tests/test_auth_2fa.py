@@ -11,6 +11,7 @@ from pathlib import Path
 import pyotp
 
 from app.auth.accounts import reset_accounts
+from tests.auth_fixtures import seed_admin
 from app.auth.security import match_step, recovery_hash
 
 _KEYS = ("AUU_AUTH", "AUU_ALLOW_SIGNUP", "AUU_INVITE_CODE", "AUU_ADMIN_USER", "AUU_USER_STORE", "AUU_USER_JOURNAL_DIR",
@@ -30,12 +31,13 @@ class TwoFactorTests(unittest.TestCase):
         os.environ.pop("AUU_INVITE_CODE", None)
         os.environ.pop("AUU_ADMIN_USER", None)
         reset_accounts()
+        seed_admin("wangshu", PW)
         from fastapi.testclient import TestClient
         from app.main import app
 
         self.TC, self.app, self.store = TestClient, app, root / "users.json"
         self.c = TestClient(app, headers=UA)
-        r = self.c.post("/api/v1/auth/register", json={"name": "wangshu", "password": PW, "password_confirm": PW})
+        r = self.c.post("/api/v1/auth/login", json={"name": "wangshu", "password": PW, "password_confirm": PW})
         self.assertEqual(r.status_code, 200)
 
     def tearDown(self):

@@ -180,12 +180,14 @@ class RouteMountTests(unittest.TestCase):
 
         reset_accounts()
         reset_store(StudioStore(root / "data" / "ai_section_studio.sqlite"))
+        from tests.auth_fixtures import seed_admin
+        seed_admin("owner", "password1")
         self.app = create_app(legacy=False)
         self.TC = TestClient
         self.owner = TestClient(self.app)
         self.member = TestClient(self.app)
         self.anon = TestClient(self.app)
-        self.assertEqual(self.owner.post("/api/v1/auth/register", json={"name": "owner", "password": "password1", "password_confirm": "password1"}).status_code, 200)
+        self.assertEqual(self.owner.post("/api/v1/auth/login", json={"name": "owner", "password": "password1"}).status_code, 200)
         self.assertEqual(self.member.post("/api/v1/auth/register", json={"name": "member", "password": "password1", "password_confirm": "password1"}).status_code, 200)
         owner_me = self.owner.get("/api/v1/auth/me").json()["data"]["user"]
         member_me = self.member.get("/api/v1/auth/me").json()["data"]["user"]
