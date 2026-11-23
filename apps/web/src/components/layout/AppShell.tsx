@@ -40,12 +40,12 @@ const more = [
 /** label = i18n key under nav.* */
 type NavItem = { to: string; label: string; icon: string; match: (path: string, search: string) => boolean };
 const LAST_SYMBOL_KEY = "auu.ms.last";
-const isAi = (p: string, q: string) => p === "/" && /(?:^|[?&])ai=1(?:&|$)/.test(q);
-const isTrade = (p: string, q: string) => p === "/" && /(?:^|[?&])symbol=/.test(q) && !isAi(p, q);
+const isAi = (p: string, _q: string) => p === "/ai" || p.startsWith("/ai/");
+const isTrade = (p: string, q: string) => p === "/" && /(?:^|[?&])symbol=/.test(q);
 const mainstreamNav: NavItem[] = [
-  { to: "/", label: "market", icon: "bars", match: (p, q) => p === "/" && !isTrade(p, q) && !isAi(p, q) },
+  { to: "/", label: "market", icon: "bars", match: (p, q) => p === "/" && !isTrade(p, q) },
   { to: "/?symbol=BTC", label: "trade", icon: "swap", match: isTrade },
-  { to: "/?symbol=BTC&ai=1", label: "ai", icon: "spark", match: isAi },
+  { to: "/ai", label: "ai", icon: "spark", match: isAi },
   { to: "/pnl", label: "pnl", icon: "wallet", match: (p) => p.startsWith("/pnl") },
   { to: "/console", label: "strategy", icon: "term", match: (p) => p.startsWith("/console") },
   { to: "/performance", label: "performance", icon: "rank", match: (p) => p.startsWith("/performance") },
@@ -76,7 +76,7 @@ function tradeHref(): string {
 }
 
 function aiHref(): string {
-  return `${tradeHref()}&ai=1`;
+  return "/ai";
 }
 
 function Icon({ name }: { name: string }) {
