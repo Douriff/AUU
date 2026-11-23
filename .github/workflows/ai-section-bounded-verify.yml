@@ -287,8 +287,16 @@ jobs:
 
           tmp = Path(sys.argv[1])
           included = {line for line in (tmp / "source-included.txt").read_text(encoding="utf-8").splitlines() if line}
+          def archive_path(name: str) -> str:
+              # Only strip a leading "./" prefix. str.lstrip("./") also
+              # removes the leading dot from ".github/..." and ".gitignore",
+              # which is what failed run 45184701356.
+              while name.startswith("./"):
+                  name = name[2:]
+              return name
+
           with tarfile.open(sys.argv[2], "r:gz") as tf:
-              members = [m.name.lstrip("./") for m in tf.getmembers() if m.isfile()]
+              members = [archive_path(m.name) for m in tf.getmembers() if m.isfile()]
           extra = sorted(set(members) - included)
           missing = sorted(included - set(members))
           if extra or missing:
@@ -313,7 +321,7 @@ jobs:
 
       - name: Stage web dist with the same checkout metadata
         id: stage_dist
-        if: ${{ steps.record_meta.outcome == 'success' }}
+        if: ${{ always() && steps.record_meta.outcome == 'success' }}
         run: |
           set -euo pipefail
           META_DIR="${GITHUB_WORKSPACE}/preview-artifacts"
@@ -363,7 +371,7 @@ jobs:
           cp "$META_DIR/checkout-meta.txt" "$META_DIR/web-dist-checkout-meta.txt"
 
       - name: Upload sanitized source archive
-        if: ${{ steps.pack_source.outcome == 'success' }}
+        if: ${{ always() && steps.pack_source.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ai-section-source
@@ -377,7 +385,7 @@ jobs:
           retention-days: 14
 
       - name: Upload sanitized web dist
-        if: ${{ steps.stage_dist.outcome == 'success' }}
+        if: ${{ always() && steps.stage_dist.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ai-section-web-dist
