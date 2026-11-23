@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "只支持币安和 OKX",
     "EXCHANGE_RATE_LIMIT": "交易所限频，请稍后再试",
     "EXCHANGE_ORDER_NOT_FOUND": "订单不存在",
-    "CRED_UNREADABLE": "保存的密钥无法解密，请解绑后重新绑定"
+    "CRED_UNREADABLE": "保存的密钥无法解密，请解绑后重新绑定",
+    "SIGNUP_NOT_READY": "注册暂不可用",
+    "STORE_UNAVAILABLE": "账户数据暂不可用，请稍后再试"
   },
   "common": {
     "submitting": "提交中…",
@@ -219,12 +221,14 @@
       "title": "注册",
       "sub": "用邮箱注册纸面交易账户：先收验证码，再设置用户名和密码。",
       "localMode": "当前是本地单用户模式，不需要注册。直接去 <market>行情</market>。",
-      "closed": "注册已关闭。",
+      "closed": "注册已关闭。已有账户请 <login>登录</login>。",
       "noEmailVerify": "当前未开启邮箱验证，直接设置用户名和密码。",
       "invite": "邀请码",
       "submit": "注册",
       "failed": "注册失败",
-      "haveAccount": "已有账户？"
+      "haveAccount": "已有账户？",
+      "subDirect": "用用户名和密码注册纸面交易账户。不会扣款，也不会开通实盘。",
+      "shellTitle": "注册后使用此功能"
     },
     "reset": {
       "title": "忘记密码",
@@ -878,7 +882,8 @@
     "anon": "<login>登录</login> 后可以修改密码。还没有账户可以 <reg>注册</reg>。",
     "change": "修改密码",
     "current": "当前账户 {{label}}。密码只以哈希保存，管理员看不到。",
-    "currentPw": "当前密码"
+    "currentPw": "当前密码",
+    "anonClosed": "<login>登录</login> 后可以修改密码。注册已关闭。"
   },
   "sec": {
     "failed": "操作失败",

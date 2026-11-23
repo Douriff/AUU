@@ -70,10 +70,16 @@ _AUTHORIZED_SUBSCRIPTION_CHANGES = frozenset({
     "subscribe.shellSub",
     "subscribe.shellTitle",
     "subscribe.sub",
+    "auth.register.closed",
 })
 _AUTHORIZED_SUBSCRIPTION_ADDITIONS = frozenset({
     "subscribe.accountSub",
     "subscribe.accountTitle",
+    "account.anonClosed",
+    "apiErr.SIGNUP_NOT_READY",
+    "apiErr.STORE_UNAVAILABLE",
+    "auth.register.shellTitle",
+    "auth.register.subDirect",
 })
 
 

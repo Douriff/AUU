@@ -41,6 +41,7 @@ from app.auth.accounts import (
     email_taken,
     scrub_secrets,
     signup_allowed,
+    public_signup_open,
     user_by_email,
     user_by_id,
     user_from_token,
@@ -65,6 +66,9 @@ COOKIE = "auu_session"
 _MESSAGES = {
     "AUTH_OFF": "登录未开启",
     "SIGNUP_CLOSED": "注册已关闭",
+    "SIGNUP_NOT_READY": "注册暂不可用",
+    "STORE_UNAVAILABLE": "账户数据暂不可用，请稍后再试",
+    "ADMIN_EXISTS": "管理员已初始化",
     "INVITE": "邀请码不正确",
     "BAD_NAME": "用户名需为 2–32 位，可用字母、数字、中文和 _ . @ -，须以字母、数字、中文或 _ 开头",
     "BAD_PASSWORD": "密码至少 8 位，必须同时包含字母和数字，可以包含特殊字符（不超过 72 字节）",
@@ -202,6 +206,8 @@ def _fail(exc: ValueError, action: str = "auth"):
         status = 429
     if code == "EMAIL_SEND_FAILED":
         status = 502
+    if code == "STORE_UNAVAILABLE":
+        status = 503
     message = _MESSAGES.get(code, "请求无效")
     wait = int(getattr(exc, "retry_after", 0) or 0)
     if code == "EMAIL_THROTTLE" and wait > 0:
@@ -213,7 +219,7 @@ def _fail(exc: ValueError, action: str = "auth"):
 def _me_payload(user: Optional[dict]) -> dict:
     body = {
         "auth_enabled": auth_enabled(),
-        "signup_allowed": signup_allowed(),
+        "signup_allowed": public_signup_open(),
         "invite_required": bool(invite_code()),
         "email_verify": bool(auth_enabled() and email_verify_enabled()),
         "user": None,

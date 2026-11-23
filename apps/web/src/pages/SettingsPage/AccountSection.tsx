@@ -69,7 +69,11 @@ export function AccountSection() {
       <section className="settings-section">
         <h2>{t("account.title")}</h2>
         <p className="muted">
-          <Trans i18nKey="account.anon" components={{ login: <Link to="/login" />, reg: <Link to="/register" /> }} />
+          {me.signup_allowed ? (
+            <Trans i18nKey="account.anon" components={{ login: <Link to="/login" />, reg: <Link to="/register" /> }} />
+          ) : (
+            <Trans i18nKey="account.anonClosed" components={{ login: <Link to="/login" /> }} />
+          )}
         </p>
       </section>
     );

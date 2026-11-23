@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from app.auth.accounts import reset_accounts
+from app.auth.accounts import find_user, public_signup_open, reset_accounts
+from tests.auth_fixtures import seed_admin
 from app.auth.gate import gate_decision
 
 _KEYS = (
@@ -129,9 +130,15 @@ class AuthGateApiTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _signed_in(self, name):
+        """First account is the controlled admin; later names use public register + session cookie."""
         client = self.TestClient(self.app)
-        body = {"name": name, "password": PW, "password_confirm": PW}
-        res = client.post("/api/v1/auth/register", json=body)
+        if find_user(name) is not None:
+            res = client.post("/api/v1/auth/login", json={"name": name, "password": PW})
+        elif not public_signup_open():
+            seed_admin(name, PW)
+            res = client.post("/api/v1/auth/login", json={"name": name, "password": PW})
+        else:
+            res = client.post("/api/v1/auth/register", json={"name": name, "password": PW, "password_confirm": PW})
         self.assertEqual(res.status_code, 200, res.text)
         return client
 
@@ -230,6 +237,7 @@ class SecurityHardeningTests(AuthGateApiTests):
             os.environ.pop("AUU_AUTH_ACCOUNT_FAIL_MAX", None)
 
     def test_cookie_flags(self):
+        seed_admin("cookieadmin", PW)
         client = self.TestClient(self.app)
         body = {"name": "cookieuser", "password": PW, "password_confirm": PW}
         cookie = client.post("/api/v1/auth/register", json=body).headers.get("set-cookie", "").lower()

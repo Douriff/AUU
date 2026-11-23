@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Solo se admiten Binance y OKX",
     "EXCHANGE_RATE_LIMIT": "El exchange limita la frecuencia, reintenta en un momento",
     "EXCHANGE_ORDER_NOT_FOUND": "Orden no encontrada",
-    "CRED_UNREADABLE": "No se puede descifrar la clave guardada, desvincúlala y vuelve a vincularla"
+    "CRED_UNREADABLE": "No se puede descifrar la clave guardada, desvincúlala y vuelve a vincularla",
+    "SIGNUP_NOT_READY": "El registro no está disponible temporalmente",
+    "STORE_UNAVAILABLE": "Los datos de la cuenta no están disponibles. Inténtalo más tarde."
   },
   "common": {
     "submitting": "Enviando…",
@@ -219,12 +221,14 @@
       "title": "Registro",
       "sub": "Crea una cuenta de trading simulado con tu correo: primero recibe un código y luego elige usuario y contraseña.",
       "localMode": "Modo local de un solo usuario; no hace falta registrarse. Ve directamente a <market>Mercados</market>.",
-      "closed": "El registro está cerrado.",
+      "closed": "El registro está cerrado. Si ya tienes una cuenta, <login>inicia sesión</login>.",
       "noEmailVerify": "La verificación por correo está desactivada; elige directamente usuario y contraseña.",
       "invite": "Código de invitación",
       "submit": "Registrarse",
       "failed": "Error en el registro",
-      "haveAccount": "¿Ya tienes cuenta?"
+      "haveAccount": "¿Ya tienes cuenta?",
+      "subDirect": "Crea una cuenta de trading en papel con usuario y contraseña. No se cobra ni se activa el trading en real.",
+      "shellTitle": "Crea una cuenta para usar esta función"
     },
     "reset": {
       "title": "Olvidé mi contraseña",
@@ -878,7 +882,8 @@
     "anon": "<login>Inicia sesión</login> para cambiar la contraseña. ¿Aún no tienes cuenta? <reg>Regístrate</reg>.",
     "change": "Cambiar contraseña",
     "current": "Cuenta actual {{label}}. Las contraseñas se guardan solo como hash; los administradores no pueden verlas.",
-    "currentPw": "Contraseña actual"
+    "currentPw": "Contraseña actual",
+    "anonClosed": "<login>Inicia sesión</login> para cambiar tu contraseña. El registro está cerrado."
   },
   "sec": {
     "failed": "La operación falló",

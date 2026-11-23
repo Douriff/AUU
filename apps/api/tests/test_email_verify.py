@@ -12,6 +12,7 @@ from unittest import mock
 
 from app.auth import email_codes
 from app.auth.accounts import reset_accounts
+from tests.auth_fixtures import seed_admin
 
 _KEYS = (
     "AUU_AUTH",
@@ -78,6 +79,7 @@ class EmailVerifyTests(unittest.TestCase):
         )
         self.store = root / "users.json"
         reset_accounts()
+        seed_admin("fixture_admin", "password1")
         self.mail = FakeSender()
         email_codes.set_sender(self.mail)
         self.clock = [1_000_000.0]
@@ -125,7 +127,7 @@ class EmailVerifyTests(unittest.TestCase):
         created = self._register("alice", "ALICE@qq.com", code)
         self.assertEqual(created.status_code, 200, created.text)
         self.assertNotIn("alice@qq.com", created.text)
-        stored = json.loads(self.store.read_text(encoding="utf-8"))["users"][0]
+        stored = next(row for row in json.loads(self.store.read_text(encoding="utf-8"))["users"] if row["name"] == "alice")
         self.assertEqual(stored["email"], "alice@qq.com")
         blob = self.store.read_text(encoding="utf-8")
         self.assertNotIn(code, blob.replace(stored["id"], "").replace(stored["password_hash"], ""))
@@ -145,6 +147,7 @@ class EmailVerifyTests(unittest.TestCase):
         self.assertEqual(fresh().post("/api/v1/auth/login", json={"name": "nobody@qq.com", "password": PW}).status_code, 401)
 
     def test_register_requires_email_and_valid_code(self):
+        store_before = self.store.read_bytes()
         missing = self._register("bob", "", "")
         self.assertEqual(missing.json()["error"]["code"], "EMAIL_REQUIRED")
         bad = self._register("bob", "not-an-email", "123456")
@@ -154,7 +157,7 @@ class EmailVerifyTests(unittest.TestCase):
         never = self._register("bob", "bob@163.com", "123456")
         self.assertEqual(never.json()["error"]["code"], "EMAIL_CODE_EXPIRED")
         self.assertIn("重新获取", never.json()["error"]["message"])
-        self.assertFalse(self.store.exists())
+        self.assertEqual(self.store.read_bytes(), store_before)
 
     def test_code_is_hashed_in_memory(self):
         self._code("carl@qq.com")

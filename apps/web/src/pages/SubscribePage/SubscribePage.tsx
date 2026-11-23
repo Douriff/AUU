@@ -5,7 +5,7 @@ import { SubPreviewToggle, useSubscription } from "@/components/subscribe/Subscr
 /** $99/month plan entry. Display only — the button does not start checkout. */
 export function SubscribePage() {
   const { t } = useTranslation();
-  const { anon, isAdmin } = useSubscription();
+  const { anon, isAdmin, signupAllowed } = useSubscription();
   return (
     <div className="shell-page pro-page sub-page">
       <header className="pro-head">
@@ -29,6 +29,12 @@ export function SubscribePage() {
         {anon ? (
           <p className="td-note">
             <Link to="/login">{t("subscribe.loginCta")}</Link>
+            {signupAllowed ? (
+              <>
+                {" · "}
+                <Link to="/register">{t("auth.login.toRegister")}</Link>
+              </>
+            ) : null}
           </p>
         ) : null}
       </section>

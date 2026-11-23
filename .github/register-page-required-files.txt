@@ -1,0 +1,25 @@
+# Files the register-page verify workflow must find. Missing any of these fails the gate.
+apps/api/app/auth/accounts.py
+apps/api/app/auth/bootstrap.py
+apps/api/app/routes/auth.py
+apps/api/tests/auth_fixtures.py
+apps/api/tests/test_register_public_flow.py
+apps/api/tests/test_register_safety.py
+apps/web/src/pages/LoginPage/RegisterForm.tsx
+apps/web/src/pages/LoginPage/RegisterPage.tsx
+apps/web/src/components/subscribe/SubscribeGate.tsx
+apps/web/src/components/layout/AppShell.tsx
+apps/web/scripts/register-page.test.mjs
+apps/web/scripts/register-lock-render.test.mjs
+apps/web/scripts/subscription-gate.test.mjs
+apps/web/scripts/i18n-check.mjs
+apps/web/package.json
+.github/workflows/register-page-bounded-verify.yml
+.github/register-page-required-files.txt
+apps/api/tests/test_ai_section.py
+apps/api/tests/test_ai_review_integrity.py
+apps/api/tests/test_auth_gate.py
+apps/api/tests/test_auth_sessions.py
+apps/api/tests/test_auth_2fa.py
+apps/api/tests/test_auth_roundtrip.py
+apps/api/tests/test_email_verify.py

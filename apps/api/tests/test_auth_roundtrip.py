@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from app.auth.accounts import password_problem, reset_accounts
+from tests.auth_fixtures import seed_admin
 
 SPECIAL = "Abc123!@#$%^&*()_+-=[]{};':\",./<>?\\|"
 _KEYS = (
@@ -41,6 +42,7 @@ class AuthRoundtripTests(unittest.TestCase):
         os.environ["PUMP_PAPER_LOOP"] = "0"
         os.environ["PUMPFUN_DISCOVERY"] = "off"
         reset_accounts()
+        seed_admin("fixture_admin", "password1")
         from fastapi.testclient import TestClient
         from app.main import app
 
@@ -135,6 +137,7 @@ class AuthRoundtripTests(unittest.TestCase):
                 self.assertIn("用户名", bad.json()["error"]["message"])
 
     def test_password_rule_accepts_and_rejects(self):
+        store_before = self.store.read_bytes()
         good = ["password1", "12345678a", SPECIAL, "Ab1!!!!!", "密码密码密码12", "Pässwört1", "a" * 70 + "12"]
         bad = ["", "short1a", "abcdefgh", "12345678", "!@#$%^&*()", "密码密码密码密码", "１２３４５６ab", "a1" + "密" * 24]
         for password in good:
@@ -153,7 +156,7 @@ class AuthRoundtripTests(unittest.TestCase):
                 self.assertIn("特殊字符", error["message"])
                 if password:
                     self.assertNotIn(password, rejected.text)
-        self.assertFalse(self.store.exists() and json.loads(self.store.read_text())["users"])
+        self.assertEqual(self.store.read_bytes(), store_before)
 
     def test_password_change_uses_the_same_rule(self):
         client = self._client()

@@ -1583,6 +1583,30 @@ html.kc-fs-lock, html.kc-fs-lock body { overflow: hidden; overscroll-behavior: n
 .sub-page { max-width: 720px; }
 .sub-plan { align-items: stretch; text-align: start; }
 .sub-plan .sub-price { text-align: start; }
+.sub-lock.is-register {
+  min-height: 0;
+  max-width: 440px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  align-items: stretch;
+  text-align: start;
+}
+.sub-lock.is-register .auth-card {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 26px 26px 22px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+.sub-lock.is-register .sub-cta { align-self: stretch; min-width: 0; width: 100%; }
+@media (max-width: 720px) {
+  .sub-lock.is-register .auth-card { padding: 22px 18px; box-shadow: none; }
+  .sub-lock.is-register .auth-card input { height: 46px; font-size: 16px; }
+}
 .sub-plan h2 { margin: 6px 0 0; font-size: 14px; color: var(--text); }
 .sub-plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .sub-plan li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.45; }

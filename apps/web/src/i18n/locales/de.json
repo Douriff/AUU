@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Es werden nur Binance und OKX unterstützt",
     "EXCHANGE_RATE_LIMIT": "Die Börse begrenzt die Anfragerate, bitte gleich erneut versuchen",
     "EXCHANGE_ORDER_NOT_FOUND": "Order nicht gefunden",
-    "CRED_UNREADABLE": "Der gespeicherte Schlüssel lässt sich nicht entschlüsseln, bitte trennen und neu verknüpfen"
+    "CRED_UNREADABLE": "Der gespeicherte Schlüssel lässt sich nicht entschlüsseln, bitte trennen und neu verknüpfen",
+    "SIGNUP_NOT_READY": "Die Registrierung ist vorübergehend nicht verfügbar",
+    "STORE_UNAVAILABLE": "Kontodaten sind vorübergehend nicht verfügbar. Bitte später erneut versuchen."
   },
   "common": {
     "submitting": "Wird gesendet…",
@@ -219,12 +221,14 @@
       "title": "Registrieren",
       "sub": "Paper-Trading-Konto per E-Mail anlegen: zuerst Code erhalten, dann Benutzername und Passwort festlegen.",
       "localMode": "Lokaler Einzelbenutzermodus – keine Registrierung nötig. Direkt zu <market>Märkte</market>.",
-      "closed": "Registrierung ist geschlossen.",
+      "closed": "Die Registrierung ist geschlossen. Wenn Sie bereits ein Konto haben, <login>melden Sie sich an</login>.",
       "noEmailVerify": "E-Mail-Bestätigung ist deaktiviert; legen Sie direkt Benutzername und Passwort fest.",
       "invite": "Einladungscode",
       "submit": "Registrieren",
       "failed": "Registrierung fehlgeschlagen",
-      "haveAccount": "Bereits ein Konto?"
+      "haveAccount": "Bereits ein Konto?",
+      "subDirect": "Erstellen Sie mit Benutzername und Passwort ein Papierhandelskonto. Es wird nicht abgebucht und kein Live-Handel aktiviert.",
+      "shellTitle": "Konto erstellen, um diese Funktion zu nutzen"
     },
     "reset": {
       "title": "Passwort vergessen",
@@ -878,7 +882,8 @@
     "anon": "<login>Melden Sie sich an</login>, um Ihr Passwort zu ändern. Noch kein Konto? <reg>Registrieren</reg>.",
     "change": "Passwort ändern",
     "current": "Aktuelles Konto {{label}}. Passwörter werden nur als Hash gespeichert; Administratoren können sie nicht sehen.",
-    "currentPw": "Aktuelles Passwort"
+    "currentPw": "Aktuelles Passwort",
+    "anonClosed": "<login>Melden Sie sich an</login>, um das Passwort zu ändern. Die Registrierung ist geschlossen."
   },
   "sec": {
     "failed": "Aktion fehlgeschlagen",

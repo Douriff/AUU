@@ -15,7 +15,8 @@
     "test:quote": "node scripts/quote-refresh.test.mjs",
     "test:rt": "node scripts/realtime.test.mjs",
     "test:livebadge": "node scripts/live-badge.test.mjs",
-    "test:screener": "node scripts/screener-route.test.mjs"
+    "test:screener": "node scripts/screener-route.test.mjs",
+    "test:register": "node scripts/register-page.test.mjs && node scripts/register-lock-render.test.mjs && node scripts/subscription-gate.test.mjs"
   },
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.28",

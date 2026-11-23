@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Yalnızca Binance ve OKX desteklenir",
     "EXCHANGE_RATE_LIMIT": "Borsa istek sınırlıyor, biraz sonra tekrar deneyin",
     "EXCHANGE_ORDER_NOT_FOUND": "Emir bulunamadı",
-    "CRED_UNREADABLE": "Kayıtlı anahtarın şifresi çözülemiyor, çıkarıp yeniden bağlayın"
+    "CRED_UNREADABLE": "Kayıtlı anahtarın şifresi çözülemiyor, çıkarıp yeniden bağlayın",
+    "SIGNUP_NOT_READY": "Kayıt geçici olarak kullanılamıyor",
+    "STORE_UNAVAILABLE": "Hesap verileri geçici olarak kullanılamıyor. Lütfen sonra yeniden deneyin."
   },
   "common": {
     "submitting": "Gönderiliyor…",
@@ -219,12 +221,14 @@
       "title": "Kayıt ol",
       "sub": "E-postanızla sanal işlem hesabı oluşturun: önce kodu alın, sonra kullanıcı adı ve şifre belirleyin.",
       "localMode": "Yerel tek kullanıcı modu; kayıt gerekmez. Doğrudan <market>Piyasalar</market> sayfasına gidin.",
-      "closed": "Kayıt kapalı.",
+      "closed": "Kayıt kapalı. Zaten bir hesabınız varsa <login>giriş yapın</login>.",
       "noEmailVerify": "E-posta doğrulaması kapalı; doğrudan kullanıcı adı ve şifre belirleyin.",
       "invite": "Davet kodu",
       "submit": "Kayıt ol",
       "failed": "Kayıt başarısız",
-      "haveAccount": "Zaten hesabınız var mı?"
+      "haveAccount": "Zaten hesabınız var mı?",
+      "subDirect": "Kullanıcı adı ve parolayla kâğıt işlem hesabı oluşturun. Ücret alınmaz, gerçek işlem açılmaz.",
+      "shellTitle": "Bu özelliği kullanmak için hesap oluşturun"
     },
     "reset": {
       "title": "Şifremi unuttum",
@@ -878,7 +882,8 @@
     "anon": "Şifrenizi değiştirmek için <login>giriş yapın</login>. Hesabınız yok mu? <reg>Kayıt olun</reg>.",
     "change": "Şifreyi değiştir",
     "current": "Mevcut hesap {{label}}. Şifreler yalnızca özet (hash) olarak saklanır; yöneticiler göremez.",
-    "currentPw": "Mevcut şifre"
+    "currentPw": "Mevcut şifre",
+    "anonClosed": "Parolayı değiştirmek için <login>giriş yapın</login>. Kayıt kapalı."
   },
   "sec": {
     "failed": "İşlem başarısız",

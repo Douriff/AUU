@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Only Binance and OKX are supported",
     "EXCHANGE_RATE_LIMIT": "The exchange is rate limiting, try again shortly",
     "EXCHANGE_ORDER_NOT_FOUND": "Order not found",
-    "CRED_UNREADABLE": "The saved key cannot be decrypted, unlink it and link it again"
+    "CRED_UNREADABLE": "The saved key cannot be decrypted, unlink it and link it again",
+    "SIGNUP_NOT_READY": "Registration is temporarily unavailable",
+    "STORE_UNAVAILABLE": "Account data is temporarily unavailable. Please try again later."
   },
   "common": {
     "submitting": "Submitting…",
@@ -219,12 +221,14 @@
       "title": "Sign up",
       "sub": "Create a paper trading account with your email: get a code first, then choose a username and password.",
       "localMode": "Running in local single-user mode; no sign-up needed. Go straight to <market>Markets</market>.",
-      "closed": "Registration is closed.",
+      "closed": "Registration is closed. If you already have an account, <login>sign in</login>.",
       "noEmailVerify": "Email verification is off; just choose a username and password.",
       "invite": "Invitation code",
       "submit": "Sign up",
       "failed": "Sign-up failed",
-      "haveAccount": "Already have an account?"
+      "haveAccount": "Already have an account?",
+      "subDirect": "Create a paper trading account with a username and password. This does not charge you or enable live trading.",
+      "shellTitle": "Create an account to use this feature"
     },
     "reset": {
       "title": "Forgot password",
@@ -878,7 +882,8 @@
     "anon": "<login>Sign in</login> to change your password. No account yet? <reg>Sign up</reg>.",
     "change": "Change password",
     "current": "Current account {{label}}. Passwords are stored only as hashes; administrators cannot see them.",
-    "currentPw": "Current password"
+    "currentPw": "Current password",
+    "anonClosed": "<login>Sign in</login> to change your password. Registration is closed."
   },
   "sec": {
     "failed": "Operation failed",

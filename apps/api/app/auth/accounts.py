@@ -1,6 +1,7 @@
 """Local paper accounts. Passwords are bcrypt hashes. No custody of funds."""
 from __future__ import annotations
 
+import fcntl
 import hmac
 import json
 import os
@@ -9,9 +10,10 @@ import secrets
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import bcrypt
 
@@ -26,6 +28,9 @@ PASSWORD_MIN = 8
 PASSWORD_MAX_BYTES = 72
 _LOCK = threading.RLock()
 _USERS: Optional[list[dict[str, Any]]] = None
+_STORE_META: Optional[tuple[int, int, int]] = None
+_STORE_CORRUPT = False
+_TXN = threading.local()
 _BOOKS: dict[str, PaperTradeJournal] = {}
 _ATTEMPTS: dict[str, list[float]] = {}
 _HIDDEN = {"password", "password_hash", "password_confirm", "current_password", "new_password", "new_password_confirm", "invite", "email_code", "session_epoch", "sessions", "totp", "totp_code"}
@@ -35,9 +40,11 @@ MAX_DEVICES = 8
 
 
 def reset_accounts() -> None:
-    global _USERS
+    global _USERS, _STORE_META, _STORE_CORRUPT
     with _LOCK:
         _USERS = None
+        _STORE_META = None
+        _STORE_CORRUPT = False
         _BOOKS.clear()
         _ATTEMPTS.clear()
         _FAILURES.clear()
@@ -83,28 +90,214 @@ def _session_secret() -> bytes:
     return os.getenv("AUU_SESSION_SECRET", "auu-paper-dev").encode("utf-8")
 
 
+class StoreUnavailable(ValueError):
+    """The user store is unreadable or internally inconsistent. Fail closed; do not rewrite it."""
+
+    def __init__(self, code: str = "STORE_UNAVAILABLE"):
+        super().__init__(code)
+
+
+def _lock_path() -> Path:
+    path = _store_path()
+    return path.with_name(path.name + ".lock")
+
+
+def _stat_tuple(path: Path) -> Optional[tuple[int, int, int]]:
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size, st.st_ino)
+    except OSError:
+        return None
+
+
+@contextmanager
+def _store_lock() -> Iterator[None]:
+    """Exclusive inter-process lock, then the in-process RLock.
+
+    Unique order is always flock then RLock. If this thread already holds the
+    transaction, yield without opening another lock fd (POSIX fcntl locks are
+    per-process; a nested fd close could drop the outer lock).
+
+    Supported topology is one or more local processes sharing a filesystem that
+    implements POSIX fcntl advisory locks (the deployed API host uses a local
+    data directory). This is not a claim about NFS or a remote database.
+    """
+    if getattr(_TXN, "held", False):
+        yield
+        return
+    path = _lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(path, "a+b")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        with _LOCK:
+            _TXN.held = True
+            try:
+                yield
+            finally:
+                _TXN.held = False
+    finally:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+        finally:
+            fh.close()
+
+
+@contextmanager
+def _store_txn() -> Iterator[list[dict[str, Any]]]:
+    """Lock, reload the on-disk users list, and let the caller mutate that list."""
+    with _store_lock():
+        yield _reload_locked()
+
+
+def _user_row(users: list[dict[str, Any]], user_id: str) -> Optional[dict[str, Any]]:
+    for row in users:
+        if row.get("id") == user_id:
+            return row
+    return None
+
+
+# Known optional fields kept as-is when present and well-typed. Unknown extra
+# keys are preserved for historical stores. Required: non-empty string id + name.
+_OPTIONAL_TYPES: dict[str, tuple[type, ...]] = {
+    "display_name": (str,),
+    "password_hash": (str,),
+    "email": (str,),
+    "start_sol": (int, float),
+    "is_admin": (bool,),
+    "created_ts": (int, float),
+    "session_epoch": (int, float),
+    "sessions": (list,),
+    "totp": (dict,),
+    "locale": (str,),
+    "locale_ts": (int, float),
+}
+
+
+def _decode_users(raw: Any) -> list[dict[str, Any]]:
+    """Validate the whole users array. Invalid or duplicate rows fail closed; nothing is filtered out."""
+    if not isinstance(raw, dict) or "users" not in raw:
+        raise StoreUnavailable("STORE_UNAVAILABLE")
+    rows = raw.get("users")
+    if not isinstance(rows, list):
+        raise StoreUnavailable("STORE_UNAVAILABLE")
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise StoreUnavailable("STORE_UNAVAILABLE")
+        uid = row.get("id")
+        name = row.get("name")
+        if not isinstance(uid, str) or not uid.strip() or not isinstance(name, str) or not name.strip():
+            raise StoreUnavailable("STORE_UNAVAILABLE")
+        if uid in seen_ids or name.lower() in seen_names:
+            raise StoreUnavailable("STORE_UNAVAILABLE")
+        seen_ids.add(uid)
+        seen_names.add(name.lower())
+        for field, types in _OPTIONAL_TYPES.items():
+            if field not in row or row[field] is None:
+                continue
+            if not isinstance(row[field], types):
+                raise StoreUnavailable("STORE_UNAVAILABLE")
+        sessions = row.get("sessions")
+        if isinstance(sessions, list):
+            if any(not isinstance(item, dict) for item in sessions):
+                raise StoreUnavailable("STORE_UNAVAILABLE")
+        out.append(row)
+    return out
+
+
+def _read_store_from_disk() -> list[dict[str, Any]]:
+    """Return users from disk. Missing file is empty. Corrupt or unreadable file raises and does not rewrite."""
+    global _STORE_CORRUPT
+    if _STORE_CORRUPT:
+        raise StoreUnavailable("STORE_UNAVAILABLE")
+    path = _store_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        _STORE_CORRUPT = True
+        raise StoreUnavailable("STORE_UNAVAILABLE") from exc
+    try:
+        return _decode_users(json.loads(text))
+    except (json.JSONDecodeError, StoreUnavailable, TypeError, ValueError) as exc:
+        _STORE_CORRUPT = True
+        raise StoreUnavailable("STORE_UNAVAILABLE") from exc
+
+
+def _reload_locked() -> list[dict[str, Any]]:
+    """Reload from disk. Caller must hold _store_lock()."""
+    global _USERS, _STORE_META
+    users = _read_store_from_disk()
+    _USERS = users
+    _STORE_META = _stat_tuple(_store_path())
+    return users
+
+
 def _load() -> list[dict[str, Any]]:
     global _USERS
+    if _STORE_CORRUPT:
+        raise StoreUnavailable("STORE_UNAVAILABLE")
+    path = _store_path()
+    meta = _stat_tuple(path)
     with _LOCK:
-        if _USERS is not None:
+        if _USERS is not None and meta == _STORE_META:
             return _USERS
-        path = _store_path()
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            raw = {"users": []}
-        rows = raw.get("users") if isinstance(raw, dict) else []
-        _USERS = [row for row in rows if isinstance(row, dict) and row.get("id")]
-        return _USERS
+    with _store_lock():
+        return _reload_locked()
+
+
+def _save_locked(users: list[dict[str, Any]]) -> None:
+    """Atomic write. Caller must hold _store_lock(). Refuses to overwrite a corrupt store."""
+    global _USERS, _STORE_META
+    if _STORE_CORRUPT:
+        raise StoreUnavailable("STORE_UNAVAILABLE")
+    path = guarded_path(_store_path())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"users": users}), encoding="utf-8")
+    tmp.replace(path)
+    _USERS = users
+    _STORE_META = _stat_tuple(path)
 
 
 def _save() -> None:
-    path = guarded_path(_store_path())
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"users": _load()}
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload), encoding="utf-8")
-    tmp.replace(path)
+    """Persist the list already loaded and mutated in an open store transaction.
+
+    Must not reload (that would drop the caller's changes) and must not dump a
+    stale cache from outside a transaction (that would wipe newer rows).
+    """
+    if not getattr(_TXN, "held", False):
+        raise RuntimeError("user store write requires an open store transaction")
+    if _USERS is None:
+        raise RuntimeError("user store transaction has no loaded users")
+    _save_locked(_USERS)
+
+
+def _has_admin(users: list[dict[str, Any]]) -> bool:
+    return any(bool(row.get("is_admin")) for row in users)
+
+
+def reserved_admin_name() -> str:
+    return os.getenv("AUU_ADMIN_USER", "").strip()
+
+
+def _is_reserved_name(name: str) -> bool:
+    reserved = reserved_admin_name()
+    return bool(reserved) and name.lower() == reserved.lower()
+
+
+def public_signup_open() -> bool:
+    """True only when env allows signup and a valid store already has an admin."""
+    if not auth_enabled() or not signup_allowed():
+        return False
+    try:
+        return _has_admin(_load())
+    except StoreUnavailable:
+        return False
 
 
 def _rate_max() -> int:
@@ -258,9 +451,6 @@ def register(
     start = start_sol_default() if start_sol is None else float(start_sol)
     if not (1.0 <= start <= 100_000.0):
         raise ValueError("BAD_START")
-    users = _load()
-    if any(str(row.get("name") or "").lower() == text.lower() for row in users):
-        raise ValueError("NAME_TAKEN")
     address = ""
     if email_verify_enabled():
         address = normalize_email(email)
@@ -268,24 +458,99 @@ def register(
             raise ValueError("EMAIL_REQUIRED")
         if not email_ok(address):
             raise ValueError("BAD_EMAIL")
+        # Consume/validate the code outside the store lock; uniqueness is rechecked under the lock.
         if user_by_email(address) is not None:
             raise ValueError("EMAIL_TAKEN")
         check_code("signup", address, email_code)
-    admin_env = os.getenv("AUU_ADMIN_USER", "").strip()
-    is_admin = not users or (bool(admin_env) and text == admin_env)
+    hashed = hash_password(password)
+    return _commit_new_user(
+        name=text,
+        password_hash=hashed,
+        display_name=shown,
+        email=address,
+        start_sol=start,
+        is_admin=False,
+        require_admin_initialized=True,
+        block_reserved_name=True,
+    )
+
+
+def _commit_new_user(
+    *,
+    name: str,
+    password_hash: str,
+    display_name: str,
+    email: str,
+    start_sol: float,
+    is_admin: bool,
+    require_admin_initialized: bool,
+    block_reserved_name: bool,
+) -> dict[str, Any]:
+    """Reload, re-check uniqueness (name/email), assign role, and persist under one file lock."""
     user = {
         "id": uuid.uuid4().hex,
-        "name": text,
-        "display_name": shown,
-        "password_hash": hash_password(password),
-        "email": address,
-        "start_sol": start,
-        "is_admin": is_admin,
+        "name": name,
+        "display_name": display_name,
+        "password_hash": password_hash,
+        "email": email,
+        "start_sol": start_sol,
+        "is_admin": bool(is_admin),
         "created_ts": int(time.time() * 1000),
     }
-    with _LOCK:
+    with _store_lock():
+        users = _reload_locked()
+        if require_admin_initialized and not _has_admin(users):
+            raise ValueError("SIGNUP_NOT_READY")
+        if block_reserved_name and _is_reserved_name(name):
+            raise ValueError("NAME_TAKEN")
+        if any(str(row.get("name") or "").lower() == name.lower() for row in users):
+            raise ValueError("NAME_TAKEN")
+        if email and any(normalize_email(str(row.get("email") or "")) == email for row in users):
+            raise ValueError("EMAIL_TAKEN")
         users.append(user)
-        _save()
+        _save_locked(users)
+    return _public(user)
+
+
+def bootstrap_admin(
+    name: str,
+    password: str,
+    display_name: str = "",
+    start_sol: Optional[float] = None,
+) -> dict[str, Any]:
+    """Controlled first-admin init. Not an HTTP route. Never overwrites a corrupt store or existing admins."""
+    if not auth_enabled():
+        raise ValueError("AUTH_OFF")
+    text = (name or "").strip()
+    if not _NAME.match(text):
+        raise ValueError("BAD_NAME")
+    if not _password_ok(password):
+        raise ValueError("BAD_PASSWORD")
+    shown = (display_name or "").strip()
+    if shown and not _DISPLAY.match(shown):
+        raise ValueError("BAD_DISPLAY")
+    start = start_sol_default() if start_sol is None else float(start_sol)
+    if not (1.0 <= start <= 100_000.0):
+        raise ValueError("BAD_START")
+    hashed = hash_password(password)
+    with _store_lock():
+        users = _reload_locked()
+        if _has_admin(users):
+            raise ValueError("ADMIN_EXISTS")
+        if any(str(row.get("name") or "").lower() == text.lower() for row in users):
+            raise ValueError("NAME_TAKEN")
+        user = {
+            "id": uuid.uuid4().hex,
+            "name": text,
+            "display_name": shown,
+            "password_hash": hashed,
+            "email": "",
+            "start_sol": start,
+            "is_admin": True,
+            "created_ts": int(time.time() * 1000),
+        }
+        users.append(user)
+        _save_locked(users)
     return _public(user)
 
 
@@ -321,14 +586,15 @@ def reset_password(email: str, code: str, new: str) -> dict[str, Any]:
     if not _password_ok(new):
         raise ValueError("BAD_PASSWORD")
     check_code("reset", address, code)
-    user = user_by_email(address)
-    if user is None:
-        raise ValueError("EMAIL_CODE_EXPIRED")
-    with _LOCK:
-        user["password_hash"] = hash_password(new)
+    hashed = hash_password(new)
+    with _store_txn() as users:
+        user = next((row for row in users if normalize_email(str(row.get("email") or "")) == address), None)
+        if user is None:
+            raise ValueError("EMAIL_CODE_EXPIRED")
+        user["password_hash"] = hashed
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
         user["sessions"] = []
-        _save()
+        _save_locked(users)
     return _public(user)
 
 
@@ -336,22 +602,23 @@ def change_password(user_id: str, current: str, new: str, totp_code: str = "") -
     """Current password (+ a TOTP / recovery code when 2FA is on). Bumps session_epoch: other sessions end."""
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None or not verify_password(current or "", str(user.get("password_hash") or "")):
-        raise ValueError("BAD_LOGIN")
     if not _password_ok(new):
         raise ValueError("BAD_PASSWORD")
-    with _LOCK:
+    hashed = hash_password(new)
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None or not verify_password(current or "", str(user.get("password_hash") or "")):
+            raise ValueError("BAD_LOGIN")
         if security.enabled(user):
             if not (totp_code or "").strip():
                 raise ValueError("TOTP_REQUIRED")
             if security.verify_second_factor(user, totp_code) is None:
-                _save()
+                _save_locked(users)
                 raise ValueError("TOTP_BAD")
-        user["password_hash"] = hash_password(new)
+        user["password_hash"] = hashed
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
         user["sessions"] = []
-        _save()
+        _save_locked(users)
 
 
 def find_user(name: str) -> Optional[dict[str, Any]]:
@@ -364,13 +631,13 @@ def find_user(name: str) -> Optional[dict[str, Any]]:
 
 def bump_epoch(user_id: str) -> None:
     """Invalidate every session cookie of this user (the caller re-stamps its own)."""
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         user["session_epoch"] = int(user.get("session_epoch") or 0) + 1
         user["sessions"] = []
-        _save()
+        _save_locked(users)
 
 
 def _sessions(user: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -391,13 +658,15 @@ def session_count(user_id: str) -> int:
 
 def revoke_session(user_id: str, sid: str) -> bool:
     """Drop one device. Other devices of this user keep their cookies."""
-    user = user_by_id(user_id)
-    if user is None or not sid:
+    if not sid:
         return False
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            return False
         before = _sessions(user)
         user["sessions"] = [row for row in before if row["id"] != sid]
-        _save()
+        _save_locked(users)
         return len(user["sessions"]) != len(before)
 
 
@@ -409,14 +678,15 @@ def set_locale(user_id: str, locale: str) -> dict[str, Any]:
     """Remember the user's interface language (display preference only)."""
     if locale not in LOCALES:
         raise ValueError("BAD_LOCALE")
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         user["locale"] = locale
         user["locale_ts"] = int(time.time() * 1000)
-        _save()
-    return locale_view(user)
+        _save_locked(users)
+        view = locale_view(user)
+    return view
 
 
 def locale_view(user: dict[str, Any]) -> dict[str, Any]:
@@ -443,7 +713,6 @@ def _reverify(user: dict[str, Any], password: str, code: str) -> None:
         if not (code or "").strip():
             raise ValueError("TOTP_REQUIRED")
         if security.verify_second_factor(user, code) is None:
-            _save()
             raise ValueError("TOTP_BAD")
 
 
@@ -452,26 +721,32 @@ def admin_step_up(user_id: str, password: str, code: str) -> None:
     TOTP / recovery code (a TOTP step or recovery code is consumed, so it cannot be replayed)."""
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None or not user.get("is_admin"):
-        raise ValueError("FORBIDDEN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None or not user.get("is_admin"):
+            raise ValueError("FORBIDDEN")
         if not security.enabled(user):
             raise ValueError("POINTS_2FA_REQUIRED")
         if not (code or "").strip():
             raise ValueError("TOTP_REQUIRED")
-        _reverify(user, password, code)
-        _save()
+        try:
+            _reverify(user, password, code)
+        except ValueError as exc:
+            if str(exc) == "TOTP_BAD":
+                _save_locked(users)
+            raise
+        _save_locked(users)
 
 
 def totp_setup(user_id: str, password: str) -> dict[str, Any]:
     """Start enabling 2FA: new secret kept as pending (encrypted) until one code is verified."""
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    secret = ""
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         if security.enabled(user):
             raise ValueError("TOTP_ALREADY_ON")
         if not verify_password(password or "", str(user.get("password_hash") or "")):
@@ -480,8 +755,9 @@ def totp_setup(user_id: str, password: str) -> dict[str, Any]:
         t = dict(user.get("totp") or {})
         t.update(enabled=False, pending_enc=security.encrypt(secret), pending_at=int(time.time()))
         user["totp"] = t
-        _save()
-    uri = security.otpauth_uri(secret, str(user.get("name") or "user"))
+        _save_locked(users)
+        uname = str(user.get("name") or "user")
+    uri = security.otpauth_uri(secret, uname)
     return {"secret": secret, "otpauth": uri, "qr_png": security.qr_png_data_uri(uri), "expires_in": security.SETUP_TTL}
 
 
@@ -489,10 +765,10 @@ def totp_enable(user_id: str, code: str) -> list[str]:
     """Verify one code against the pending secret, switch 2FA on, return the recovery codes (shown once)."""
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         t = dict(user.get("totp") or {})
         if t.get("enabled"):
             raise ValueError("TOTP_ALREADY_ON")
@@ -508,37 +784,47 @@ def totp_enable(user_id: str, code: str) -> list[str]:
         codes = security.new_recovery_codes()
         user["totp"] = {"enabled": True, "secret_enc": t["pending_enc"], "last_step": step, "enabled_at": int(time.time() * 1000),
                         "recovery": [security.recovery_hash(c) for c in codes]}
-        _save()
+        _save_locked(users)
     return codes
 
 
 def totp_disable(user_id: str, password: str, code: str) -> None:
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         if not security.enabled(user):
             raise ValueError("TOTP_OFF")
-        _reverify(user, password, code)
+        try:
+            _reverify(user, password, code)
+        except ValueError as exc:
+            if str(exc) == "TOTP_BAD":
+                _save_locked(users)
+            raise
         user.pop("totp", None)
-        _save()
+        _save_locked(users)
 
 
 def totp_new_recovery(user_id: str, password: str, code: str) -> list[str]:
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         if not security.enabled(user):
             raise ValueError("TOTP_OFF")
-        _reverify(user, password, code)
+        try:
+            _reverify(user, password, code)
+        except ValueError as exc:
+            if str(exc) == "TOTP_BAD":
+                _save_locked(users)
+            raise
         codes = security.new_recovery_codes()
         user["totp"]["recovery"] = [security.recovery_hash(c) for c in codes]
-        _save()
+        _save_locked(users)
     return codes
 
 
@@ -546,13 +832,13 @@ def totp_login(user_id: str, code: str) -> Optional[str]:
     """Second login step. Returns 'totp' | 'recovery' | None and persists the replay step / used code."""
     from app.auth import security
 
-    user = user_by_id(user_id)
-    if user is None:
-        return None
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            return None
         how = security.verify_second_factor(user, code)
         if how is not None:
-            _save()
+            _save_locked(users)
         return how
 
 
@@ -584,19 +870,20 @@ def _epoch_of(user_id: str) -> int:
 
 def issue_token(user_id: str) -> str:
     """Issue one device cookie. Tokens without a device id are not accepted."""
-    user = user_by_id(user_id)
-    if user is None:
-        raise ValueError("BAD_LOGIN")
     sid = secrets.token_hex(16)
-    with _LOCK:
+    with _store_txn() as users:
+        user = _user_row(users, user_id)
+        if user is None:
+            raise ValueError("BAD_LOGIN")
         rows = _sessions(user)
         rows.append({"id": sid, "issued_ts": int(time.time() * 1000)})
         if len(rows) > MAX_DEVICES:
             rows = rows[-MAX_DEVICES:]
         user["sessions"] = rows
-        _save()
+        _save_locked(users)
+        epoch = int(user.get("session_epoch") or 0)
     exp = str(int(time.time()) + 14 * 24 * 3600)
-    sig = _token_sig(user_id, exp, sid, _epoch_of(user_id))
+    sig = _token_sig(user_id, exp, sid, epoch)
     return f"{user_id}.{exp}.{sid}.{sig}"
 
 
