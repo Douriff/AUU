@@ -12,7 +12,7 @@ import i18n from "i18next";
 import { LangSwitch } from "@/components/ui/LangSwitch";
 import { onExplicitLang, reconcileAccountLocale, setLang } from "@/i18n";
 import { fmtDate } from "@/i18n/format";
-import { isPremiumPath, readSubPreview, subscribedPreview, writeSubPreview, type SubPreview } from "@/lib/subscription";
+import { isAccountPath, isPremiumPath, readSubPreview, subscribedPreview, writeSubPreview, type SubPreview } from "@/lib/subscription";
 import { SubscribeLock, SubscriptionProvider, useSubscription, type SubscriptionState } from "@/components/subscribe/SubscribeGate";
 
 // Legacy pump nav (AUU_LEGACY_PUMP=on only). Labels are i18n keys under nav.legacy.*
@@ -40,10 +40,12 @@ const more = [
 /** label = i18n key under nav.* */
 type NavItem = { to: string; label: string; icon: string; match: (path: string, search: string) => boolean };
 const LAST_SYMBOL_KEY = "auu.ms.last";
+const isAi = (p: string, _q: string) => p === "/ai" || p.startsWith("/ai/");
 const isTrade = (p: string, q: string) => p === "/" && /(?:^|[?&])symbol=/.test(q);
 const mainstreamNav: NavItem[] = [
   { to: "/", label: "market", icon: "bars", match: (p, q) => p === "/" && !isTrade(p, q) },
   { to: "/?symbol=BTC", label: "trade", icon: "swap", match: isTrade },
+  { to: "/ai", label: "ai", icon: "spark", match: isAi },
   { to: "/pnl", label: "pnl", icon: "wallet", match: (p) => p.startsWith("/pnl") },
   { to: "/console", label: "strategy", icon: "term", match: (p) => p.startsWith("/console") },
   { to: "/performance", label: "performance", icon: "rank", match: (p) => p.startsWith("/performance") },
@@ -52,13 +54,15 @@ const mainstreamNav: NavItem[] = [
   { to: "/airdrops", label: "airdrops", icon: "radar", match: (p) => p.startsWith("/airdrops") },
   { to: "/exchange", label: "exchange", icon: "swap", match: (p) => p.startsWith("/exchange") },
 ];
-// mobile: 行情 · 交易 · 盈亏 · 策略 · 动态 · 我的 (绩效 is one tap away from the 盈亏 page)
+// mobile: 行情 · 交易 · AI · 盈亏 · 策略 · 动态 · 我的
+// Tab labels use nav.tabPnl for the P&L item so 7 tabs fit at 390px; title keeps the full nav.pnl string.
 const mobileTabs: NavItem[] = [
   mainstreamNav[0],
   mainstreamNav[1],
   mainstreamNav[2],
   mainstreamNav[3],
-  mainstreamNav[6],
+  mainstreamNav[4],
+  mainstreamNav[7],
   { to: "/settings", label: "me", icon: "user", match: (p) => p.startsWith("/settings") || p.startsWith("/exchange") || p.startsWith("/leaderboard") || p.startsWith("/majors") || p.startsWith("/airdrops") },
 ];
 
@@ -69,6 +73,10 @@ function tradeHref(): string {
   } catch {
     return "/?symbol=BTC";
   }
+}
+
+function aiHref(): string {
+  return "/ai";
 }
 
 function Icon({ name }: { name: string }) {
@@ -190,6 +198,11 @@ function Icon({ name }: { name: string }) {
         <path d="M12 8.2a3.8 3.8 0 0 1 3.8 3.8" />
       </>
     ),
+    spark: (
+      <>
+        <path d="M12 3.5 13.6 9 19 10.5 13.6 12 12 17.5 10.4 12 5 10.5 10.4 9 12 3.5z" />
+      </>
+    ),
   };
   return <svg {...common}>{paths[name]}</svg>;
 }
@@ -199,7 +212,7 @@ const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 type Gate = "loading" | "anon" | "ok";
 
-/** Signed-out visitors see the shell only. Market data stays behind the subscription gate. */
+/** Signed-out visitors can open quotes and charts. Starred tools and account pages stay gated. */
 export function AppShell() {
   const [gate, setGate] = useState<Gate>("loading");
   const [who, setWho] = useState("");
@@ -390,8 +403,8 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
 function GatedOutlet() {
   const { anon, subscribed } = useSubscription();
   const { pathname } = useLocation();
-  if (anon && pathname !== "/subscribe") return <SubscribeLock variant="shell" />;
-  if (!anon && !subscribed && isPremiumPath(pathname)) return <SubscribeLock variant="locked" />;
+  if (anon && isAccountPath(pathname)) return <SubscribeLock variant="account" />;
+  if (!subscribed && isPremiumPath(pathname)) return <SubscribeLock variant={anon ? "shell" : "locked"} />;
   return <Outlet />;
 }
 
@@ -448,7 +461,12 @@ function ShellFrame({ who, onLogout }: { who: string; onLogout: () => void }) {
   const nav = legacy
     ? primary.map((i) => ({ to: i.to, label: `legacy.${i.label}`, icon: i.icon, match: (p: string) => ("end" in i && i.end ? p === i.to : p.startsWith(i.to)) }))
     : mainstreamNav.filter((i) => i.label !== "exchange" || Boolean(who));
-  const href = (i: NavItem) => (i.label === "trade" && !legacy ? tradeHref() : i.to);
+  const href = (i: NavItem) => {
+    if (legacy) return i.to;
+    if (i.label === "trade") return tradeHref();
+    if (i.label === "ai") return aiHref();
+    return i.to;
+  };
   const gated = (to: string) => !unlocked && isPremiumPath((to.split("?")[0] || "/") as string);
 
   return (
@@ -504,10 +522,10 @@ function ShellFrame({ who, onLogout }: { who: string; onLogout: () => void }) {
             const locked = gated(to);
             const on = i.match(location.pathname, location.search);
             return (
-              <Link key={i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? t("subscribe.starLabel") : undefined}>
+              <Link key={i.label} to={to} className={`${on ? "is-active" : ""}${i.label === "pnl" ? " tab-hot" : ""}${locked ? " is-locked" : ""}`} aria-current={on ? "page" : undefined} title={locked ? `${t(`nav.${i.label}`)} · ${t("subscribe.starLabel")}` : t(`nav.${i.label}`)}>
                 <Icon name={i.icon} />
                 <span>
-                  {t(`nav.${i.label}`)}
+                  {t(`nav.${i.label === "pnl" ? "tabPnl" : i.label}`)}
                   {locked ? <span className="nav-star" aria-hidden="true">★</span> : null}
                 </span>
               </Link>

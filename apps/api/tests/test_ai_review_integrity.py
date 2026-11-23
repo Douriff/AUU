@@ -17,9 +17,13 @@ LOCALES = ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]
 # New relative to 1e9c986, and only when that path is absent from the baseline.
 # 1e9c986 -> 2905d287 added these and changed no existing value. On current main
 # they are already in the baseline, so a later edit is drift.
-_NEW_TREES = frozenset({"aiReview", "screener"})
+# nav.tabPnl is the exact mobile tab-bar short label added on 55fcd22; not nav.*.
+# aiSection is the first-level same-site AI section; a new tree absent from main.
+_NEW_TREES = frozenset({"aiReview", "screener", "aiSection"})
 _NEW_PATHS = frozenset({
     "apiErr.SCREENER_ADMIN",
+    "nav.ai",
+    "nav.tabPnl",
     "strat.k.awaitClose",
     "strat.k.gapHistory",
     "strat.k.gapReset",
@@ -57,7 +61,29 @@ def _addition_allowed(path: str, baseline: set[str]) -> bool:
     return False
 
 
-def locale_drift(old: dict, new: dict) -> list[str]:
+# This joint candidate rewrites these existing subscription strings and adds two login prompts
+# (PR138). They are the only authorized copy *edits* versus main, besides the named AI/nav
+# additions already allowed above. Any other changed path is still drift.
+_AUTHORIZED_SUBSCRIPTION_CHANGES = frozenset({
+    "subscribe.fMarket",
+    "subscribe.lockedSub",
+    "subscribe.shellSub",
+    "subscribe.shellTitle",
+    "subscribe.sub",
+})
+_AUTHORIZED_SUBSCRIPTION_ADDITIONS = frozenset({
+    "subscribe.accountSub",
+    "subscribe.accountTitle",
+})
+
+
+def locale_drift(
+    old: dict,
+    new: dict,
+    *,
+    allow_changed: frozenset[str] = frozenset(),
+    allow_added: frozenset[str] = frozenset(),
+) -> list[str]:
     """Differences that are not an explicitly named addition absent from old."""
     old_paths, new_paths = _flat_locale(old), _flat_locale(new)
     problems = []
@@ -65,10 +91,13 @@ def locale_drift(old: dict, new: dict) -> list[str]:
     if removed:
         problems.append("removed " + ", ".join(removed))
     added = sorted(set(new_paths) - set(old_paths))
-    unknown = [path for path in added if not _addition_allowed(path, set(old_paths))]
+    unknown = [path for path in added if path not in allow_added and not _addition_allowed(path, set(old_paths))]
     if unknown:
         problems.append("unexpected " + ", ".join(unknown))
-    changed = sorted(path for path in set(old_paths) & set(new_paths) if old_paths[path] != new_paths[path])
+    changed = sorted(
+        path for path in set(old_paths) & set(new_paths)
+        if old_paths[path] != new_paths[path] and path not in allow_changed
+    )
     if changed:
         problems.append("changed " + ", ".join(changed))
     return problems
@@ -222,14 +251,24 @@ class GapTests(unittest.TestCase):
 
 class LocaleNamespaceTests(unittest.TestCase):
     def _baseline(self, lang: str) -> dict:
-        raw = subprocess.check_output(["git", "show", f"main:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT)
+        ref = os.environ.get("AUU_I18N_BASELINE", "main")
+        raw = subprocess.check_output(["git", "show", f"{ref}:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT)
         return json.loads(raw)
 
     def test_old_locale_keys_are_unchanged(self):
         for lang in LOCALES:
             old = self._baseline(lang)
             new = json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
-            self.assertEqual(locale_drift(old, new), [], lang)
+            self.assertEqual(
+                locale_drift(
+                    old,
+                    new,
+                    allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+                    allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+                ),
+                [],
+                lang,
+            )
 
     def test_changing_an_old_key_is_rejected(self):
         old = self._baseline("zh-CN")
@@ -254,6 +293,49 @@ class LocaleNamespaceTests(unittest.TestCase):
         unknown = json.loads(json.dumps(old))
         unknown["brandNew"] = {"title": "不在名单"}
         self.assertTrue(locale_drift(old, unknown))
+        tab = json.loads(json.dumps(old))
+        tab["nav"] = {"tabPnl": "P&L"}
+        self.assertEqual(locale_drift(old, tab), [])
+        tab["nav"]["tabFoo"] = "nope"
+        self.assertTrue(any("unexpected nav.tabFoo" in item for item in locale_drift(old, tab)), locale_drift(old, tab))
+
+    def test_tab_pnl_short_labels_exist_and_desktop_pnl_is_unchanged(self):
+        for lang in LOCALES:
+            old = _flat_locale(self._baseline(lang))
+            new = _flat_locale(json.loads((ROOT / "apps/web/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8")))
+            label = new.get("nav.tabPnl")
+            self.assertIsInstance(label, str, lang)
+            self.assertTrue(label.strip(), lang)
+            self.assertEqual(new.get("nav.pnl"), old.get("nav.pnl"), lang)
+
+    def test_subscription_copy_allowlist_does_not_hide_other_edits(self):
+        old = self._baseline("zh-CN")
+        current = json.loads((ROOT / "apps/web/src/i18n/locales/zh-CN.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            locale_drift(
+                old,
+                current,
+                allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+                allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+            ),
+            [],
+        )
+        current["strat"]["k"]["nav"] += "（已改）"
+        drift = locale_drift(
+            old,
+            current,
+            allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+            allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+        )
+        self.assertTrue(any("strat.k.nav" in item for item in drift), drift)
+        current["subscribe"]["price"] = "$0"
+        drift = locale_drift(
+            old,
+            current,
+            allow_changed=_AUTHORIZED_SUBSCRIPTION_CHANGES,
+            allow_added=_AUTHORIZED_SUBSCRIPTION_ADDITIONS,
+        )
+        self.assertTrue(any("subscribe.price" in item for item in drift), drift)
 
 
 class RelayAndDraftTests(unittest.TestCase):

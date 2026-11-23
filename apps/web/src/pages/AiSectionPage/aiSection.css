@@ -1,0 +1,157 @@
+/* Same-site AI section. Uses AUU pro tokens (dark + amber). Not a second theme. */
+.ai-section {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--tab-h, 58px) + env(safe-area-inset-bottom) + 16px);
+}
+.ai-section .pro-head h1 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+.ai-section .pro-head p { margin: 0; color: var(--muted); max-width: 52rem; }
+.ai-section-kicker {
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.35rem;
+}
+.ai-section-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+}
+.ai-section-flags span {
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  color: var(--text2);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+}
+.ai-section-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin: 0.85rem 0 0;
+}
+.ai-section-links a { color: var(--accent); }
+.ai-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1rem 0 0.85rem;
+}
+.ai-section-tabs button {
+  background: var(--panel2);
+  color: var(--text2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  min-height: 36px;
+}
+.ai-section-tabs button[aria-selected="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.ai-section-note, .ai-section-empty, .ai-section-error { color: var(--muted); margin: 0.5rem 0; }
+.ai-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+.ai-section-card, .ai-section-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 0.9rem;
+}
+.ai-section-card h3, .ai-section-panel h2 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+.ai-section-card p, .ai-section-panel p { margin: 0.2rem 0; color: var(--text2); }
+.ai-section-card .meta { color: var(--muted); font-size: 0.78rem; }
+.ai-section-studio textarea {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.ai-section-studio button[type="submit"], .ai-section-ask {
+  background: var(--accent-bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  min-height: 36px;
+}
+.ai-section-studio button[type="submit"]:disabled, .ai-section-ask:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ai-section-engine { color: var(--accent); font-size: 0.78rem; margin: 0.6rem 0 0.3rem; }
+.ai-section-events { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.55rem; }
+.ai-section-events li {
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem;
+}
+.ai-section-note-box {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+@media (max-width: 760px) {
+  .ai-section-tabs button, .ai-section-ask, .ai-section-studio button[type="submit"] {
+    min-height: 44px;
+  }
+}
+
+.ai-section-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.65rem 0.8rem;
+  margin: 0.75rem 0;
+}
+.ai-section-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--text2);
+  font-size: 0.82rem;
+}
+.ai-section-form input, .ai-section-form select {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  min-height: 36px;
+}
+.ai-section-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.45rem !important;
+}
+.ai-section-check input { min-height: auto; width: auto; }
+.ai-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+.ai-section-form button[type="submit"], .ai-section-actions .ai-section-ask {
+  justify-self: start;
+}
+@media (max-width: 760px) {
+  .ai-section-form input, .ai-section-form select, .ai-section-actions button {
+    min-height: 44px;
+  }
+}

@@ -31,4 +31,19 @@ if (pull.includes("askNote")) {
   console.error("plaza refresh calls the model");
   process.exit(1);
 }
+const board = readFileSync(new URL("../src/pages/MainstreamPage/BoardAiPanel.tsx", import.meta.url), "utf8");
+const shell = readFileSync(new URL("../src/components/layout/AppShell.tsx", import.meta.url), "utf8");
+const effect = board.slice(board.indexOf("useEffect("), board.indexOf("async function ask"));
+if (effect.includes("askNote")) {
+  console.error("opening the board panel calls the model");
+  process.exit(1);
+}
+if (!board.includes("onClick={() => void ask(row)}")) {
+  console.error("board note is not behind an explicit click");
+  process.exit(1);
+}
+if (!shell.includes('label: "ai"')) {
+  console.error("main nav has no AI entry");
+  process.exit(1);
+}
 console.log("ai-review guard OK");

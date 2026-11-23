@@ -41,6 +41,7 @@ import { ExchangePage } from "@/pages/ExchangePage/ExchangePage";
 import { AdminSectionPage } from "@/pages/AdminPage/AdminSectionPage";
 import { HomeIndex, LegacyOnly } from "@/app/legacy";
 import { ScreenerPage } from "@/pages/ScreenerPage/ScreenerPage";
+import { AiSectionPage } from "@/pages/AiSectionPage/AiSectionPage";
 
 const AiReviewPage = lazy(() => import("@/pages/AiReviewPage/AiReviewPage").then((m) => ({ default: m.AiReviewPage })));
 
@@ -100,6 +101,7 @@ export const router = createBrowserRouter([
       { path: "board", element: <LegacyOnly><BoardPage /></LegacyOnly> },
       { path: "console", element: <ConsolePage /> },
       { path: "performance", element: <PerformancePage /> },
+      { path: "ai", element: <AiSectionPage /> },
       { path: "pnl", element: <PnlPage /> },
       { path: "markets", element: <LegacyOnly><MarketsPage /></LegacyOnly> },
       { path: "market", element: <LegacyOnly><MarketPage /></LegacyOnly> },

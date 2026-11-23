@@ -109,6 +109,21 @@ class ReviewAuthTests(unittest.TestCase):
                     self.assertNotIn("total_return", json.dumps(body))
         self.assertEqual(admin.get("/api/v1/ai-review/plaza").status_code, 200)
 
+    def test_symbol_decisions_stay_admin_only(self):
+        anon = self.client_cls(self.app)
+        admin = self._user("reviewadmin2")
+        user = self._user("reviewuser2")
+        for client, status in ((anon, 401), (user, 403)):
+            res = client.get("/api/v1/ai-review/decisions?symbol=BTC")
+            self.assertEqual(res.status_code, status, res.text)
+            self.assertNotIn("events", res.text)
+            self.assertNotIn("total_return", res.text)
+        ok = admin.get("/api/v1/ai-review/decisions?symbol=BTC")
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertIn("events", ok.json()["data"])
+        bad = admin.get("/api/v1/ai-review/decisions?symbol=btc")
+        self.assertEqual(bad.status_code, 400, bad.text)
+
     def test_auth_off_forged_headers_and_fixture_do_not_open_the_lab(self):
         admin = self._user("reviewadmin")
         cookie = admin.cookies.get("auu_session")

@@ -1,6 +1,7 @@
 """AUU API — FastAPI entrypoint (paper only; mainstream CEX data, legacy pump behind a flag)."""
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager, suppress
 
@@ -150,6 +151,12 @@ def _make_lifespan(legacy: bool):
                 from app.marketdata.realtime import set_manager
 
                 set_manager(None)
+            try:
+                from app.ai_section.store import reset_store
+
+                reset_store()
+            except Exception:
+                logging.getLogger("auu.api").exception("ai_section store shutdown failed")
 
     return lifespan
 
@@ -208,8 +215,10 @@ def create_app(legacy: bool | None = None) -> FastAPI:
     for mod in (health, status, events, majors, auth, live, stats, mainstream, mainstream_paper, pnl, mainstream_strategy, mainstream_shadow, mainstream_signal, news, airdrops, chart_drawings, price_alerts_routes, points, points_trading, exchange, screener, strategy_resume):
         app.include_router(mod.router)
     from app.ai_review.routes import router as ai_review_router
+    from app.ai_section.routes import router as ai_section_router
 
     app.include_router(ai_review_router)
+    app.include_router(ai_section_router)
     if legacy:
         for mod in _legacy_routers():
             app.include_router(mod.router)
@@ -241,6 +250,7 @@ def root(legacy: bool = False):
                     "strategy": "GET /api/v1/mainstream/strategy (M3 daily paper runner: curve, positions, Go/No-Go, risk caps)",
                     "strategyResume": "POST /api/v1/strategy/resume (admin, confirm resume-forward; seals a gap, does not backfill)",
                     "aiReview": "GET /api/v1/ai-review (admin lab; no trading)",
+                    "aiSection": "GET /api/v1/ai-section/catalog; POST /compile (catalog match); GET /runner (site-wide paper); login studio/agents/simulate (personal paper only)",
                     "shadowS3": "GET /api/v1/mainstream/shadow/s3 (shadow hypothesis, no capital, not evidence)",
                     "shadowH2": "GET /api/v1/mainstream/shadow/h2 (pre-registered forward shadow H2, no capital, no orders)",
                     "auuSignal": "GET /api/v1/mainstream/signal?symbol=&tf=1d (auu_signal_v0 experimental overlay; shadow record-only)",

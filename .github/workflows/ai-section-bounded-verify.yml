@@ -1,0 +1,411 @@
+# Draft only: bounded joint verify for the AI section studio loop plus the
+# already-reviewed free-board gate (PR138 equivalent on the PR139 candidate).
+# For a later web submit, not a live workflow pushed from this box.
+# Main locale baseline is the already-known SHA below; do not invent other SHAs.
+# Node 22 (CI-only): subscription-gate.test.mjs imports subscription.ts; Node
+# 22.18+ type-strips erasable TypeScript by default. Production web Dockerfile
+# is unchanged.
+name: ai-section-bounded-verify
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/api/app/ai_section/**"
+      - "apps/api/app/main.py"
+      - "apps/api/app/auth/gate.py"
+      - "apps/api/app/routes/mainstream.py"
+      - "apps/api/app/routes/ws.py"
+      - "apps/api/tests/test_ai_section.py"
+      - "apps/api/tests/test_ai_review_integrity.py"
+      - "apps/api/tests/test_auth_gate.py"
+      - "apps/web/src/pages/AiSectionPage/**"
+      - "apps/web/src/pages/MainstreamPage/**"
+      - "apps/web/scripts/ai-section.test.mjs"
+      - "apps/web/scripts/board-ai-sheet.test.mjs"
+      - "apps/web/scripts/subscription-gate.test.mjs"
+      - "apps/web/scripts/i18n-check.mjs"
+      - "apps/web/src/i18n/locales/**"
+      - "apps/web/src/app/router.tsx"
+      - "apps/web/src/components/layout/AppShell.tsx"
+      - "apps/web/src/components/subscribe/SubscribeGate.tsx"
+      - "apps/web/src/lib/subscription.ts"
+      - ".github/workflows/ai-section-bounded-verify.yml"
+      - ".github/ai-section-required-files.txt"
+permissions:
+  contents: read
+env:
+  # Douriff/AUU default main, already verified earlier in this draft thread.
+  AUU_MAIN_SHA: 3211be8c9821c788ae49c863bb210da06c377d29
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Fail if a required verify file is missing
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r path; do
+            case "$path" in
+              ""|\#*) continue ;;
+            esac
+            if [ ! -e "$path" ]; then
+              echo "missing required file: $path"
+              missing=1
+            fi
+          done < .github/ai-section-required-files.txt
+          if [ "$missing" -ne 0 ]; then
+            echo "required files are missing; failing the gate (no skip)"
+            exit 1
+          fi
+      - name: Pin local main to the known baseline SHA
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$AUU_MAIN_SHA"
+          git update-ref refs/heads/main "$AUU_MAIN_SHA"
+          test "$(git rev-parse --verify main)" = "$AUU_MAIN_SHA"
+          git show "main:apps/web/src/i18n/locales/en.json" >/dev/null
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install API and web dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements.txt
+          python -m pip install -r apps/api/requirements-dev.txt
+          test -f apps/web/package-lock.json
+          (cd apps/web && npm ci)
+      - name: Locale parity
+        working-directory: apps/web
+        run: node scripts/i18n-check.mjs
+      - name: Subscription path gate
+        working-directory: apps/web
+        run: node scripts/subscription-gate.test.mjs
+      - name: AI section guards
+        working-directory: apps/web
+        run: node scripts/ai-section.test.mjs
+      - name: Mobile AI sheet guards
+        working-directory: apps/web
+        run: node scripts/board-ai-sheet.test.mjs
+      - name: Web typecheck and production build
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          test -f tsconfig.json
+          npx tsc --noEmit
+          npm run build
+      - name: API unit, HTTP, CSRF, admin isolation, locale baseline, and auth gate
+        working-directory: apps/api
+        env:
+          AUU_TEST: "1"
+          AUU_I18N_BASELINE: main
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          export AUU_DATA_DIR="$DATA"
+          export AUU_USER_STORE="$DATA/users.json"
+          export AUU_USER_JOURNAL_DIR="$DATA/journals"
+          python -m unittest tests.test_ai_section tests.test_ai_review_integrity tests.test_auth_gate
+
+      # --- draft addendum only: sanitized source/dist for a later isolated GUI
+      # preview. Existing verify steps above are unchanged. Artifact upload is
+      # not a release, merge, or production deploy. upload-artifact@v4 uses the
+      # runner runtime token; GITHUB_TOKEN stays at the original contents: read only.
+      - name: Record checkout head and tree metadata
+        id: record_meta
+        run: |
+          set -euo pipefail
+          META_DIR="${GITHUB_WORKSPACE}/preview-artifacts"
+          mkdir -p "$META_DIR"
+          CHECKOUT_SHA="$(git rev-parse --verify HEAD)"
+          CHECKOUT_TREE="$(git rev-parse --verify 'HEAD^{tree}')"
+          PR_HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if [ -z "$PR_HEAD_SHA" ]; then
+            PR_HEAD_SHA="${{ github.sha }}"
+          fi
+          {
+            echo "kind=ai-section-bounded-verify-artifacts"
+            echo "not_production=true"
+            echo "not_a_release=true"
+            echo "publishable=false"
+            echo "workflow=${{ github.workflow }}"
+            echo "workflow_file=.github/workflows/ai-section-bounded-verify.yml"
+            echo "event=${{ github.event_name }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+            echo "repository=${{ github.repository }}"
+            echo "ref=${{ github.ref }}"
+            echo "github_sha=${{ github.sha }}"
+            echo "pr_head_sha=${PR_HEAD_SHA}"
+            echo "checkout_sha=${CHECKOUT_SHA}"
+            echo "checkout_tree=${CHECKOUT_TREE}"
+            echo "main_baseline=${AUU_MAIN_SHA}"
+            echo "local_main=$(git rev-parse --verify main)"
+            echo "head_subject=$(git log -1 --format=%s)"
+            echo "recorded_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "recorded_at_asia_shanghai=$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S%z)"
+            echo "node=$(node -v 2>/dev/null || true)"
+            echo "python=$(python -c 'import sys; print(sys.version.split()[0])' 2>/dev/null || true)"
+            echo "source_method=git_ls_files_tracked_minus_exclude_rules"
+            echo "fixture_note=apps/api/tests and apps/web/scripts/*.test.mjs stay in the source archive as synthetic examples only; no real user ledgers, sessions, or production credentials are included."
+          } | tee "$META_DIR/checkout-meta.txt"
+          test -n "$CHECKOUT_SHA"
+          test -n "$CHECKOUT_TREE"
+          test "$(git rev-parse --verify main)" = "$AUU_MAIN_SHA"
+
+      - name: Pack sanitized secret-free source archive
+        id: pack_source
+        if: ${{ steps.record_meta.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          META_DIR="${GITHUB_WORKSPACE}/preview-artifacts"
+          TMP="${RUNNER_TEMP:-/tmp}/auu-source-pack"
+          mkdir -p "$TMP"
+          test -f "$META_DIR/checkout-meta.txt"
+          CHECKOUT_TREE="$(awk -F= '/^checkout_tree=/{print $2}' "$META_DIR/checkout-meta.txt")"
+          test -n "$CHECKOUT_TREE"
+          test "$(git rev-parse --verify 'HEAD^{tree}')" = "$CHECKOUT_TREE"
+          git ls-files -z > "$TMP/tracked.null"
+          python3 - "$TMP" <<'PY'
+          from __future__ import annotations
+
+          import fnmatch
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          # Auditable exclude rules. A tracked path (repo-relative, posix) is
+          # omitted from the source archive when any rule matches. Same family
+          # as the earlier joint isolated-test packs, plus db/credentials/key
+          # material from the preview brief. Dependencies and apps/web/dist
+          # stay out of the source archive (dist is uploaded separately).
+          EXCLUDE_DIR_COMPONENTS = (
+              ".git",
+              ".venv",
+              "node_modules",
+              "secrets",
+              "credentials",
+              "users",
+              "data",
+              "db",
+              "test-logs",
+              ".ssh",
+              "__pycache__",
+              "preview-artifacts",
+              ".env",
+          )
+          EXCLUDE_PREFIXES = ("apps/web/dist/",)
+          EXCLUDE_EXACT_PATHS = ("apps/web/dist",)
+          EXCLUDE_EXACT_BASENAMES = (
+              ".env",
+              "users.json",
+              ".netrc",
+              "id_rsa",
+              "id_ed25519",
+              "session.secret",
+              "LOCAL-TEST-IDENTITIES.txt",
+          )
+          EXCLUDE_BASENAME_GLOBS = (
+              ".env.*",
+              "*.log",
+              "*.pyc",
+              "*.pem",
+              "*.key",
+              "*.p12",
+              "*.pfx",
+              "*.db",
+              "*.sqlite",
+              "*.sqlite3",
+              "*.password",
+          )
+
+          def exclude_reason(path: str) -> str | None:
+              if path in EXCLUDE_EXACT_PATHS:
+                  return f"exact-path:{path}"
+              for prefix in EXCLUDE_PREFIXES:
+                  if path.startswith(prefix):
+                      return f"prefix:{prefix}"
+              parts = path.split("/")
+              for comp in parts:
+                  if comp in EXCLUDE_DIR_COMPONENTS:
+                      return f"dir-component:{comp}"
+              base = parts[-1] if parts else path
+              if base in EXCLUDE_EXACT_BASENAMES:
+                  return f"basename:{base}"
+              for glob in EXCLUDE_BASENAME_GLOBS:
+                  if fnmatch.fnmatch(base, glob):
+                      return f"basename-glob:{glob}"
+              return None
+
+          tmp = Path(sys.argv[1])
+          raw = (tmp / "tracked.null").read_bytes()
+          tracked = [p.decode("utf-8") for p in raw.split(b"\0") if p]
+          if any(("\n" in p) or ("\r" in p) for p in tracked):
+              raise SystemExit("tracked path contains a newline; failing closed")
+          tracked_sorted = sorted(tracked)
+          included: list[str] = []
+          excluded: list[tuple[str, str]] = []
+          for path in tracked_sorted:
+              reason = exclude_reason(path)
+              if reason:
+                  excluded.append((path, reason))
+              else:
+                  included.append(path)
+          if not included:
+              raise SystemExit("tracked include list is empty; failing closed")
+          missing = [p for p in included if not (Path.cwd() / p).is_file()]
+          if missing:
+              print("included tracked files missing from the worktree:")
+              print("\n".join(missing[:50]))
+              raise SystemExit("include list references missing files; failing closed")
+          (tmp / "source-tracked.txt").write_text("\n".join(tracked_sorted) + "\n", encoding="utf-8")
+          (tmp / "source-included.txt").write_text("\n".join(included) + "\n", encoding="utf-8")
+          (tmp / "source-excluded.txt").write_text(
+              "".join(f"{path}\t{reason}\n" for path, reason in excluded),
+              encoding="utf-8",
+          )
+          (tmp / "included.null").write_bytes(b"\0".join(p.encode("utf-8") for p in included) + b"\0")
+          inc_sha = hashlib.sha256((tmp / "source-included.txt").read_bytes()).hexdigest()
+          meta_lines = [
+              f"source_tracked_count={len(tracked_sorted)}",
+              f"source_included_count={len(included)}",
+              f"source_excluded_count={len(excluded)}",
+              f"source_included_sha256={inc_sha}",
+          ]
+          (tmp / "source-counts.txt").write_text("\n".join(meta_lines) + "\n", encoding="utf-8")
+          print("\n".join(meta_lines))
+          print(f"wrote include/exclude lists under {tmp}")
+          PY
+          # Pack only the audited include list into a temp archive. Do not
+          # copy it into the upload directory until the forbidden-path
+          # filter succeeds.
+          TAR_TMP="$TMP/auu-ai-section-source.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" --null -T "$TMP/included.null" -czf "$TAR_TMP"
+          FORBIDDEN_RE='(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.venv(/|$)|(^|/)\.env(/|$)|(^|/)\.env\.[^/]+$|(^|/)secrets(/|$)|(^|/)credentials(/|$)|(^|/)users(/|$)|(^|/)users\.json$|(^|/)data(/|$)|(^|/)db(/|$)|(^|/)test-logs(/|$)|(^|/)apps/web/dist(/|$)|(^|/).+\.(pem|key|p12|pfx|db|sqlite|sqlite3|password)$|(^|/)id_(rsa|ed25519)$|(^|/)session\.secret$|(^|/)LOCAL-TEST-IDENTITIES\.txt$'
+          if tar -tzf "$TAR_TMP" | grep -E "$FORBIDDEN_RE"; then
+            echo "source tar contains a forbidden path; not promoting it for upload"
+            rm -f "$TAR_TMP"
+            exit 1
+          fi
+          python3 - "$TMP" "$TAR_TMP" <<'PY'
+          import sys
+          import tarfile
+          from pathlib import Path
+
+          tmp = Path(sys.argv[1])
+          included = {line for line in (tmp / "source-included.txt").read_text(encoding="utf-8").splitlines() if line}
+          def archive_path(name: str) -> str:
+              # Only strip a leading "./" prefix. str.lstrip("./") also
+              # removes the leading dot from ".github/..." and ".gitignore",
+              # which is what failed run 45184701356.
+              while name.startswith("./"):
+                  name = name[2:]
+              return name
+
+          with tarfile.open(sys.argv[2], "r:gz") as tf:
+              members = [archive_path(m.name) for m in tf.getmembers() if m.isfile()]
+          extra = sorted(set(members) - included)
+          missing = sorted(included - set(members))
+          if extra or missing:
+              if extra:
+                  print("tar contains files not on the include list:")
+                  print("\n".join(extra[:50]))
+              if missing:
+                  print("include list files missing from the tar:")
+                  print("\n".join(missing[:50]))
+              raise SystemExit("source tar does not match the audited include list")
+          print(f"tar file members match include list ({len(members)} files)")
+          PY
+          TAR_OUT="$META_DIR/auu-ai-section-source-${CHECKOUT_TREE:0:12}.tar.gz"
+          cp "$TAR_TMP" "$TAR_OUT"
+          cp "$TMP/source-tracked.txt" "$TMP/source-included.txt" "$TMP/source-excluded.txt" "$META_DIR/"
+          TAR_SHA="$(sha256sum "$TAR_OUT" | awk '{print $1}')"
+          {
+            cat "$TMP/source-counts.txt"
+            echo "source_tar=$(basename "$TAR_OUT")"
+            echo "source_tar_sha256=$TAR_SHA"
+          } | tee -a "$META_DIR/checkout-meta.txt"
+
+      - name: Stage web dist with the same checkout metadata
+        id: stage_dist
+        if: ${{ always() && steps.record_meta.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          META_DIR="${GITHUB_WORKSPACE}/preview-artifacts"
+          TMP="${RUNNER_TEMP:-/tmp}/auu-dist-stage"
+          mkdir -p "$TMP/web-dist"
+          test -f "$META_DIR/checkout-meta.txt"
+          if [ ! -f apps/web/dist/index.html ]; then
+            echo "preview artifact gate failed: apps/web/dist/index.html is missing"
+            echo "web_dist=missing" | tee -a "$META_DIR/checkout-meta.txt"
+            exit 1
+          fi
+          cp -a apps/web/dist/. "$TMP/web-dist/"
+          if find "$TMP/web-dist" -type f \( \
+            -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' \
+            -o -name 'users.json' -o -name '*.password' -o -name 'session.secret' \
+            -o -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \
+          \) | grep -q .; then
+            echo "web dist contains a forbidden file; not promoting it for upload"
+            rm -rf "$TMP/web-dist"
+            exit 1
+          fi
+          python3 - "$TMP" <<'PY'
+          from pathlib import Path
+          import hashlib
+          import sys
+
+          tmp = Path(sys.argv[1])
+          root = tmp / "web-dist"
+          index = root / "index.html"
+          if not index.is_file():
+              raise SystemExit("preview artifact gate failed: staged dist is missing index.html")
+          digest = hashlib.sha256(index.read_bytes()).hexdigest()
+          count = sum(1 for p in root.rglob("*") if p.is_file())
+          (tmp / "dist-counts.txt").write_text(
+              "web_dist=present\n"
+              f"dist_index_sha256={digest}\n"
+              f"dist_file_count={count}\n",
+              encoding="utf-8",
+          )
+          print(f"dist_index_sha256={digest}")
+          print(f"dist_file_count={count}")
+          PY
+          mkdir -p "$META_DIR/web-dist"
+          cp -a "$TMP/web-dist/." "$META_DIR/web-dist/"
+          cat "$TMP/dist-counts.txt" >> "$META_DIR/checkout-meta.txt"
+          cat "$TMP/dist-counts.txt"
+          cp "$META_DIR/checkout-meta.txt" "$META_DIR/web-dist-checkout-meta.txt"
+
+      - name: Upload sanitized source archive
+        if: ${{ always() && steps.pack_source.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-section-source
+          path: |
+            preview-artifacts/auu-ai-section-source-*.tar.gz
+            preview-artifacts/checkout-meta.txt
+            preview-artifacts/source-tracked.txt
+            preview-artifacts/source-included.txt
+            preview-artifacts/source-excluded.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload sanitized web dist
+        if: ${{ always() && steps.stage_dist.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-section-web-dist
+          path: |
+            preview-artifacts/web-dist/
+            preview-artifacts/web-dist-checkout-meta.txt
+          if-no-files-found: error
+          retention-days: 14

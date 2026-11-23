@@ -40,22 +40,27 @@ export function SubPreviewToggle() {
 }
 
 /** Gray star-lock with a subscribe entry. No payment control. */
-export function SubscribeLock({ variant, compact = false }: { variant: "shell" | "locked"; compact?: boolean }) {
+export function SubscribeLock({ variant, compact = false }: { variant: "shell" | "locked" | "account"; compact?: boolean }) {
   const { t } = useTranslation();
   const { anon } = useSubscription();
+  const account = variant === "account";
   const shell = variant === "shell";
   return (
     <section className={`sub-lock${compact ? " is-compact" : ""}`} aria-labelledby="sub-lock-title">
       <span className="sub-star" aria-hidden="true">★</span>
-      <h1 id="sub-lock-title">{t(shell ? "subscribe.shellTitle" : "subscribe.lockedTitle")}</h1>
-      <p>{t(shell ? "subscribe.shellSub" : "subscribe.lockedSub")}</p>
-      <p className="sub-price">
-        <b>{t("subscribe.price")}</b> <span>{t("subscribe.per")}</span>
-      </p>
-      <Link className="td-submit buy sub-cta" to="/subscribe">
-        {t("subscribe.cta")}
-      </Link>
-      {anon ? (
+      <h1 id="sub-lock-title">{t(account ? "subscribe.accountTitle" : shell ? "subscribe.shellTitle" : "subscribe.lockedTitle")}</h1>
+      <p>{t(account ? "subscribe.accountSub" : shell ? "subscribe.shellSub" : "subscribe.lockedSub")}</p>
+      {account ? null : (
+        <p className="sub-price">
+          <b>{t("subscribe.price")}</b> <span>{t("subscribe.per")}</span>
+        </p>
+      )}
+      {account ? null : (
+        <Link className="td-submit buy sub-cta" to="/subscribe">
+          {t("subscribe.cta")}
+        </Link>
+      )}
+      {anon || account ? (
         <Link className="td-link" to="/login">
           {t("subscribe.loginCta")}
         </Link>
