@@ -1,6 +1,10 @@
-# Draft only: one-shot bounded verify for the AI section studio loop.
+# Draft only: bounded joint verify for the AI section studio loop plus the
+# already-reviewed free-board gate (PR138 equivalent on the PR139 candidate).
 # For a later web submit, not a live workflow pushed from this box.
 # Main locale baseline is the already-known SHA below; do not invent other SHAs.
+# Node 22 (CI-only): subscription-gate.test.mjs imports subscription.ts; Node
+# 22.18+ type-strips erasable TypeScript by default. Production web Dockerfile
+# is unchanged.
 name: ai-section-bounded-verify
 on:
   workflow_dispatch:
@@ -8,15 +12,23 @@ on:
     paths:
       - "apps/api/app/ai_section/**"
       - "apps/api/app/main.py"
+      - "apps/api/app/auth/gate.py"
+      - "apps/api/app/routes/mainstream.py"
+      - "apps/api/app/routes/ws.py"
       - "apps/api/tests/test_ai_section.py"
       - "apps/api/tests/test_ai_review_integrity.py"
+      - "apps/api/tests/test_auth_gate.py"
       - "apps/web/src/pages/AiSectionPage/**"
+      - "apps/web/src/pages/MainstreamPage/**"
       - "apps/web/scripts/ai-section.test.mjs"
       - "apps/web/scripts/board-ai-sheet.test.mjs"
+      - "apps/web/scripts/subscription-gate.test.mjs"
       - "apps/web/scripts/i18n-check.mjs"
       - "apps/web/src/i18n/locales/**"
       - "apps/web/src/app/router.tsx"
       - "apps/web/src/components/layout/AppShell.tsx"
+      - "apps/web/src/components/subscribe/SubscribeGate.tsx"
+      - "apps/web/src/lib/subscription.ts"
       - ".github/workflows/ai-section-bounded-verify.yml"
       - ".github/ai-section-required-files.txt"
 permissions:
@@ -62,7 +74,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install API and web dependencies
         run: |
           set -euo pipefail
@@ -74,6 +86,9 @@ jobs:
       - name: Locale parity
         working-directory: apps/web
         run: node scripts/i18n-check.mjs
+      - name: Subscription path gate
+        working-directory: apps/web
+        run: node scripts/subscription-gate.test.mjs
       - name: AI section guards
         working-directory: apps/web
         run: node scripts/ai-section.test.mjs
@@ -87,7 +102,7 @@ jobs:
           test -f tsconfig.json
           npx tsc --noEmit
           npm run build
-      - name: API unit, HTTP, CSRF, admin isolation, and locale baseline
+      - name: API unit, HTTP, CSRF, admin isolation, locale baseline, and auth gate
         working-directory: apps/api
         env:
           AUU_TEST: "1"
@@ -98,7 +113,7 @@ jobs:
           export AUU_DATA_DIR="$DATA"
           export AUU_USER_STORE="$DATA/users.json"
           export AUU_USER_JOURNAL_DIR="$DATA/journals"
-          python -m unittest tests.test_ai_section tests.test_ai_review_integrity
+          python -m unittest tests.test_ai_section tests.test_ai_review_integrity tests.test_auth_gate
 
       # --- draft addendum only: sanitized source/dist for a later isolated GUI
       # preview. Existing verify steps above are unchanged. Artifact upload is
