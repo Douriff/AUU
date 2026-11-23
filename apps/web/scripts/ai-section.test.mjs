@@ -178,13 +178,13 @@ if (routesPy.includes("request.body()")) {
 if (!storePy.includes("BEGIN IMMEDIATE") || !storePy.includes("foreign_keys=ON")) {
   fail("studio store must use an immediate transaction and foreign keys");
 }
-if (!simulatePy.includes("blocked_bad_data") || !simulatePy.includes("fills_truncated") || !simulatePy.includes("signal_on_closed_bar_fill_next_open") || !simulatePy.includes("apply_pending_open") || !simulatePy.includes("manage_open_gap")) {
-  fail("simulation must validate bars, disclose next-open fills, and keep open orders ahead of intrabar risk");
+if (!simulatePy.includes("blocked_bad_data") || !simulatePy.includes("fills_truncated") || !simulatePy.includes("signal_on_closed_bar_fill_next_open") || !simulatePy.includes("apply_pending_open") || !simulatePy.includes("manage_open_gap") || !simulatePy.includes("exclude_trailing_unclosed_disclose_cutoff") || !simulatePy.includes("bars_excluded_unclosed")) {
+  fail("simulation must validate bars, disclose next-open fills, keep open orders ahead of intrabar risk, and disclose a dropped forming tail");
 }
 if (!en.includes("The paper fraction is not an investment return") || !zh.includes("纸面分数不是投资回报")) {
   fail("locales must disclose that paper fractions are not investment returns");
 }
-if (!page.includes("fills_truncated") || !page.includes("blocked_bad_data") || !page.includes("gross_zero_cost")) {
+if (!page.includes("fills_truncated") || !page.includes("blocked_bad_data") || !page.includes("gross_zero_cost") || !page.includes("aiSection.paper.cutoff") || !page.includes("bars_excluded_unclosed")) {
   fail("paper UI must surface truncation, bad-data blocks, and the cost model");
 }
 
