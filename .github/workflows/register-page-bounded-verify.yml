@@ -1,0 +1,142 @@
+# Bounded verify for public registration, the targeted AI95 modules, and the
+# four directly affected security fixture modules (sessions, 2FA, roundtrip,
+# email verify). This is not a full-repository test run.
+name: register-page-bounded-verify
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/api/app/auth/accounts.py"
+      - "apps/api/app/auth/bootstrap.py"
+      - "apps/api/app/routes/auth.py"
+      - "apps/api/tests/auth_fixtures.py"
+      - "apps/api/tests/test_register_public_flow.py"
+      - "apps/api/tests/test_register_safety.py"
+      - "apps/api/tests/test_accounts.py"
+      - "apps/api/tests/test_ai_section.py"
+      - "apps/api/tests/test_ai_review_integrity.py"
+      - "apps/api/tests/test_auth_gate.py"
+      - "apps/api/tests/test_auth_sessions.py"
+      - "apps/api/tests/test_auth_2fa.py"
+      - "apps/api/tests/test_auth_roundtrip.py"
+      - "apps/api/tests/test_email_verify.py"
+      - "apps/web/src/pages/LoginPage/**"
+      - "apps/web/src/pages/SubscribePage/**"
+      - "apps/web/src/pages/SettingsPage/AccountSection.tsx"
+      - "apps/web/src/components/subscribe/SubscribeGate.tsx"
+      - "apps/web/src/components/layout/AppShell.tsx"
+      - "apps/web/src/styles/pro.css"
+      - "apps/web/src/i18n/locales/**"
+      - "apps/web/scripts/register-page.test.mjs"
+      - "apps/web/scripts/register-lock-render.test.mjs"
+      - "apps/web/scripts/subscription-gate.test.mjs"
+      - "apps/web/scripts/i18n-check.mjs"
+      - "apps/web/package.json"
+      - ".github/workflows/register-page-bounded-verify.yml"
+      - ".github/register-page-required-files.txt"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Formal main already independently verified as this work's locale baseline.
+      AUU_MAIN_SHA: fcd153a0875bbcb219f2acb8c36bf9a05b6f96d3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Fail if a required verify file is missing
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r path; do
+            case "$path" in
+              ""|\#*) continue ;;
+            esac
+            if [ ! -e "$path" ]; then
+              echo "missing required file: $path"
+              missing=1
+            fi
+          done < .github/register-page-required-files.txt
+          if [ "$missing" -ne 0 ]; then
+            echo "required files are missing; failing the gate (no skip)"
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install API and web dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements.txt
+          python -m pip install -r apps/api/requirements-dev.txt
+          test -f apps/web/package-lock.json
+          (cd apps/web && npm ci)
+      - name: Locale parity
+        working-directory: apps/web
+        run: node scripts/i18n-check.mjs
+      - name: Register page guards and actual lock render
+        working-directory: apps/web
+        run: npm run test:register
+      - name: Web typecheck and production build
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          test -f tsconfig.json
+          npx tsc --noEmit
+          npm run build
+      - name: Pin local main to the formal locale baseline
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$AUU_MAIN_SHA"
+          git update-ref refs/heads/main "$AUU_MAIN_SHA"
+          test "$(git rev-parse --verify main)" = "$AUU_MAIN_SHA"
+          git show "main:apps/web/src/i18n/locales/en.json" >/dev/null
+      - name: Public register flow, safety, and signup rules
+        working-directory: apps/api
+        env:
+          AUU_TEST: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          export AUU_DATA_DIR="$DATA"
+          export AUU_USER_STORE="$DATA/users.json"
+          export AUU_USER_JOURNAL_DIR="$DATA/journals"
+          python -m unittest \
+            tests.test_register_public_flow \
+            tests.test_register_safety \
+            tests.test_accounts.PaperAccountTests.test_signup_invite_and_password_rules \
+            tests.test_accounts.PaperAccountTests.test_two_users_do_not_share_fills_or_the_system_journal
+      - name: Directly affected security modules (sessions, 2FA, roundtrip, email verify)
+        working-directory: apps/api
+        env:
+          AUU_TEST: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          export AUU_DATA_DIR="$DATA"
+          export AUU_USER_STORE="$DATA/users.json"
+          export AUU_USER_JOURNAL_DIR="$DATA/journals"
+          python -m unittest tests.test_auth_sessions tests.test_auth_2fa tests.test_auth_roundtrip tests.test_email_verify
+      - name: AI95 targeted modules (section, review integrity/locale, auth gate)
+        working-directory: apps/api
+        env:
+          AUU_TEST: "1"
+          AUU_I18N_BASELINE: main
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          export AUU_DATA_DIR="$DATA"
+          export AUU_USER_STORE="$DATA/users.json"
+          export AUU_USER_JOURNAL_DIR="$DATA/journals"
+          python -m unittest tests.test_ai_section tests.test_ai_review_integrity tests.test_auth_gate
