@@ -179,6 +179,21 @@ async function readJson(path: string, init?: RequestInit): Promise<{ status: num
   return { status: res.status, code: body?.error?.code || "", data: res.ok ? (body.data as Record<string, unknown>) : null };
 }
 
+/** Whether catalog/match tabs may call their protected APIs. Does not change auth policy. */
+export type DirectoryAccess = "needLogin" | "load" | "error";
+
+export function planDirectorySession(me: { auth_enabled?: boolean; user?: unknown } | null | undefined): DirectoryAccess {
+  if (!me) return "error";
+  if (me.auth_enabled && !me.user) return "needLogin";
+  return "load";
+}
+
+export function planDirectoryResult(status: number, hasData: boolean): DirectoryAccess {
+  if (status === 401) return "needLogin";
+  if (!hasData) return "error";
+  return "load";
+}
+
 function tabOf(raw: string | null): Tab {
   return TABS.includes(raw as Tab) ? (raw as Tab) : "market";
 }
@@ -222,6 +237,7 @@ export function AiSectionPage() {
 
   const [catalog, setCatalog] = useState<CatalogCard[] | null>(null);
   const [catalogErr, setCatalogErr] = useState(false);
+  const [dirAuth, setDirAuth] = useState<"loading" | "auth" | "ok">("loading");
   const [prompt, setPrompt] = useState("");
   const [matching, setMatching] = useState(false);
   const [matched, setMatched] = useState<MatchData | null>(null);
@@ -249,14 +265,39 @@ export function AiSectionPage() {
 
   useEffect(() => {
     const ac = new AbortController();
+    setDirAuth("loading");
+    setCatalogErr(false);
+    setCatalog(null);
     (async () => {
+      const me = await readJson("/api/v1/auth/me", { signal: ac.signal });
+      if (ac.signal.aborted) return;
+      const session = planDirectorySession(me.data as { auth_enabled?: boolean; user?: unknown } | null);
+      if (session === "needLogin") {
+        setDirAuth("auth");
+        return;
+      }
+      if (session === "error") {
+        setDirAuth("ok");
+        setCatalogErr(true);
+        setCatalog([]);
+        return;
+      }
       const listed = await readJson("/api/v1/ai-section/catalog", { signal: ac.signal });
       if (ac.signal.aborted) return;
+      const result = planDirectoryResult(listed.status, Boolean(listed.data));
+      if (result === "needLogin") {
+        setDirAuth("auth");
+        setCatalog(null);
+        setCatalogErr(false);
+        return;
+      }
       const rows = Array.isArray(listed.data?.strategies) ? (listed.data!.strategies as CatalogCard[]) : [];
-      setCatalogErr(!listed.data);
+      setDirAuth("ok");
+      setCatalogErr(result === "error");
       setCatalog(listed.data ? rows : []);
     })().catch(() => {
       if (!ac.signal.aborted) {
+        setDirAuth("ok");
         setCatalogErr(true);
         setCatalog([]);
       }
@@ -382,12 +423,22 @@ export function AiSectionPage() {
     setMatching(true);
     setMatchErr(false);
     setMatched(null);
+    if (dirAuth === "auth") {
+      setMatching(false);
+      return;
+    }
     try {
       const res = await readJson("/api/v1/ai-section/compile", {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
+      if (planDirectoryResult(res.status, Boolean(res.data)) === "needLogin") {
+        setDirAuth("auth");
+        setMatchErr(false);
+        setMatched(null);
+        return;
+      }
       if (!res.data) {
         setMatchErr(true);
         return;
@@ -602,9 +653,14 @@ export function AiSectionPage() {
         <section role="tabpanel">
           <h2 className="dim">{t("aiSection.marketplace.title")}</h2>
           <p className="ai-section-note">{t("aiSection.marketplace.notFull")}</p>
-          {catalogErr ? <p className="ai-section-error">{t("aiSection.error")}</p> : null}
-          {catalog && catalog.length === 0 && !catalogErr ? <p className="ai-section-empty">{t("aiSection.marketplace.empty")}</p> : null}
-          {catalog && catalog.length > 0 ? (
+          {dirAuth === "auth" ? (
+            <p>
+              {t("aiSection.marketplace.needLogin")} <Link to="/login">{t("aiSection.login")}</Link>
+            </p>
+          ) : null}
+          {dirAuth === "ok" && catalogErr ? <p className="ai-section-error">{t("aiSection.error")}</p> : null}
+          {dirAuth === "ok" && catalog && catalog.length === 0 && !catalogErr ? <p className="ai-section-empty">{t("aiSection.marketplace.empty")}</p> : null}
+          {dirAuth === "ok" && catalog && catalog.length > 0 ? (
             <div className="ai-section-grid">
               {catalog.map((card) => (
                 <article key={card.id} className="ai-section-card">
@@ -628,6 +684,13 @@ export function AiSectionPage() {
             <h2>{t("aiSection.matcher.title")}</h2>
             <p>{t("aiSection.matcher.hint")}</p>
             <p className="ai-section-note">{t("aiSection.matcher.notStudio")}</p>
+            {dirAuth === "auth" ? (
+              <p>
+                {t("aiSection.matcher.needLogin")} <Link to="/login">{t("aiSection.login")}</Link>
+              </p>
+            ) : null}
+            {dirAuth === "ok" ? (
+            <>
             <form onSubmit={onMatch}>
               <label>
                 {t("aiSection.matcher.promptLabel")}
@@ -655,6 +718,8 @@ export function AiSectionPage() {
                   </ul>
                 ) : null}
               </>
+            ) : null}
+            </>
             ) : null}
           </div>
         </section>
