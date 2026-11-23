@@ -212,6 +212,18 @@ class RouteMountTests(unittest.TestCase):
         self.assertEqual(self.anon.post("/api/v1/ai-section/strategies", json=_draft()).status_code, 401)
         self.assertEqual(self.anon.get("/api/v1/ai-section/agents").status_code, 401)
 
+    def test_anon_catalog_and_match_still_require_login_but_owner_can_load(self):
+        self.assertEqual(self.anon.get("/api/v1/ai-section/catalog").status_code, 401)
+        self.assertEqual(self.anon.post("/api/v1/ai-section/compile", json={"prompt": "time series momentum daily rebalance"}).status_code, 401)
+        listed = self.owner.get("/api/v1/ai-section/catalog")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertIsInstance(listed.json()["data"].get("strategies"), list)
+        matched = self.owner.post("/api/v1/ai-section/compile", json={"prompt": "time series momentum daily rebalance"})
+        self.assertEqual(matched.status_code, 200, matched.text)
+        body = matched.json()["data"]
+        self.assertFalse(body.get("used_model"))
+        self.assertFalse(body.get("generates_code"))
+
     def test_owner_round_trip_and_missing_candles_do_not_invent_results(self):
         created = self.owner.post("/api/v1/ai-section/strategies", json=_draft())
         self.assertEqual(created.status_code, 200, created.text)
