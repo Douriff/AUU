@@ -6,7 +6,9 @@ import os
 import tempfile
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 import pyotp
 
@@ -66,6 +68,18 @@ class TwoFactorTests(unittest.TestCase):
     def _next_code(self, secret):
         """A code for a step not used yet (the replay guard refuses the step used to enable)."""
         return pyotp.TOTP(secret).at(time.time() + 30)
+
+    @staticmethod
+    @contextmanager
+    def _shift_clock(seconds: float):
+        """Advance time.time() used by TOTP match_step / tickets, without sleeping."""
+        real = time.time
+
+        def now():
+            return real() + seconds
+
+        with patch("time.time", now):
+            yield
 
     def test_default_off_login_unchanged_and_recorded(self):
         r = self._login()
@@ -160,13 +174,25 @@ class TwoFactorTests(unittest.TestCase):
         self.assertEqual(c2.get("/api/v1/auth/security").status_code, 401)
         self.assertEqual(c2.post("/api/v1/auth/login/totp", json={"ticket": d["ticket"], "code": "123456"}).status_code, 401)
         self.assertEqual(c2.post("/api/v1/auth/login/totp", json={"ticket": "x.y.z.w", "code": "123456"}).status_code, 401)
-        ok = c2.post("/api/v1/auth/login/totp", json={"ticket": d["ticket"], "code": self._next_code(secret)})
+        code = self._next_code(secret)
+        ok = c2.post("/api/v1/auth/login/totp", json={"ticket": d["ticket"], "code": code})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(c2.get("/api/v1/auth/security").status_code, 200)
-        # the same step cannot be replayed
+        # Replay the exact same TOTP code / step. Calling _next_code again is not a
+        # replay: at(time.time()+30) can cross a 30s window and become a new valid code
+        # (CI run 45235549424 failed at 18:12:00Z with expected 401 actual 200).
         d2 = self._login().json()["data"]
-        again = self.TC(self.app).post("/api/v1/auth/login/totp", json={"ticket": d2["ticket"], "code": self._next_code(secret)})
+        with self._shift_clock(30):
+            again = self.TC(self.app).post("/api/v1/auth/login/totp", json={"ticket": d2["ticket"], "code": code})
         self.assertEqual(again.status_code, 401)
+        self.assertEqual(again.json()["error"]["code"], "TOTP_BAD")
+        # The next unused legitimate step remains usable after the rejected replay.
+        d3 = self._login().json()["data"]
+        with self._shift_clock(30):
+            later_code = self._next_code(secret)
+            later = self.TC(self.app).post("/api/v1/auth/login/totp", json={"ticket": d3["ticket"], "code": later_code})
+        self.assertEqual(later.status_code, 200, later.text)
+        self.assertNotEqual(later_code, code)
 
     def test_recovery_code_works_once(self):
         _, codes = self._enable()
