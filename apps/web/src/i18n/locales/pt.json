@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Somente Binance e OKX são suportadas",
     "EXCHANGE_RATE_LIMIT": "A corretora limitou a taxa, tente novamente em instantes",
     "EXCHANGE_ORDER_NOT_FOUND": "Ordem não encontrada",
-    "CRED_UNREADABLE": "Não é possível descriptografar a chave salva, desvincule e vincule novamente"
+    "CRED_UNREADABLE": "Não é possível descriptografar a chave salva, desvincule e vincule novamente",
+    "SIGNUP_NOT_READY": "O registo está temporariamente indisponível",
+    "STORE_UNAVAILABLE": "Os dados da conta estão temporariamente indisponíveis. Tente mais tarde."
   },
   "common": {
     "submitting": "Enviando…",
@@ -219,12 +221,14 @@
       "title": "Cadastro",
       "sub": "Crie uma conta de negociação simulada com seu e-mail: primeiro receba um código, depois escolha nome de usuário e senha.",
       "localMode": "Modo local de usuário único; não é preciso se cadastrar. Vá direto para <market>Mercados</market>.",
-      "closed": "O cadastro está fechado.",
+      "closed": "O registo está fechado. Se já tem uma conta, <login>entre</login>.",
       "noEmailVerify": "A verificação por e-mail está desativada; escolha direto nome de usuário e senha.",
       "invite": "Código de convite",
       "submit": "Cadastrar",
       "failed": "Falha no cadastro",
-      "haveAccount": "Já tem conta?"
+      "haveAccount": "Já tem conta?",
+      "subDirect": "Crie uma conta de trading em papel com nome de utilizador e palavra-passe. Não há cobrança nem trading real.",
+      "shellTitle": "Crie uma conta para usar esta função"
     },
     "reset": {
       "title": "Esqueci a senha",
@@ -878,7 +882,8 @@
     "anon": "<login>Entre</login> para alterar a senha. Ainda não tem conta? <reg>Cadastre-se</reg>.",
     "change": "Alterar senha",
     "current": "Conta atual {{label}}. As senhas são armazenadas apenas como hash; administradores não podem vê-las.",
-    "currentPw": "Senha atual"
+    "currentPw": "Senha atual",
+    "anonClosed": "<login>Entre</login> para alterar a palavra-passe. O registo está fechado."
   },
   "sec": {
     "failed": "A operação falhou",

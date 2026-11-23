@@ -143,7 +143,9 @@
     "EXCHANGE_UNSUPPORTED": "Seuls Binance et OKX sont pris en charge",
     "EXCHANGE_RATE_LIMIT": "L'échange limite le débit, réessayez dans un instant",
     "EXCHANGE_ORDER_NOT_FOUND": "Ordre introuvable",
-    "CRED_UNREADABLE": "La clé enregistrée ne peut pas être déchiffrée, déliez-la puis reliez-la"
+    "CRED_UNREADABLE": "La clé enregistrée ne peut pas être déchiffrée, déliez-la puis reliez-la",
+    "SIGNUP_NOT_READY": "Les inscriptions sont temporairement indisponibles",
+    "STORE_UNAVAILABLE": "Les données de compte sont temporairement indisponibles. Réessayez plus tard."
   },
   "common": {
     "submitting": "Envoi…",
@@ -219,12 +221,14 @@
       "title": "Inscription",
       "sub": "Créez un compte de trading fictif avec votre e-mail : recevez d’abord un code, puis choisissez un nom d’utilisateur et un mot de passe.",
       "localMode": "Mode local mono-utilisateur : aucune inscription nécessaire. Allez directement aux <market>Marchés</market>.",
-      "closed": "Les inscriptions sont fermées.",
+      "closed": "Les inscriptions sont fermées. Si vous avez déjà un compte, <login>connectez-vous</login>.",
       "noEmailVerify": "La vérification par e-mail est désactivée ; choisissez directement un nom d’utilisateur et un mot de passe.",
       "invite": "Code d’invitation",
       "submit": "S’inscrire",
       "failed": "Échec de l’inscription",
-      "haveAccount": "Déjà un compte ?"
+      "haveAccount": "Déjà un compte ?",
+      "subDirect": "Créez un compte de trading papier avec un identifiant et un mot de passe. Aucun prélèvement, pas de trading réel.",
+      "shellTitle": "Créez un compte pour utiliser cette fonction"
     },
     "reset": {
       "title": "Mot de passe oublié",
@@ -878,7 +882,8 @@
     "anon": "<login>Connectez-vous</login> pour changer votre mot de passe. Pas encore de compte ? <reg>Inscrivez-vous</reg>.",
     "change": "Changer le mot de passe",
     "current": "Compte actuel {{label}}. Les mots de passe sont stockés uniquement sous forme de hash ; les administrateurs ne peuvent pas les voir.",
-    "currentPw": "Mot de passe actuel"
+    "currentPw": "Mot de passe actuel",
+    "anonClosed": "<login>Connectez-vous</login> pour modifier votre mot de passe. Les inscriptions sont fermées."
   },
   "sec": {
     "failed": "Échec de l’opération",
