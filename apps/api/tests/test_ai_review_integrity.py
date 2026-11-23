@@ -18,7 +18,8 @@ LOCALES = ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]
 # 1e9c986 -> 2905d287 added these and changed no existing value. On current main
 # they are already in the baseline, so a later edit is drift.
 # nav.tabPnl is the exact mobile tab-bar short label added on 55fcd22; not nav.*.
-_NEW_TREES = frozenset({"aiReview", "screener"})
+# aiSection is the first-level same-site AI section; a new tree absent from main.
+_NEW_TREES = frozenset({"aiReview", "screener", "aiSection"})
 _NEW_PATHS = frozenset({
     "apiErr.SCREENER_ADMIN",
     "nav.ai",
@@ -225,7 +226,8 @@ class GapTests(unittest.TestCase):
 
 class LocaleNamespaceTests(unittest.TestCase):
     def _baseline(self, lang: str) -> dict:
-        raw = subprocess.check_output(["git", "show", f"main:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT)
+        ref = os.environ.get("AUU_I18N_BASELINE", "main")
+        raw = subprocess.check_output(["git", "show", f"{ref}:apps/web/src/i18n/locales/{lang}.json"], cwd=ROOT)
         return json.loads(raw)
 
     def test_old_locale_keys_are_unchanged(self):
