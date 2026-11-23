@@ -81,6 +81,9 @@ type SimRecord = {
     reason?: string | null;
     bars_used?: number;
     bars_required?: number;
+    bars_excluded_unclosed?: number;
+    data_cutoff_ts?: number | null;
+    data_cutoff_close_at?: number | null;
     fills?: unknown[];
     fill_count?: number;
     fills_truncated?: boolean;
@@ -96,6 +99,11 @@ type SimRecord = {
     live?: boolean;
   };
 };
+
+function formatCutoffTs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return new Date(value).toISOString();
+}
 
 type DraftForm = {
   name: string;
@@ -836,12 +844,16 @@ export function AiSectionPage() {
                         const noData = item.status === "blocked_no_data" || result.status === "blocked_no_data";
                         const badData = item.status === "blocked_bad_data" || result.status === "blocked_bad_data";
                         const fillCount = typeof result.fill_count === "number" ? result.fill_count : Array.isArray(result.fills) ? result.fills.length : 0;
+                        const cutoffNote = typeof result.bars_excluded_unclosed === "number" && result.bars_excluded_unclosed > 0 ? (
+                              <p className="meta">{t("aiSection.paper.cutoff", { count: result.bars_excluded_unclosed, cutoff: formatCutoffTs(result.data_cutoff_ts), closeAt: formatCutoffTs(result.data_cutoff_close_at) })}</p>
+                            ) : null;
                         return (
                           <div key={item.id} className="ai-section-note-box">
                             {noData ? (
                               <p>{t("aiSection.paper.blocked", { used: result.bars_used ?? 0, need: result.bars_required ?? 0 })}</p>
                             ) : null}
                             {badData ? <p>{t("aiSection.paper.blockedBad", { reason: result.reason || "" })}</p> : null}
+                            {cutoffNote}
                             {!noData && !badData ? (
                               <>
                                 <p>
