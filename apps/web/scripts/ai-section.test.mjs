@@ -188,4 +188,69 @@ if (!page.includes("fills_truncated") || !page.includes("blocked_bad_data") || !
   fail("paper UI must surface truncation, bad-data blocks, and the cost model");
 }
 
+
+
+function planDirectorySession(me) {
+  if (!me) return "error";
+  if (me.auth_enabled && !me.user) return "needLogin";
+  return "load";
+}
+
+function planDirectoryResult(status, hasData) {
+  if (status === 401) return "needLogin";
+  if (!hasData) return "error";
+  return "load";
+}
+
+// Simulated unauthenticated / login-recovery paths. These are the same rules the page must follow.
+const anon = planDirectorySession({ auth_enabled: true, user: null });
+if (anon !== "needLogin") fail("anonymous users must be asked to sign in, not sent into a generic load failure");
+const afterLogin = planDirectorySession({ auth_enabled: true, user: { id: "u1" } });
+if (afterLogin !== "load") fail("a signed-in session must be allowed to load the catalog");
+const authOff = planDirectorySession({ auth_enabled: false, user: null });
+if (authOff !== "load") fail("when site auth is off, the catalog may load without a login wall");
+const meFailed = planDirectorySession(null);
+if (meFailed !== "error") fail("a missing /auth/me body is an error, not a silent catalog call");
+if (planDirectoryResult(401, false) !== "needLogin") fail("catalog/compile 401 must become a sign-in prompt, not a generic failure");
+if (planDirectoryResult(200, true) !== "load") fail("a successful catalog payload must load");
+if (planDirectoryResult(503, false) !== "error") fail("non-auth catalog failures must stay visible as errors");
+
+const catalogEffectStart = page.indexOf('readJson("/api/v1/auth/me"');
+const catalogCall = page.indexOf('readJson("/api/v1/ai-section/catalog"');
+if (catalogEffectStart < 0 || catalogCall < 0 || catalogCall < catalogEffectStart) {
+  fail("catalog must not be requested until /api/v1/auth/me has been consulted");
+}
+if (!page.includes("planDirectorySession") || !page.includes("planDirectoryResult")) {
+  fail("page must use the explicit directory access plan");
+}
+if (!page.includes("aiSection.marketplace.needLogin") || !page.includes('Link to="/login"') || !page.includes("aiSection.matcher.needLogin")) {
+  fail("anonymous catalog and match tabs must prompt to sign in, with a login link, not only a generic error");
+}
+if (!page.includes('if (dirAuth === "auth")') || !page.includes("setDirAuth(\"auth\")")) {
+  fail("match must refuse to send compile while the directory is in the anonymous sign-in state");
+}
+if (page.includes("/api/v1/auth/register") || page.includes('to="/register"') || page.includes('to="/signup"')) {
+  fail("this change must not add a registration page or signup link");
+}
+if (!zh.includes("请先登录后再查看已登记策略目录") || !zh.includes("请先登录后再使用关键词匹配")) {
+  fail("zh-CN must tell anonymous users to sign in to view the catalog and use matching");
+}
+if (!en.includes("Sign in to view the registered strategy catalog") || !en.includes("Sign in to use keyword matching")) {
+  fail("en must tell anonymous users to sign in to view the catalog and use matching");
+}
+for (const lang of ["zh-CN", "en", "de", "fr", "es", "pt", "tr", "ru", "ja", "ko", "ar"]) {
+  const loc = JSON.parse(readFileSync(join(root, `src/i18n/locales/${lang}.json`), "utf8"));
+  const market = loc.aiSection?.marketplace?.needLogin;
+  const match = loc.aiSection?.matcher?.needLogin;
+  if (typeof market !== "string" || !market.trim() || typeof match !== "string" || !match.trim()) {
+    fail(`${lang} must include marketplace.needLogin and matcher.needLogin`);
+  }
+  if (market.includes("{{") || match.includes("{{")) fail(`${lang} needLogin strings must be plain login prompts`);
+}
+
+const gatePy = readFileSync(join(root, "../api/app/auth/gate.py"), "utf8");
+if (gatePy.includes("/api/v1/ai-section/catalog") || gatePy.includes("/api/v1/ai-section/compile") || gatePy.includes("/api/v1/ai-section")) {
+  fail("auth gate must not be loosened to make the catalog or matcher public");
+}
+
 console.log("ai-section guard OK");
