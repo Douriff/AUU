@@ -1,11 +1,14 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { RegisterForm } from "@/pages/LoginPage/RegisterForm";
 import { useTranslation } from "react-i18next";
 
 export type SubscriptionState = {
   anon: boolean;
   authOn: boolean;
   isAdmin: boolean;
+  /** True when /auth/me says public registration is open. Does not unlock billing. */
+  signupAllowed: boolean;
   /** Unlocked market/premium desk. Signed-out visitors are never unlocked. */
   subscribed: boolean;
   setPreview: (next: "on" | "off") => void;
@@ -42,9 +45,18 @@ export function SubPreviewToggle() {
 /** Gray star-lock with a subscribe entry. No payment control. */
 export function SubscribeLock({ variant, compact = false }: { variant: "shell" | "locked" | "account"; compact?: boolean }) {
   const { t } = useTranslation();
-  const { anon } = useSubscription();
+  const { anon, signupAllowed } = useSubscription();
   const account = variant === "account";
   const shell = variant === "shell";
+  // Anonymous shell / account entry: registration is the primary experience when signup is open.
+  // The $99 star plan stays on the logged-in locked card and the standalone /subscribe page.
+  if ((shell || account) && anon) {
+    return (
+      <section className={`sub-lock is-register${compact ? " is-compact" : ""}`}>
+        <RegisterForm embed assumeOpen={signupAllowed} />
+      </section>
+    );
+  }
   return (
     <section className={`sub-lock${compact ? " is-compact" : ""}`} aria-labelledby="sub-lock-title">
       <span className="sub-star" aria-hidden="true">★</span>
@@ -65,7 +77,8 @@ export function SubscribeLock({ variant, compact = false }: { variant: "shell" |
           {t("subscribe.loginCta")}
         </Link>
       ) : null}
-      <p className="muted sub-note">{t("subscribe.noBilling")}</p>
+      {account ? null : <p className="muted sub-note">{t("subscribe.noBilling")}</p>}
     </section>
   );
 }
+
