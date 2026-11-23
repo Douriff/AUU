@@ -207,7 +207,8 @@ function Icon({ name }: { name: string }) {
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-// Full-screen auth cards. Every other signed-out route stays in the shell with no market data.
+// Full-screen auth cards for login/register/reset. Other signed-out routes stay in the shell;
+// quotes and charts remain visible. Starred tools and account pages stay gated.
 const AUTH_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 type Gate = "loading" | "anon" | "ok";
@@ -218,6 +219,7 @@ export function AppShell() {
   const [who, setWho] = useState("");
   const [authOn, setAuthOn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(true);
+  const [signupAllowed, setSignupAllowed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const gateRef = useRef<Gate>("loading");
@@ -236,6 +238,7 @@ export function AppShell() {
         setAuthOn(me.auth_enabled);
         setWho(me.user?.display_name || me.user?.name || "");
         setIsAdmin(!me.auth_enabled || Boolean(me.user?.is_admin));
+        setSignupAllowed(Boolean(me.signup_allowed));
         setGate(me.auth_enabled && !me.user ? "anon" : "ok");
       })
       .catch(() => setGate((g) => (g === "loading" ? "ok" : g)));
@@ -273,8 +276,8 @@ export function AppShell() {
   const setPreview = useCallback((next: "on" | "off") => writeSubPreview(next), []);
   const subscribed = subscribedPreview(isAdmin, flag);
   const subValue = useMemo<SubscriptionState>(
-    () => ({ anon: gate === "anon", authOn, isAdmin, subscribed, setPreview }),
-    [gate, authOn, isAdmin, subscribed, setPreview],
+    () => ({ anon: gate === "anon", authOn, isAdmin, signupAllowed, subscribed, setPreview }),
+    [gate, authOn, isAdmin, signupAllowed, subscribed, setPreview],
   );
 
   if (gate === "loading") {
@@ -345,6 +348,7 @@ function DataDot({ f, provider }: { f: MainstreamFreshness | null; provider: str
 
 function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boolean; isAdmin: boolean; onLogout: () => void }) {
   const { t } = useTranslation();
+  const { signupAllowed } = useSubscription();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -390,9 +394,16 @@ function UserMenu({ who, authOn, isAdmin, onLogout }: { who: string; authOn: boo
             </>
           ) : null}
           {authOn && !who ? (
-            <Link role="menuitem" to="/login">
-              {t("auth.login.submit")}
-            </Link>
+            <>
+              <Link role="menuitem" to="/login">
+                {t("auth.login.submit")}
+              </Link>
+              {signupAllowed ? (
+                <Link role="menuitem" to="/register">
+                  {t("auth.login.toRegister")}
+                </Link>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}
