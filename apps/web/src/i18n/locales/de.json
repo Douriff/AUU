@@ -2163,5 +2163,142 @@
     "boardFactTime": "Record time: {{when}}. This is not the current quote.",
     "boardDeduped": "This record was already sent. It was not sent again.",
     "boardNotSent": "No request was sent."
+  },
+  "aiSection": {
+    "title": "KI",
+    "kicker": "Bereich",
+    "lead": "Ein Verzeichnis bereits registrierter Strategien, ein Stichwortabgleich, ein strukturiertes Studio für eigene Entwürfe, persönliche Papier-Agenten mit lokaler Simulation und der Status des seitenweiten System-Paper-Runners auf derselben Website. Login, APIs und Design bleiben die bestehenden — keine zweite Site. Dies ist keine Übernahme des Quell-Studios oder persönlicher Agenten; Studio und Papierschleife hier sind eigenständig umgesetzt. Das Modell wird nur nach einem Klick unter Review angefragt.",
+    "tabs": {
+      "market": "Registriert",
+      "match": "Abgleich",
+      "studio": "Studio",
+      "paper": "Papier-Agent",
+      "runner": "System-Paper",
+      "review": "Review"
+    },
+    "chartAssistant": "Chart-Assistent öffnen",
+    "chartAssistantHint": "Weiterhin der vorhandene Chart-Helfer (nur ?ai=1); das Modell wird dabei nicht selbst aufgerufen.",
+    "existing": {
+      "console": "Strategie-Konsole",
+      "performance": "Performance",
+      "signalsNote": "Verzeichnis und Review nutzen die bereits registrierten Strategien, Signalerklärungen und Entscheidungsprotokolle. Es wird keine Rangliste oder Renditeserie erfunden. Ihre Entwürfe und Papiersimulationen bleiben in Ihrem Konto. Marktplatz, Live-Agenten und Börsenadapter der Quelle sind nicht vollständig angebunden."
+    },
+    "matcher": {
+      "title": "Registrierte Strategien abgleichen",
+      "hint": "Stichwörter werden nur mit bereits registrierten Strategie-IDs abgeglichen. Das ist kein Sprachmodell und erzeugt oder kompiliert keinen ausführbaren Strategiecode, erstellt keine neue Strategie und platziert keine Order.",
+      "notStudio": "Dieser Tab gleicht nur registrierte Kennungen ab. Hier können keine neuen Strategien geschrieben, kompiliert oder bereitgestellt werden. Nutzen Sie das Studio für strukturierte Regelentwürfe.",
+      "promptLabel": "Hinweis oder ID",
+      "promptPlaceholder": "Zum Beispiel: time series momentum, extremes Funding oder eine registrierte ID wie trend_tsmom_v1",
+      "run": "Abgleichen",
+      "engine": "Deterministischer Katalogabgleich",
+      "noMatch": "Keine registrierte Strategie gefunden. Es wurde keine neue Strategie erzeugt, kein Code generiert, und das Modell wurde nicht aufgerufen.",
+      "matched": "Registrierte Strategie {{id}} (Stichwort: {{keyword}})",
+      "usedModelNo": "Modell nicht verwendet",
+      "noCode": "Kein Code erzeugt oder kompiliert"
+    },
+    "studio": {
+      "title": "Strategiestudio",
+      "hint": "Nach der Anmeldung können Sie eigene strukturierte Regelentwürfe anlegen, speichern und ansehen. Der Regelsatz ist begrenzt; Felder und Risikolimits werden geprüft. Nutzercode wird weder angenommen noch ausgeführt.",
+      "needLogin": "Melden Sie sich an, um eigene Strategieentwürfe zu speichern.",
+      "notCode": "Dies ist keine Code-Erzeugung oder Kompilierung. Skripte werden nicht angenommen oder ausgeführt, und das Modell erfindet keine Strategie.",
+      "verifiedMeans": "„Geprüft“ bedeutet nur, dass Schema- und Risikofelder stimmen. Das ist keine Renditezusage und keine Modellauslegung.",
+      "name": "Name",
+      "kind": "Regeltyp",
+      "symbol": "Symbol",
+      "timeframe": "Zeitrahmen",
+      "save": "Entwurf speichern",
+      "update": "Aktualisieren",
+      "cancel": "Abbrechen",
+      "delete": "Löschen",
+      "empty": "Sie haben noch keine Strategieentwürfe.",
+      "inUse": "Dieser Entwurf ist mit einem persönlichen Papier-Agenten verknüpft. Löschen Sie zuerst diesen Agenten.",
+      "statusVerified": "Schema- und Risikoprüfung bestanden (kein Modell, keine Renditegarantie)",
+      "kinds": {
+        "sma_cross": "SMA-Kreuzung",
+        "rsi_threshold": "RSI-Schwelle",
+        "donchian_break": "Donchian-Ausbruch"
+      },
+      "params": {
+        "fast": "Schnelle Periode",
+        "slow": "Langsame Periode",
+        "period": "Periode",
+        "oversold": "Überverkauft",
+        "overbought": "Überkauft"
+      },
+      "risk": {
+        "max_weight": "Maximales Gewicht",
+        "stop_loss_pct": "Stop-Loss-Anteil (optional)",
+        "take_profit_pct": "Take-Profit-Anteil (optional)",
+        "long_only": "Nur Long",
+        "fee_bps": "Gebühr (bp, konfigurierbar, Standard 0)",
+        "slippage_bps": "Slippage (bp, konfigurierbar, Standard 0)"
+      }
+    },
+    "paper": {
+      "title": "Persönlicher Papier-Agent",
+      "hint": "Verknüpfen Sie einen geprüften Entwurf mit einem persönlichen Papier-Agenten und führen Sie eine begrenzte Simulation auf gespeicherten Kursen aus. Aufzeichnungen bleiben in Ihrem Konto.",
+      "needLogin": "Melden Sie sich an, um einen persönlichen Papier-Agenten zu nutzen.",
+      "notRunner": "Dies ist nicht der seitenweite System-Runner und kann ihn nicht starten.",
+      "noLive": "Live-Handel, Orders, Börsenanbindungen und unbegrenzte Hintergrundaufgaben sind aus.",
+      "name": "Agentenname",
+      "strategy": "Geprüfter Entwurf",
+      "create": "Papier-Agent erstellen",
+      "empty": "Sie haben noch keinen persönlichen Papier-Agenten.",
+      "simulate": "Lokal simulieren",
+      "delete": "Löschen",
+      "idle": "Bereit",
+      "blocked": "Nicht genug gespeicherte Kurse ({{used}} Kerzen, {{need}} erforderlich). Es wurden keine Fills oder Renditen erzeugt.",
+      "simulated": "Papiersimulation auf gespeicherten Kursen abgeschlossen (kein Modell)",
+      "fills": "{{count}} Papier-Fills erfasst",
+      "pnl": "Papieranteil",
+      "needStrategy": "Wählen Sie zuerst einen geprüften Entwurf",
+      "records": "Simulationsprotokolle anzeigen",
+      "blockedBad": "Gespeicherte Kurse sind ungültig ({{reason}}). Es wurden keine Fills oder Renditen erzeugt.",
+      "truncated": "Fill-Details zeigen {{shown}} von {{total}} und sind keine vollständige Liste. Die Fensterkennzahl umfasst alle verarbeiteten Kerzen.",
+      "costs": "Kostenmodell: Gebühr {{fee}} bp, Slippage {{slip}} bp",
+      "notReturn": "Der Papieranteil ist keine Anlagerendite und kein real ausführbarer Fill.",
+      "realized": "Realisierter Papieranteil",
+      "unrealized": "Unrealisiert (letzter Schluss, Exit-Gebühr nicht angewendet)",
+      "grossZero": "Derzeit ein Brutto-Anteil ohne Kosten",
+      "executionNote": "Signale nutzen abgeschlossene Kerzen und werden zum nächsten Open ausgeführt. Ein Gap durch Stop oder Take füllt zum Open. Sind beide in derselben Kerze erreichbar, gilt der Stop. Donchian nutzt den High/Low-Kanal der Vorperiode. Lücken, Duplikate, künftige oder offene Kerzen blockieren den Lauf. Innerhalb einer Kerze werden zuerst die Open-Gap-Risiken und die aus der Vorperiode ausstehenden Open-Orders (Exit, Reverse, Entry) abgeschlossen; High/Low-Risiko folgt danach. Spätere Extrema dürfen eine bereits ausgeführte Open-Order nicht ändern."
+    },
+    "llm": {
+      "title": "Modellinterpretation",
+      "hint": "Vorhandene Entscheidungsprotokolle laufen erst nach einem ausdrücklichen Klick über das bestehende ai-review-Relay und die Zähler. Die Berechtigung entspricht dem bestehenden Review-Labor: nur Administratoren. Keine automatische Anfrage. Ohne Modell wird keine Antwort erfunden.",
+      "needAdmin": "Interpretationsprotokolle sind Administratoren vorbehalten, mit derselben Berechtigung wie im bestehenden Review-Labor. Diese Sperre wird nicht gelockert.",
+      "needLogin": "Melden Sie sich an, um interpretierbare Protokolle zu sehen.",
+      "off": "Konten sind deaktiviert, daher ist die Modellinterpretation nicht verfügbar.",
+      "ask": "Diesen Datensatz interpretieren",
+      "empty": "Es gibt keine Entscheidungsprotokolle zum Interpretieren.",
+      "noAnswer": "Keine Modellantwort zum Anzeigen."
+    },
+    "marketplace": {
+      "title": "Registrierte Strategien",
+      "notFull": "Dies ist ein Verzeichnis bereits auf dieser Site registrierter Strategien, keine vollständige Übernahme des Quell-Marktplatzes.",
+      "empty": "Derzeit ist keine registrierte Strategie sichtbar.",
+      "ordersNo": "Keine Orders",
+      "paperOnly": "Papier- / Shadow-Protokolle",
+      "noReturns": "Keine veröffentlichten Renditen oder Ranglisten"
+    },
+    "runner": {
+      "title": "Seitenweiter Paper-Runner",
+      "needLogin": "Melden Sie sich an, um den seitenweiten System-Paper-Status zu sehen. Das ist nicht Ihr persönliches Konto.",
+      "empty": "Es gibt keinen seitenweiten Paper-Status zum Anzeigen.",
+      "siteWide": "Dies ist der Status des M3-System-Paper-Runners dieser Site. Das Hauptbuch ist seitenweit geteilt. Es ist kein persönlicher Agent und nicht Ihre Positionen.",
+      "source": "Die Daten sind eine gekürzte Statusansicht des bestehenden System-Paper-Ledgers mainstream_strategy.sqlite. NAV, Renditen und Positionsdetails sind nicht enthalten.",
+      "notPersonal": "Persönliche Agenten und Copy-Trading aus dem Quell-Repository sind nicht angebunden.",
+      "goNoGo": "Seitenweites Go/No-Go",
+      "ledger": "System-Ledger",
+      "strategy": "Systemstrategie"
+    },
+    "status": {
+      "paper": "Papier / nur lesen",
+      "noLive": "Live-Handel und Orders sind aus",
+      "noAutoModel": "Das Modell wird nicht automatisch aufgerufen",
+      "notFullSource": "Vollständiges Quell-Studio und persönliche Agenten sind nicht angebunden"
+    },
+    "empty": "Keine Daten.",
+    "error": "Laden fehlgeschlagen.",
+    "login": "Anmelden"
   }
 }

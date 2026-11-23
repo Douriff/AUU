@@ -2163,5 +2163,142 @@
     "boardFactTime": "Record time: {{when}}. This is not the current quote.",
     "boardDeduped": "This record was already sent. It was not sent again.",
     "boardNotSent": "No request was sent."
+  },
+  "aiSection": {
+    "title": "IA",
+    "kicker": "Section",
+    "lead": "Un répertoire des stratégies déjà enregistrées, une correspondance par mots-clés, un studio structuré pour vos brouillons, des agents papier personnels avec simulation locale, et l’état du runner papier système, sur le même site. Connexion, API et habillage restent ceux d’ici — pas un second site. Ce n’est pas une reprise du studio source ni d’agents personnels ; le studio et la boucle papier d’ici sont une implémentation indépendante. Le modèle n’est demandé qu’après un clic dans Revue.",
+    "tabs": {
+      "market": "Enregistrées",
+      "match": "Correspondance",
+      "studio": "Studio",
+      "paper": "Agent papier",
+      "runner": "Papier site",
+      "review": "Revue"
+    },
+    "chartAssistant": "Ouvrir l’assistant du graphique",
+    "chartAssistantHint": "Cela utilise toujours l’assistant existant à côté du graphique (il ne fait que basculer ?ai=1) et n’appelle pas le modèle tout seul.",
+    "existing": {
+      "console": "Console de stratégie",
+      "performance": "Performance",
+      "signalsNote": "Le répertoire et la revue réutilisent les stratégies enregistrées, les explications de signaux et les journaux de décision de ce site. Aucun classement ni série de rendements n’est inventé. Vos brouillons et simulations papier restent dans votre compte. Le marché, les agents réels et les adaptateurs d’échange de la source ne sont pas entièrement reliés."
+    },
+    "matcher": {
+      "title": "Correspondance avec les stratégies enregistrées",
+      "hint": "Les mots-clés sont associés uniquement aux identifiants déjà enregistrés sur ce site. Ce n’est pas un grand modèle, et cela ne génère ni ne compile de code de stratégie exécutable, ne crée pas de nouvelle stratégie et ne passe aucun ordre.",
+      "notStudio": "Cet onglet ne fait que correspondre aux identifiants déjà enregistrés. On ne peut pas écrire, compiler ou déployer une nouvelle stratégie ici. Utilisez le studio pour enregistrer des règles structurées.",
+      "promptLabel": "Note ou identifiant",
+      "promptPlaceholder": "Par exemple : time series momentum, funding extrême, ou un identifiant enregistré comme trend_tsmom_v1",
+      "run": "Associer",
+      "engine": "Correspondance déterministe au catalogue",
+      "noMatch": "Aucune stratégie enregistrée ne correspond. Aucune nouvelle stratégie n’a été créée, aucun code n’a été généré, et le modèle n’a pas été appelé.",
+      "matched": "Stratégie enregistrée {{id}} (mot-clé : {{keyword}})",
+      "usedModelNo": "Modèle non utilisé",
+      "noCode": "Aucun code généré ou compilé"
+    },
+    "studio": {
+      "title": "Studio de stratégies",
+      "hint": "Une fois connecté, vous pouvez créer, enregistrer et consulter vos propres brouillons de règles structurées. L’ensemble de règles est limité ; les champs et les limites de risque sont contrôlés. Le code utilisateur n’est ni accepté ni exécuté.",
+      "needLogin": "Connectez-vous pour enregistrer vos propres brouillons de stratégie.",
+      "notCode": "Ceci n’est ni une génération ni une compilation de code. Les scripts ne sont ni acceptés ni exécutés, et le modèle n’invente pas de stratégie.",
+      "verifiedMeans": "« Vérifié » signifie seulement que le schéma et les champs de risque sont valides. Ce n’est pas une promesse de rendement ni une lecture par le modèle.",
+      "name": "Nom",
+      "kind": "Type de règle",
+      "symbol": "Symbole",
+      "timeframe": "Période",
+      "save": "Enregistrer le brouillon",
+      "update": "Mettre à jour",
+      "cancel": "Annuler",
+      "delete": "Supprimer",
+      "empty": "Vous n’avez pas encore de brouillon de stratégie.",
+      "inUse": "Ce brouillon est lié à un agent papier personnel. Supprimez d’abord cet agent.",
+      "statusVerified": "Contrôles de schéma et de risque réussis (pas un modèle, pas une garantie de rendement)",
+      "kinds": {
+        "sma_cross": "Croisement de SMA",
+        "rsi_threshold": "Seuil RSI",
+        "donchian_break": "Cassure de Donchian"
+      },
+      "params": {
+        "fast": "Période rapide",
+        "slow": "Période lente",
+        "period": "Période",
+        "oversold": "Survente",
+        "overbought": "Surachat"
+      },
+      "risk": {
+        "max_weight": "Poids maximal",
+        "stop_loss_pct": "Fraction stop (facultatif)",
+        "take_profit_pct": "Fraction take-profit (facultatif)",
+        "long_only": "Long seulement",
+        "fee_bps": "Frais (bps, réglable, 0 par défaut)",
+        "slippage_bps": "Glissement (bps, réglable, 0 par défaut)"
+      }
+    },
+    "paper": {
+      "title": "Agent papier personnel",
+      "hint": "Liez un brouillon vérifié à un agent papier personnel et lancez une simulation bornée sur les cotations déjà stockées. Les enregistrements restent dans votre compte.",
+      "needLogin": "Connectez-vous pour utiliser un agent papier personnel.",
+      "notRunner": "Ce n’est pas le runner système du site, et il ne peut pas le démarrer.",
+      "noLive": "Le trading réel, les ordres, les connexions d’échange et les tâches d’arrière-plan illimitées sont désactivés.",
+      "name": "Nom de l’agent",
+      "strategy": "Brouillon vérifié",
+      "create": "Créer un agent papier",
+      "empty": "Vous n’avez pas encore d’agent papier personnel.",
+      "simulate": "Simuler localement",
+      "delete": "Supprimer",
+      "idle": "Inactif",
+      "blocked": "Pas assez de cotations stockées ({{used}} barres, {{need}} requises). Aucune exécution ni rendement n’a été créé.",
+      "simulated": "Simulation papier terminée sur les cotations stockées (pas un modèle)",
+      "fills": "{{count}} exécutions papier enregistrées",
+      "pnl": "Fraction papier",
+      "needStrategy": "Choisissez d’abord un brouillon vérifié",
+      "records": "Voir les simulations",
+      "blockedBad": "Les cotations stockées ont échoué à la validation ({{reason}}). Aucune exécution ni rendement n’a été créé.",
+      "truncated": "Le détail des exécutions montre {{shown}} sur {{total}} et n’est pas une liste complète. La fraction de fenêtre inclut toutes les barres traitées.",
+      "costs": "Modèle de coût : frais {{fee}} bps, glissement {{slip}} bps",
+      "notReturn": "La fraction papier n’est pas un rendement d’investissement ni une exécution réelle.",
+      "realized": "Fraction papier réalisée",
+      "unrealized": "Non réalisée (dernier close, frais de sortie non appliqués)",
+      "grossZero": "Fraction brute actuellement à coût zéro",
+      "executionNote": "Les signaux utilisent des barres clôturées et s’exécutent à l’ouverture suivante. Un gap à travers un stop ou un take s’exécute à l’ouverture. Si les deux sont atteignables sur la même barre, le stop l’emporte. Donchian utilise le canal high/low de la période précédente. Les trous, doublons, barres futures ou non clôturées bloquent la simulation. Dans une barre, la protection de gap à l’ouverture et les ordres d’ouverture déjà décidés (sortie, retournement, entrée) sont d’abord terminés ; le risque high/low vient ensuite. Les extrêmes ultérieurs ne peuvent pas réviser un ordre d’ouverture déjà exécuté."
+    },
+    "llm": {
+      "title": "Interprétation par le modèle",
+      "hint": "Les journaux de décision existants passent par le relais et les compteurs ai-review actuels uniquement après un clic explicite. L’autorisation est celle du laboratoire de revue existant : administrateurs uniquement. Pas de requête automatique. Sans modèle, aucune réponse n’est inventée.",
+      "needAdmin": "Les journaux d’interprétation sont réservés aux administrateurs, avec la même autorisation que le laboratoire de revue existant. Cette barrière n’est pas assouplie.",
+      "needLogin": "Connectez-vous pour voir les journaux interprétables.",
+      "off": "Les comptes sont désactivés, l’interprétation par le modèle est indisponible.",
+      "ask": "Interpréter cet enregistrement",
+      "empty": "Il n’y a aucun journal de décision à interpréter.",
+      "noAnswer": "Aucune réponse de modèle à afficher."
+    },
+    "marketplace": {
+      "title": "Stratégies enregistrées",
+      "notFull": "Ceci est un répertoire des stratégies déjà enregistrées sur ce site, pas une reprise complète du marché source.",
+      "empty": "Aucune stratégie enregistrée à afficher pour le moment.",
+      "ordersNo": "Aucun ordre",
+      "paperOnly": "Enregistrements papier / shadow",
+      "noReturns": "Aucun rendement ni classement publié"
+    },
+    "runner": {
+      "title": "Runner papier du site",
+      "needLogin": "Connectez-vous pour voir l’état papier système du site. Ce n’est pas votre compte personnel.",
+      "empty": "Aucun état papier du site à afficher.",
+      "siteWide": "Ceci est l’état du runner papier système M3 de ce site. Le grand livre est partagé sur tout le site. Ce n’est pas un agent personnel ni vos positions.",
+      "source": "Les données sont une vue d’état allégée du grand livre papier système existant mainstream_strategy.sqlite. Elles n’incluent ni la NAV, ni les rendements, ni le détail des positions.",
+      "notPersonal": "Les agents personnels et la copie de trades du dépôt source ne sont pas reliés.",
+      "goNoGo": "Go/No-Go du site",
+      "ledger": "Grand livre système",
+      "strategy": "Stratégie système"
+    },
+    "status": {
+      "paper": "Papier / lecture seule",
+      "noLive": "Trading réel et ordres désactivés",
+      "noAutoModel": "Le modèle n’est pas appelé automatiquement",
+      "notFullSource": "Le studio source complet et les agents personnels ne sont pas reliés"
+    },
+    "empty": "Aucune donnée.",
+    "error": "Échec du chargement.",
+    "login": "Connexion"
   }
 }

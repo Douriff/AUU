@@ -2163,5 +2163,142 @@
     "boardFactTime": "Record time: {{when}}. This is not the current quote.",
     "boardDeduped": "This record was already sent. It was not sent again.",
     "boardNotSent": "No request was sent."
+  },
+  "aiSection": {
+    "title": "YZ",
+    "kicker": "Bölüm",
+    "lead": "Aynı sitede kayıtlı strateji dizini, anahtar sözcük eşleştirme, kendi taslaklarınız için yapılandırılmış bir stüdyo, yerel simülasyonlu kişisel kâğıt aracılar ve site genelindeki sistem kâğıt runner durumu. Mevcut giriş, API’ler ve tasarım kullanılır — ikinci bir site yok. Bu, kaynak stüdyonun veya kişisel aracıların aktarımı değildir; buradaki stüdyo ve kâğıt döngüsü bağımsız gerçekleştirilmiştir. Model yalnızca İnceleme’de tıkladıktan sonra istenir.",
+    "tabs": {
+      "market": "Kayıtlı",
+      "match": "Eşleştirme",
+      "studio": "Stüdyo",
+      "paper": "Kâğıt aracı",
+      "runner": "Site kâğıdı",
+      "review": "İnceleme"
+    },
+    "chartAssistant": "Grafik asistanını aç",
+    "chartAssistantHint": "Bu hâlâ mevcut grafik yanı yardımcısını kullanır (yalnızca ?ai=1 anahtarını değiştirir) ve modeli kendiliğinden çağırmaz.",
+    "existing": {
+      "console": "Strateji konsolu",
+      "performance": "Performans",
+      "signalsNote": "Dizin ve inceleme, bu sitedeki kayıtlı stratejileri, sinyal açıklamalarını ve karar kayıtlarını yeniden kullanır. Yeni bir sıralama veya getiri serisi uydurulmaz. Taslaklarınız ve kâğıt simülasyonlarınız hesabınızda kalır. Kaynak pazar, canlı aracılar ve borsa bağlayıcıları tam bağlanmamıştır."
+    },
+    "matcher": {
+      "title": "Kayıtlı stratejileri eşleştir",
+      "hint": "Anahtar sözcükler yalnızca bu sitede zaten kayıtlı strateji kimlikleriyle eşleştirilir. Bu bir büyük dil modeli değildir; çalıştırılabilir strateji kodu üretmez veya derlemez, yeni strateji oluşturmaz ve emir göndermez.",
+      "notStudio": "Bu sekme yalnızca kayıtlı kimlikleri eşleştirir. Burada yeni bir strateji yazılamaz, derlenemez veya dağıtılamaz. Yapılandırılmış kural taslakları için Stüdyo’yu kullanın.",
+      "promptLabel": "Not veya kimlik",
+      "promptPlaceholder": "Örneğin: time series momentum, aşırı funding veya trend_tsmom_v1 gibi kayıtlı bir kimlik",
+      "run": "Eşleştir",
+      "engine": "Belirleyici katalog eşleştirmesi",
+      "noMatch": "Kayıtlı bir strateji eşleşmedi. Yeni bir strateji oluşturulmadı, kod üretilmedi ve model çağrılmadı.",
+      "matched": "Kayıtlı strateji {{id}} (anahtar sözcük: {{keyword}})",
+      "usedModelNo": "Model kullanılmadı",
+      "noCode": "Kod üretilmedi veya derlenmedi"
+    },
+    "studio": {
+      "title": "Strateji stüdyosu",
+      "hint": "Giriş yaptıktan sonra kendi yapılandırılmış kural taslaklarınızı oluşturabilir, kaydedebilir ve görüntüleyebilirsiniz. Kural kümesi sınırlıdır; alanlar ve risk sınırları doğrulanır. Kullanıcı kodu kabul edilmez ve çalıştırılmaz.",
+      "needLogin": "Kendi strateji taslaklarınızı kaydetmek için giriş yapın.",
+      "notCode": "Bu bir kod üretimi veya derleme değildir. Betikler kabul edilmez veya çalıştırılmaz ve model bir strateji uydurmaz.",
+      "verifiedMeans": "«Doğrulandı» yalnızca şema ve risk alanlarının geçtiği anlamına gelir. Getiri vaadi veya model yorumu değildir.",
+      "name": "Ad",
+      "kind": "Kural türü",
+      "symbol": "Sembol",
+      "timeframe": "Zaman dilimi",
+      "save": "Taslağı kaydet",
+      "update": "Güncelle",
+      "cancel": "İptal",
+      "delete": "Sil",
+      "empty": "Henüz strateji taslağınız yok.",
+      "inUse": "Bu taslak kişisel bir kâğıt aracıya bağlı. Önce o aracıyı silin.",
+      "statusVerified": "Şema ve risk denetimlerini geçti (model değil, getiri güvencesi değil)",
+      "kinds": {
+        "sma_cross": "SMA kesişimi",
+        "rsi_threshold": "RSI eşiği",
+        "donchian_break": "Donchian kırılımı"
+      },
+      "params": {
+        "fast": "Hızlı dönem",
+        "slow": "Yavaş dönem",
+        "period": "Dönem",
+        "oversold": "Aşırı satım",
+        "overbought": "Aşırı alım"
+      },
+      "risk": {
+        "max_weight": "Azami ağırlık",
+        "stop_loss_pct": "Zarar durdur oranı (isteğe bağlı)",
+        "take_profit_pct": "Kâr al oranı (isteğe bağlı)",
+        "long_only": "Yalnızca uzun",
+        "fee_bps": "Ücret (bps, yapılandırılabilir, varsayılan 0)",
+        "slippage_bps": "Kayma (bps, yapılandırılabilir, varsayılan 0)"
+      }
+    },
+    "paper": {
+      "title": "Kişisel kâğıt aracı",
+      "hint": "Doğrulanmış bir taslağı kişisel kâğıt aracıya bağlayın ve saklanan fiyatlarda sınırlı bir simülasyon çalıştırın. Kayıtlar hesabınızda kalır.",
+      "needLogin": "Kişisel kâğıt aracı kullanmak için giriş yapın.",
+      "notRunner": "Bu, site genelindeki sistem runner’ı değildir ve onu başlatamaz.",
+      "noLive": "Canlı işlem, emirler, borsa bağlantıları ve sınırsız arka plan görevleri kapalıdır.",
+      "name": "Aracı adı",
+      "strategy": "Doğrulanmış taslak",
+      "create": "Kâğıt aracı oluştur",
+      "empty": "Henüz kişisel kâğıt aracınız yok.",
+      "simulate": "Yerelde simüle et",
+      "delete": "Sil",
+      "idle": "Boşta",
+      "blocked": "Yeterli saklanan fiyat yok ({{used}} bar, {{need}} gerekli). İşlem veya getiri oluşturulmadı.",
+      "simulated": "Kâğıt simülasyonu saklanan fiyatlarla tamamlandı (model değil)",
+      "fills": "{{count}} kâğıt işlem kaydedildi",
+      "pnl": "Kâğıt kesir",
+      "needStrategy": "Önce doğrulanmış bir taslak seçin",
+      "records": "Simülasyon kayıtlarını gör",
+      "blockedBad": "Saklanan fiyatlar doğrulamayı geçemedi ({{reason}}). İşlem veya getiri oluşturulmadı.",
+      "truncated": "İşlem ayrıntıları {{total}} içinden {{shown}} gösteriyor ve tam liste değildir. Pencere kesri işlenen tüm barları kapsar.",
+      "costs": "Maliyet modeli: ücret {{fee}} bps, kayma {{slip}} bps",
+      "notReturn": "Kâğıt kesir bir yatırım getirisi veya gerçek bir işlem değildir.",
+      "realized": "Gerçekleşen kâğıt kesir",
+      "unrealized": "Gerçekleşmemiş (son kapanış, çıkış ücreti uygulanmadı)",
+      "grossZero": "Şu anda sıfır maliyetli brüt kesir",
+      "executionNote": "Sinyaller kapanmış barları kullanır ve bir sonraki açılışta gerçekleşir. Stop veya take’i delen bir boşluk açılıştan doldurulur. İkisi aynı barda ulaşılırsa stop kullanılır. Donchian önceki dönemin yüksek/düşük kanalını kullanır. Boşluk, yinelenen, gelecek veya kapanmamış barlar simülasyonu durdurur. Bir bar içinde önce açılış boşluğu riski ve bir önceki barda kararlaştırılmış açılış çıkış/ters/giriş emirleri tamamlanır; yüksek/düşük riski ondan sonra uygulanır. Sonraki uç değerler tamamlanmış bir açılış emrini değiştiremez."
+    },
+    "llm": {
+      "title": "Model yorumu",
+      "hint": "Mevcut karar kayıtları, yalnızca açık bir tıklamadan sonra mevcut ai-review aktarıcısı ve sayaçları üzerinden gider. İzin, mevcut inceleme laboratuvarıyla aynıdır: yalnızca yöneticiler. Otomatik istek yoktur. Model yoksa yanıt uydurulmaz.",
+      "needAdmin": "Yorum kayıtları, mevcut inceleme laboratuvarıyla aynı yetkiyle yalnızca yöneticilere açıktır. Bu kapı gevşetilmez.",
+      "needLogin": "Yorumlanabilecek kayıtları görmek için oturum açın.",
+      "off": "Hesaplar kapalı olduğu için model yorumu kullanılamaz.",
+      "ask": "Bu kaydı yorumla",
+      "empty": "Yorumlanacak karar kaydı yok.",
+      "noAnswer": "Gösterilecek model yanıtı yok."
+    },
+    "marketplace": {
+      "title": "Kayıtlı stratejiler",
+      "notFull": "Bu, bu sitede zaten kayıtlı stratejilerin dizinidir; kaynak pazar yerinin tam aktarımı değildir.",
+      "empty": "Şu anda gösterilecek kayıtlı strateji yok.",
+      "ordersNo": "Emir yok",
+      "paperOnly": "Kâğıt / gölge kayıtları",
+      "noReturns": "Yayımlanmış getiri veya sıralama yok"
+    },
+    "runner": {
+      "title": "Site geneli kâğıt runner",
+      "needLogin": "Site geneli sistem kâğıt durumunu görmek için oturum açın. Bu sizin kişisel hesabınız değildir.",
+      "empty": "Gösterilecek site geneli kâğıt durumu yok.",
+      "siteWide": "Bu, sitenin M3 sistem kâğıt runner durumudur. Defter site genelinde paylaşılır. Kişisel bir aracı veya sizin pozisyonlarınız değildir.",
+      "source": "Veriler, mevcut sistem kâğıt defteri mainstream_strategy.sqlite dosyasının kısaltılmış durum görünümüdür. NAV, getiri veya pozisyon ayrıntısı içermez.",
+      "notPersonal": "Kaynak depodaki kişisel aracılar ve kopya işlem bağlı değildir.",
+      "goNoGo": "Site geneli Go/No-Go",
+      "ledger": "Sistem defteri",
+      "strategy": "Sistem stratejisi"
+    },
+    "status": {
+      "paper": "Kâğıt / salt okunur",
+      "noLive": "Canlı işlem ve emirler kapalı",
+      "noAutoModel": "Model otomatik çağrılmaz",
+      "notFullSource": "Kaynak stüdyonun tamamı ve kişisel aracılar bağlı değil"
+    },
+    "empty": "Veri yok.",
+    "error": "Yükleme başarısız.",
+    "login": "Oturum aç"
   }
 }

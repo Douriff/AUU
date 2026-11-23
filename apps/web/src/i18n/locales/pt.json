@@ -2163,5 +2163,142 @@
     "boardFactTime": "Record time: {{when}}. This is not the current quote.",
     "boardDeduped": "This record was already sent. It was not sent again.",
     "boardNotSent": "No request was sent."
+  },
+  "aiSection": {
+    "title": "IA",
+    "kicker": "Secção",
+    "lead": "Um diretório de estratégias já registadas, correspondência por palavras-chave, um estúdio estruturado para os seus rascunhos, agentes de papel pessoais com simulação local e o estado do runner de papel do sistema, no mesmo sítio. Usa o início de sessão, as API e o visual atuais — não é um segundo sítio. Não é uma portagem do estúdio de origem nem de agentes pessoais; o estúdio e o ciclo de papel daqui são uma implementação independente. O modelo só é pedido depois de um clique em Revisão.",
+    "tabs": {
+      "market": "Registadas",
+      "match": "Correspondência",
+      "studio": "Estúdio",
+      "paper": "Agente de papel",
+      "runner": "Papel do sítio",
+      "review": "Revisão"
+    },
+    "chartAssistant": "Abrir o assistente do gráfico",
+    "chartAssistantHint": "Continua a usar o assistente existente ao lado do gráfico (só alterna ?ai=1) e não chama o modelo sozinho.",
+    "existing": {
+      "console": "Consola de estratégia",
+      "performance": "Desempenho",
+      "signalsNote": "O diretório e a revisão reutilizam as estratégias registadas, as explicações de sinais e os registos de decisão deste sítio. Não se inventa um ranking nem uma série de retornos. Os seus rascunhos e simulações de papel ficam na sua conta. O mercado, os agentes reais e os adaptadores de bolsa de origem não estão totalmente ligados."
+    },
+    "matcher": {
+      "title": "Corresponder estratégias registadas",
+      "hint": "As palavras-chave são associadas apenas a IDs já registados neste sítio. Isto não é um grande modelo e não gera nem compila código de estratégia executável, não cria uma estratégia nova nem coloca uma ordem.",
+      "notStudio": "Este separador só corresponde a identificadores já registados. Aqui não se pode escrever, compilar ou implementar uma estratégia nova. Use o Estúdio para guardar regras estruturadas.",
+      "promptLabel": "Nota ou ID",
+      "promptPlaceholder": "Por exemplo: time series momentum, funding extremo ou um id registado como trend_tsmom_v1",
+      "run": "Corresponder",
+      "engine": "Correspondência determinística do catálogo",
+      "noMatch": "Nenhuma estratégia registada correspondeu. Não foi criada uma estratégia nova, não foi gerado código e o modelo não foi chamado.",
+      "matched": "Estratégia registada {{id}} (palavra-chave: {{keyword}})",
+      "usedModelNo": "Modelo não usado",
+      "noCode": "Nenhum código gerado ou compilado"
+    },
+    "studio": {
+      "title": "Estúdio de estratégias",
+      "hint": "Depois de iniciar sessão, pode criar, guardar e ver os seus próprios rascunhos de regras estruturadas. O conjunto de regras é limitado; os campos e os limites de risco são validados. Código do utilizador não é aceite nem executado.",
+      "needLogin": "Inicie sessão para guardar os seus próprios rascunhos de estratégia.",
+      "notCode": "Isto não é geração nem compilação de código. Scripts não são aceites nem executados, e o modelo não inventa uma estratégia.",
+      "verifiedMeans": "«Verificado» significa apenas que o esquema e os campos de risco passaram. Não é uma promessa de rentabilidade nem uma leitura do modelo.",
+      "name": "Nome",
+      "kind": "Tipo de regra",
+      "symbol": "Símbolo",
+      "timeframe": "Intervalo",
+      "save": "Guardar rascunho",
+      "update": "Atualizar",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "empty": "Ainda não tem rascunhos de estratégia.",
+      "inUse": "Este rascunho está ligado a um agente de papel pessoal. Elimine primeiro esse agente.",
+      "statusVerified": "Passou as verificações de esquema e risco (não é um modelo nem uma garantia de retorno)",
+      "kinds": {
+        "sma_cross": "Cruzamento de SMA",
+        "rsi_threshold": "Limiar RSI",
+        "donchian_break": "Rutura de Donchian"
+      },
+      "params": {
+        "fast": "Período rápido",
+        "slow": "Período lento",
+        "period": "Período",
+        "oversold": "Sobrevenda",
+        "overbought": "Sobrecompra"
+      },
+      "risk": {
+        "max_weight": "Peso máximo",
+        "stop_loss_pct": "Fração de stop (opcional)",
+        "take_profit_pct": "Fração de take-profit (opcional)",
+        "long_only": "Apenas longo",
+        "fee_bps": "Comissão (bps, configurável, 0 por defeito)",
+        "slippage_bps": "Slippage (bps, configurável, 0 por defeito)"
+      }
+    },
+    "paper": {
+      "title": "Agente de papel pessoal",
+      "hint": "Ligue um rascunho verificado a um agente de papel pessoal e execute uma simulação limitada nas cotações já armazenadas. Os registos ficam na sua conta.",
+      "needLogin": "Inicie sessão para usar um agente de papel pessoal.",
+      "notRunner": "Isto não é o runner de sistema do sítio e não o pode iniciar.",
+      "noLive": "Negociação real, ordens, ligações a bolsas e tarefas de fundo ilimitadas estão desligadas.",
+      "name": "Nome do agente",
+      "strategy": "Rascunho verificado",
+      "create": "Criar agente de papel",
+      "empty": "Ainda não tem um agente de papel pessoal.",
+      "simulate": "Simular localmente",
+      "delete": "Eliminar",
+      "idle": "Inativo",
+      "blocked": "Cotações armazenadas insuficientes ({{used}} barras, são precisas {{need}}). Não foram criadas execuções nem retornos.",
+      "simulated": "Simulação de papel concluída com cotações armazenadas (não é um modelo)",
+      "fills": "{{count}} execuções de papel registadas",
+      "pnl": "Fração de papel",
+      "needStrategy": "Escolha primeiro um rascunho verificado",
+      "records": "Ver registos de simulação",
+      "blockedBad": "As cotações armazenadas falharam a validação ({{reason}}). Não foram criadas execuções nem retornos.",
+      "truncated": "O detalhe mostra {{shown}} de {{total}} execuções e não é uma lista completa. A fracção da janela inclui todas as barras processadas.",
+      "costs": "Modelo de custo: comissão {{fee}} bps, slippage {{slip}} bps",
+      "notReturn": "A fracção de papel não é um retorno de investimento nem uma execução real.",
+      "realized": "Fracção de papel realizada",
+      "unrealized": "Não realizada (último fecho, sem comissão de saída)",
+      "grossZero": "Fracção bruta actualmente a custo zero",
+      "executionNote": "Os sinais usam barras fechadas e executam na abertura seguinte. Um gap através de um stop ou take preenche na abertura. Se ambos forem atingíveis na mesma barra, usa-se o stop. Donchian usa o canal máximo/mínimo do período anterior. Lacunas, duplicados, barras futuras ou por fechar bloqueiam a simulação. Dentro de uma barra, primeiro concluem-se o risco de gap na abertura e as ordens de abertura já decididas (saída, inversão ou entrada); o risco de máximo/mínimo vem a seguir. Extremos posteriores não podem rever uma ordem de abertura já executada."
+    },
+    "llm": {
+      "title": "Interpretação do modelo",
+      "hint": "Os registos de decisão existentes passam pelo relay e pelos contadores atuais de ai-review só após um clique explícito. A permissão é a do laboratório de revisão existente: só administradores. Sem pedido automático. Sem modelo, nenhuma resposta é inventada.",
+      "needAdmin": "Os registos de interpretação estão limitados a administradores, com a mesma permissão do laboratório de revisão existente. Essa barreira não é aliviada.",
+      "needLogin": "Inicie sessão para ver os registos que podem ser interpretados.",
+      "off": "As contas estão desativadas, por isso a interpretação do modelo não está disponível.",
+      "ask": "Interpretar este registo",
+      "empty": "Não há registos de decisão para interpretar.",
+      "noAnswer": "Não há resposta do modelo para mostrar."
+    },
+    "marketplace": {
+      "title": "Estratégias registadas",
+      "notFull": "Este é um diretório de estratégias já registadas neste sítio, não uma portagem completa do mercado de origem.",
+      "empty": "Não há nenhuma estratégia registada para mostrar neste momento.",
+      "ordersNo": "Sem ordens",
+      "paperOnly": "Registos em papel / sombra",
+      "noReturns": "Sem retornos ou rankings publicados"
+    },
+    "runner": {
+      "title": "Runner de papel do sítio",
+      "needLogin": "Inicie sessão para ver o estado de papel do sistema em todo o sítio. Isto não é a sua conta pessoal.",
+      "empty": "Não há estado de papel do sítio para mostrar.",
+      "siteWide": "Este é o estado do runner de papel do sistema M3 deste sítio. O livro é partilhado em todo o sítio. Não é um agente pessoal nem as suas posições.",
+      "source": "Os dados são uma vista de estado reduzida do livro de papel do sistema existente mainstream_strategy.sqlite. Não incluem NAV, retornos nem detalhe de posições.",
+      "notPersonal": "Os agentes pessoais e o copy trading do repositório de origem não estão ligados.",
+      "goNoGo": "Go/No-Go do sítio",
+      "ledger": "Livro do sistema",
+      "strategy": "Estratégia do sistema"
+    },
+    "status": {
+      "paper": "Papel / só leitura",
+      "noLive": "Trading real e ordens desligados",
+      "noAutoModel": "O modelo não é chamado automaticamente",
+      "notFullSource": "O estúdio de origem completo e os agentes pessoais não estão ligados"
+    },
+    "empty": "Sem dados.",
+    "error": "Falha ao carregar.",
+    "login": "Iniciar sessão"
   }
 }
