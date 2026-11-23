@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.auth.accounts import issue_token, reset_accounts, user_from_token
+from app.auth.accounts import issue_token, public_signup_open, reset_accounts, user_from_token
+from tests.auth_fixtures import seed_admin
 
 PW = "password1"
 _KEYS = (
@@ -46,7 +47,11 @@ class SessionReplayTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _reg(self, client, name):
-        res = client.post("/api/v1/auth/register", json={"name": name, "password": PW, "password_confirm": PW})
+        if not public_signup_open():
+            seed_admin(name, PW)
+            res = client.post("/api/v1/auth/login", json={"name": name, "password": PW})
+        else:
+            res = client.post("/api/v1/auth/register", json={"name": name, "password": PW, "password_confirm": PW})
         self.assertEqual(res.status_code, 200, res.text)
         return res
 

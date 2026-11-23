@@ -9,6 +9,7 @@ from unittest import mock
 from pathlib import Path
 
 from app.auth.accounts import journal_for, reset_accounts, user_by_id
+from tests.auth_fixtures import seed_admin
 from app.models.contracts import Fill
 from app.paper.broker import reset_paper_broker
 from app.paper.ledger import get_paper_journal, reset_paper_ledger
@@ -55,6 +56,7 @@ class PaperAccountTests(unittest.TestCase):
         reset_risk_gate()
         reset_paper_broker()
         reset_paper_ledger()
+        seed_admin("alice", "password1", start_sol=80)
         from fastapi.testclient import TestClient
         from app.main import app
 
@@ -126,8 +128,8 @@ class PaperAccountTests(unittest.TestCase):
     def test_two_users_do_not_share_fills_or_the_system_journal(self, _real_label):
         day = float(get_risk_gate().day_pnl)
         alice = self.client.post(
-            "/api/v1/auth/register",
-            json={"name": "alice", "password": "password1", "password_confirm": "password1", "start_sol": 80},
+            "/api/v1/auth/login",
+            json={"name": "alice", "password": "password1"},
         )
         self.assertEqual(alice.status_code, 200, alice.text)
         # AUU_AUTH=on gates every read, so read the system book as the signed-in admin.
