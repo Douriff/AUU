@@ -37,3 +37,12 @@ apps/web/src/i18n/locales/ko.json
 apps/web/src/i18n/locales/ar.json
 .github/workflows/ai-section-bounded-verify.yml
 .github/ai-section-required-files.txt
+# Joint free-board files. The same workflow must fail closed if they are missing.
+apps/api/app/auth/gate.py
+apps/api/app/routes/mainstream.py
+apps/api/app/routes/ws.py
+apps/api/tests/test_auth_gate.py
+apps/web/scripts/subscription-gate.test.mjs
+apps/web/src/lib/subscription.ts
+apps/web/src/components/subscribe/SubscribeGate.tsx
+apps/web/src/pages/MainstreamPage/MainstreamPage.tsx
